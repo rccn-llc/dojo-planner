@@ -1,0 +1,322 @@
+import type { AuditContext } from '@/types/Audit';
+
+import { ORPCError } from '@orpc/server';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { AUDIT_ACTION, AUDIT_ENTITY_TYPE } from '@/types/Audit';
+import { ORG_ROLE } from '@/types/Auth';
+
+// Mock all dependencies
+vi.mock('@/libs/DB', () => ({ db: {} }));
+vi.mock('@/libs/Logger', () => ({
+  logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
+}));
+vi.mock('./AuthGuards', () => ({
+  guardRole: vi.fn(),
+}));
+vi.mock('@/services/AuditService', () => ({
+  audit: vi.fn(),
+}));
+vi.mock('@/services/MemberPaymentService', () => ({
+  processMemberPayment: vi.fn(),
+}));
+vi.mock('@/libs/IQPro', () => ({
+  getTokenizationConfig: vi.fn(),
+}));
+
+const mockContext: AuditContext = {
+  userId: 'test-user-123',
+  orgId: 'test-org-456',
+  role: 'org:admin',
+};
+
+const baseInput = {
+  memberId: 'test-member-123',
+  memberEmail: 'member@test.com',
+  memberFirstName: 'John',
+  memberLastName: 'Doe',
+  paymentMethod: 'card' as const,
+  billingType: 'one-time' as const,
+  amount: 7900,
+  description: 'Monthly membership payment',
+};
+
+// Helper to call ORPC handlers
+function callHandler(handler: unknown, input?: unknown) {
+  const h = handler as { '~orpc': { handler: (args: Record<string, unknown>) => unknown } };
+  return h['~orpc'].handler({ input, context: undefined, errors: undefined });
+}
+
+describe('Payment Router', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('processPayment', () => {
+    it('should return result on successful payment (approved)', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { processMemberPayment } = await import('@/services/MemberPaymentService');
+      const { audit } = await import('@/services/AuditService');
+
+      const mockResult = {
+        success: true,
+        status: 'approved' as const,
+        transactionId: 'test-txn-789',
+      };
+
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(processMemberPayment).mockResolvedValue(mockResult);
+
+      const { processPayment } = await import('./Payment');
+      const result = await callHandler(processPayment, baseInput);
+
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ADMIN);
+      expect(processMemberPayment).toHaveBeenCalledWith({
+        organizationId: 'test-org-456',
+        ...baseInput,
+      });
+      expect(audit).toHaveBeenCalledWith(
+        mockContext,
+        AUDIT_ACTION.PAYMENT_PROCESS,
+        AUDIT_ENTITY_TYPE.TRANSACTION,
+        {
+          entityId: 'test-txn-789',
+          status: 'success',
+          error: undefined,
+        },
+      );
+      expect(result).toEqual(mockResult);
+    });
+
+    it('should return result when payment is declined (not throw)', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { processMemberPayment } = await import('@/services/MemberPaymentService');
+      const { audit } = await import('@/services/AuditService');
+
+      const declinedResult = {
+        success: false,
+        status: 'declined' as const,
+        declineReason: 'Insufficient funds',
+        transactionId: 'test-txn-declined',
+        error: 'Card declined',
+      };
+
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(processMemberPayment).mockResolvedValue(declinedResult);
+
+      const { processPayment } = await import('./Payment');
+      const result = await callHandler(processPayment, baseInput);
+
+      expect(result).toEqual(declinedResult);
+      expect(audit).toHaveBeenCalledWith(
+        mockContext,
+        AUDIT_ACTION.PAYMENT_PROCESS,
+        AUDIT_ENTITY_TYPE.TRANSACTION,
+        {
+          entityId: 'test-txn-declined',
+          status: 'failure',
+          error: 'Card declined',
+        },
+      );
+    });
+
+    it('should rethrow ORPCError from guardRole (unauthorized)', async () => {
+      const { guardRole } = await import('./AuthGuards');
+
+      const error = new ORPCError('UNAUTHORIZED', {
+        message: 'Insufficient permissions',
+      });
+      vi.mocked(guardRole).mockRejectedValue(error);
+
+      const { processPayment } = await import('./Payment');
+
+      await expect(callHandler(processPayment, baseInput)).rejects.toThrow(error);
+    });
+
+    it('should wrap non-ORPC service errors in ORPCError with status 500', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { processMemberPayment } = await import('@/services/MemberPaymentService');
+      const { audit } = await import('@/services/AuditService');
+
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(processMemberPayment).mockRejectedValue(
+        new Error('Payment processing is not configured. Set IQPRO_* environment variables.'),
+      );
+
+      const { processPayment } = await import('./Payment');
+
+      await expect(callHandler(processPayment, baseInput)).rejects.toThrow(
+        new ORPCError('Payment processing failed. Please try again.', { status: 500 }),
+      );
+
+      expect(audit).toHaveBeenCalledWith(
+        mockContext,
+        AUDIT_ACTION.PAYMENT_PROCESS,
+        AUDIT_ENTITY_TYPE.TRANSACTION,
+        {
+          status: 'failure',
+          error: 'Payment processing is not configured. Set IQPRO_* environment variables.',
+        },
+      );
+    });
+
+    it('should rethrow ORPCError from service without wrapping', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { processMemberPayment } = await import('@/services/MemberPaymentService');
+
+      const orpcError = new ORPCError('BAD_REQUEST', {
+        message: 'Invalid payment data',
+      });
+
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(processMemberPayment).mockRejectedValue(orpcError);
+
+      const { processPayment } = await import('./Payment');
+
+      await expect(callHandler(processPayment, baseInput)).rejects.toThrow(orpcError);
+    });
+
+    it('should audit with failure status when service throws', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { processMemberPayment } = await import('@/services/MemberPaymentService');
+      const { audit } = await import('@/services/AuditService');
+
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(processMemberPayment).mockRejectedValue(new Error('Network timeout'));
+
+      const { processPayment } = await import('./Payment');
+
+      await expect(callHandler(processPayment, baseInput)).rejects.toThrow();
+
+      expect(audit).toHaveBeenCalledWith(
+        mockContext,
+        AUDIT_ACTION.PAYMENT_PROCESS,
+        AUDIT_ENTITY_TYPE.TRANSACTION,
+        {
+          status: 'failure',
+          error: 'Network timeout',
+        },
+      );
+    });
+
+    it('should handle non-Error thrown values in catch block', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { processMemberPayment } = await import('@/services/MemberPaymentService');
+      const { audit } = await import('@/services/AuditService');
+
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(processMemberPayment).mockRejectedValue('string error');
+
+      const { processPayment } = await import('./Payment');
+
+      await expect(callHandler(processPayment, baseInput)).rejects.toThrow(
+        new ORPCError('Payment processing failed. Please try again.', { status: 500 }),
+      );
+
+      expect(audit).toHaveBeenCalledWith(
+        mockContext,
+        AUDIT_ACTION.PAYMENT_PROCESS,
+        AUDIT_ENTITY_TYPE.TRANSACTION,
+        {
+          status: 'failure',
+          error: 'Unknown error',
+        },
+      );
+    });
+
+    it('should log warning when payment is declined', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { processMemberPayment } = await import('@/services/MemberPaymentService');
+      const { logger } = await import('@/libs/Logger');
+
+      const declinedResult = {
+        success: false,
+        status: 'declined' as const,
+        declineReason: 'Do not honor',
+        transactionId: 'test-txn-warn',
+      };
+
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(processMemberPayment).mockResolvedValue(declinedResult);
+
+      const { processPayment } = await import('./Payment');
+      await callHandler(processPayment, baseInput);
+
+      expect(logger.warn).toHaveBeenCalledWith('[Payment] Payment declined or failed', {
+        memberId: 'test-member-123',
+        status: 'declined',
+        declineReason: 'Do not honor',
+      });
+    });
+  });
+
+  describe('getTokenizationIframeConfig', () => {
+    it('should return tokenization config when IQPro is configured', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { getTokenizationConfig } = await import('@/libs/IQPro');
+
+      const mockConfig = {
+        origin: 'http://localhost:3000',
+        tokenizationId: 'test-token-ex-id',
+        tokenScheme: 'test-scheme',
+        authenticationKey: 'test-auth-key',
+        timestamp: '2025-01-01T00:00:00Z',
+        iframeScriptUrl: 'https://sandbox.api.basyspro.com/Iframe/iframe/iframe-v3.js',
+      };
+
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(getTokenizationConfig).mockResolvedValue(mockConfig);
+
+      const { getTokenizationIframeConfig } = await import('./Payment');
+      const input = { origin: 'http://localhost:3000' };
+      const result = await callHandler(getTokenizationIframeConfig, input);
+
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
+      expect(getTokenizationConfig).toHaveBeenCalledWith('http://localhost:3000');
+      expect(result).toEqual(mockConfig);
+    });
+
+    it('should return null when IQPro is not configured', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { getTokenizationConfig } = await import('@/libs/IQPro');
+
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(getTokenizationConfig).mockResolvedValue(null);
+
+      const { getTokenizationIframeConfig } = await import('./Payment');
+      const input = { origin: 'http://localhost:3000' };
+      const result = await callHandler(getTokenizationIframeConfig, input);
+
+      expect(result).toBeNull();
+    });
+
+    it('should throw ORPCError when getTokenizationConfig fails', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { getTokenizationConfig } = await import('@/libs/IQPro');
+
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(getTokenizationConfig).mockRejectedValue(new Error('OAuth failed'));
+
+      const { getTokenizationIframeConfig } = await import('./Payment');
+      const input = { origin: 'http://localhost:3000' };
+
+      await expect(callHandler(getTokenizationIframeConfig, input)).rejects.toThrow(
+        'Failed to load payment configuration.',
+      );
+    });
+
+    it('should require FRONT_DESK role', async () => {
+      const { guardRole } = await import('./AuthGuards');
+
+      const error = new ORPCError('UNAUTHORIZED', {
+        message: 'Insufficient permissions',
+      });
+      vi.mocked(guardRole).mockRejectedValue(error);
+
+      const { getTokenizationIframeConfig } = await import('./Payment');
+      const input = { origin: 'http://localhost:3000' };
+
+      await expect(callHandler(getTokenizationIframeConfig, input)).rejects.toThrow(error);
+    });
+  });
+});

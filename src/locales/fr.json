@@ -417,9 +417,6 @@
       "back_button": "Retour",
       "cancel_button": "Annuler",
       "next_button": "Suivant",
-      "process_payment_button": "Traiter le paiement",
-      "retry_payment_button": "Réessayer le paiement",
-      "continue_anyway_button": "Continuer quand même",
       "processing_button": "Traitement en cours...",
       "payment_approved_title": "Paiement approuvé",
       "payment_approved_message": "Le paiement a été traité avec succès. Vous pouvez maintenant terminer l'inscription du membre.",
@@ -431,7 +428,9 @@
       "decline_reason_expired_card": "La carte est expirée. Veuillez utiliser une carte valide.",
       "decline_reason_card_declined": "La carte a été refusée. Veuillez essayer un autre mode de paiement.",
       "decline_reason_ach_failed": "La transaction ACH a échoué. Veuillez vérifier les détails du compte et réessayer.",
-      "decline_reason_generic": "Le paiement n'a pas pu être traité. Veuillez réessayer ou utiliser un autre mode de paiement."
+      "decline_reason_generic": "Le paiement n'a pas pu être traité. Veuillez réessayer ou utiliser un autre mode de paiement.",
+      "card_number_iframe_loading": "Chargement du champ de paiement sécurisé...",
+      "card_number_iframe_error": "Échec du chargement du champ de paiement sécurisé. Veuillez actualiser et réessayer."
     },
     "MemberSuccessStep": {
       "title": "Succès",

@@ -3,10 +3,10 @@ import { ORPCError, os } from '@orpc/server';
 import { z } from 'zod';
 import { logger } from '@/libs/Logger';
 import { audit } from '@/services/AuditService';
-import { addMemberMembership, changeMemberMembership, createMember, getAllMembershipPlans, getMembershipPlans, updateMember, updateMemberContactInfo, updateMemberStatus } from '@/services/MembersService';
+import { addMemberMembership, changeMemberMembership, createMember, getAllMembershipPlans, getMemberPaymentMethods, getMembershipPlans, getMemberTransactions, updateMember, updateMemberContactInfo, updateMemberStatus } from '@/services/MembersService';
 import { AUDIT_ACTION, AUDIT_ENTITY_TYPE } from '@/types/Audit';
 import { ORG_ROLE } from '@/types/Auth';
-import { DeleteMemberValidation, EditMemberValidation, MemberValidation, UpdateMemberContactInfoValidation } from '@/validations/MemberValidation';
+import { DeleteMemberValidation, EditMemberValidation, MemberPaymentMethodsValidation, MemberTransactionsValidation, MemberValidation, UpdateMemberContactInfoValidation } from '@/validations/MemberValidation';
 import { guardAuth, guardRole } from './AuthGuards';
 
 export const create = os
@@ -361,4 +361,20 @@ export const listAllMembershipPlans = os
       logger.error(`Failed to fetch membership plans: ${errorMessage}`);
       throw error instanceof ORPCError ? error : new ORPCError('Failed to fetch membership plans. Please try again.', { status: 500 });
     }
+  });
+
+export const listPaymentMethods = os
+  .input(MemberPaymentMethodsValidation)
+  .handler(async ({ input }) => {
+    await guardRole(ORG_ROLE.FRONT_DESK);
+    const paymentMethods = await getMemberPaymentMethods(input.memberId);
+    return { paymentMethods };
+  });
+
+export const listMemberTransactions = os
+  .input(MemberTransactionsValidation)
+  .handler(async ({ input }) => {
+    const { orgId } = await guardRole(ORG_ROLE.FRONT_DESK);
+    const transactions = await getMemberTransactions(input.memberId, orgId, input.limit);
+    return { transactions };
   });

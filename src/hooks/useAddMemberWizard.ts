@@ -67,7 +67,10 @@ export type AddMemberWizardData = {
   paymentMethod?: PaymentMethod;
   billingType?: BillingType; // autopay (recurring) or one-time payment
   cardholderName?: string;
-  cardNumber?: string;
+  cardNumber?: string; // Fallback: raw card (local dev without IQPro)
+  cardToken?: string; // PCI-compliant: tokenized card from TokenEx iframe
+  cardFirstSix?: string; // First 6 digits (BIN) from TokenEx tokenization (for maskedCard)
+  cardLastFour?: string; // Last 4 digits from TokenEx tokenization (for maskedCard)
   cardExpiry?: string;
   cardCvc?: string;
   achAccountHolder?: string;
@@ -160,6 +163,9 @@ export const useAddMemberWizard = () => {
       billingType: undefined,
       cardholderName: undefined,
       cardNumber: undefined,
+      cardToken: undefined,
+      cardFirstSix: undefined,
+      cardLastFour: undefined,
       cardExpiry: undefined,
       cardCvc: undefined,
       achAccountHolder: undefined,

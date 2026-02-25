@@ -3,11 +3,12 @@
 import type { AttendanceRecord, PunchcardInfo } from '@/features/members/details/MemberDetailAttendance';
 import type { MemberNote } from '@/features/members/details/MemberDetailNotes';
 import type { Member } from '@/hooks/useMembersCache';
+import type { MemberPaymentMethodData } from '@/services/MembersService';
 import type { SignedWaiverWithTemplateName } from '@/services/WaiversService';
 import { useOrganization } from '@clerk/nextjs';
 import { Download, Plus, Trash2 } from 'lucide-react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useReducer, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { MemberBreadcrumb } from '@/components/ui/breadcrumb/MemberBreadcrumb';
@@ -22,8 +23,10 @@ import { client } from '@/libs/Orpc';
 import { generateAndDownloadWaiverPdf, generatePdfFilename } from '@/services/WaiverPdfService';
 import {
   formatCurrency,
-  getBrandIcon,
+  formatTransactionType,
   getInitials,
+  getPaymentTypeIcon,
+  getPaymentTypeLabel,
   getStatusColor,
   getStatusLabel,
   resolveTabFromUrl,
@@ -72,18 +75,6 @@ type MembershipDetailsData = {
   nextPaymentAmount: number;
 };
 
-type PaymentMethod = {
-  last4: string;
-  brand: string;
-  isDefault: boolean;
-  appliedCoupon?: {
-    code: string;
-    type: string;
-    amount: string;
-    description: string;
-  };
-};
-
 type BillingHistoryItem = {
   id: string;
   date: string;
@@ -107,8 +98,6 @@ type MemberData = {
   subscriptionDetails: SubscriptionDetails;
   familyMembers: FamilyMember[];
   membershipDetails: MembershipDetailsData;
-  paymentMethod: PaymentMethod;
-  billingHistory: BillingHistoryItem[];
 };
 
 // Mock attendance data for demonstration
@@ -225,19 +214,6 @@ const MOCK_NOTES: MemberNote[] = [
 // Base mock data fallback
 const BASE_MOCK_DATA = {
   familyMembers: [] as FamilyMember[],
-  paymentMethod: {
-    last4: '0046',
-    brand: 'Visa',
-    isDefault: true,
-    // Mock coupon data for demonstration
-    appliedCoupon: {
-      code: 'SAVE15',
-      type: 'Percentage',
-      amount: '15%',
-      description: 'New member discount',
-    },
-  },
-  billingHistory: [] as BillingHistoryItem[],
 };
 
 // Build MemberData from API member data - use Member type from cache
@@ -452,8 +428,6 @@ function buildMemberDataFromAPI(apiMember: Member & { membershipType?: string; p
       createdAt: apiMember.currentMembership?.createdAt,
       nextPaymentDate: apiMember.currentMembership?.nextPaymentDate,
     }),
-    paymentMethod: BASE_MOCK_DATA.paymentMethod,
-    billingHistory: BASE_MOCK_DATA.billingHistory,
   };
 }
 
@@ -577,6 +551,14 @@ export default function EditMemberPage() {
   const [signedWaivers, setSignedWaivers] = useState<SignedWaiverWithTemplateName[]>([]);
   const [isLoadingWaivers, setIsLoadingWaivers] = useState(true);
 
+  // State for payment methods
+  const [paymentMethods, setPaymentMethods] = useState<MemberPaymentMethodData[]>([]);
+  const [isLoadingPayment, setIsLoadingPayment] = useState(true);
+
+  // State for billing history
+  const [billingHistory, setBillingHistory] = useState<BillingHistoryItem[]>([]);
+  const [isLoadingBilling, setIsLoadingBilling] = useState(true);
+
   // Get the current member from cache for membership info
   const currentMember: Member | undefined = members?.find(m => m.id === memberId);
   const currentMembership = currentMember?.currentMembership;
@@ -669,6 +651,76 @@ export default function EditMemberPage() {
     };
     fetchSignedWaivers();
   }, [memberId]);
+
+  // Fetch payment methods for this member
+  useEffect(() => {
+    const fetchPaymentMethods = async () => {
+      if (!memberId) {
+        return;
+      }
+      setIsLoadingPayment(true);
+      try {
+        const result = await client.member.listPaymentMethods({ memberId });
+        setPaymentMethods(result.paymentMethods);
+      } catch (err) {
+        console.warn('[Edit Member] Failed to fetch payment methods:', err);
+        setPaymentMethods([]);
+      } finally {
+        setIsLoadingPayment(false);
+      }
+    };
+    fetchPaymentMethods();
+  }, [memberId]);
+
+  // Fetch billing history for this member
+  useEffect(() => {
+    const fetchBillingHistory = async () => {
+      if (!memberId) {
+        return;
+      }
+      setIsLoadingBilling(true);
+      try {
+        const result = await client.member.listMemberTransactions({ memberId, limit: 50 });
+        const items: BillingHistoryItem[] = result.transactions.map(tx => ({
+          id: tx.id,
+          date: new Date(tx.createdAt).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+          }),
+          member: `${tx.memberFirstName || ''} ${tx.memberLastName || ''}`.trim(),
+          amount: tx.amount,
+          purpose: formatTransactionType(tx.transactionType),
+          method: tx.paymentMethod || 'N/A',
+        }));
+        setBillingHistory(items);
+      } catch (err) {
+        console.warn('[Edit Member] Failed to fetch billing history:', err);
+        setBillingHistory([]);
+      } finally {
+        setIsLoadingBilling(false);
+      }
+    };
+    fetchBillingHistory();
+  }, [memberId]);
+
+  // Derive applied coupon from signed waivers (most recent with coupon data)
+  const appliedCoupon = useMemo(() => {
+    const waiverWithCoupon = signedWaivers
+      .filter(w => w.couponCode)
+      .sort((a, b) => new Date(b.signedAt).getTime() - new Date(a.signedAt).getTime())[0];
+
+    if (!waiverWithCoupon?.couponCode) {
+      return null;
+    }
+
+    return {
+      code: waiverWithCoupon.couponCode,
+      type: waiverWithCoupon.couponType || 'Percentage',
+      amount: waiverWithCoupon.couponAmount || '',
+      description: 'Applied at signup',
+    };
+  }, [signedWaivers]);
 
   const handleDownloadWaiver = useCallback((waiver: SignedWaiverWithTemplateName) => {
     if (!organization?.name) {
@@ -1011,48 +1063,69 @@ export default function EditMemberPage() {
             <Card className="flex flex-col p-6">
               <div>
                 <h2 className="mb-6 text-lg font-semibold text-foreground">Payment Method</h2>
-                <div className="flex items-start gap-4">
-                  <div className="rounded-lg bg-blue-600 p-3">
-                    <span className="text-2xl">{getBrandIcon(state.currentData.paymentMethod.brand)}</span>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-foreground">
-                      {state.currentData.paymentMethod.brand.toUpperCase()}
-                      {' '}
-                      •••• •••• ••••
-                      {' '}
-                      {state.currentData.paymentMethod.last4}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {state.currentData.paymentMethod.isDefault ? 'Default payment method' : ''}
-                    </p>
-                  </div>
-                </div>
-                {/* Applied Coupon Info */}
-                {state.currentData.paymentMethod.appliedCoupon && (
-                  <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950/30">
-                    <div className="flex items-center gap-2">
-                      <span className="text-green-600 dark:text-green-400">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
-                          <line x1="7" y1="7" x2="7.01" y2="7" />
-                        </svg>
-                      </span>
-                      <span className="text-sm font-medium text-green-800 dark:text-green-200">
-                        Coupon Applied:
-                        {' '}
-                        {state.currentData.paymentMethod.appliedCoupon.code}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-xs text-green-700 dark:text-green-300">
-                      {state.currentData.paymentMethod.appliedCoupon.type === 'Free Trial'
-                        ? state.currentData.paymentMethod.appliedCoupon.amount
-                        : `${state.currentData.paymentMethod.appliedCoupon.amount} off`}
-                      {' - '}
-                      {state.currentData.paymentMethod.appliedCoupon.description}
-                    </p>
-                  </div>
-                )}
+                {isLoadingPayment
+                  ? (
+                      <p className="text-sm text-muted-foreground">Loading payment methods...</p>
+                    )
+                  : paymentMethods.length === 0
+                    ? (
+                        <p className="text-sm text-muted-foreground">No payment method on file</p>
+                      )
+                    : (
+                        <>
+                          {(() => {
+                            const pm = paymentMethods.find(p => p.isDefault) || paymentMethods[0]!;
+                            return (
+                              <div className="flex items-start gap-4">
+                                <div className="rounded-lg bg-blue-600 p-3">
+                                  <span className="text-2xl">{getPaymentTypeIcon(pm.type)}</span>
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-medium text-foreground">
+                                    {getPaymentTypeLabel(pm.type).toUpperCase()}
+                                    {pm.last4 && (
+                                      <>
+                                        {' '}
+                                        ••••
+                                        {' '}
+                                        {pm.last4}
+                                      </>
+                                    )}
+                                  </p>
+                                  <p className="mt-1 text-xs text-muted-foreground">
+                                    {pm.isDefault ? 'Default payment method' : ''}
+                                  </p>
+                                </div>
+                              </div>
+                            );
+                          })()}
+                          {/* Applied Coupon Info */}
+                          {appliedCoupon && (
+                            <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950/30">
+                              <div className="flex items-center gap-2">
+                                <span className="text-green-600 dark:text-green-400">
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+                                    <line x1="7" y1="7" x2="7.01" y2="7" />
+                                  </svg>
+                                </span>
+                                <span className="text-sm font-medium text-green-800 dark:text-green-200">
+                                  Coupon Applied:
+                                  {' '}
+                                  {appliedCoupon.code}
+                                </span>
+                              </div>
+                              <p className="mt-1 text-xs text-green-700 dark:text-green-300">
+                                {appliedCoupon.type === 'Free Trial'
+                                  ? appliedCoupon.amount
+                                  : `${appliedCoupon.amount} off`}
+                                {' - '}
+                                {appliedCoupon.description}
+                              </p>
+                            </div>
+                          )}
+                        </>
+                      )}
               </div>
             </Card>
 
@@ -1109,67 +1182,31 @@ export default function EditMemberPage() {
           {/* Billing History */}
           <Card className="p-6">
             <h2 className="mb-6 text-lg font-semibold text-foreground">Billing History</h2>
-            {state.currentData.billingHistory.length === 0
+            {isLoadingBilling
               ? (
-                  <div className="flex items-center justify-center py-12">
-                    <p className="text-muted-foreground">No billing history</p>
-                  </div>
+                  <p className="text-sm text-muted-foreground">Loading billing history...</p>
                 )
-              : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-border">
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">Member</th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">Date</th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">Amount</th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">Purpose</th>
-                          <th className="hidden px-4 py-3 text-left text-sm font-semibold text-foreground sm:table-cell">Method</th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {state.currentData.billingHistory.flatMap((item) => {
-                          if (item.groupType === 'family' && item.children && item.children.length > 0) {
-                            return [
-                              <tr key={item.id} className="border-b border-border hover:bg-secondary/30">
-                                <td className="px-4 py-4">
-                                  <span className="text-sm font-semibold text-foreground">{item.member}</span>
-                                </td>
-                                <td className="px-4 py-4 text-sm text-muted-foreground">{item.date}</td>
-                                <td className="px-4 py-4 text-sm font-semibold text-primary">
-                                  {formatCurrency(item.amount)}
-                                </td>
-                                <td className="px-4 py-4 text-sm text-muted-foreground">{item.purpose}</td>
-                                <td className="hidden px-4 py-4 text-sm text-muted-foreground sm:table-cell">{item.method}</td>
-                                <td className="px-4 py-4">
-                                  <Button
-                                    size="sm"
-                                    onClick={() => console.info('Refund', item.id)}
-                                    className="w-fit bg-foreground text-background hover:bg-foreground/90"
-                                  >
-                                    Refund
-                                  </Button>
-                                </td>
-                              </tr>,
-                              ...item.children.map(child => (
-                                <tr key={child.id} className="border-b border-border bg-secondary/20">
-                                  <td className="px-4 py-4 pl-8 text-sm text-muted-foreground">
-                                    {child.member}
-                                  </td>
-                                  <td className="px-4 py-4 text-sm text-muted-foreground" />
-                                  <td className="px-4 py-4 text-sm text-muted-foreground">
-                                    {formatCurrency(child.amount)}
-                                  </td>
-                                  <td className="px-4 py-4 text-sm text-muted-foreground">{child.purpose}</td>
-                                  <td className="hidden px-4 py-4 text-sm text-muted-foreground sm:table-cell" />
-                                  <td className="px-4 py-4" />
-                                </tr>
-                              )),
-                            ];
-                          }
-
-                          return [
+              : billingHistory.length === 0
+                ? (
+                    <div className="flex items-center justify-center py-12">
+                      <p className="text-muted-foreground">No billing history</p>
+                    </div>
+                  )
+                : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-border">
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">Member</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">Date</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">Amount</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">Purpose</th>
+                            <th className="hidden px-4 py-3 text-left text-sm font-semibold text-foreground sm:table-cell">Method</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {billingHistory.map(item => (
                             <tr key={item.id} className="border-b border-border hover:bg-secondary/30">
                               <td className="px-4 py-4">
                                 <span className="text-sm font-semibold text-foreground">{item.member}</span>
@@ -1189,13 +1226,12 @@ export default function EditMemberPage() {
                                   Refund
                                 </Button>
                               </td>
-                            </tr>,
-                          ];
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
           </Card>
 
           {/* Family Members Section - With Remove Buttons */}

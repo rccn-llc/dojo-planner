@@ -21,16 +21,43 @@ export const formatCurrency = (amount: number): string => {
 };
 
 /**
- * Get the icon for a card brand
+ * Get the icon for a payment method type
  */
-export const getBrandIcon = (brand: string): string => {
+export const getPaymentTypeIcon = (type: string): string => {
   const iconMap: Record<string, string> = {
-    visa: '💳',
-    mastercard: '💳',
-    amex: '💳',
-    discover: '💳',
+    card: '💳',
+    bank_transfer: '🏦',
+    cash: '💵',
+    check: '📝',
   };
-  return iconMap[brand.toLowerCase()] || '💳';
+  return iconMap[type.toLowerCase()] || '💳';
+};
+
+/**
+ * Get a human-readable label for a payment method type
+ */
+export const getPaymentTypeLabel = (type: string): string => {
+  const labelMap: Record<string, string> = {
+    card: 'Card',
+    bank_transfer: 'Bank Transfer',
+    cash: 'Cash',
+    check: 'Check',
+  };
+  return labelMap[type.toLowerCase()] || type;
+};
+
+/**
+ * Format a transaction type to a human-readable label
+ */
+export const formatTransactionType = (type: string): string => {
+  const map: Record<string, string> = {
+    membership_payment: 'Membership Payment',
+    event_registration: 'Event Registration',
+    signup_fee: 'Signup Fee',
+    refund: 'Refund',
+    adjustment: 'Adjustment',
+  };
+  return map[type] || type;
 };
 
 /**

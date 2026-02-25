@@ -155,6 +155,7 @@ export const memberSchema = pgTable(
       .$onUpdate(() => new Date()),
     status: text('status').notNull().default('active'), // active, hold, trial, cancelled, past_due
     statusChangedAt: timestamp('status_changed_at', { mode: 'date' }),
+    iqproCustomerId: text('iqpro_customer_id'), // IQPro payment processor customer ID
     createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { mode: 'date' })
       .defaultNow()
@@ -166,6 +167,7 @@ export const memberSchema = pgTable(
     index('member_org_status_idx').on(table.organizationId, table.status),
     index('member_org_email_idx').on(table.organizationId, table.email),
     uniqueIndex('member_clerk_user_idx').on(table.clerkUserId),
+    uniqueIndex('member_iqpro_customer_idx').on(table.iqproCustomerId),
   ],
 );
 
@@ -213,6 +215,7 @@ export const memberMembershipSchema = pgTable(
     endDate: timestamp('end_date', { mode: 'date' }), // null if ongoing
     firstPaymentDate: timestamp('first_payment_date', { mode: 'date' }), // When the first payment was made
     nextPaymentDate: timestamp('next_payment_date', { mode: 'date' }), // When the next payment is due (for autopay)
+    iqproSubscriptionId: text('iqpro_subscription_id'), // IQPro recurring subscription ID
     createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { mode: 'date' })
       .defaultNow()
@@ -382,6 +385,7 @@ export const paymentMethodSchema = pgTable('payment_method', {
   id: text('id').primaryKey(),
   memberId: text('member_id').references(() => memberSchema.id).notNull(),
   stripePaymentMethodId: text('stripe_payment_method_id'),
+  iqproPaymentMethodId: text('iqpro_payment_method_id'), // IQPro payment method ID
   type: text('type').notNull(),
   last4: text('last4'),
   isDefault: boolean('is_default').default(false),
@@ -863,6 +867,7 @@ export const transactionSchema = pgTable(
     memberMembershipId: text('member_membership_id').references(() => memberMembershipSchema.id),
     eventRegistrationId: text('event_registration_id').references(() => eventRegistrationSchema.id),
     stripePaymentIntentId: text('stripe_payment_intent_id'),
+    iqproTransactionId: text('iqpro_transaction_id'), // IQPro transaction ID
     transactionType: text('transaction_type').notNull(), // 'membership_payment', 'event_registration', 'signup_fee', 'refund', 'adjustment'
     amount: real('amount').notNull(),
     currency: text('currency').notNull().default('USD'),

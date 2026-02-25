@@ -45,3 +45,12 @@ export const UpdateMemberContactInfoValidation = z.object({
     country: z.string(),
   }).optional(),
 });
+
+export const MemberPaymentMethodsValidation = z.object({
+  memberId: z.string().min(1),
+});
+
+export const MemberTransactionsValidation = z.object({
+  memberId: z.string().min(1),
+  limit: z.number().min(1).max(200).optional(),
+});

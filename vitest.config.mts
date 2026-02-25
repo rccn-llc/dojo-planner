@@ -11,6 +11,7 @@ export default defineConfig({
   },
   test: {
     silent: true,
+    reporters: process.env.CI ? ['dot'] : ['default'],
     coverage: {
       include: ['src/**/*'],
       exclude: ['src/**/*.stories.{js,jsx,ts,tsx}'],

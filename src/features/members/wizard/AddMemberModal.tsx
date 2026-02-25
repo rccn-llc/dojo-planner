@@ -1,9 +1,11 @@
 'use client';
 
 import type { Coupon } from '@/features/marketing';
-import type { AppliedCoupon } from '@/hooks/useAddMemberWizard';
+import type { AppliedCoupon, PaymentDeclineReason } from '@/hooks/useAddMemberWizard';
+import type { TokenizationIframeConfig } from '@/libs/IQPro';
 import { useOrganization, useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useAddMemberWizard } from '@/hooks/useAddMemberWizard';
 import { client } from '@/libs/Orpc';
@@ -46,8 +48,50 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
   const wizard = useAddMemberWizard();
   const { user } = useUser();
   const { organization } = useOrganization();
+  const [tokenizationConfig, setTokenizationConfig] = useState<TokenizationIframeConfig | null>(null);
+  // Holds the cardToken + cardFirstSix + cardLastFour from iframe tokenization so handleFinalNext
+  // can access them without waiting for React state to commit (avoids stale closure).
+  const cardTokenRef = useRef<string | undefined>(undefined);
+  const cardFirstSixRef = useRef<string | undefined>(undefined);
+  const cardLastFourRef = useRef<string | undefined>(undefined);
+
+  // Wrapper around wizard.updateData that also captures card refs synchronously
+  // so handleFinalNext can read them (React setState is async).
+  const updateDataWithRef = (updates: Partial<typeof wizard.data>) => {
+    if (updates.cardToken !== undefined) {
+      cardTokenRef.current = updates.cardToken;
+    }
+    if (updates.cardFirstSix !== undefined) {
+      cardFirstSixRef.current = updates.cardFirstSix;
+    }
+    if (updates.cardLastFour !== undefined) {
+      cardLastFourRef.current = updates.cardLastFour;
+    }
+    wizard.updateData(updates);
+  };
+
+  // Fetch tokenization config on mount (returns null if IQPro not configured)
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+    client.payment.getTokenizationConfig({ origin: window.location.origin })
+      .then((config) => {
+        setTokenizationConfig(config ?? null);
+      })
+      .catch((err) => {
+        // IQPro not configured — use fallback plain inputs
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[AddMemberModal] Failed to fetch tokenization config:', err);
+        }
+        setTokenizationConfig(null);
+      });
+  }, [isOpen]);
 
   const handleCancel = () => {
+    cardTokenRef.current = undefined;
+    cardFirstSixRef.current = undefined;
+    cardLastFourRef.current = undefined;
     wizard.reset();
     onCloseAction();
   };
@@ -57,6 +101,9 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
       timestamp: new Date().toISOString(),
       memberData: wizard.data,
     });
+    cardTokenRef.current = undefined;
+    cardFirstSixRef.current = undefined;
+    cardLastFourRef.current = undefined;
     wizard.reset();
     onCloseAction();
     router.refresh();
@@ -209,6 +256,69 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
         console.info('[Add Member Wizard] Signed waiver created for member:', result.id);
       }
 
+      // Process payment if payment details were collected and amount > 0
+      const finalPrice = wizard.data.appliedCoupon
+        ? computeDiscountedPrice(wizard.data.membershipPlanPrice, wizard.data.appliedCoupon) ?? 0
+        : (wizard.data.membershipPlanPrice ?? 0);
+
+      if (wizard.data.paymentMethod && finalPrice > 0 && result.id) {
+        try {
+          wizard.updateData({ paymentStatus: 'processing' });
+
+          const paymentResult = await client.payment.process({
+            memberId: result.id,
+            memberEmail: wizard.data.email,
+            memberFirstName: wizard.data.firstName,
+            memberLastName: wizard.data.lastName,
+            ...(wizard.data.phone && { memberPhone: wizard.data.phone }),
+            ...(wizard.data.address && { memberAddress: wizard.data.address }),
+            paymentMethod: wizard.data.paymentMethod,
+            billingType: wizard.data.billingType || 'one-time',
+            amount: finalPrice,
+            description: wizard.data.membershipPlanName
+              ? `Membership: ${wizard.data.membershipPlanName}`
+              : 'Membership payment',
+            // Card fields (cardToken = PCI-compliant tokenized card; cardNumber = fallback)
+            // Read cardToken from ref because React setState in MemberPaymentStep is async
+            // and wizard.data.cardToken may not yet reflect the tokenized value.
+            ...(wizard.data.cardholderName && { cardholderName: wizard.data.cardholderName }),
+            ...((cardTokenRef.current || wizard.data.cardToken) && { cardToken: cardTokenRef.current || wizard.data.cardToken }),
+            ...((cardFirstSixRef.current || wizard.data.cardFirstSix) && { cardFirstSix: cardFirstSixRef.current || wizard.data.cardFirstSix }),
+            ...((cardLastFourRef.current || wizard.data.cardLastFour) && { cardLastFour: cardLastFourRef.current || wizard.data.cardLastFour }),
+            ...(wizard.data.cardNumber && !cardTokenRef.current && !wizard.data.cardToken && { cardNumber: wizard.data.cardNumber }),
+            ...(wizard.data.cardExpiry && { cardExpiry: wizard.data.cardExpiry }),
+            ...(wizard.data.cardCvc && { cardCvc: wizard.data.cardCvc }),
+            // ACH fields
+            ...(wizard.data.achAccountHolder && { achAccountHolder: wizard.data.achAccountHolder }),
+            ...(wizard.data.achRoutingNumber && { achRoutingNumber: wizard.data.achRoutingNumber }),
+            ...(wizard.data.achAccountNumber && { achAccountNumber: wizard.data.achAccountNumber }),
+            // Membership context
+            ...(wizard.data.membershipPlanId && { membershipPlanId: wizard.data.membershipPlanId }),
+            ...(wizard.data.membershipPlanFrequency && { membershipPlanFrequency: wizard.data.membershipPlanFrequency }),
+            ...(wizard.data.appliedCoupon && { appliedCoupon: wizard.data.appliedCoupon }),
+          });
+
+          wizard.updateData({
+            paymentStatus: paymentResult.success ? 'approved' : 'declined',
+            paymentDeclineReason: paymentResult.declineReason as PaymentDeclineReason | undefined,
+            paymentProcessed: true,
+          });
+
+          if (!paymentResult.success && process.env.NODE_ENV === 'development') {
+            console.warn('[Add Member Wizard] Payment declined:', paymentResult.declineReason);
+          }
+        } catch (paymentError) {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('[Add Member Wizard] Payment processing error:', paymentError);
+          }
+          wizard.updateData({
+            paymentStatus: 'declined',
+            paymentDeclineReason: 'card_declined',
+            paymentProcessed: true,
+          });
+        }
+      }
+
       // Move to success step
       wizard.setStep('success');
     } catch (error) {
@@ -322,12 +432,13 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
           {wizard.step === 'payment' && (
             <MemberPaymentStep
               data={wizard.data}
-              onUpdateAction={wizard.updateData}
+              onUpdateAction={updateDataWithRef}
               onNextAction={handleFinalNext}
               onBackAction={wizard.previousStep}
               onCancelAction={handleCancel}
               isLoading={wizard.isLoading}
               availableCoupons={availableCoupons}
+              tokenizationConfig={tokenizationConfig}
             />
           )}
 

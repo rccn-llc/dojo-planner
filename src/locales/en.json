@@ -417,9 +417,6 @@
       "back_button": "Back",
       "cancel_button": "Cancel",
       "next_button": "Next",
-      "process_payment_button": "Process Payment",
-      "retry_payment_button": "Retry Payment",
-      "continue_anyway_button": "Continue Anyway",
       "processing_button": "Processing...",
       "payment_approved_title": "Payment Approved",
       "payment_approved_message": "The payment has been successfully processed. You can now proceed to complete member registration.",
@@ -431,7 +428,9 @@
       "decline_reason_expired_card": "The card has expired. Please use a valid card.",
       "decline_reason_card_declined": "The card was declined. Please try a different payment method.",
       "decline_reason_ach_failed": "The ACH transaction failed. Please verify the account details and try again.",
-      "decline_reason_generic": "The payment could not be processed. Please try again or use a different payment method."
+      "decline_reason_generic": "The payment could not be processed. Please try again or use a different payment method.",
+      "card_number_iframe_loading": "Loading secure payment field...",
+      "card_number_iframe_error": "Failed to load secure payment field. Please refresh and try again."
     },
     "MemberSuccessStep": {
       "title": "Success",

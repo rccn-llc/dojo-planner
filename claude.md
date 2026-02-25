@@ -52,6 +52,7 @@ src/
 │   ├── Transactions.ts    # Transaction listing with filters
 │   ├── Dashboard.ts       # Membership stats, financial stats, chart data
 │   ├── Reports.ts         # Report values, chart data, dynamic insights
+│   ├── Payment.ts         # Payment processing (one-time + autopay subscriptions)
 │   └── Waivers.ts         # Waiver templates, signing, versioning, membership associations, merge fields
 │
 ├── services/              # Business logic layer
@@ -68,7 +69,10 @@ src/
 │   ├── DashboardService.ts # Membership stats, financial stats, member average & earnings chart data
 │   ├── ReportsService.ts  # Report current values, chart data, dynamically computed insights
 │   ├── WaiversService.ts  # Waiver template CRUD, versioning, signed waivers, merge fields, placeholder resolution
-│   └── WaiverPdfService.ts # On-demand PDF generation for signed waivers
+│   ├── WaiverPdfService.ts # On-demand PDF generation for signed waivers
+│   ├── PaymentProviderService.ts # Payment provider abstraction (interface + factory)
+│   ├── IQProPaymentService.ts # IQPro implementation of payment provider
+│   └── MemberPaymentService.ts # Member payment orchestration (customer → method → charge/subscription)
 │
 ├── models/
 │   └── Schema.ts          # Drizzle ORM tables (25+ tables)
@@ -83,7 +87,8 @@ src/
 │   ├── I18nRouting.ts     # Locale routing
 │   ├── Logger.ts          # Better Stack logging
 │   ├── Orpc.ts            # RPC client setup
-│   └── Stripe.ts          # Stripe client
+│   ├── Stripe.ts          # Stripe client
+│   └── IQPro.ts           # IQPro payment client singleton + gateway processor lookup
 ├── utils/                 # Helper functions
 │   ├── AppConfig.ts       # Pricing plans, Clerk locales
 │   └── Auth.ts            # Page-level auth helpers
@@ -157,6 +162,7 @@ docs/                      # Documentation
 |-------|--------|---------|
 | `/rpc/[[...rest]]` | ALL | ORPC handler |
 | `/webhook/billing` | POST | Stripe webhooks |
+| `/webhook/iqpro` | POST | IQPro payment webhooks |
 | `/api/organization/[orgId]/subscription` | GET | Subscription details |
 
 ### Layout Hierarchy
@@ -270,6 +276,64 @@ PLAN_ID.ANNUAL      -> $790/year
 npm run stripe:listen    # Forward webhooks locally
 npm run stripe:setup-price # Create test prices
 ```
+
+### IQPro (Member Payments)
+
+**Package:** `@dojo-planner/iqpro-client` (GitHub)
+
+**Purpose:** Processes member-level payments (one-time charges and recurring autopay subscriptions). Organization-level SaaS billing continues through Stripe.
+
+**Key Files:**
+- `src/libs/IQPro.ts` - Client singleton, OAuth token management, tokenization config endpoint, gateway processor lookup (`getGatewayProcessors`)
+- `src/services/PaymentProviderService.ts` - Provider-agnostic interface + factory
+- `src/services/IQProPaymentService.ts` - IQPro implementation (InsertCard schema with token + maskedCard BIN format)
+- `src/services/MemberPaymentService.ts` - Payment orchestration (customer → method → charge/subscription → DB)
+- `src/routers/Payment.ts` - ORPC `payment.process` + `payment.getTokenizationConfig` endpoints
+- `src/validations/PaymentValidation.ts` - Zod input schema
+- `src/app/[locale]/webhook/iqpro/route.ts` - Webhook handler
+- `src/hooks/useTokenExIframe.ts` - TokenEx hosted iframe lifecycle hook (PCI-compliant card tokenization)
+
+**Card Tokenization (PCI Compliance):**
+
+Raw card numbers must never touch our servers. Card data is tokenized via a TokenEx hosted iframe:
+
+1. Server fetches iframe config from IQPro Tokenization API (`payment.getTokenizationConfig`)
+2. Client loads TokenEx iframe script + initializes iframe with config (`useTokenExIframe` hook)
+3. User types card number into the iframe (hosted by TokenEx, not our app)
+4. On submit: `iframe.tokenize()` → returns `{ token, firstSix, lastFour }`
+5. Token + BIN data sent to server → used with `InsertCard` schema: `card: { token, expirationDate, maskedCard }` where `maskedCard` = `BIN(6)******last4(4)` (e.g., `424242******4242`)
+6. When IQPro is not configured, falls back to plain card number input (local dev only)
+
+**CSP domains for TokenEx:** `sandbox.api.basyspro.com`, `api.basyspro.com`, `*.tokenex.com` (configured in `next.config.ts`)
+
+**Payment Flow:**
+1. Get or create IQPro customer (stored as `iqproCustomerId` on member)
+2. Register payment method — card uses `InsertCard` schema with `token` + `maskedCard` (BIN format); ACH uses `InsertAch` schema
+3. One-time: process transaction → save to `transaction` table
+4. Autopay: create subscription → save `iqproSubscriptionId` on membership
+
+**Subscription API Requirements (IQPro InsertSubscription):**
+
+The IQPro subscription API has strict requirements validated against the sandbox:
+
+- `prefix` (required, max 10 chars) — set to `"MBR"` for membership subscriptions
+- `billingPeriodId` — 4 (Monthly) or 6 (Yearly)
+- Schedule for monthly: `{ minutes: [0], hours: [0], daysOfMonth: [day] }` — must NOT include `monthsOfYear`
+- Schedule for annual: `{ minutes: [0], hours: [0], daysOfMonth: [day], monthsOfYear: [month] }`
+- Two separate addresses required: one billing (must include `country`, `state`, `email`), one remittance (cannot be same as billing)
+- `cardProcessorId` / `achProcessorId` required on payment method — fetched via `getGatewayProcessors()` from gateway config
+- `trialLengthInDays` (required, min 0) and `invoiceLengthInDays` (required, min 1)
+- Line items: `unitPrice` in dollars (not cents), `discount` field is required (use `0`)
+- `unitOfMeasureId`: 3 = Month, 4 = Year
+
+**Webhook Events Handled:**
+- `payment.completed` - Update transaction status
+- `payment.failed` - Mark member past_due
+- `subscription.payment_succeeded` - Update next payment date
+- `subscription.payment_failed` - Mark membership past_due
+- `subscription.cancelled` - Update membership status
+
+**Configuration:** All env vars are optional — app starts without IQPro, payment features disabled.
 
 ### Sentry (Error Monitoring)
 
@@ -432,9 +496,9 @@ await deleteUserWithOrganization();
 
 **Key Tables:**
 - `organization` - Multi-tenant orgs with Stripe IDs
-- `member` - Member records with dateOfBirth, optional `clerkUserId` for kiosk auth
+- `member` - Member records with dateOfBirth, optional `clerkUserId` for kiosk auth, optional `iqproCustomerId`
 - `membership_plan` - Pricing tiers
-- `member_membership` - Member-plan associations with startDate, endDate, firstPaymentDate, nextPaymentDate
+- `member_membership` - Member-plan associations with startDate, endDate, firstPaymentDate, nextPaymentDate, optional `iqproSubscriptionId`
 - `program` - Training programs (Adult BJJ, Kids, Competition)
 - `class` - Class definitions
 - `class_schedule_instance` - Recurring schedule patterns
@@ -444,10 +508,10 @@ await deleteUserWithOrganization();
 - `event_billing` - Event pricing tiers
 - `tag` - Polymorphic tags for classes/memberships/events
 - `coupon` - Discount codes
-- `transaction` - Financial transactions (membership payments, signup fees, event registrations, refunds, adjustments)
+- `transaction` - Financial transactions (membership payments, signup fees, event registrations, refunds, adjustments), optional `iqproTransactionId`
 - `attendance` - Check-in records
 - `audit_event` - SOC2 compliance audit logging
-- `payment_method` - Saved payment methods (card, bank_transfer, cash, check)
+- `payment_method` - Saved payment methods (card, bank_transfer, cash, check), optional `iqproPaymentMethodId`
 - `address` - Member addresses
 - `note` - Member notes
 - `family_member` - Family relationships
@@ -577,6 +641,17 @@ NEXT_PUBLIC_BETTER_STACK_SOURCE_TOKEN
 NEXT_PUBLIC_BETTER_STACK_INGESTING_HOST
 ```
 
+**Optional (IQPro Member Payments):**
+```bash
+IQPRO_CLIENT_ID
+IQPRO_CLIENT_SECRET
+IQPRO_SCOPE
+IQPRO_OAUTH_URL
+IQPRO_BASE_URL
+IQPRO_GATEWAY_ID
+IQPRO_WEBHOOK_SECRET
+```
+
 ## Scripts
 
 ```bash
@@ -697,6 +772,9 @@ AUDIT_ACTION.MERGE_FIELD_CREATE;
 AUDIT_ACTION.MERGE_FIELD_UPDATE;
 AUDIT_ACTION.MERGE_FIELD_DELETE;
 
+// Payment operations
+AUDIT_ACTION.PAYMENT_PROCESS;
+
 // See src/types/Audit.ts for full list
 ```
 
@@ -789,6 +867,7 @@ This approach:
 | **Sentry** | `*.ingest.sentry.io`, `o-*.ingest.sentry.io`, `sentry.io`, `www.sentry-cdn.com` | connect-src, script-src |
 | **Better Stack** | `*.betterstack.com`, `logs.betterstack.com` | connect-src |
 | **Upstash** | `*.upstash.io` | connect-src |
+| **TokenEx/BasysPro** | `sandbox.api.basyspro.com`, `api.basyspro.com`, `*.tokenex.com` | script-src, frame-src, connect-src |
 
 **Adding New Third-Party Services:**
 
@@ -817,6 +896,10 @@ When integrating a new service, update the CSP in `next.config.ts`:
 **OAuth/Social Login:**
 
 The `form-action` directive includes Clerk domains to allow OAuth redirects for social login (Google, Facebook, GitHub, etc.). Without this, browsers block the redirect to OAuth providers, causing CORS-like errors during social authentication.
+
+**Dev Mode CSP:**
+- `upgrade-insecure-requests` is conditionally excluded in development (`NODE_ENV=development`) because it breaks TokenEx iframe postMessage on `http://localhost`
+- In production, `upgrade-insecure-requests` is always included
 
 **Testing CSP:**
 - Use `Content-Security-Policy-Report-Only` header during testing

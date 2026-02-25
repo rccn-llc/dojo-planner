@@ -63,6 +63,9 @@ export const AUDIT_ACTION = {
   TRANSACTION_REFUND: 'transaction.refund',
   TRANSACTION_UPDATE: 'transaction.update',
 
+  // Payment operations
+  PAYMENT_PROCESS: 'payment.process',
+
   // Tag operations
   TAG_CREATE: 'tag.create',
   TAG_UPDATE: 'tag.update',

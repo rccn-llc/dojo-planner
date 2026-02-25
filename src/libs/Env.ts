@@ -11,6 +11,14 @@ export const Env = createEnv({
     // Upstash Redis for rate limiting (optional - rate limiting disabled if not configured)
     UPSTASH_REDIS_REST_URL: z.string().url().optional(),
     UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
+    // IQPro payment processor for member payments (optional - payments disabled if not configured)
+    IQPRO_CLIENT_ID: z.string().min(1).optional(),
+    IQPRO_CLIENT_SECRET: z.string().min(1).optional(),
+    IQPRO_SCOPE: z.string().min(1).optional(),
+    IQPRO_OAUTH_URL: z.string().url().optional(),
+    IQPRO_BASE_URL: z.string().url().optional(),
+    IQPRO_GATEWAY_ID: z.string().min(1).optional(),
+    IQPRO_WEBHOOK_SECRET: z.string().min(1).optional(),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.string().optional(),
@@ -31,6 +39,13 @@ export const Env = createEnv({
     BILLING_PLAN_ENV: process.env.BILLING_PLAN_ENV,
     UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
     UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
+    IQPRO_CLIENT_ID: process.env.IQPRO_CLIENT_ID,
+    IQPRO_CLIENT_SECRET: process.env.IQPRO_CLIENT_SECRET,
+    IQPRO_SCOPE: process.env.IQPRO_SCOPE,
+    IQPRO_OAUTH_URL: process.env.IQPRO_OAUTH_URL,
+    IQPRO_BASE_URL: process.env.IQPRO_BASE_URL,
+    IQPRO_GATEWAY_ID: process.env.IQPRO_GATEWAY_ID,
+    IQPRO_WEBHOOK_SECRET: process.env.IQPRO_WEBHOOK_SECRET,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:
       process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
