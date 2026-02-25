@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatCurrency,
-  getBrandIcon,
+  formatTransactionType,
   getInitials,
+  getPaymentTypeIcon,
+  getPaymentTypeLabel,
   getStatusColor,
   getStatusLabel,
   resolveTabFromUrl,
@@ -53,37 +55,77 @@ describe('Member Detail Page Utilities', () => {
     });
   });
 
-  describe('getBrandIcon', () => {
-    it('returns icon for visa', () => {
-      expect(getBrandIcon('visa')).toBe('💳');
+  describe('getPaymentTypeIcon', () => {
+    it('returns card icon for card type', () => {
+      expect(getPaymentTypeIcon('card')).toBe('💳');
     });
 
-    it('returns icon for mastercard', () => {
-      expect(getBrandIcon('mastercard')).toBe('💳');
+    it('returns bank icon for bank_transfer type', () => {
+      expect(getPaymentTypeIcon('bank_transfer')).toBe('🏦');
     });
 
-    it('returns icon for amex', () => {
-      expect(getBrandIcon('amex')).toBe('💳');
+    it('returns cash icon for cash type', () => {
+      expect(getPaymentTypeIcon('cash')).toBe('💵');
     });
 
-    it('returns icon for discover', () => {
-      expect(getBrandIcon('discover')).toBe('💳');
+    it('returns check icon for check type', () => {
+      expect(getPaymentTypeIcon('check')).toBe('📝');
     });
 
-    it('handles uppercase brand names', () => {
-      expect(getBrandIcon('VISA')).toBe('💳');
+    it('handles uppercase type names', () => {
+      expect(getPaymentTypeIcon('CARD')).toBe('💳');
     });
 
-    it('handles mixed case brand names', () => {
-      expect(getBrandIcon('MasterCard')).toBe('💳');
+    it('returns default icon for unknown type', () => {
+      expect(getPaymentTypeIcon('unknown')).toBe('💳');
+    });
+  });
+
+  describe('getPaymentTypeLabel', () => {
+    it('returns "Card" for card type', () => {
+      expect(getPaymentTypeLabel('card')).toBe('Card');
     });
 
-    it('returns default icon for unknown brand', () => {
-      expect(getBrandIcon('unknown')).toBe('💳');
+    it('returns "Bank Transfer" for bank_transfer type', () => {
+      expect(getPaymentTypeLabel('bank_transfer')).toBe('Bank Transfer');
     });
 
-    it('returns default icon for empty string', () => {
-      expect(getBrandIcon('')).toBe('💳');
+    it('returns "Cash" for cash type', () => {
+      expect(getPaymentTypeLabel('cash')).toBe('Cash');
+    });
+
+    it('returns "Check" for check type', () => {
+      expect(getPaymentTypeLabel('check')).toBe('Check');
+    });
+
+    it('returns raw type for unknown type', () => {
+      expect(getPaymentTypeLabel('crypto')).toBe('crypto');
+    });
+  });
+
+  describe('formatTransactionType', () => {
+    it('returns "Membership Payment" for membership_payment', () => {
+      expect(formatTransactionType('membership_payment')).toBe('Membership Payment');
+    });
+
+    it('returns "Event Registration" for event_registration', () => {
+      expect(formatTransactionType('event_registration')).toBe('Event Registration');
+    });
+
+    it('returns "Signup Fee" for signup_fee', () => {
+      expect(formatTransactionType('signup_fee')).toBe('Signup Fee');
+    });
+
+    it('returns "Refund" for refund', () => {
+      expect(formatTransactionType('refund')).toBe('Refund');
+    });
+
+    it('returns "Adjustment" for adjustment', () => {
+      expect(formatTransactionType('adjustment')).toBe('Adjustment');
+    });
+
+    it('returns raw type for unknown type', () => {
+      expect(formatTransactionType('custom_type')).toBe('custom_type');
     });
   });
 

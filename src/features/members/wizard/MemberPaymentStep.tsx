@@ -1,14 +1,16 @@
 'use client';
 
 import type { Coupon } from '@/features/marketing';
-import type { AddMemberWizardData, AppliedCoupon, BillingType, PaymentDeclineReason, PaymentMethod, PaymentStatus } from '@/hooks/useAddMemberWizard';
+import type { AddMemberWizardData, AppliedCoupon, BillingType, PaymentDeclineReason, PaymentMethod } from '@/hooks/useAddMemberWizard';
+import type { TokenizationIframeConfig } from '@/libs/IQPro';
 import { AlertCircle, CheckCircle2, CreditCard, Landmark, Loader2, RefreshCw, Tag } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { calculateCouponDiscount, getValidMembershipCoupons } from '@/features/marketing';
+import { useTokenExIframe } from '@/hooks/useTokenExIframe';
 
 type MemberPaymentStepProps = {
   data: AddMemberWizardData;
@@ -18,96 +20,10 @@ type MemberPaymentStepProps = {
   onCancelAction: () => void;
   isLoading?: boolean;
   availableCoupons?: Coupon[];
+  tokenizationConfig?: TokenizationIframeConfig | null;
 };
 
-type MockPaymentResult = {
-  success: boolean;
-  status: PaymentStatus;
-  declineReason?: PaymentDeclineReason;
-  transactionId?: string;
-};
-
-/**
- * FIX: This mock payment API should be replaced with actual payment processor integration
- * (e.g., Stripe, Square, or similar payment gateway) in production.
- *
- * Mock payment logic for testing:
- * - Card number ending in '0000' or CVC all zeros (000, 0000, etc.) = declined (insufficient funds)
- * - Card number ending in '0001' or CVC '001' = declined (invalid CVC)
- * - Card number ending in '0002' = declined (expired card)
- * - Card number ending in '0003' = declined (card declined)
- * - ACH routing number '000000000' = declined (ACH failed)
- * - All other values = approved
- *
- * Test card numbers (use any expiry date in future):
- * - 4111111111111111 = approved
- * - 4111111111110000 = declined (insufficient funds)
- * - 4111111111110001 = declined (invalid CVC)
- */
-async function mockProcessPayment(
-  paymentMethod: PaymentMethod,
-  cardNumber?: string,
-  cardCvc?: string,
-  achRoutingNumber?: string,
-): Promise<MockPaymentResult> {
-  // Simulate network delay (1-2 seconds)
-  await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
-
-  // Check for decline conditions based on card/ACH details
-  // Normalize CVC by removing spaces and checking if it contains only zeros
-  const normalizedCvc = cardCvc?.replace(/\s/g, '') || '';
-  const isAllZerosCvc = normalizedCvc.length >= 3 && /^0+$/.test(normalizedCvc);
-
-  if (paymentMethod === 'card') {
-    if (cardNumber?.endsWith('0000') || isAllZerosCvc) {
-      return {
-        success: false,
-        status: 'declined',
-        declineReason: 'insufficient_funds',
-      };
-    }
-    if (cardNumber?.endsWith('0001') || normalizedCvc === '001') {
-      return {
-        success: false,
-        status: 'declined',
-        declineReason: 'invalid_cvc',
-      };
-    }
-    if (cardNumber?.endsWith('0002')) {
-      return {
-        success: false,
-        status: 'declined',
-        declineReason: 'expired_card',
-      };
-    }
-    if (cardNumber?.endsWith('0003')) {
-      return {
-        success: false,
-        status: 'declined',
-        declineReason: 'card_declined',
-      };
-    }
-  }
-
-  if (paymentMethod === 'ach') {
-    if (achRoutingNumber === '000000000') {
-      return {
-        success: false,
-        status: 'declined',
-        declineReason: 'ach_failed',
-      };
-    }
-  }
-
-  // Generate mock transaction ID
-  const transactionId = `txn_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-
-  return {
-    success: true,
-    status: 'approved',
-    transactionId,
-  };
-}
+const TOKENEX_CONTAINER_ID = 'tokenExIframeDiv';
 
 const formatPaymentAmount = (price?: number): string => {
   if (price === undefined || price === null || price === 0) {
@@ -138,16 +54,35 @@ export const MemberPaymentStep = ({
   onCancelAction,
   isLoading = false,
   availableCoupons = [],
+  tokenizationConfig,
 }: MemberPaymentStepProps) => {
   const t = useTranslations('AddMemberWizard.MemberPaymentStep');
   const [touched, setTouched] = useState<Record<string, boolean>>({});
-  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [tokenizing, setTokenizing] = useState(false);
 
+  const useIframe = !!tokenizationConfig;
   const paymentMethod = data.paymentMethod || 'card';
+
+  // Persist default payment method to wizard state on mount
+  useEffect(() => {
+    if (!data.paymentMethod) {
+      onUpdateAction({ paymentMethod: 'card' });
+    }
+  }, [data.paymentMethod, onUpdateAction]);
+
+  // TokenEx iframe hook — only active when config is provided (null = skip init)
+  const {
+    isLoaded: iframeLoaded,
+    isValid: iframeValid,
+    error: iframeError,
+    tokenize: iframeTokenize,
+  } = useTokenExIframe({
+    containerId: TOKENEX_CONTAINER_ID,
+    config: tokenizationConfig ?? null,
+  });
   const originalPrice = data.membershipPlanPrice ?? 0;
   const frequencyLabel = getFrequencyLabel(data.membershipPlanFrequency);
   const paymentStatus = data.paymentStatus;
-  const paymentProcessed = data.paymentProcessed;
 
   // Determine if this is a recurring membership (monthly or annual)
   const isRecurringMembership = data.membershipPlanFrequency
@@ -246,7 +181,7 @@ export const MemberPaymentStep = ({
 
   // Card validation helpers for touched fields
   const isCardholderNameInvalid = touched.cardholderName && !data.cardholderName;
-  const isCardNumberInvalid = touched.cardNumber && !data.cardNumber;
+  const isCardNumberInvalid = !useIframe && touched.cardNumber && !data.cardNumber;
   const isCardExpiryInvalid = touched.cardExpiry && !data.cardExpiry;
   const isCardCvcInvalid = touched.cardCvc && !data.cardCvc;
 
@@ -255,9 +190,10 @@ export const MemberPaymentStep = ({
   const isAchRoutingNumberInvalid = touched.achRoutingNumber && !data.achRoutingNumber;
   const isAchAccountNumberInvalid = touched.achAccountNumber && !data.achAccountNumber;
 
+  // Card form valid: iframe mode checks iframeValid instead of cardNumber
   const isCardFormValid = paymentMethod === 'card'
     && data.cardholderName
-    && data.cardNumber
+    && (useIframe ? iframeValid : data.cardNumber)
     && data.cardExpiry
     && data.cardCvc;
 
@@ -267,38 +203,6 @@ export const MemberPaymentStep = ({
     && data.achAccountNumber;
 
   const isFormValid = isCardFormValid || isAchFormValid;
-
-  const handleProcessPayment = async () => {
-    if (!isFormValid || isProcessingPayment) {
-      return;
-    }
-
-    setIsProcessingPayment(true);
-    onUpdateAction({ paymentStatus: 'processing' });
-
-    try {
-      const result = await mockProcessPayment(
-        paymentMethod,
-        data.cardNumber,
-        data.cardCvc,
-        data.achRoutingNumber,
-      );
-
-      onUpdateAction({
-        paymentStatus: result.status,
-        paymentDeclineReason: result.declineReason,
-        paymentProcessed: true,
-      });
-    } catch {
-      onUpdateAction({
-        paymentStatus: 'declined',
-        paymentDeclineReason: 'card_declined',
-        paymentProcessed: true,
-      });
-    } finally {
-      setIsProcessingPayment(false);
-    }
-  };
 
   const getDeclineReasonMessage = (reason?: PaymentDeclineReason): string => {
     switch (reason) {
@@ -322,6 +226,32 @@ export const MemberPaymentStep = ({
   const periodText = frequencyLabel;
   const originalAmountText = formatPaymentAmount(originalPrice);
   const hasCouponApplied = data.appliedCoupon && discountAmount > 0;
+
+  // Handle next: tokenize via iframe if needed, then proceed.
+  const handleNextClick = useCallback(async () => {
+    if (!useIframe || paymentMethod !== 'card') {
+      onNextAction();
+      return;
+    }
+
+    try {
+      setTokenizing(true);
+      const result = await iframeTokenize();
+      onUpdateAction({ cardToken: result.token, cardFirstSix: result.firstSix, cardLastFour: result.lastFour });
+      onNextAction();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Tokenization failed';
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[TokenEx] Tokenization failed:', msg);
+      }
+      onUpdateAction({
+        paymentStatus: 'declined',
+        paymentDeclineReason: 'card_declined',
+      });
+    } finally {
+      setTokenizing(false);
+    }
+  }, [useIframe, paymentMethod, onNextAction, onUpdateAction, iframeTokenize]);
 
   return (
     <div className="space-y-6">
@@ -357,7 +287,7 @@ export const MemberPaymentStep = ({
           <Select
             value={data.appliedCoupon?.id || 'none'}
             onValueChange={handleCouponChange}
-            disabled={isProcessingPayment}
+            disabled={isLoading}
           >
             <SelectTrigger id="couponSelect" className="mt-1">
               <SelectValue placeholder={t('coupon_placeholder')} />
@@ -408,12 +338,12 @@ export const MemberPaymentStep = ({
             <button
               type="button"
               onClick={() => handleBillingTypeChange('autopay')}
-              disabled={isProcessingPayment}
+              disabled={isLoading}
               className={`flex flex-1 items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 transition-all ${
                 billingType === 'autopay'
                   ? 'border-primary bg-primary/5'
                   : 'border-border bg-background hover:border-primary/50 hover:bg-accent/50'
-              } ${isProcessingPayment ? 'cursor-not-allowed opacity-50' : ''}`}
+              } ${isLoading ? 'cursor-not-allowed opacity-50' : ''}`}
             >
               <RefreshCw className="h-5 w-5" />
               <div className="text-left">
@@ -425,12 +355,12 @@ export const MemberPaymentStep = ({
             <button
               type="button"
               onClick={() => handleBillingTypeChange('one-time')}
-              disabled={isProcessingPayment}
+              disabled={isLoading}
               className={`flex flex-1 items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 transition-all ${
                 billingType === 'one-time'
                   ? 'border-primary bg-primary/5'
                   : 'border-border bg-background hover:border-primary/50 hover:bg-accent/50'
-              } ${isProcessingPayment ? 'cursor-not-allowed opacity-50' : ''}`}
+              } ${isLoading ? 'cursor-not-allowed opacity-50' : ''}`}
             >
               <CreditCard className="h-5 w-5" />
               <div className="text-left">
@@ -493,12 +423,12 @@ export const MemberPaymentStep = ({
         <button
           type="button"
           onClick={() => handlePaymentMethodChange('card')}
-          disabled={isProcessingPayment}
+          disabled={isLoading}
           className={`flex flex-1 items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 transition-all ${
             paymentMethod === 'card'
               ? 'border-primary bg-primary/5'
               : 'border-border bg-background hover:border-primary/50 hover:bg-accent/50'
-          } ${isProcessingPayment ? 'cursor-not-allowed opacity-50' : ''}`}
+          } ${isLoading ? 'cursor-not-allowed opacity-50' : ''}`}
         >
           <CreditCard className="h-5 w-5" />
           <span className="font-medium">{t('card_tab_label')}</span>
@@ -507,12 +437,12 @@ export const MemberPaymentStep = ({
         <button
           type="button"
           onClick={() => handlePaymentMethodChange('ach')}
-          disabled={isProcessingPayment}
+          disabled={isLoading}
           className={`flex flex-1 items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 transition-all ${
             paymentMethod === 'ach'
               ? 'border-primary bg-primary/5'
               : 'border-border bg-background hover:border-primary/50 hover:bg-accent/50'
-          } ${isProcessingPayment ? 'cursor-not-allowed opacity-50' : ''}`}
+          } ${isLoading ? 'cursor-not-allowed opacity-50' : ''}`}
         >
           <Landmark className="h-5 w-5" />
           <span className="font-medium">{t('ach_tab_label')}</span>
@@ -533,7 +463,7 @@ export const MemberPaymentStep = ({
               onChange={e => handleInputChange('cardholderName', e.target.value)}
               onBlur={() => handleInputBlur('cardholderName')}
               error={isCardholderNameInvalid}
-              disabled={isProcessingPayment}
+              disabled={isLoading}
               className="mt-1"
             />
             {isCardholderNameInvalid && (
@@ -542,22 +472,46 @@ export const MemberPaymentStep = ({
           </div>
 
           <div>
-            <label htmlFor="cardNumber" className="block text-sm font-medium">
+            <label htmlFor={useIframe ? TOKENEX_CONTAINER_ID : 'cardNumber'} className="block text-sm font-medium">
               {t('card_number_label')}
             </label>
-            <Input
-              id="cardNumber"
-              placeholder={t('card_number_placeholder')}
-              value={data.cardNumber || ''}
-              onChange={e => handleInputChange('cardNumber', e.target.value)}
-              onBlur={() => handleInputBlur('cardNumber')}
-              error={isCardNumberInvalid}
-              disabled={isProcessingPayment}
-              className="mt-1"
-            />
-            {isCardNumberInvalid && (
-              <p className="text-xs text-destructive">{t('card_number_error')}</p>
-            )}
+            {useIframe
+              ? (
+                  <div>
+                    {!iframeLoaded && !iframeError && (
+                      <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        {t('card_number_iframe_loading')}
+                      </div>
+                    )}
+                    {iframeError && (
+                      <p className="text-xs text-destructive">{t('card_number_iframe_error')}</p>
+                    )}
+                    <div
+                      id={TOKENEX_CONTAINER_ID}
+                      className={`mt-1 h-10 w-full overflow-hidden rounded-md border border-input bg-background ${
+                        isLoading ? 'pointer-events-none opacity-50' : ''
+                      } ${!iframeLoaded && !iframeError ? 'hidden' : ''}`}
+                    />
+                  </div>
+                )
+              : (
+                  <>
+                    <Input
+                      id="cardNumber"
+                      placeholder={t('card_number_placeholder')}
+                      value={data.cardNumber || ''}
+                      onChange={e => handleInputChange('cardNumber', e.target.value)}
+                      onBlur={() => handleInputBlur('cardNumber')}
+                      error={isCardNumberInvalid}
+                      disabled={isLoading}
+                      className="mt-1"
+                    />
+                    {isCardNumberInvalid && (
+                      <p className="text-xs text-destructive">{t('card_number_error')}</p>
+                    )}
+                  </>
+                )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -572,7 +526,7 @@ export const MemberPaymentStep = ({
                 onChange={e => handleInputChange('cardExpiry', e.target.value)}
                 onBlur={() => handleInputBlur('cardExpiry')}
                 error={isCardExpiryInvalid}
-                disabled={isProcessingPayment}
+                disabled={isLoading}
                 className="mt-1"
               />
               {isCardExpiryInvalid && (
@@ -591,7 +545,7 @@ export const MemberPaymentStep = ({
                 onChange={e => handleInputChange('cardCvc', e.target.value)}
                 onBlur={() => handleInputBlur('cardCvc')}
                 error={isCardCvcInvalid}
-                disabled={isProcessingPayment}
+                disabled={isLoading}
                 className="mt-1"
               />
               {isCardCvcInvalid && (
@@ -616,7 +570,7 @@ export const MemberPaymentStep = ({
               onChange={e => handleInputChange('achAccountHolder', e.target.value)}
               onBlur={() => handleInputBlur('achAccountHolder')}
               error={isAchAccountHolderInvalid}
-              disabled={isProcessingPayment}
+              disabled={isLoading}
               className="mt-1"
             />
             {isAchAccountHolderInvalid && (
@@ -635,7 +589,7 @@ export const MemberPaymentStep = ({
               onChange={e => handleInputChange('achRoutingNumber', e.target.value)}
               onBlur={() => handleInputBlur('achRoutingNumber')}
               error={isAchRoutingNumberInvalid}
-              disabled={isProcessingPayment}
+              disabled={isLoading}
               className="mt-1"
             />
             {isAchRoutingNumberInvalid && (
@@ -654,7 +608,7 @@ export const MemberPaymentStep = ({
               onChange={e => handleInputChange('achAccountNumber', e.target.value)}
               onBlur={() => handleInputBlur('achAccountNumber')}
               error={isAchAccountNumberInvalid}
-              disabled={isProcessingPayment}
+              disabled={isLoading}
               className="mt-1"
             />
             {isAchAccountNumberInvalid && (
@@ -667,59 +621,26 @@ export const MemberPaymentStep = ({
       {/* Action Buttons */}
       <div className="flex justify-between gap-3 pt-6">
         <div className="flex gap-3">
-          <Button variant="outline" onClick={onBackAction} disabled={isProcessingPayment}>
+          <Button variant="outline" onClick={onBackAction} disabled={isLoading || tokenizing}>
             {t('back_button')}
           </Button>
-          <Button variant="outline" onClick={onCancelAction} disabled={isProcessingPayment}>
+          <Button variant="outline" onClick={onCancelAction} disabled={isLoading || tokenizing}>
             {t('cancel_button')}
           </Button>
         </div>
-        <div className="flex gap-3">
-          {/* Show Process Payment button when payment has not been processed yet */}
-          {!paymentProcessed && (
-            <Button
-              onClick={handleProcessPayment}
-              disabled={!isFormValid || isProcessingPayment || isLoading}
-            >
-              {isProcessingPayment
-                ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      {t('processing_button')}
-                    </>
-                  )
-                : t('process_payment_button')}
-            </Button>
-          )}
-          {/* When payment is declined, show both Retry and Continue Anyway buttons */}
-          {paymentStatus === 'declined' && (
-            <>
-              <Button
-                variant="outline"
-                onClick={handleProcessPayment}
-                disabled={!isFormValid || isProcessingPayment || isLoading}
-              >
-                {isProcessingPayment
-                  ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        {t('processing_button')}
-                      </>
-                    )
-                  : t('retry_payment_button')}
-              </Button>
-              <Button onClick={onNextAction} disabled={isLoading} variant="destructive">
-                {isLoading ? `${t('continue_anyway_button')}...` : t('continue_anyway_button')}
-              </Button>
-            </>
-          )}
-          {/* Show Next button when payment is approved */}
-          {paymentStatus === 'approved' && (
-            <Button onClick={onNextAction} disabled={isLoading}>
-              {isLoading ? `${t('next_button')}...` : t('next_button')}
-            </Button>
-          )}
-        </div>
+        <Button
+          onClick={handleNextClick}
+          disabled={!isFormValid || isLoading || tokenizing}
+        >
+          {(isLoading || tokenizing)
+            ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {t('processing_button')}
+                </>
+              )
+            : t('next_button')}
+        </Button>
       </div>
     </div>
   );

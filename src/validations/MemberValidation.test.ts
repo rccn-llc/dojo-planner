@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   DeleteMemberValidation,
   EditMemberValidation,
+  MemberPaymentMethodsValidation,
+  MemberTransactionsValidation,
   MemberValidation,
   UpdateMemberContactInfoValidation,
 } from './MemberValidation';
@@ -245,6 +247,58 @@ describe('MemberValidation', () => {
       const result = UpdateMemberContactInfoValidation.safeParse(validData);
 
       expect(result.success).toBe(true);
+    });
+  });
+
+  describe('MemberPaymentMethodsValidation schema', () => {
+    it('should validate with valid memberId', () => {
+      const result = MemberPaymentMethodsValidation.safeParse({ memberId: 'member-123' });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should fail when memberId is empty', () => {
+      const result = MemberPaymentMethodsValidation.safeParse({ memberId: '' });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('should fail when memberId is missing', () => {
+      const result = MemberPaymentMethodsValidation.safeParse({});
+
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('MemberTransactionsValidation schema', () => {
+    it('should validate with valid memberId', () => {
+      const result = MemberTransactionsValidation.safeParse({ memberId: 'member-123' });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate with optional limit', () => {
+      const result = MemberTransactionsValidation.safeParse({ memberId: 'member-123', limit: 25 });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should fail when limit is below 1', () => {
+      const result = MemberTransactionsValidation.safeParse({ memberId: 'member-123', limit: 0 });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('should fail when limit exceeds 200', () => {
+      const result = MemberTransactionsValidation.safeParse({ memberId: 'member-123', limit: 201 });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('should fail when memberId is empty', () => {
+      const result = MemberTransactionsValidation.safeParse({ memberId: '' });
+
+      expect(result.success).toBe(false);
     });
   });
 });

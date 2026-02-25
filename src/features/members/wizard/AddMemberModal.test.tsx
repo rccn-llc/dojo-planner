@@ -42,6 +42,9 @@ vi.mock('@/libs/Orpc', () => ({
     waivers: {
       createSignedWaiver: vi.fn().mockResolvedValue({ waiver: { id: 'signed-waiver-1' } }),
     },
+    payment: {
+      getTokenizationConfig: vi.fn().mockResolvedValue(null),
+    },
   },
 }));
 

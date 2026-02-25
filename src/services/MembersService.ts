@@ -1,7 +1,8 @@
+import type { TransactionData } from '@/services/TransactionsService';
 import { randomUUID } from 'node:crypto';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/libs/DB';
-import { addressSchema, memberMembershipSchema, memberSchema, membershipPlanSchema } from '@/models/Schema';
+import { addressSchema, memberMembershipSchema, memberSchema, membershipPlanSchema, paymentMethodSchema, transactionSchema } from '@/models/Schema';
 
 export type MembershipPlanData = {
   id: string;
@@ -501,4 +502,68 @@ export async function getAllMembershipPlans(organizationId: string): Promise<Mem
     isTrial: plan.isTrial,
     isActive: plan.isActive,
   }));
+}
+
+// ===== Member payment data queries =====
+
+export type MemberPaymentMethodData = {
+  id: string;
+  type: string;
+  last4: string | null;
+  isDefault: boolean | null;
+};
+
+/**
+ * Get payment methods for a specific member
+ * @param memberId - The member ID
+ * @returns Array of payment methods, default method first
+ */
+export async function getMemberPaymentMethods(memberId: string): Promise<MemberPaymentMethodData[]> {
+  return db
+    .select({
+      id: paymentMethodSchema.id,
+      type: paymentMethodSchema.type,
+      last4: paymentMethodSchema.last4,
+      isDefault: paymentMethodSchema.isDefault,
+    })
+    .from(paymentMethodSchema)
+    .where(eq(paymentMethodSchema.memberId, memberId))
+    .orderBy(desc(paymentMethodSchema.isDefault));
+}
+
+/**
+ * Get transactions for a specific member within an organization
+ * @param memberId - The member ID
+ * @param organizationId - The organization ID
+ * @param limit - Max number of transactions to return (default 50)
+ * @returns Array of transactions, most recent first
+ */
+export async function getMemberTransactions(
+  memberId: string,
+  organizationId: string,
+  limit: number = 50,
+): Promise<TransactionData[]> {
+  return db
+    .select({
+      id: transactionSchema.id,
+      memberId: transactionSchema.memberId,
+      memberFirstName: memberSchema.firstName,
+      memberLastName: memberSchema.lastName,
+      transactionType: transactionSchema.transactionType,
+      amount: transactionSchema.amount,
+      currency: transactionSchema.currency,
+      status: transactionSchema.status,
+      paymentMethod: transactionSchema.paymentMethod,
+      description: transactionSchema.description,
+      processedAt: transactionSchema.processedAt,
+      createdAt: transactionSchema.createdAt,
+    })
+    .from(transactionSchema)
+    .innerJoin(memberSchema, eq(transactionSchema.memberId, memberSchema.id))
+    .where(and(
+      eq(transactionSchema.memberId, memberId),
+      eq(transactionSchema.organizationId, organizationId),
+    ))
+    .orderBy(desc(transactionSchema.createdAt))
+    .limit(limit);
 }

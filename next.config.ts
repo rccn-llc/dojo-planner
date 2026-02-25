@@ -7,28 +7,30 @@ import './src/libs/Env';
 // Content Security Policy for SOC2 compliance (CC6.6)
 // Protects against XSS attacks by controlling which resources can be loaded
 // Note: Clerk uses dynamic subdomains like *.clerk.accounts.dev for each instance
+const isDev = process.env.NODE_ENV === 'development';
+
 const contentSecurityPolicy = [
   'default-src \'self\'',
-  // Scripts: self + Clerk + Sentry + unsafe-inline (required for Next.js theme/RSC scripts)
-  'script-src \'self\' \'unsafe-inline\' https://cdn.clerk.com https://*.clerk.accounts.dev https://www.sentry-cdn.com',
+  // Scripts: self + Clerk + Sentry + TokenEx/BasysPro (payment iframe) + unsafe-inline (required for Next.js theme/RSC scripts)
+  'script-src \'self\' \'unsafe-inline\' https://cdn.clerk.com https://*.clerk.accounts.dev https://www.sentry-cdn.com https://sandbox.api.basyspro.com https://api.basyspro.com',
   // Styles: self + unsafe-inline (required by Clerk inline styles - cannot be avoided) + Clerk domains
   'style-src \'self\' \'unsafe-inline\' https://cdn.clerk.com https://*.clerk.accounts.dev',
   // Fonts: self only (Inter is self-hosted via next/font)
   'font-src \'self\'',
   // Images: self + all HTTPS + data URIs + blob (for Clerk avatars)
   'img-src \'self\' https: data: blob:',
-  // Frames: self + Clerk for OAuth flows
-  'frame-src \'self\' https://*.clerk.com https://*.clerk.accounts.dev',
+  // Frames: self + Clerk for OAuth flows + TokenEx/BasysPro for payment iframe
+  'frame-src \'self\' https://*.clerk.com https://*.clerk.accounts.dev https://sandbox.api.basyspro.com https://api.basyspro.com https://*.tokenex.com',
   // Workers: self + blob (for Clerk)
   'worker-src \'self\' blob:',
-  // Connections: self + Clerk API + Sentry + Upstash + Better Stack
-  'connect-src \'self\' https://api.clerk.com https://*.clerk.com https://*.clerk.accounts.dev https://*.ingest.sentry.io https://o-*.ingest.sentry.io https://sentry.io https://*.upstash.io https://*.betterstack.com https://logs.betterstack.com',
+  // Connections: self + Clerk API + Sentry + Upstash + Better Stack + TokenEx/BasysPro
+  'connect-src \'self\' https://api.clerk.com https://*.clerk.com https://*.clerk.accounts.dev https://*.ingest.sentry.io https://o-*.ingest.sentry.io https://sentry.io https://*.upstash.io https://*.betterstack.com https://logs.betterstack.com https://sandbox.api.basyspro.com https://api.basyspro.com https://*.tokenex.com',
   // Base URI: restrict to self
   'base-uri \'self\'',
   // Form actions: self + Clerk for OAuth/social login flows
   'form-action \'self\' https://*.clerk.com https://*.clerk.accounts.dev',
-  // Upgrade HTTP to HTTPS
-  'upgrade-insecure-requests',
+  // Upgrade HTTP to HTTPS (skip in dev — breaks TokenEx iframe postMessage on http://localhost)
+  ...(!isDev ? ['upgrade-insecure-requests'] : []),
 ].join('; ');
 
 // Security headers for SOC2 compliance
