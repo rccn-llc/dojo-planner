@@ -98,9 +98,9 @@ export function generateWaiverPdfBuffer(input: WaiverPdfInput): Buffer {
   }
   cleanContent = cleanContent
     .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
     .trim();
   for (const paragraph of cleanContent.split(/\n{2,}/)) {
     if (paragraph.trim()) {

@@ -239,9 +239,9 @@ export function generateWaiverPdf(input: WaiverPdfInput): Blob {
   }
   cleanContent = cleanContent
     .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
     .trim();
 
   const paragraphs = cleanContent.split(/\n{2,}/);
