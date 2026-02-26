@@ -1,10 +1,11 @@
 'use client';
 
 import type { Coupon } from '@/features/marketing';
-import type { AddMemberWizardData, AppliedCoupon, BillingType, PaymentDeclineReason, PaymentMethod } from '@/hooks/useAddMemberWizard';
+import type { AddMemberWizardData, AppliedCoupon, BillingType, MemberType, PaymentDeclineReason, PaymentMethod } from '@/hooks/useAddMemberWizard';
 import type { TokenizationIframeConfig } from '@/libs/IQPro';
-import { AlertCircle, CheckCircle2, CreditCard, Landmark, Loader2, RefreshCw, Tag } from 'lucide-react';
+import { AlertCircle, CheckCircle2, CreditCard, Info, Landmark, Loader2, RefreshCw, Tag } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { useTheme } from 'next-themes';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +22,7 @@ type MemberPaymentStepProps = {
   isLoading?: boolean;
   availableCoupons?: Coupon[];
   tokenizationConfig?: TokenizationIframeConfig | null;
+  memberType?: MemberType;
 };
 
 const TOKENEX_CONTAINER_ID = 'tokenExIframeDiv';
@@ -55,8 +57,11 @@ export const MemberPaymentStep = ({
   isLoading = false,
   availableCoupons = [],
   tokenizationConfig,
+  memberType,
 }: MemberPaymentStepProps) => {
   const t = useTranslations('AddMemberWizard.MemberPaymentStep');
+  const tHOH = useTranslations('AddMemberWizard.MemberPaymentStep_HOHNotice');
+  const { resolvedTheme } = useTheme();
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [tokenizing, setTokenizing] = useState(false);
 
@@ -79,6 +84,7 @@ export const MemberPaymentStep = ({
   } = useTokenExIframe({
     containerId: TOKENEX_CONTAINER_ID,
     config: tokenizationConfig ?? null,
+    theme: resolvedTheme === 'dark' ? 'dark' : 'light',
   });
   const originalPrice = data.membershipPlanPrice ?? 0;
   const frequencyLabel = getFrequencyLabel(data.membershipPlanFrequency);
@@ -277,6 +283,16 @@ export const MemberPaymentStep = ({
           })}
         </p>
       </div>
+
+      {/* HOH Billing Notice */}
+      {memberType === 'head-of-household' && (
+        <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/30">
+          <Info className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
+          <p className="text-sm text-blue-700 dark:text-blue-300">
+            {tHOH('notice')}
+          </p>
+        </div>
+      )}
 
       {/* Coupon Selection */}
       {validCoupons.length > 0 && originalPrice > 0 && (
@@ -489,7 +505,7 @@ export const MemberPaymentStep = ({
                     )}
                     <div
                       id={TOKENEX_CONTAINER_ID}
-                      className={`mt-1 h-10 w-full overflow-hidden rounded-md border border-input bg-background ${
+                      className={`mt-1 h-9 w-full overflow-hidden rounded-md border border-neutral-600 bg-neutral-100 shadow-xs dark:bg-input/30 [&_iframe]:border-none ${
                         isLoading ? 'pointer-events-none opacity-50' : ''
                       } ${!iframeLoaded && !iframeError ? 'hidden' : ''}`}
                     />

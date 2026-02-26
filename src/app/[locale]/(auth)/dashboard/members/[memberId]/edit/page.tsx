@@ -14,11 +14,12 @@ import { Badge } from '@/components/ui/badge';
 import { MemberBreadcrumb } from '@/components/ui/breadcrumb/MemberBreadcrumb';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ChangeMembershipModal } from '@/features/members/details/ChangeMembershipModal';
 import { EditContactInfoModal } from '@/features/members/details/EditContactInfoModal';
 import { MemberDetailAttendance } from '@/features/members/details/MemberDetailAttendance';
 import { MemberDetailNotes } from '@/features/members/details/MemberDetailNotes';
-import { useMembersCache } from '@/hooks/useMembersCache';
+import { invalidateMembersCache, useMembersCache } from '@/hooks/useMembersCache';
 import { client } from '@/libs/Orpc';
 import { generateAndDownloadWaiverPdf, generatePdfFilename } from '@/services/WaiverPdfService';
 import {
@@ -210,11 +211,6 @@ const MOCK_NOTES: MemberNote[] = [
     content: 'Welcome call completed. Member is interested in competition training starting next year.',
   },
 ];
-
-// Base mock data fallback
-const BASE_MOCK_DATA = {
-  familyMembers: [] as FamilyMember[],
-};
 
 // Build MemberData from API member data - use Member type from cache
 
@@ -422,7 +418,7 @@ function buildMemberDataFromAPI(apiMember: Member & { membershipType?: string; p
       pastDuePayments: 0,
       lastPayment: isFreeOrTrial ? undefined : 'Last payment: N/A',
     },
-    familyMembers: BASE_MOCK_DATA.familyMembers,
+    familyMembers: [],
     membershipDetails: buildMembershipDetails(membershipTypeStr, apiMember.status, planProgram, currentPlan, {
       startDate: apiMember.currentMembership?.startDate,
       createdAt: apiMember.currentMembership?.createdAt,
@@ -559,6 +555,9 @@ export default function EditMemberPage() {
   const [billingHistory, setBillingHistory] = useState<BillingHistoryItem[]>([]);
   const [isLoadingBilling, setIsLoadingBilling] = useState(true);
 
+  // State for family members (only for HOH members)
+  const [familyMembersData, setFamilyMembersData] = useState<FamilyMember[]>([]);
+
   // Get the current member from cache for membership info
   const currentMember: Member | undefined = members?.find(m => m.id === memberId);
   const currentMembership = currentMember?.currentMembership;
@@ -567,6 +566,22 @@ export default function EditMemberPage() {
   const handleOpenMembershipModal = (mode: 'add' | 'change') => {
     setMembershipModalMode(mode);
     setIsChangeMembershipModalOpen(true);
+  };
+
+  const handleMemberTypeChange = async (value: string) => {
+    if (!memberId) {
+      return;
+    }
+    try {
+      await client.member.updateMemberType({
+        id: memberId,
+        memberType: value as 'individual' | 'family-member' | 'head-of-household',
+      });
+      await invalidateMembersCache();
+    } catch (err) {
+      console.warn('[Edit Member] Failed to update member type:', err);
+      dispatch({ type: 'SET_ERROR', payload: 'Failed to update member type' });
+    }
   };
 
   // Handler to sync tab from URL
@@ -704,6 +719,33 @@ export default function EditMemberPage() {
     fetchBillingHistory();
   }, [memberId]);
 
+  // Fetch family members if this member is a head of household
+  const isHOH = currentMember?.memberType === 'head-of-household';
+  useEffect(() => {
+    if (!memberId || !isHOH) {
+      return;
+    }
+    const fetchFamilyMembers = async () => {
+      try {
+        const result = await client.member.listFamilyMembers({ memberId });
+        const mapped: FamilyMember[] = result.familyMembers.map((fm: { id: string; firstName: string; lastName: string; photoUrl: string | null; status: string | null; relationship: string }) => ({
+          id: fm.id,
+          name: `${fm.firstName} ${fm.lastName}`,
+          relationship: fm.relationship,
+          photoUrl: fm.photoUrl || undefined,
+          membershipType: 'Family Member',
+          status: (fm.status === 'on-hold' ? 'on-hold' : fm.status === 'cancelled' ? 'cancelled' : 'active') as 'active' | 'on-hold' | 'cancelled',
+          amount: 0,
+        }));
+        setFamilyMembersData(mapped);
+      } catch (err) {
+        console.warn('[Edit Member] Failed to fetch family members:', err);
+        setFamilyMembersData([]);
+      }
+    };
+    fetchFamilyMembers();
+  }, [memberId, isHOH]);
+
   // Derive applied coupon from signed waivers (most recent with coupon data)
   const appliedCoupon = useMemo(() => {
     const waiverWithCoupon = signedWaivers
@@ -817,7 +859,19 @@ export default function EditMemberPage() {
           <AvatarFallback>{getInitials(state.currentData.memberName)}</AvatarFallback>
         </Avatar>
         <div className="flex flex-col gap-2">
-          <h1 className="text-2xl font-bold text-foreground">{state.currentData.memberName}</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-foreground">{state.currentData.memberName}</h1>
+            <Select value={currentMember?.memberType || 'individual'} onValueChange={handleMemberTypeChange}>
+              <SelectTrigger className="h-8 w-auto gap-1 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="individual">Individual</SelectItem>
+                <SelectItem value="head-of-household">Head of Household</SelectItem>
+                <SelectItem value="family-member">Family Member</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary">{state.currentData.billingContactRole}</Badge>
             {currentMember?.status && (
@@ -1234,69 +1288,74 @@ export default function EditMemberPage() {
                   )}
           </Card>
 
-          {/* Family Members Section - With Remove Buttons */}
-          <div className="space-y-6">
-            <h2 className="text-lg font-semibold text-foreground">Family Members</h2>
+          {/* Family Members Section - Only shown for HOH members */}
+          {isHOH && (
+            <div className="space-y-6">
+              <h2 className="text-lg font-semibold text-foreground">Family Members</h2>
 
-            {state.currentData.familyMembers.length > 0 && (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {state.currentData.familyMembers.map((member: FamilyMember) => (
-                  <Card key={member.id} className="relative p-6">
-                    {/* Remove Button */}
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      className="absolute top-4 right-4"
-                      onClick={() => handleRemoveFamilyMember(member.id)}
-                      aria-label={`Remove ${member.name}`}
-                      title={`Remove ${member.name}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+              {familyMembersData.length > 0 && (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {familyMembersData.map((member: FamilyMember) => (
+                    <Card key={member.id} className="relative p-6">
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="absolute top-4 right-4"
+                        onClick={() => handleRemoveFamilyMember(member.id)}
+                        aria-label={`Remove ${member.name}`}
+                        title={`Remove ${member.name}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
 
-                    <div className="mb-4 flex flex-col gap-3 pr-10">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <Avatar className="h-10 w-10 shrink-0">
-                          {member.photoUrl && <AvatarImage src={member.photoUrl} alt={member.name} />}
-                          <AvatarFallback>{getInitials(member.name)}</AvatarFallback>
-                        </Avatar>
-                        <div className="min-w-0 flex-1">
-                          <h3 className="truncate font-semibold text-foreground">{member.name}</h3>
-                          <Badge variant="outline" className="mt-1 text-xs">{member.relationship}</Badge>
+                      <div className="mb-4 flex flex-col gap-3 pr-10">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <Avatar className="h-10 w-10 shrink-0">
+                            {member.photoUrl && <AvatarImage src={member.photoUrl} alt={member.name} />}
+                            <AvatarFallback>{getInitials(member.name)}</AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0 flex-1">
+                            <h3 className="truncate font-semibold text-foreground">{member.name}</h3>
+                            <Badge variant="outline" className="mt-1 text-xs">{member.relationship}</Badge>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="space-y-3 border-t border-border pt-4">
-                      <div>
-                        <p className="text-xs font-semibold text-muted-foreground">{member.membershipType}</p>
-                        <Badge variant={getStatusColor(member.status)} className="mt-2">
-                          {getStatusLabel(member.status)}
-                        </Badge>
+                      <div className="space-y-3 border-t border-border pt-4">
+                        <div>
+                          <p className="text-xs font-semibold text-muted-foreground">{member.membershipType}</p>
+                          <Badge variant={getStatusColor(member.status)} className="mt-2">
+                            {getStatusLabel(member.status)}
+                          </Badge>
+                        </div>
+                        <p className="text-2xl font-bold text-primary">
+                          $
+                          {member.amount}
+                        </p>
                       </div>
-                      <p className="text-2xl font-bold text-primary">
-                        $
-                        {member.amount}
-                      </p>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            )}
-
-            {/* Add Family Member Card */}
-            <Card className="border-2 border-dashed p-6">
-              <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
-                <div className="rounded-lg bg-secondary p-3">
-                  <Plus className="h-6 w-6 text-muted-foreground" />
+                    </Card>
+                  ))}
                 </div>
-                <h3 className="font-semibold text-foreground">Add Family Member</h3>
-                <p className="text-sm text-muted-foreground">Create a new family membership</p>
-                <Button variant="outline" className="mt-2">
-                  Add Family Member
-                </Button>
-              </div>
-            </Card>
-          </div>
+              )}
+
+              {familyMembersData.length === 0 && (
+                <p className="text-sm text-muted-foreground">No family members linked yet.</p>
+              )}
+
+              {/* Add Family Member Card */}
+              <Card className="border-2 border-dashed p-6">
+                <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
+                  <div className="rounded-lg bg-secondary p-3">
+                    <Plus className="h-6 w-6 text-muted-foreground" />
+                  </div>
+                  <h3 className="font-semibold text-foreground">Add Family Member</h3>
+                  <p className="text-sm text-muted-foreground">Create a new family membership</p>
+                  <Button variant="outline" className="mt-2">
+                    Add Family Member
+                  </Button>
+                </div>
+              </Card>
+            </div>
+          )}
 
         </div>
       )}

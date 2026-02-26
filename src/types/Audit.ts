@@ -107,6 +107,9 @@ export const AUDIT_ACTION = {
   MERGE_FIELD_CREATE: 'mergeField.create',
   MERGE_FIELD_UPDATE: 'mergeField.update',
   MERGE_FIELD_DELETE: 'mergeField.delete',
+
+  // Family member operations
+  FAMILY_MEMBER_LINK: 'familyMember.link',
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTION)[keyof typeof AUDIT_ACTION];
@@ -139,6 +142,7 @@ export const AUDIT_ENTITY_TYPE = {
   SIGNED_WAIVER: 'signedWaiver',
   MEMBERSHIP_WAIVER: 'membershipWaiver',
   WAIVER_MERGE_FIELD: 'waiverMergeField',
+  FAMILY_MEMBER: 'familyMember',
 } as const;
 
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPE)[keyof typeof AUDIT_ENTITY_TYPE];

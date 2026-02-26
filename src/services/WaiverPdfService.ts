@@ -1,4 +1,5 @@
 import type { SignedWaiver } from './WaiversService';
+
 // jsPDF is intentionally lowercase per the library's design
 
 import { jsPDF as JsPDF } from 'jspdf';
@@ -227,15 +228,20 @@ export function generateWaiverPdf(input: WaiverPdfInput): Blob {
   yPosition += 3;
 
   // Split content into paragraphs and render
-  // Remove HTML tags if present
-  const cleanContent = input.renderedContent
+  // Remove HTML tags if present — loop until stable to prevent nested tag bypass
+  let cleanContent = input.renderedContent
     .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n\n')
-    .replace(/<[^>]*>/g, '')
+    .replace(/<\/p>/gi, '\n\n');
+  let prev = '';
+  while (prev !== cleanContent) {
+    prev = cleanContent;
+    cleanContent = cleanContent.replace(/<[^>]*>/g, '');
+  }
+  cleanContent = cleanContent
     .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
     .trim();
 
   const paragraphs = cleanContent.split(/\n{2,}/);

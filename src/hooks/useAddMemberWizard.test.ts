@@ -1,7 +1,7 @@
 import type { AddMemberWizardData, WizardStep } from './useAddMemberWizard';
 import { describe, expect, it } from 'vitest';
 import { renderHook } from 'vitest-browser-react';
-import { useAddMemberWizard } from './useAddMemberWizard';
+import { getStepsForMemberType, useAddMemberWizard } from './useAddMemberWizard';
 
 describe('useAddMemberWizard hook', () => {
   describe('initial state', () => {
@@ -512,17 +512,14 @@ describe('useAddMemberWizard types and exports', () => {
     expect(plans[3]).toBe('custom');
   });
 
-  it('should support all wizard steps', () => {
-    const steps: WizardStep[] = ['member-type', 'details', 'photo', 'subscription', 'waiver', 'payment', 'success'];
+  it('should support all wizard steps including HOH and family steps', () => {
+    const steps: WizardStep[] = ['member-type', 'details', 'photo', 'subscription', 'waiver', 'payment', 'hoh-selection', 'family-payment', 'success'];
 
-    expect(steps).toHaveLength(7);
+    expect(steps).toHaveLength(9);
     expect(steps[0]).toBe('member-type');
-    expect(steps[1]).toBe('details');
-    expect(steps[2]).toBe('photo');
-    expect(steps[3]).toBe('subscription');
-    expect(steps[4]).toBe('waiver');
-    expect(steps[5]).toBe('payment');
-    expect(steps[6]).toBe('success');
+    expect(steps[6]).toBe('hoh-selection');
+    expect(steps[7]).toBe('family-payment');
+    expect(steps[8]).toBe('success');
   });
 
   it('should allow creating data with optional address', () => {
@@ -582,5 +579,224 @@ describe('useAddMemberWizard types and exports', () => {
     expect(minimalData.membershipPlanId).toBeNull();
     expect(minimalData.firstName).toBe('');
     expect(minimalData.email).toBe('');
+  });
+
+  it('should allow HOH fields in AddMemberWizardData', () => {
+    const dataWithHOH: AddMemberWizardData = {
+      memberType: 'family-member',
+      firstName: 'Alice',
+      lastName: 'Doe',
+      email: 'alice@example.com',
+      phone: '1234567890',
+      membershipPlanId: null,
+      waiverTemplateId: null,
+      hohMemberId: 'hoh-123',
+      hohMemberName: 'John Doe',
+      hohMemberEmail: 'john@example.com',
+      hohHasPaymentMethod: true,
+      hohPaymentMethodLast4: '4242',
+      hohPaymentMethodType: 'card',
+    };
+
+    expect(dataWithHOH.hohMemberId).toBe('hoh-123');
+    expect(dataWithHOH.hohMemberName).toBe('John Doe');
+    expect(dataWithHOH.hohHasPaymentMethod).toBe(true);
+    expect(dataWithHOH.hohPaymentMethodLast4).toBe('4242');
+    expect(dataWithHOH.hohPaymentMethodType).toBe('card');
+  });
+});
+
+describe('getStepsForMemberType', () => {
+  it('should return standard steps for null member type', () => {
+    const steps = getStepsForMemberType(null);
+
+    expect(steps).toEqual(['member-type', 'details', 'photo', 'subscription', 'waiver', 'payment', 'success']);
+  });
+
+  it('should return standard steps for individual member type', () => {
+    const steps = getStepsForMemberType('individual');
+
+    expect(steps).toEqual(['member-type', 'details', 'photo', 'subscription', 'waiver', 'payment', 'success']);
+  });
+
+  it('should return standard steps for head-of-household member type', () => {
+    const steps = getStepsForMemberType('head-of-household');
+
+    expect(steps).toEqual(['member-type', 'details', 'photo', 'subscription', 'waiver', 'payment', 'success']);
+  });
+
+  it('should return family-member steps with hoh-selection and family-payment', () => {
+    const steps = getStepsForMemberType('family-member');
+
+    expect(steps).toEqual(['member-type', 'details', 'photo', 'subscription', 'waiver', 'hoh-selection', 'family-payment', 'success']);
+  });
+
+  it('should not include payment step for family-member flow', () => {
+    const steps = getStepsForMemberType('family-member');
+
+    expect(steps).not.toContain('payment');
+  });
+
+  it('should not include hoh-selection or family-payment for individual flow', () => {
+    const steps = getStepsForMemberType('individual');
+
+    expect(steps).not.toContain('hoh-selection');
+    expect(steps).not.toContain('family-payment');
+  });
+});
+
+describe('useAddMemberWizard conditional step routing', () => {
+  it('should navigate through family-member steps correctly', async () => {
+    const { result, act } = await renderHook(() => useAddMemberWizard());
+
+    // Set member type to family-member first
+    act(() => {
+      result.current.updateData({ memberType: 'family-member' });
+    });
+
+    // Navigate through steps
+    act(() => {
+      result.current.nextStep();
+    });
+
+    expect(result.current.step).toBe('details');
+
+    act(() => {
+      result.current.nextStep();
+    });
+
+    expect(result.current.step).toBe('photo');
+
+    act(() => {
+      result.current.nextStep();
+    });
+
+    expect(result.current.step).toBe('subscription');
+
+    act(() => {
+      result.current.nextStep();
+    });
+
+    expect(result.current.step).toBe('waiver');
+
+    act(() => {
+      result.current.nextStep();
+    });
+
+    expect(result.current.step).toBe('hoh-selection');
+
+    act(() => {
+      result.current.nextStep();
+    });
+
+    expect(result.current.step).toBe('family-payment');
+
+    act(() => {
+      result.current.nextStep();
+    });
+
+    expect(result.current.step).toBe('success');
+  });
+
+  it('should go back through family-member steps correctly', async () => {
+    const { result, act } = await renderHook(() => useAddMemberWizard());
+
+    act(() => {
+      result.current.updateData({ memberType: 'family-member' });
+      result.current.setStep('family-payment');
+    });
+
+    act(() => {
+      result.current.previousStep();
+    });
+
+    expect(result.current.step).toBe('hoh-selection');
+
+    act(() => {
+      result.current.previousStep();
+    });
+
+    expect(result.current.step).toBe('waiver');
+  });
+
+  it('should navigate through head-of-household steps (same as individual)', async () => {
+    const { result, act } = await renderHook(() => useAddMemberWizard());
+
+    act(() => {
+      result.current.updateData({ memberType: 'head-of-household' });
+    });
+
+    // Navigate to waiver step
+    act(() => {
+      result.current.nextStep(); // details
+    });
+
+    act(() => {
+      result.current.nextStep(); // photo
+    });
+
+    act(() => {
+      result.current.nextStep(); // subscription
+    });
+
+    act(() => {
+      result.current.nextStep(); // waiver
+    });
+
+    expect(result.current.step).toBe('waiver');
+
+    act(() => {
+      result.current.nextStep(); // payment (not hoh-selection)
+    });
+
+    expect(result.current.step).toBe('payment');
+  });
+
+  it('should update HOH fields via updateData', async () => {
+    const { result, act } = await renderHook(() => useAddMemberWizard());
+
+    act(() => {
+      result.current.updateData({
+        hohMemberId: 'hoh-abc',
+        hohMemberName: 'Parent User',
+        hohMemberEmail: 'parent@test.com',
+        hohHasPaymentMethod: true,
+        hohPaymentMethodLast4: '1234',
+        hohPaymentMethodType: 'ach',
+      });
+    });
+
+    expect(result.current.data.hohMemberId).toBe('hoh-abc');
+    expect(result.current.data.hohMemberName).toBe('Parent User');
+    expect(result.current.data.hohMemberEmail).toBe('parent@test.com');
+    expect(result.current.data.hohHasPaymentMethod).toBe(true);
+    expect(result.current.data.hohPaymentMethodLast4).toBe('1234');
+    expect(result.current.data.hohPaymentMethodType).toBe('ach');
+  });
+
+  it('should clear HOH fields on reset', async () => {
+    const { result, act } = await renderHook(() => useAddMemberWizard());
+
+    act(() => {
+      result.current.updateData({
+        hohMemberId: 'hoh-abc',
+        hohMemberName: 'Parent User',
+        hohMemberEmail: 'parent@test.com',
+        hohHasPaymentMethod: true,
+        hohPaymentMethodLast4: '1234',
+        hohPaymentMethodType: 'card',
+      });
+    });
+
+    act(() => {
+      result.current.reset();
+    });
+
+    expect(result.current.data.hohMemberId).toBeUndefined();
+    expect(result.current.data.hohMemberName).toBeUndefined();
+    expect(result.current.data.hohMemberEmail).toBeUndefined();
+    expect(result.current.data.hohHasPaymentMethod).toBeUndefined();
+    expect(result.current.data.hohPaymentMethodLast4).toBeUndefined();
+    expect(result.current.data.hohPaymentMethodType).toBeUndefined();
   });
 });

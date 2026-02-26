@@ -206,10 +206,10 @@
     "status_trial": "Trial",
     "status_cancelled": "Cancelled",
     "status_past_due": "Past Due",
-    "all_membership_types_filter": "All Membership Types",
-    "membership_type_free_trial": "Free Trial",
-    "membership_type_monthly": "Monthly",
-    "membership_type_annual": "Annual"
+    "all_membership_types_filter": "All Member Types",
+    "member_type_individual": "Individual",
+    "member_type_head_of_household": "Head of Household",
+    "member_type_family_member": "Family Member"
   },
   "Staff": {
     "invite_staff_button": "Invite Staff Member",
@@ -332,7 +332,7 @@
       "email_placeholder": "you@example.com",
       "phone_label": "Phone Number",
       "phone_placeholder": "(555) 123-4567",
-      "address_label": "Address (Optional)",
+      "address_label": "Address:",
       "street_label": "Street Address",
       "street_placeholder": "123 Main St",
       "apartment_label": "Apartment / Line 2",
@@ -431,6 +431,41 @@
       "decline_reason_generic": "The payment could not be processed. Please try again or use a different payment method.",
       "card_number_iframe_loading": "Loading secure payment field...",
       "card_number_iframe_error": "Failed to load secure payment field. Please refresh and try again."
+    },
+    "HOHSelectionStep": {
+      "title": "Select Head of Household",
+      "subtitle": "Choose which head of household will be responsible for this family member's billing",
+      "search_placeholder": "Search by name or email...",
+      "no_hoh_found": "No head of household members found. Please create an HOH member first.",
+      "no_search_results": "No results matching your search.",
+      "selected_label": "Selected",
+      "payment_method_label": "Payment method on file",
+      "payment_method_value": "{type} ending in {last4}",
+      "no_payment_method": "No payment method on file",
+      "back_button": "Back",
+      "cancel_button": "Cancel",
+      "next_button": "Next"
+    },
+    "FamilyPaymentStep": {
+      "title": "Confirm Family Member Billing",
+      "subtitle_with_card": "This family member's billing will be charged to the head of household's payment method",
+      "subtitle_no_card": "No payment method on file for the head of household. Please enter payment details below.",
+      "summary_label": "Billing Summary",
+      "member_label": "Family Member",
+      "plan_label": "Plan",
+      "amount_label": "Amount",
+      "hoh_label": "Head of Household",
+      "payment_method_label": "Payment Method",
+      "payment_method_value": "{hohName}'s {type} ending in {last4}",
+      "billing_notice": "The initial fee of {amount} will be charged to {hohName}'s payment method today. A recurring subscription of {price}/{frequency} will be set up starting from today's date.",
+      "no_card_notice": "No payment method on file for {hohName}. Please enter payment details below. Payment will be saved to the head of household's account.",
+      "confirm_button": "Confirm & Add Member",
+      "processing_button": "Processing...",
+      "back_button": "Back",
+      "cancel_button": "Cancel"
+    },
+    "MemberPaymentStep_HOHNotice": {
+      "notice": "Note: If family members are added to your account in the future, their membership fees will be charged to this payment method on the date they join, with recurring billing based on their join date."
     },
     "MemberSuccessStep": {
       "title": "Success",

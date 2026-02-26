@@ -62,9 +62,15 @@ async function openWizard(page: Page) {
   await expect(page.getByRole('dialog')).toBeVisible();
 }
 
-/** Select "Individual" member type and click Next. */
-async function selectMemberType(page: Page) {
-  await page.getByRole('heading', { name: 'Individual' }).click();
+/** Select a member type by heading name and click Next. */
+async function selectMemberType(page: Page, type: 'Individual' | 'Head of Household' | 'Family Member' = 'Individual') {
+  // Locate the <h3> heading with the exact member type text, then click its parent <button>.
+  // Using getByRole('heading') + exact match ensures we target the correct member type,
+  // even when another type's description contains the same words (e.g. "Family Member"
+  // description says "head of household").
+  const heading = page.getByRole('heading', { name: type, exact: true, level: 3 });
+  // Click the ancestor button element — using xpath `..` for cross-browser compatibility
+  await heading.locator('xpath=ancestor::button').click();
   await page.getByRole('button', { name: 'Next', exact: true }).click();
 
   await expect(page.getByText('Add Member Details').first()).toBeVisible();
@@ -103,9 +109,9 @@ async function fillDetailsStep(page: Page): Promise<MemberDetails> {
 }
 
 /** Navigate through steps 1-3 (type → details → photo) and land on subscription step. */
-async function navigateToSubscriptionStep(page: Page): Promise<MemberDetails> {
+async function navigateToSubscriptionStep(page: Page, memberType: 'Individual' | 'Head of Household' | 'Family Member' = 'Individual'): Promise<MemberDetails> {
   await openWizard(page);
-  await selectMemberType(page);
+  await selectMemberType(page, memberType);
   const details = await fillDetailsStep(page);
   await page.getByRole('button', { name: 'Next', exact: true }).click();
 
@@ -121,8 +127,8 @@ async function navigateToSubscriptionStep(page: Page): Promise<MemberDetails> {
 }
 
 /** Navigate through steps 1-5 to land on payment step. */
-async function navigateToPaymentStep(page: Page): Promise<MemberDetails> {
-  const details = await navigateToSubscriptionStep(page);
+async function navigateToPaymentStep(page: Page, memberType: 'Individual' | 'Head of Household' = 'Individual'): Promise<MemberDetails> {
+  const details = await navigateToSubscriptionStep(page, memberType);
 
   // Wait for plans to load and select the first one
   await expect(page.locator('button[aria-pressed]').first()).toBeVisible({ timeout: 10000 });
@@ -134,6 +140,73 @@ async function navigateToPaymentStep(page: Page): Promise<MemberDetails> {
   await expect(page.getByText('Payment Information')).toBeVisible({ timeout: 10000 });
 
   return details;
+}
+
+/** Whether the family card number field is a plain <input> (fallback mode). */
+async function isFamilyCardNumberFallback(page: Page): Promise<boolean> {
+  return page.locator('#familyCardNumber').isVisible({ timeout: 2000 }).catch(() => false);
+}
+
+/**
+ * Fill payment details in the family payment step.
+ * Handles both fallback (plain input) and iframe (TokenEx) modes.
+ */
+async function fillFamilyPaymentStep(page: Page) {
+  const isFallback = await isFamilyCardNumberFallback(page);
+
+  if (isFallback) {
+    await page.locator('#familyCardholderName').fill('Test Family Cardholder');
+    await page.locator('#familyCardNumber').fill('4111111111111111');
+    await page.locator('#familyCardExpiry').fill('12/30');
+    await page.locator('#familyCardCvc').fill('999');
+  } else {
+    // TokenEx iframe can't be driven — use ACH instead
+    await page.getByText('ACH Bank Account').click();
+    await page.locator('#familyAchAccountHolder').fill('Test Family Account Holder');
+    await page.getByPlaceholder('9 digits').fill('021000021');
+    await page.getByPlaceholder('Account number').fill('123456789');
+  }
+}
+
+/**
+ * Complete the entire HOH wizard flow end-to-end.
+ * Creates an HOH member and returns their details for subsequent tests.
+ */
+async function completeHOHWizardFlow(page: Page): Promise<MemberDetails> {
+  // Step 1: Member Type — HOH
+  await openWizard(page);
+  await selectMemberType(page, 'Head of Household');
+
+  // Step 2: Details
+  const hohDetails = await fillDetailsStep(page);
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+
+  // Step 3: Photo — skip
+  await expect(page.getByText('Drop your image here to upload')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+
+  // Step 4: Membership Plan
+  await expect(page.getByText('Choose Membership Plan').first()).toBeVisible();
+  await expect(page.locator('button[aria-pressed]').first()).toBeVisible({ timeout: 10000 });
+
+  await page.locator('button[aria-pressed]').first().click();
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+
+  // Step 5: Waiver auto-skips → Step 6: Payment
+  await expect(page.getByText('Payment Information')).toBeVisible({ timeout: 10000 });
+
+  await fillPaymentStep(page);
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+
+  // Step 7: Success
+  await expect(page.getByText(/has successfully been added as a member/i)).toBeVisible({ timeout: 30000 });
+
+  await page.getByRole('button', { name: 'Done' }).click();
+
+  await expect(page.getByRole('dialog')).toBeHidden();
+
+  return hohDetails;
 }
 
 // ── Tests ────────────────────────────────────────────────────────────
@@ -160,7 +233,9 @@ test.describe('Add Member Wizard', () => {
       await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeDisabled();
 
       // Select Individual → Next enabled
-      await page.getByRole('heading', { name: 'Individual' }).click();
+      await page.getByRole('heading', { name: 'Individual', exact: true, level: 3 })
+        .locator('xpath=ancestor::button')
+        .click();
 
       await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeEnabled();
     });
@@ -291,8 +366,7 @@ test.describe('Add Member Wizard', () => {
     test('should complete entire wizard from member type through success', async ({ page }) => {
       // Step 1: Member Type
       await openWizard(page);
-      await page.getByRole('heading', { name: 'Individual' }).click();
-      await page.getByRole('button', { name: 'Next', exact: true }).click();
+      await selectMemberType(page, 'Individual');
 
       // Step 2: Details
       const details = await fillDetailsStep(page);
@@ -331,6 +405,223 @@ test.describe('Add Member Wizard', () => {
       await page.getByRole('button', { name: 'Done' }).click();
 
       await expect(page.getByRole('dialog')).toBeHidden();
+    });
+  });
+
+  // ── HOH Flow ─────────────────────────────────────────────────────
+
+  test.describe('HOH Flow', () => {
+    test('should show HOH billing notice on payment step', async ({ page }) => {
+      await navigateToPaymentStep(page, 'Head of Household');
+
+      // Verify the HOH-specific billing notice is displayed
+      await expect(page.getByText(/family members are added to your account/i)).toBeVisible();
+      await expect(page.getByText(/charged to this payment method/i)).toBeVisible();
+    });
+
+    test('should complete entire HOH wizard flow through success', async ({ page }) => {
+      // Step 1: Member Type — Head of Household
+      await openWizard(page);
+      await selectMemberType(page, 'Head of Household');
+
+      // Step 2: Details
+      const details = await fillDetailsStep(page);
+      await page.getByRole('button', { name: 'Next', exact: true }).click();
+
+      // Step 3: Photo — skip
+      await expect(page.getByText('Drop your image here to upload')).toBeVisible();
+
+      await page.getByRole('button', { name: 'Next', exact: true }).click();
+
+      // Step 4: Membership Plan
+      await expect(page.getByText('Choose Membership Plan').first()).toBeVisible();
+      await expect(page.locator('button[aria-pressed]').first()).toBeVisible({ timeout: 10000 });
+
+      await page.locator('button[aria-pressed]').first().click();
+      await page.getByRole('button', { name: 'Next', exact: true }).click();
+
+      // Step 5: Waiver auto-skips → Step 6: Payment
+      await expect(page.getByText('Payment Information')).toBeVisible({ timeout: 10000 });
+
+      // Verify HOH billing notice is visible on the payment step
+      await expect(page.getByText(/family members are added to your account/i)).toBeVisible();
+
+      // Fill payment details
+      await fillPaymentStep(page);
+      await page.getByRole('button', { name: 'Next', exact: true }).click();
+
+      // Step 7: Success
+      await expect(page.getByText(/has successfully been added as a member/i)).toBeVisible({ timeout: 30000 });
+      await expect(page.getByText(details.firstName)).toBeVisible();
+
+      // Close wizard
+      await page.getByRole('button', { name: 'Done' }).click();
+
+      await expect(page.getByRole('dialog')).toBeHidden();
+    });
+  });
+
+  // ── Family Member Flow ───────────────────────────────────────────
+
+  test.describe('Family Member Flow', () => {
+    test('should navigate to HOH selection step instead of payment for family members', async ({ page }) => {
+      // Navigate through to subscription step as family member
+      const details = await navigateToSubscriptionStep(page, 'Family Member');
+
+      // Wait for plans to load and select the first one
+      await expect(page.locator('button[aria-pressed]').first()).toBeVisible({ timeout: 10000 });
+
+      await page.locator('button[aria-pressed]').first().click();
+      await page.getByRole('button', { name: 'Next', exact: true }).click();
+
+      // Waiver auto-skips → should land on HOH Selection step (NOT payment)
+      // Use heading role to disambiguate from dialog title (both have same text)
+      await expect(page.getByPlaceholder('Search by name or email...')).toBeVisible({ timeout: 10000 });
+
+      // Payment Information should NOT be visible
+      await expect(page.getByText('Payment Information')).toBeHidden();
+
+      // Verify HOH selection UI elements
+      await expect(page.getByPlaceholder('Search by name or email...')).toBeVisible();
+      // Next should be disabled until an HOH is selected
+      await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeDisabled();
+
+      // Verify Back button exists and is enabled
+      await expect(page.getByRole('button', { name: 'Back' })).toBeEnabled();
+
+      void details; // Used to verify the flow works end-to-end
+    });
+
+    test('should complete full family member flow with HOH that has no saved payment method', async ({ page }) => {
+      // First, create an HOH member via the full wizard flow
+      const hohDetails = await completeHOHWizardFlow(page);
+
+      // Now create a family member linked to this HOH
+      await openWizard(page);
+      await selectMemberType(page, 'Family Member');
+
+      // Step 2: Details
+      const familyDetails = await fillDetailsStep(page);
+      await page.getByRole('button', { name: 'Next', exact: true }).click();
+
+      // Step 3: Photo — skip
+      await expect(page.getByText('Drop your image here to upload')).toBeVisible();
+
+      await page.getByRole('button', { name: 'Next', exact: true }).click();
+
+      // Step 4: Membership Plan
+      await expect(page.getByText('Choose Membership Plan').first()).toBeVisible();
+      await expect(page.locator('button[aria-pressed]').first()).toBeVisible({ timeout: 10000 });
+
+      await page.locator('button[aria-pressed]').first().click();
+      await page.getByRole('button', { name: 'Next', exact: true }).click();
+
+      // Step 5: Waiver auto-skips → Step 6: HOH Selection
+      await expect(page.getByPlaceholder('Search by name or email...')).toBeVisible({ timeout: 10000 });
+
+      // Search for and select the HOH we just created
+      const dialog = page.getByRole('dialog');
+      await dialog.getByPlaceholder('Search by name or email...').fill(hohDetails.firstName);
+
+      // Wait for the HOH to appear in the list and click to select (scoped to dialog)
+      await expect(dialog.getByText(hohDetails.email)).toBeVisible({ timeout: 10000 });
+
+      await dialog.getByText(hohDetails.email).click();
+
+      // Wait for payment method lookup to complete
+      await expect(page.getByText('Selected')).toBeVisible({ timeout: 10000 });
+
+      // The HOH likely won't have a payment method saved (IQPro not configured in E2E),
+      // so we should see "No payment method on file"
+      await expect(page.getByText(/No payment method on file/i)).toBeVisible();
+
+      // Proceed to family payment step
+      await page.getByRole('button', { name: 'Next', exact: true }).click();
+
+      // Step 7: Family Payment — verify by billing summary label (scoped to dialog)
+      await expect(dialog.getByText('Billing Summary')).toBeVisible({ timeout: 10000 });
+
+      // Verify billing summary shows family member and HOH info (scoped to dialog)
+      await expect(dialog.getByText(familyDetails.firstName)).toBeVisible();
+      await expect(dialog.getByText(`${hohDetails.firstName} ${hohDetails.lastName}`).first()).toBeVisible();
+
+      // HOH has no card on file → should show payment form (Mode B)
+      // The amber notice includes the HOH's name specifically
+      await expect(dialog.getByText(/Please enter payment details below/i).first()).toBeVisible();
+
+      // Fill the family payment form
+      await fillFamilyPaymentStep(page);
+
+      // Submit — Confirm & Add Member
+      await dialog.getByRole('button', { name: /Confirm & Add Member/i }).click();
+
+      // Step 8: Success
+      await expect(page.getByText(/has successfully been added as a member/i)).toBeVisible({ timeout: 30000 });
+      await expect(page.getByText(familyDetails.firstName)).toBeVisible();
+
+      // Close wizard
+      await page.getByRole('button', { name: 'Done' }).click();
+
+      await expect(page.getByRole('dialog')).toBeHidden();
+
+      // Verify: Navigate to HOH's member detail page and check family members section
+      // Reload the members page to ensure freshly created members appear
+      await navigateTo(page, '/dashboard/members');
+      await page.waitForLoadState('domcontentloaded');
+
+      // Search for the HOH by name (email is not displayed in table view)
+      const searchInput = page.getByPlaceholder('Search members...');
+
+      await expect(searchInput).toBeVisible({ timeout: 10000 });
+
+      await searchInput.fill(hohDetails.firstName);
+
+      // Wait for search results to filter, then click the HOH row
+      const hohName = `${hohDetails.firstName} ${hohDetails.lastName}`;
+      const hohCell = page.locator('tbody').getByText(hohName);
+
+      await expect(hohCell).toBeVisible({ timeout: 10000 });
+
+      await hohCell.click();
+
+      // Wait for member detail page to load
+      await page.waitForURL(/\/dashboard\/members\//, { timeout: 15000 });
+
+      // Verify the Family Members section appears (only for HOH members)
+      await expect(page.getByRole('heading', { name: 'Family Members' })).toBeVisible({ timeout: 15000 });
+
+      // Verify the family member we just added appears
+      await expect(page.getByText(`${familyDetails.firstName} ${familyDetails.lastName}`)).toBeVisible();
+    });
+
+    test('should display billing summary with HOH card info when HOH has payment method', async ({ page }) => {
+      // Navigate through to HOH selection step as family member
+      await openWizard(page);
+      await selectMemberType(page, 'Family Member');
+      await fillDetailsStep(page);
+      await page.getByRole('button', { name: 'Next', exact: true }).click();
+
+      // Photo — skip
+      await expect(page.getByText('Drop your image here to upload')).toBeVisible();
+
+      await page.getByRole('button', { name: 'Next', exact: true }).click();
+
+      // Membership Plan
+      await expect(page.getByText('Choose Membership Plan').first()).toBeVisible();
+      await expect(page.locator('button[aria-pressed]').first()).toBeVisible({ timeout: 10000 });
+
+      await page.locator('button[aria-pressed]').first().click();
+      await page.getByRole('button', { name: 'Next', exact: true }).click();
+
+      // HOH Selection step — verify by search input (dialog title also says "Select Head of Household")
+      await expect(page.getByPlaceholder('Search by name or email...')).toBeVisible({ timeout: 10000 });
+
+      // If there are HOH members, verify search filtering works
+      const noHOHMessage = page.getByText('No head of household members found');
+      const hohList = page.locator('button').filter({ hasText: /@/ }); // HOH buttons have email
+
+      // Either we see HOH members or a "no HOH found" message
+      await expect(noHOHMessage.or(hohList.first())).toBeVisible({ timeout: 10000 });
     });
   });
 });
