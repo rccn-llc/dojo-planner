@@ -87,10 +87,16 @@ export function generateWaiverPdfBuffer(input: WaiverPdfInput): Buffer {
   // Waiver content
   addText('WAIVER AND RELEASE OF LIABILITY', 12, true);
   yPosition += 3;
-  const cleanContent = input.renderedContent
+  // Remove HTML tags — loop until stable to prevent nested tag bypass
+  let cleanContent = input.renderedContent
     .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n\n')
-    .replace(/<[^>]*>/g, '')
+    .replace(/<\/p>/gi, '\n\n');
+  let prev = '';
+  while (prev !== cleanContent) {
+    prev = cleanContent;
+    cleanContent = cleanContent.replace(/<[^>]*>/g, '');
+  }
+  cleanContent = cleanContent
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
