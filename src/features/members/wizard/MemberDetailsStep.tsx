@@ -101,6 +101,7 @@ export const MemberDetailsStep = ({ data, onUpdate, onNext, onBack, onCancel, er
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">{t('first_name_label')}</label>
             <Input
+              autoComplete="off"
               placeholder={t('first_name_placeholder')}
               value={data.firstName}
               onChange={e => handleInputChange('firstName', e.target.value)}
@@ -114,6 +115,7 @@ export const MemberDetailsStep = ({ data, onUpdate, onNext, onBack, onCancel, er
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">{t('last_name_label')}</label>
             <Input
+              autoComplete="off"
               placeholder={t('last_name_placeholder')}
               value={data.lastName}
               onChange={e => handleInputChange('lastName', e.target.value)}
@@ -131,6 +133,7 @@ export const MemberDetailsStep = ({ data, onUpdate, onNext, onBack, onCancel, er
           <label className="text-sm font-medium text-foreground">{t('email_label')}</label>
           <Input
             type="email"
+            autoComplete="off"
             placeholder={t('email_placeholder')}
             value={data.email}
             onChange={e => handleInputChange('email', e.target.value)}
@@ -146,6 +149,7 @@ export const MemberDetailsStep = ({ data, onUpdate, onNext, onBack, onCancel, er
           <label className="text-sm font-medium text-foreground">{t('phone_label')}</label>
           <Input
             type="tel"
+            autoComplete="off"
             placeholder={t('phone_placeholder')}
             value={data.phone}
             onChange={e => handleInputChange('phone', e.target.value)}
@@ -179,6 +183,7 @@ export const MemberDetailsStep = ({ data, onUpdate, onNext, onBack, onCancel, er
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">{t('street_label')}</label>
               <Input
+                autoComplete="off"
                 placeholder={t('street_placeholder')}
                 value={data.address?.street || ''}
                 onChange={e => handleAddressChange('street', e.target.value)}
@@ -193,6 +198,7 @@ export const MemberDetailsStep = ({ data, onUpdate, onNext, onBack, onCancel, er
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">{t('apartment_label')}</label>
               <Input
+                autoComplete="off"
                 placeholder={t('apartment_placeholder')}
                 value={data.address?.apartment || ''}
                 onChange={e => handleAddressChange('apartment', e.target.value)}
@@ -203,6 +209,7 @@ export const MemberDetailsStep = ({ data, onUpdate, onNext, onBack, onCancel, er
               <div className="col-span-6 space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground">{t('city_label')}</label>
                 <Input
+                  autoComplete="off"
                   placeholder={t('city_placeholder')}
                   value={data.address?.city || ''}
                   onChange={e => handleAddressChange('city', e.target.value)}
@@ -234,6 +241,7 @@ export const MemberDetailsStep = ({ data, onUpdate, onNext, onBack, onCancel, er
               <div className="col-span-4 space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground">{t('zip_code_label')}</label>
                 <Input
+                  autoComplete="off"
                   placeholder={t('zip_code_placeholder')}
                   value={data.address?.zipCode || ''}
                   onChange={e => handleAddressChange('zipCode', e.target.value)}

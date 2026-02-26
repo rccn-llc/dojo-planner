@@ -14,6 +14,7 @@ export type MemberCardProps = {
   photoUrl: string | null;
   lastAccessedAt: Date | null;
   status: string;
+  memberType?: string | null;
   membershipType?: 'free' | 'free-trial' | 'monthly' | 'annual';
   amountDue?: string;
   nextPayment?: Date | null;
@@ -28,6 +29,7 @@ export type MemberCardProps = {
   formatters?: {
     currency?: (amount: string) => string;
     date?: (date: Date | null) => string;
+    memberType?: (type: string | null | undefined) => string;
     membershipType?: (type: string) => string;
     status?: (status: string) => string;
   };
@@ -146,7 +148,7 @@ export function MemberCard({
   lastName,
   email,
   photoUrl,
-  membershipType,
+  memberType,
   amountDue,
   nextPayment,
   lastAccessedAt,
@@ -191,11 +193,19 @@ export function MemberCard({
           <div>
             <div className="text-xs font-semibold text-muted-foreground">{finalLabels.membership}</div>
             <div className="mt-1">
-              <MembershipBadge
-                membershipType={membershipType}
-                formatStatus={formatText}
-                formatter={formatters.membershipType}
-              />
+              {formatters.memberType
+                ? (
+                    <Badge variant="secondary">
+                      {formatters.memberType(memberType)}
+                    </Badge>
+                  )
+                : (
+                    <MembershipBadge
+                      membershipType={memberType || undefined}
+                      formatStatus={formatText}
+                      formatter={formatters.membershipType}
+                    />
+                  )}
             </div>
           </div>
 

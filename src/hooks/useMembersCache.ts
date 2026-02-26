@@ -37,6 +37,7 @@ export type Member = {
   phone: string | null;
   dateOfBirth: Date | null;
   photoUrl: string | null;
+  memberType: string | null;
   lastAccessedAt: Date | null;
   status: string;
   createdAt: Date;

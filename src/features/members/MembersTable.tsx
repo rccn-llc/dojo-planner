@@ -19,6 +19,7 @@ type Member = {
   phone: string | null;
   dateOfBirth: Date | null;
   photoUrl: string | null;
+  memberType: string | null;
   lastAccessedAt: Date | null;
   status: string;
   createdAt: Date;
@@ -71,12 +72,12 @@ export function MembersTable({
     return Array.from(statuses).sort();
   }, [members]);
 
-  // Compute available membership types from actual member data
+  // Compute available member types from actual member data
   const availableMembershipTypes = useMemo(() => {
     const types = new Set<string>();
     members.forEach((member) => {
-      if (member.membershipType) {
-        types.add(member.membershipType);
+      if (member.memberType) {
+        types.add(member.memberType);
       }
     });
     return Array.from(types).sort();
@@ -94,9 +95,9 @@ export function MembersTable({
     // Status filter
     const matchesStatus = filters.status === 'all' || member.status === filters.status;
 
-    // Membership type filter
+    // Member type filter
     const matchesMembershipType = filters.membershipType === 'all'
-      || member.membershipType === filters.membershipType;
+      || member.memberType === filters.membershipType;
 
     return matchesSearch && matchesStatus && matchesMembershipType;
   });
@@ -111,8 +112,8 @@ export function MembersTable({
         bValue = `${b.firstName || ''} ${b.lastName || ''}`.toLowerCase();
         break;
       case 'membershipType':
-        aValue = a.membershipType || '';
-        bValue = b.membershipType || '';
+        aValue = a.memberType || '';
+        bValue = b.memberType || '';
         break;
       case 'amountDue':
         aValue = a.amountDue ? Number.parseFloat(a.amountDue) : 0;
@@ -228,27 +229,26 @@ export function MembersTable({
     }
   };
 
-  const getMembershipTypeLabel = (membershipType: string | undefined) => {
-    switch (membershipType) {
-      case 'free-trial':
-        return 'Free Trial';
-      case 'monthly':
-        return 'Monthly';
-      case 'annual':
-        return 'Annual';
+  const getMemberTypeLabel = (memberType: string | null | undefined) => {
+    switch (memberType) {
+      case 'individual':
+        return 'Individual';
+      case 'head-of-household':
+        return 'Head of Household';
+      case 'family-member':
+        return 'Family Member';
       default:
         return '-';
     }
   };
 
-  const getMembershipTypeVariant = (membershipType: string | undefined): 'default' | 'secondary' | 'destructive' | 'outline' => {
-    switch (membershipType) {
-      case 'free-trial':
+  const getMemberTypeVariant = (memberType: string | null | undefined): 'default' | 'secondary' | 'destructive' | 'outline' => {
+    switch (memberType) {
+      case 'head-of-household':
+        return 'default';
+      case 'family-member':
         return 'outline';
-      case 'monthly':
-        return 'default';
-      case 'annual':
-        return 'default';
+      case 'individual':
       default:
         return 'secondary';
     }
@@ -322,7 +322,7 @@ export function MembersTable({
                               onClick={() => handleSort('membershipType')}
                               className="flex cursor-pointer items-center gap-2 hover:text-foreground/80"
                             >
-                              Membership type
+                              Member type
                               {sortField === 'membershipType' && (
                                 sortDirection === 'asc'
                                   ? <ArrowDownAZ className="h-4 w-4" />
@@ -413,8 +413,8 @@ export function MembersTable({
                               </div>
                             </td>
                             <td className="px-6 py-4">
-                              <Badge variant={getMembershipTypeVariant(member.membershipType)}>
-                                {getMembershipTypeLabel(member.membershipType)}
+                              <Badge variant={getMemberTypeVariant(member.memberType)}>
+                                {getMemberTypeLabel(member.memberType)}
                               </Badge>
                             </td>
                             <td className="px-6 py-4 text-sm text-muted-foreground">
@@ -467,14 +467,14 @@ export function MembersTable({
                       photoUrl={member.photoUrl}
                       lastAccessedAt={member.lastAccessedAt}
                       status={member.status}
-                      membershipType={member.membershipType}
+                      memberType={member.memberType}
                       amountDue={member.amountDue}
                       nextPayment={member.nextPayment}
                       onClick={onRowClickAction}
                       formatters={{
                         currency: formatCurrency,
                         date: formatDate,
-                        membershipType: getMembershipTypeLabel,
+                        memberType: getMemberTypeLabel,
                         status: getStatusLabel,
                       }}
                     />

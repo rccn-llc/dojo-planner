@@ -206,10 +206,10 @@
     "status_trial": "Essai",
     "status_cancelled": "Annulé",
     "status_past_due": "En retard",
-    "all_membership_types_filter": "Tous les types d'adhésion",
-    "membership_type_free_trial": "Essai gratuit",
-    "membership_type_monthly": "Mensuel",
-    "membership_type_annual": "Annuel"
+    "all_membership_types_filter": "Tous les types de membre",
+    "member_type_individual": "Individuel",
+    "member_type_head_of_household": "Chef de famille",
+    "member_type_family_member": "Membre de famille"
   },
   "Staff": {
     "invite_staff_button": "Inviter un membre du personnel",
@@ -332,7 +332,7 @@
       "email_placeholder": "vous@exemple.com",
       "phone_label": "Numéro de téléphone",
       "phone_placeholder": "(555) 123-4567",
-      "address_label": "Adresse (Optionnel)",
+      "address_label": "Adresse :",
       "street_label": "Adresse de la rue",
       "street_placeholder": "123 rue Principale",
       "apartment_label": "Appartement / Ligne 2",
@@ -431,6 +431,41 @@
       "decline_reason_generic": "Le paiement n'a pas pu être traité. Veuillez réessayer ou utiliser un autre mode de paiement.",
       "card_number_iframe_loading": "Chargement du champ de paiement sécurisé...",
       "card_number_iframe_error": "Échec du chargement du champ de paiement sécurisé. Veuillez actualiser et réessayer."
+    },
+    "HOHSelectionStep": {
+      "title": "Sélectionner le chef de famille",
+      "subtitle": "Choisissez le chef de famille responsable de la facturation de ce membre",
+      "search_placeholder": "Rechercher par nom ou email...",
+      "no_hoh_found": "Aucun chef de famille trouvé. Veuillez d'abord créer un membre chef de famille.",
+      "no_search_results": "Aucun résultat correspondant à votre recherche.",
+      "selected_label": "Sélectionné",
+      "payment_method_label": "Mode de paiement enregistré",
+      "payment_method_value": "{type} se terminant par {last4}",
+      "no_payment_method": "Aucun mode de paiement enregistré",
+      "back_button": "Retour",
+      "cancel_button": "Annuler",
+      "next_button": "Suivant"
+    },
+    "FamilyPaymentStep": {
+      "title": "Confirmer la facturation du membre de la famille",
+      "subtitle_with_card": "La facturation de ce membre sera débitée sur le mode de paiement du chef de famille",
+      "subtitle_no_card": "Aucun mode de paiement enregistré pour le chef de famille. Veuillez entrer les détails de paiement ci-dessous.",
+      "summary_label": "Résumé de facturation",
+      "member_label": "Membre de la famille",
+      "plan_label": "Plan",
+      "amount_label": "Montant",
+      "hoh_label": "Chef de famille",
+      "payment_method_label": "Mode de paiement",
+      "payment_method_value": "{type} de {hohName} se terminant par {last4}",
+      "billing_notice": "Les frais initiaux de {amount} seront débités sur le mode de paiement de {hohName} aujourd'hui. Un abonnement récurrent de {price}/{frequency} sera mis en place à partir d'aujourd'hui.",
+      "no_card_notice": "Aucun mode de paiement enregistré pour {hohName}. Veuillez entrer les détails de paiement ci-dessous. Le paiement sera enregistré sur le compte du chef de famille.",
+      "confirm_button": "Confirmer et ajouter le membre",
+      "processing_button": "Traitement en cours...",
+      "back_button": "Retour",
+      "cancel_button": "Annuler"
+    },
+    "MemberPaymentStep_HOHNotice": {
+      "notice": "Remarque : Si des membres de la famille sont ajoutés à votre compte à l'avenir, leurs frais d'adhésion seront débités sur ce mode de paiement à la date de leur inscription, avec une facturation récurrente basée sur leur date d'inscription."
     },
     "MemberSuccessStep": {
       "title": "Succès",

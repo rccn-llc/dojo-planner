@@ -17,6 +17,7 @@ const createMockMember = (overrides = {}) => ({
   phone: null,
   dateOfBirth: null,
   photoUrl: null,
+  memberType: 'individual',
   lastAccessedAt: null,
   status: 'active',
   createdAt: new Date(),
@@ -226,9 +227,9 @@ describe('MembersTable', () => {
     });
   });
 
-  describe('Membership type display', () => {
-    it('should display Free Trial for free-trial membership', () => {
-      const mockMembers = [createMockMember({ membershipType: 'free-trial' })];
+  describe('Member type display', () => {
+    it('should display Individual for individual member type', () => {
+      const mockMembers = [createMockMember({ memberType: 'individual' })];
       const mockOnRowClick = vi.fn();
 
       render(
@@ -239,11 +240,11 @@ describe('MembersTable', () => {
       );
 
       // Use first() since element appears in both desktop and mobile views
-      expect(page.getByText('Free Trial').first()).toBeInTheDocument();
+      expect(page.getByText('Individual').first()).toBeInTheDocument();
     });
 
-    it('should display Monthly for monthly membership', () => {
-      const mockMembers = [createMockMember({ membershipType: 'monthly' })];
+    it('should display Head of Household for head-of-household member type', () => {
+      const mockMembers = [createMockMember({ memberType: 'head-of-household' })];
       const mockOnRowClick = vi.fn();
 
       render(
@@ -253,11 +254,11 @@ describe('MembersTable', () => {
         />,
       );
 
-      expect(page.getByText('Monthly').first()).toBeInTheDocument();
+      expect(page.getByText('Head of Household').first()).toBeInTheDocument();
     });
 
-    it('should display Annual for annual membership', () => {
-      const mockMembers = [createMockMember({ membershipType: 'annual' })];
+    it('should display Family Member for family-member member type', () => {
+      const mockMembers = [createMockMember({ memberType: 'family-member' })];
       const mockOnRowClick = vi.fn();
 
       render(
@@ -267,11 +268,11 @@ describe('MembersTable', () => {
         />,
       );
 
-      expect(page.getByText('Annual').first()).toBeInTheDocument();
+      expect(page.getByText('Family Member').first()).toBeInTheDocument();
     });
 
-    it('should display dash for undefined membership type', () => {
-      const mockMembers = [createMockMember({ membershipType: undefined })];
+    it('should display dash for null member type', () => {
+      const mockMembers = [createMockMember({ memberType: null })];
       const mockOnRowClick = vi.fn();
 
       render(
@@ -281,7 +282,7 @@ describe('MembersTable', () => {
         />,
       );
 
-      // The membership type badge should show '-'
+      // The member type badge should show '-'
       const table = page.getByRole('table');
 
       expect(table.getByText('-').first()).toBeInTheDocument();
@@ -450,10 +451,10 @@ describe('MembersTable', () => {
       expect(page.getByRole('option', { name: 'status_cancelled' })).toBeInTheDocument();
     });
 
-    it('should have membership type filter dropdown', async () => {
+    it('should have member type filter dropdown', async () => {
       const mockMembers = [
-        createMockMember({ id: '1', firstName: 'John', membershipType: 'monthly' }),
-        createMockMember({ id: '2', firstName: 'Jane', membershipType: 'annual' }),
+        createMockMember({ id: '1', firstName: 'John', memberType: 'individual' }),
+        createMockMember({ id: '2', firstName: 'Jane', memberType: 'head-of-household' }),
       ];
       const mockOnRowClick = vi.fn();
 
@@ -464,13 +465,13 @@ describe('MembersTable', () => {
         />,
       );
 
-      // Click the membership type filter dropdown (second combobox)
-      const membershipTrigger = page.getByRole('combobox').nth(1);
-      await membershipTrigger.click();
+      // Click the member type filter dropdown (second combobox)
+      const memberTypeTrigger = page.getByRole('combobox').nth(1);
+      await memberTypeTrigger.click();
 
-      // Verify membership type options are shown
-      expect(page.getByRole('option', { name: 'membership_type_monthly' })).toBeInTheDocument();
-      expect(page.getByRole('option', { name: 'membership_type_annual' })).toBeInTheDocument();
+      // Verify member type options are shown
+      expect(page.getByRole('option', { name: 'member_type_head_of_household' })).toBeInTheDocument();
+      expect(page.getByRole('option', { name: 'member_type_individual' })).toBeInTheDocument();
     });
   });
 
@@ -569,10 +570,10 @@ describe('MembersTable', () => {
       expect(page.getByRole('option', { name: 'status_cancelled' }).elements()).toHaveLength(0);
     });
 
-    it('should only show available membership types in filter', async () => {
+    it('should only show available member types in filter', async () => {
       const mockMembers = [
-        createMockMember({ id: '1', membershipType: 'monthly' }),
-        createMockMember({ id: '2', membershipType: 'annual' }),
+        createMockMember({ id: '1', memberType: 'individual' }),
+        createMockMember({ id: '2', memberType: 'head-of-household' }),
       ];
       const mockOnRowClick = vi.fn();
 
@@ -583,24 +584,24 @@ describe('MembersTable', () => {
         />,
       );
 
-      // Click the membership type filter dropdown
-      const membershipTrigger = page.getByRole('combobox').nth(1);
-      await membershipTrigger.click();
+      // Click the member type filter dropdown
+      const memberTypeTrigger = page.getByRole('combobox').nth(1);
+      await memberTypeTrigger.click();
 
-      // Should show 'monthly' and 'annual' options
-      expect(page.getByRole('option', { name: 'membership_type_monthly' })).toBeInTheDocument();
-      expect(page.getByRole('option', { name: 'membership_type_annual' })).toBeInTheDocument();
+      // Should show 'individual' and 'head-of-household' options
+      expect(page.getByRole('option', { name: 'member_type_head_of_household' })).toBeInTheDocument();
+      expect(page.getByRole('option', { name: 'member_type_individual' })).toBeInTheDocument();
 
-      // Should NOT show 'free-trial' option (not in data)
-      expect(page.getByRole('option', { name: 'membership_type_free_trial' }).elements()).toHaveLength(0);
+      // Should NOT show 'family-member' option (not in data)
+      expect(page.getByRole('option', { name: 'member_type_family_member' }).elements()).toHaveLength(0);
     });
   });
 
   describe('Additional Sorting', () => {
-    it('should sort members by membership type column', async () => {
+    it('should sort members by member type column', async () => {
       const mockMembers = [
-        createMockMember({ id: '1', firstName: 'John', membershipType: 'monthly' }),
-        createMockMember({ id: '2', firstName: 'Jane', membershipType: 'annual' }),
+        createMockMember({ id: '1', firstName: 'John', memberType: 'individual' }),
+        createMockMember({ id: '2', firstName: 'Jane', memberType: 'head-of-household' }),
       ];
       const mockOnRowClick = vi.fn();
 
@@ -611,15 +612,15 @@ describe('MembersTable', () => {
         />,
       );
 
-      // Click membership type header
-      const membershipHeader = page.getByRole('button', { name: /Membership type/i });
-      await membershipHeader.click();
+      // Click member type header
+      const memberTypeHeader = page.getByRole('button', { name: /Member type/i });
+      await memberTypeHeader.click();
 
       // Verify both members are present
       const table = page.getByRole('table');
 
-      expect(table.getByText('Monthly')).toBeInTheDocument();
-      expect(table.getByText('Annual')).toBeInTheDocument();
+      expect(table.getByText('Individual')).toBeInTheDocument();
+      expect(table.getByText('Head of Household')).toBeInTheDocument();
     });
 
     it('should sort members by next payment column', async () => {
@@ -869,10 +870,10 @@ describe('MembersTable', () => {
       expect(table.getByText('Jane Doe').elements()).toHaveLength(0);
     });
 
-    it('should filter by membership type when selecting from dropdown', async () => {
+    it('should filter by member type when selecting from dropdown', async () => {
       const mockMembers = [
-        createMockMember({ id: '1', firstName: 'John', membershipType: 'monthly' }),
-        createMockMember({ id: '2', firstName: 'Jane', membershipType: 'annual' }),
+        createMockMember({ id: '1', firstName: 'John', memberType: 'individual' }),
+        createMockMember({ id: '2', firstName: 'Jane', memberType: 'head-of-household' }),
       ];
       const mockOnRowClick = vi.fn();
 
@@ -883,15 +884,15 @@ describe('MembersTable', () => {
         />,
       );
 
-      // Click the membership type filter dropdown
-      const membershipTrigger = page.getByRole('combobox').nth(1);
-      await membershipTrigger.click();
+      // Click the member type filter dropdown
+      const memberTypeTrigger = page.getByRole('combobox').nth(1);
+      await memberTypeTrigger.click();
 
-      // Select 'annual' membership
-      const annualOption = page.getByRole('option', { name: 'membership_type_annual' });
-      await annualOption.click();
+      // Select 'head-of-household'
+      const hohOption = page.getByRole('option', { name: 'member_type_head_of_household' });
+      await hohOption.click();
 
-      // Should only show Jane (annual)
+      // Should only show Jane (head-of-household)
       const table = page.getByRole('table');
 
       expect(table.getByText('Jane Doe')).toBeInTheDocument();
@@ -1185,11 +1186,11 @@ describe('MembersTable', () => {
   });
 
   describe('Combined filters', () => {
-    it('should apply search and membership type filter together', async () => {
+    it('should apply search and member type filter together', async () => {
       const mockMembers = [
-        createMockMember({ id: '1', firstName: 'John', lastName: 'Monthly', membershipType: 'monthly' }),
-        createMockMember({ id: '2', firstName: 'Jane', lastName: 'Monthly', membershipType: 'monthly' }),
-        createMockMember({ id: '3', firstName: 'John', lastName: 'Annual', membershipType: 'annual' }),
+        createMockMember({ id: '1', firstName: 'John', lastName: 'Individual', memberType: 'individual' }),
+        createMockMember({ id: '2', firstName: 'Jane', lastName: 'Individual', memberType: 'individual' }),
+        createMockMember({ id: '3', firstName: 'John', lastName: 'HOH', memberType: 'head-of-household' }),
       ];
       const mockOnRowClick = vi.fn();
 
@@ -1204,16 +1205,16 @@ describe('MembersTable', () => {
       const searchInput = page.getByPlaceholder('search_placeholder');
       await userEvent.fill(searchInput.element() as HTMLInputElement, 'John');
 
-      // Filter by membership type 'monthly'
-      const membershipTrigger = page.getByRole('combobox').nth(1);
-      await membershipTrigger.click();
-      const monthlyOption = page.getByRole('option', { name: 'membership_type_monthly' });
-      await monthlyOption.click();
+      // Filter by member type 'individual'
+      const memberTypeTrigger = page.getByRole('combobox').nth(1);
+      await memberTypeTrigger.click();
+      const individualOption = page.getByRole('option', { name: 'member_type_individual' });
+      await individualOption.click();
 
-      // Should only show John Monthly (matches both search 'John' and membership 'monthly')
+      // Should only show John Individual (matches both search 'John' and member type 'individual')
       const table = page.getByRole('table');
 
-      expect(table.getByText('John Monthly')).toBeInTheDocument();
+      expect(table.getByText('John Individual')).toBeInTheDocument();
     });
   });
 

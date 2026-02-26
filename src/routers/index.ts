@@ -20,7 +20,7 @@ import { tags as classTags, list as listClasses } from './Classes';
 import { listActive as listActiveCoupons, list as listCoupons } from './Coupons';
 import { earningsChart, financialStats, memberAverageChart, membershipStats } from './Dashboard';
 import { list as listEvents } from './Events';
-import { addMembership, changeMembership, create as createMember, listAllMembershipPlans, listMembershipPlans, listMemberTransactions, listPaymentMethods, remove as removeMember, restore as restoreMember, updateLastAccessed, update as updateMember, updateContactInfo as updateMemberContactInfo } from './Member';
+import { addMembership, changeMembership, create as createMember, getHOHPaymentMethods, linkFamily, listAllMembershipPlans, listFamily, listMembershipPlans, listMemberTransactions, listPaymentMethods, remove as removeMember, restore as restoreMember, searchHOH, sendConfirmationEmail, updateLastAccessed, update as updateMember, updateContactInfo as updateMemberContactInfo, updateMemberType } from './Member';
 import { list as listMembers } from './Members';
 import { getTokenizationIframeConfig, processPayment } from './Payment';
 import { chartData as reportChartData, currentValues as reportCurrentValues, insights as reportInsights } from './Reports';
@@ -66,6 +66,12 @@ export const router = {
     remove: removeMember,
     restore: restoreMember,
     updateLastAccessed,
+    searchHOH,
+    linkFamilyMember: linkFamily,
+    listFamilyMembers: listFamily,
+    getHOHPaymentMethods,
+    sendConfirmationEmail,
+    updateMemberType,
   },
   classes: {
     list: listClasses,

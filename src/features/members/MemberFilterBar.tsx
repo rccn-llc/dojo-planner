@@ -72,17 +72,17 @@ export function MemberFilterBar({
     }
   };
 
-  // Map membership type values to i18n labels
-  const getMembershipTypeLabel = (membershipType: string): string => {
-    switch (membershipType) {
-      case 'free-trial':
-        return t('membership_type_free_trial');
-      case 'monthly':
-        return t('membership_type_monthly');
-      case 'annual':
-        return t('membership_type_annual');
+  // Map member type values to i18n labels
+  const getMembershipTypeLabel = (memberType: string): string => {
+    switch (memberType) {
+      case 'individual':
+        return t('member_type_individual');
+      case 'head-of-household':
+        return t('member_type_head_of_household');
+      case 'family-member':
+        return t('member_type_family_member');
       default:
-        return membershipType.charAt(0).toUpperCase() + membershipType.slice(1).replace(/[-_]/g, ' ');
+        return memberType.charAt(0).toUpperCase() + memberType.slice(1).replace(/[-_]/g, ' ');
     }
   };
 

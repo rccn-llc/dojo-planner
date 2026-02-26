@@ -1,12 +1,15 @@
+import type { Buffer } from 'node:buffer';
 import { randomUUID } from 'node:crypto';
 import { ORPCError, os } from '@orpc/server';
 import { z } from 'zod';
 import { logger } from '@/libs/Logger';
 import { audit } from '@/services/AuditService';
-import { addMemberMembership, changeMemberMembership, createMember, getAllMembershipPlans, getMemberPaymentMethods, getMembershipPlans, getMemberTransactions, updateMember, updateMemberContactInfo, updateMemberStatus } from '@/services/MembersService';
+import { sendMemberConfirmationEmail } from '@/services/EmailService';
+import { addMemberMembership, changeMemberMembership, createMember, getAllMembershipPlans, getFamilyMembers, getHeadOfHouseholdMembers, getMemberPaymentMethods, getMembershipPlans, getMemberTransactions, linkFamilyMember, updateMember, updateMemberContactInfo, updateMemberStatus } from '@/services/MembersService';
+import { generatePdfFilename, generateWaiverPdfBuffer } from '@/services/WaiverPdfService';
 import { AUDIT_ACTION, AUDIT_ENTITY_TYPE } from '@/types/Audit';
 import { ORG_ROLE } from '@/types/Auth';
-import { DeleteMemberValidation, EditMemberValidation, MemberPaymentMethodsValidation, MemberTransactionsValidation, MemberValidation, UpdateMemberContactInfoValidation } from '@/validations/MemberValidation';
+import { DeleteMemberValidation, EditMemberValidation, GetHOHPaymentMethodsValidation, LinkFamilyMemberValidation, ListFamilyMembersValidation, MemberPaymentMethodsValidation, MemberTransactionsValidation, MemberValidation, SearchHOHValidation, SendConfirmationEmailValidation, UpdateMemberContactInfoValidation, UpdateMemberTypeValidation } from '@/validations/MemberValidation';
 import { guardAuth, guardRole } from './AuthGuards';
 
 export const create = os
@@ -200,6 +203,39 @@ export const restore = os
     }
   });
 
+export const updateMemberType = os
+  .input(UpdateMemberTypeValidation)
+  .handler(async ({ input }) => {
+    const context = await guardRole(ORG_ROLE.ADMIN);
+
+    try {
+      const result = await updateMember({ id: input.id, memberType: input.memberType }, context.orgId);
+
+      if (result.length === 0) {
+        throw new ORPCError('Member not found', { status: 404 });
+      }
+
+      logger.info(`Member type updated: ${input.id} -> ${input.memberType}`);
+
+      await audit(context, AUDIT_ACTION.MEMBER_UPDATE, AUDIT_ENTITY_TYPE.MEMBER, {
+        entityId: input.id,
+        status: 'success',
+      });
+
+      return {};
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+      await audit(context, AUDIT_ACTION.MEMBER_UPDATE, AUDIT_ENTITY_TYPE.MEMBER, {
+        entityId: input.id,
+        status: 'failure',
+        error: errorMessage,
+      });
+
+      throw error;
+    }
+  });
+
 export const updateLastAccessed = os
   .handler(async () => {
     const { userId, orgId } = await guardAuth();
@@ -377,4 +413,129 @@ export const listMemberTransactions = os
     const { orgId } = await guardRole(ORG_ROLE.FRONT_DESK);
     const transactions = await getMemberTransactions(input.memberId, orgId, input.limit);
     return { transactions };
+  });
+
+// ===== Family member / HOH endpoints =====
+
+export const searchHOH = os
+  .input(SearchHOHValidation)
+  .handler(async ({ input }) => {
+    const { orgId } = await guardRole(ORG_ROLE.ADMIN);
+    const hohMembers = await getHeadOfHouseholdMembers(orgId);
+
+    if (input.query && input.query.trim()) {
+      const q = input.query.trim().toLowerCase();
+      return {
+        members: hohMembers.filter(m =>
+          `${m.firstName} ${m.lastName}`.toLowerCase().includes(q)
+          || m.email.toLowerCase().includes(q),
+        ),
+      };
+    }
+    return { members: hohMembers };
+  });
+
+export const linkFamily = os
+  .input(LinkFamilyMemberValidation)
+  .handler(async ({ input }) => {
+    const context = await guardRole(ORG_ROLE.ADMIN);
+
+    try {
+      await linkFamilyMember(input.hohMemberId, input.memberId, input.relationship);
+
+      await audit(context, AUDIT_ACTION.FAMILY_MEMBER_LINK, AUDIT_ENTITY_TYPE.FAMILY_MEMBER, {
+        entityId: input.memberId,
+        status: 'success',
+      });
+
+      logger.info(`Family member linked: ${input.memberId} → HOH: ${input.hohMemberId}`);
+      return { linked: true };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`Failed to link family member: ${errorMessage}`);
+
+      await audit(context, AUDIT_ACTION.FAMILY_MEMBER_LINK, AUDIT_ENTITY_TYPE.FAMILY_MEMBER, {
+        entityId: input.memberId,
+        status: 'failure',
+        error: errorMessage,
+      });
+
+      throw error instanceof ORPCError
+        ? error
+        : new ORPCError('Failed to link family member. Please try again.', { status: 500 });
+    }
+  });
+
+export const listFamily = os
+  .input(ListFamilyMembersValidation)
+  .handler(async ({ input }) => {
+    await guardRole(ORG_ROLE.FRONT_DESK);
+    const familyMembers = await getFamilyMembers(input.memberId);
+    return { familyMembers };
+  });
+
+export const getHOHPaymentMethods = os
+  .input(GetHOHPaymentMethodsValidation)
+  .handler(async ({ input }) => {
+    await guardRole(ORG_ROLE.ADMIN);
+    const paymentMethods = await getMemberPaymentMethods(input.hohMemberId);
+    return { paymentMethods };
+  });
+
+export const sendConfirmationEmail = os
+  .input(SendConfirmationEmailValidation)
+  .handler(async ({ input }) => {
+    await guardRole(ORG_ROLE.ADMIN);
+
+    try {
+      // Generate waiver PDF server-side if data provided
+      let waiverPdfBuffer: Buffer | undefined;
+      let waiverPdfFilename: string | undefined;
+
+      if (input.waiverPdfData) {
+        const pdfInput = {
+          ...input.waiverPdfData,
+          signedByRelationship: input.waiverPdfData.signedByRelationship ?? null,
+          signedAt: new Date(input.waiverPdfData.signedAt),
+          ipAddress: null,
+          membershipPlanName: input.waiverPdfData.membershipPlanName ?? null,
+          membershipPlanPrice: input.waiverPdfData.membershipPlanPrice ?? null,
+          membershipPlanFrequency: input.waiverPdfData.membershipPlanFrequency ?? null,
+          membershipPlanContractLength: input.waiverPdfData.membershipPlanContractLength ?? null,
+          membershipPlanSignupFee: input.waiverPdfData.membershipPlanSignupFee ?? null,
+          membershipPlanIsTrial: input.waiverPdfData.membershipPlanIsTrial ?? null,
+          couponCode: input.waiverPdfData.couponCode ?? null,
+          couponType: input.waiverPdfData.couponType ?? null,
+          couponAmount: input.waiverPdfData.couponAmount ?? null,
+          couponDiscountedPrice: input.waiverPdfData.couponDiscountedPrice ?? null,
+        };
+
+        waiverPdfBuffer = generateWaiverPdfBuffer(pdfInput);
+        waiverPdfFilename = generatePdfFilename({
+          memberFirstName: input.waiverPdfData.memberFirstName,
+          memberLastName: input.waiverPdfData.memberLastName,
+          signedAt: new Date(input.waiverPdfData.signedAt),
+        });
+      }
+
+      const sent = await sendMemberConfirmationEmail({
+        memberEmail: input.memberEmail,
+        memberName: input.memberName,
+        membershipPlanName: input.membershipPlanName,
+        membershipPlanPrice: input.membershipPlanPrice,
+        membershipPlanFrequency: input.membershipPlanFrequency,
+        memberType: input.memberType,
+        hohName: input.hohName,
+        waiverPdfBuffer,
+        waiverPdfFilename,
+      });
+
+      return { sent };
+    } catch (error) {
+      // Email failures should not block the wizard — log and return false
+      logger.error('[sendConfirmationEmail] Failed:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      return { sent: false };
+    }
   });

@@ -2,7 +2,7 @@ import type { TransactionData } from '@/services/TransactionsService';
 import { randomUUID } from 'node:crypto';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/libs/DB';
-import { addressSchema, memberMembershipSchema, memberSchema, membershipPlanSchema, paymentMethodSchema, transactionSchema } from '@/models/Schema';
+import { addressSchema, familyMemberSchema, memberMembershipSchema, memberSchema, membershipPlanSchema, paymentMethodSchema, transactionSchema } from '@/models/Schema';
 
 export type MembershipPlanData = {
   id: string;
@@ -106,7 +106,7 @@ type UpdateMemberInput = {
   memberType?: string;
   dateOfBirth?: Date;
   lastAccessedAt?: Date;
-  status: string;
+  status?: string;
 };
 
 /**
@@ -566,4 +566,90 @@ export async function getMemberTransactions(
     ))
     .orderBy(desc(transactionSchema.createdAt))
     .limit(limit);
+}
+
+// ===== Family member queries =====
+
+export type HOHMemberData = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string | null;
+  photoUrl: string | null;
+  status: string | null;
+};
+
+/**
+ * Get all Head of Household members for an organization.
+ * Filters to active/trial members only.
+ */
+export async function getHeadOfHouseholdMembers(organizationId: string): Promise<HOHMemberData[]> {
+  return db
+    .select({
+      id: memberSchema.id,
+      firstName: memberSchema.firstName,
+      lastName: memberSchema.lastName,
+      email: memberSchema.email,
+      phone: memberSchema.phone,
+      photoUrl: memberSchema.photoUrl,
+      status: memberSchema.status,
+    })
+    .from(memberSchema)
+    .where(
+      and(
+        eq(memberSchema.organizationId, organizationId),
+        eq(memberSchema.memberType, 'head-of-household'),
+        inArray(memberSchema.status, ['active', 'trial']),
+      ),
+    );
+}
+
+/**
+ * Link a family member to a Head of Household.
+ * The HOH goes in memberId (parent side), family member in relatedMemberId.
+ */
+export async function linkFamilyMember(
+  hohMemberId: string,
+  familyMemberId: string,
+  relationship: string,
+) {
+  return db
+    .insert(familyMemberSchema)
+    .values({
+      memberId: hohMemberId,
+      relatedMemberId: familyMemberId,
+      relationship,
+    })
+    .returning();
+}
+
+export type FamilyMemberData = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  photoUrl: string | null;
+  status: string | null;
+  relationship: string;
+};
+
+/**
+ * Get family members linked to a Head of Household.
+ * Joins family_member with member to return full member details.
+ */
+export async function getFamilyMembers(hohMemberId: string): Promise<FamilyMemberData[]> {
+  return db
+    .select({
+      id: memberSchema.id,
+      firstName: memberSchema.firstName,
+      lastName: memberSchema.lastName,
+      email: memberSchema.email,
+      photoUrl: memberSchema.photoUrl,
+      status: memberSchema.status,
+      relationship: familyMemberSchema.relationship,
+    })
+    .from(familyMemberSchema)
+    .innerJoin(memberSchema, eq(familyMemberSchema.relatedMemberId, memberSchema.id))
+    .where(eq(familyMemberSchema.memberId, hohMemberId));
 }

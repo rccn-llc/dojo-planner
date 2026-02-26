@@ -43,7 +43,7 @@ src/
 ├── routers/               # ORPC API handlers
 │   ├── AuthGuards.ts      # Auth middleware with role hierarchy
 │   ├── Catalog.ts         # Catalog items, variants, categories, images
-│   ├── Member.ts          # Member CRUD
+│   ├── Member.ts          # Member CRUD, family linking, HOH search, confirmation email
 │   ├── Members.ts         # Members list ops
 │   ├── Classes.ts         # Classes list & tags
 │   ├── Events.ts          # Events list
@@ -69,7 +69,8 @@ src/
 │   ├── DashboardService.ts # Membership stats, financial stats, member average & earnings chart data
 │   ├── ReportsService.ts  # Report current values, chart data, dynamically computed insights
 │   ├── WaiversService.ts  # Waiver template CRUD, versioning, signed waivers, merge fields, placeholder resolution
-│   ├── WaiverPdfService.ts # On-demand PDF generation for signed waivers
+│   ├── WaiverPdfService.ts # On-demand PDF generation for signed waivers (client Blob + server Buffer)
+│   ├── EmailService.ts    # Resend email integration with PDF attachment support
 │   ├── PaymentProviderService.ts # Payment provider abstraction (interface + factory)
 │   ├── IQProPaymentService.ts # IQPro implementation of payment provider
 │   └── MemberPaymentService.ts # Member payment orchestration (customer → method → charge/subscription)
@@ -178,23 +179,39 @@ RootLayout (theme, i18n, migrations)
 
 ### Add Member Wizard
 
-The Add Member flow is a multi-step modal wizard (`AddMemberModal.tsx`) using the `useAddMemberWizard` hook for state management.
+The Add Member flow is a multi-step modal wizard (`AddMemberModal.tsx`) using the `useAddMemberWizard` hook for state management. The wizard supports three member types with conditional step routing.
 
-**Steps:**
-1. **Member Type** — Select member type (adult, child, etc.)
+**Steps (Individual / Head of Household):**
+1. **Member Type** — Select member type (individual, family-member, head-of-household)
 2. **Details** — Name, email, phone, date of birth (required), address
 3. **Photo** — Optional member photo upload
 4. **Subscription** — Choose membership plan
 5. **Waiver** — Sign applicable waiver(s) for the selected membership plan (auto-skipped if none required)
-6. **Payment** — Payment information
-7. **Success** — Confirmation
+6. **Payment** — Payment information (HOH sees a notice about future family member billing)
+7. **Success** — Confirmation + email sent
+
+**Steps (Family Member):**
+1. **Member Type** — Select family-member
+2. **Details** — Name, email, phone, date of birth, address
+3. **Photo** — Optional member photo upload
+4. **Subscription** — Choose membership plan
+5. **Waiver** — Sign applicable waiver(s)
+6. **HOH Selection** — Search and select a Head of Household (fetches their payment methods)
+7. **Family Payment** — Uses HOH's card on file or collects new payment details as fallback
+8. **Success** — Confirmation + email sent
+
+**After member creation:** A confirmation email is sent via Resend with the signed waiver PDF attached (fire-and-forget, doesn't block wizard).
 
 **Key Files:**
-- `src/features/members/wizard/AddMemberModal.tsx` — Wizard orchestrator, handles member + signed waiver creation (includes membership plan snapshot for waiver PDF)
+- `src/features/members/wizard/AddMemberModal.tsx` — Wizard orchestrator, handles member + signed waiver creation, family member linking, email sending
+- `src/features/members/wizard/HOHSelectionStep.tsx` — Search/select HOH, fetch payment methods
+- `src/features/members/wizard/FamilyPaymentStep.tsx` — HOH card confirmation or fallback payment form
+- `src/features/members/wizard/MemberPaymentStep.tsx` — Payment form with HOH billing notice
 - `src/features/members/wizard/MemberWaiverStep.tsx` — Fetches waivers for membership, resolves merge field placeholders, captures signature
 - `src/features/waivers/signing/SignatureCanvas.tsx` — Reusable signature capture (react-signature-canvas, supports mouse + touch)
-- `src/hooks/useAddMemberWizard.ts` — Wizard state management hook (step navigation, data, loading, error)
-- `src/services/WaiverPdfService.ts` — Client-side PDF generation with membership details section (plan name, price, frequency, contract length, signup fee) and coupon discount display (strikethrough original price, discounted price, discount code)
+- `src/hooks/useAddMemberWizard.ts` — Wizard state management hook with `getStepsForMemberType()` for conditional routing + HOH data fields
+- `src/services/WaiverPdfService.ts` — PDF generation: client-side Blob (`generateWaiverPdf`) + server-side Buffer (`generateWaiverPdfBuffer`)
+- `src/services/EmailService.ts` — Resend integration for confirmation emails with waiver PDF attachment
 
 ### Member Detail Page
 
@@ -203,6 +220,7 @@ The member detail/edit page (`members/[memberId]/edit/page.tsx`) displays:
 - Membership details with actual dates from DB (registration, start, next payment)
 - Signed waivers with template name and version, with PDF download
 - Payment method and billing history
+- Family members (displayed only when member is Head of Household, fetched via `listFamilyMembers` endpoint)
 - Attendance records and notes
 
 ## Vendor Integrations
@@ -652,6 +670,12 @@ IQPRO_GATEWAY_ID
 IQPRO_WEBHOOK_SECRET
 ```
 
+**Optional (Email — Resend):**
+```bash
+RESEND_API_KEY           # Resend API key for sending confirmation emails
+RESEND_FROM_EMAIL        # From address (default: noreply@dojoplanner.com)
+```
+
 ## Scripts
 
 ```bash
@@ -774,6 +798,9 @@ AUDIT_ACTION.MERGE_FIELD_DELETE;
 
 // Payment operations
 AUDIT_ACTION.PAYMENT_PROCESS;
+
+// Family member operations
+AUDIT_ACTION.FAMILY_MEMBER_LINK;
 
 // See src/types/Audit.ts for full list
 ```

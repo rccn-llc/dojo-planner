@@ -77,6 +77,14 @@ export type AddMemberWizardData = {
   achRoutingNumber?: string;
   achAccountNumber?: string;
 
+  // HOH (Head of Household) fields — used when memberType is 'family-member'
+  hohMemberId?: string;
+  hohMemberName?: string;
+  hohMemberEmail?: string;
+  hohHasPaymentMethod?: boolean;
+  hohPaymentMethodLast4?: string;
+  hohPaymentMethodType?: PaymentMethod;
+
   // Coupon applied to payment
   appliedCoupon?: AppliedCoupon | null;
 
@@ -86,7 +94,15 @@ export type AddMemberWizardData = {
   paymentProcessed?: boolean;
 };
 
-export type WizardStep = 'member-type' | 'details' | 'photo' | 'subscription' | 'waiver' | 'payment' | 'success';
+export type WizardStep = 'member-type' | 'details' | 'photo' | 'subscription' | 'waiver' | 'payment' | 'hoh-selection' | 'family-payment' | 'success';
+
+export function getStepsForMemberType(memberType: MemberType | null): WizardStep[] {
+  if (memberType === 'family-member') {
+    return ['member-type', 'details', 'photo', 'subscription', 'waiver', 'hoh-selection', 'family-payment', 'success'];
+  }
+  // individual and head-of-household share the same flow
+  return ['member-type', 'details', 'photo', 'subscription', 'waiver', 'payment', 'success'];
+}
 
 export const useAddMemberWizard = () => {
   const [step, setStep] = useState<WizardStep>('member-type');
@@ -111,7 +127,7 @@ export const useAddMemberWizard = () => {
   };
 
   const nextStep = () => {
-    const steps: WizardStep[] = ['member-type', 'details', 'photo', 'subscription', 'waiver', 'payment', 'success'];
+    const steps = getStepsForMemberType(data.memberType);
     const currentIndex = steps.indexOf(step);
     if (currentIndex < steps.length - 1 && currentIndex !== -1) {
       const nextStepValue = steps[currentIndex + 1];
@@ -123,7 +139,7 @@ export const useAddMemberWizard = () => {
   };
 
   const previousStep = () => {
-    const steps: WizardStep[] = ['member-type', 'details', 'photo', 'subscription', 'waiver', 'payment', 'success'];
+    const steps = getStepsForMemberType(data.memberType);
     const currentIndex = steps.indexOf(step);
     if (currentIndex > 0) {
       const prevStepValue = steps[currentIndex - 1];
@@ -171,6 +187,12 @@ export const useAddMemberWizard = () => {
       achAccountHolder: undefined,
       achRoutingNumber: undefined,
       achAccountNumber: undefined,
+      hohMemberId: undefined,
+      hohMemberName: undefined,
+      hohMemberEmail: undefined,
+      hohHasPaymentMethod: undefined,
+      hohPaymentMethodLast4: undefined,
+      hohPaymentMethodType: undefined,
       appliedCoupon: undefined,
       paymentStatus: undefined,
       paymentDeclineReason: undefined,

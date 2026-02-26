@@ -19,6 +19,9 @@ export const Env = createEnv({
     IQPRO_BASE_URL: z.string().url().optional(),
     IQPRO_GATEWAY_ID: z.string().min(1).optional(),
     IQPRO_WEBHOOK_SECRET: z.string().min(1).optional(),
+    // Resend email service (optional - email sending disabled if not configured)
+    RESEND_API_KEY: z.string().min(1).optional(),
+    RESEND_FROM_EMAIL: z.string().email().optional(),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.string().optional(),
@@ -46,6 +49,8 @@ export const Env = createEnv({
     IQPRO_BASE_URL: process.env.IQPRO_BASE_URL,
     IQPRO_GATEWAY_ID: process.env.IQPRO_GATEWAY_ID,
     IQPRO_WEBHOOK_SECRET: process.env.IQPRO_WEBHOOK_SECRET,
+    RESEND_API_KEY: process.env.RESEND_API_KEY,
+    RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:
       process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,

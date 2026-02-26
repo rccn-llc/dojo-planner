@@ -28,6 +28,11 @@ vi.mock('@/models/Schema', () => ({
     organizationId: 'organization_id',
     firstName: 'first_name',
     lastName: 'last_name',
+    memberType: 'member_type',
+    status: 'status',
+    email: 'email',
+    phone: 'phone',
+    photoUrl: 'photo_url',
   },
   addressSchema: {
     id: 'id',
@@ -53,6 +58,11 @@ vi.mock('@/models/Schema', () => ({
     description: 'description',
     processedAt: 'processed_at',
     createdAt: 'created_at',
+  },
+  familyMemberSchema: {
+    memberId: 'member_id',
+    relatedMemberId: 'related_member_id',
+    relationship: 'relationship',
   },
 }));
 
@@ -258,6 +268,95 @@ describe('MembersService', () => {
       await getMemberTransactions('member-123', 'org-123', 10);
 
       expect(mockLimit).toHaveBeenCalledWith(10);
+    });
+  });
+
+  describe('getHeadOfHouseholdMembers', () => {
+    it('should return HOH members for the organization', async () => {
+      const { db } = await import('@/libs/DB');
+      const mockHOHMembers = [
+        { id: 'hoh-1', firstName: 'John', lastName: 'Doe', email: 'john@test.com', phone: '555-1234', photoUrl: null, status: 'active' },
+        { id: 'hoh-2', firstName: 'Jane', lastName: 'Smith', email: 'jane@test.com', phone: '555-5678', photoUrl: null, status: 'trial' },
+      ];
+
+      const mockWhere = vi.fn(() => Promise.resolve(mockHOHMembers));
+      const mockFrom = vi.fn(() => ({ where: mockWhere }));
+      vi.mocked(db.select).mockReturnValue({ from: mockFrom } as never);
+
+      const { getHeadOfHouseholdMembers } = await import('./MembersService');
+      const result = await getHeadOfHouseholdMembers('org-123');
+
+      expect(result).toEqual(mockHOHMembers);
+      expect(db.select).toHaveBeenCalled();
+    });
+
+    it('should return empty array when no HOH members exist', async () => {
+      const { db } = await import('@/libs/DB');
+
+      const mockWhere = vi.fn(() => Promise.resolve([]));
+      const mockFrom = vi.fn(() => ({ where: mockWhere }));
+      vi.mocked(db.select).mockReturnValue({ from: mockFrom } as never);
+
+      const { getHeadOfHouseholdMembers } = await import('./MembersService');
+      const result = await getHeadOfHouseholdMembers('org-no-hoh');
+
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('linkFamilyMember', () => {
+    it('should insert a family member relationship', async () => {
+      const { db } = await import('@/libs/DB');
+      const mockResult = [{ id: 'family-link-1' }];
+
+      const mockReturning = vi.fn(() => Promise.resolve(mockResult));
+      const mockValues = vi.fn(() => ({ returning: mockReturning }));
+      vi.mocked(db.insert).mockReturnValue({ values: mockValues } as never);
+
+      const { linkFamilyMember } = await import('./MembersService');
+      const result = await linkFamilyMember('hoh-123', 'member-456', 'family-member');
+
+      expect(result).toEqual(mockResult);
+      expect(db.insert).toHaveBeenCalled();
+      expect(mockValues).toHaveBeenCalledWith({
+        memberId: 'hoh-123',
+        relatedMemberId: 'member-456',
+        relationship: 'family-member',
+      });
+    });
+  });
+
+  describe('getFamilyMembers', () => {
+    it('should return family members for an HOH', async () => {
+      const { db } = await import('@/libs/DB');
+      const mockFamilyMembers = [
+        { id: 'fm-1', firstName: 'Alice', lastName: 'Doe', email: 'alice@test.com', photoUrl: null, status: 'active', relationship: 'family-member' },
+      ];
+
+      const mockWhere = vi.fn(() => Promise.resolve(mockFamilyMembers));
+      const mockInnerJoin = vi.fn(() => ({ where: mockWhere }));
+      const mockFrom = vi.fn(() => ({ innerJoin: mockInnerJoin }));
+      vi.mocked(db.select).mockReturnValue({ from: mockFrom } as never);
+
+      const { getFamilyMembers } = await import('./MembersService');
+      const result = await getFamilyMembers('hoh-123');
+
+      expect(result).toEqual(mockFamilyMembers);
+      expect(db.select).toHaveBeenCalled();
+    });
+
+    it('should return empty array when HOH has no family members', async () => {
+      const { db } = await import('@/libs/DB');
+
+      const mockWhere = vi.fn(() => Promise.resolve([]));
+      const mockInnerJoin = vi.fn(() => ({ where: mockWhere }));
+      const mockFrom = vi.fn(() => ({ innerJoin: mockInnerJoin }));
+      vi.mocked(db.select).mockReturnValue({ from: mockFrom } as never);
+
+      const { getFamilyMembers } = await import('./MembersService');
+      const result = await getFamilyMembers('hoh-no-family');
+
+      expect(result).toEqual([]);
     });
   });
 });

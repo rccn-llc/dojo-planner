@@ -1,4 +1,5 @@
 import type { WaiverPdfInput } from './WaiverPdfService';
+import { Buffer } from 'node:buffer';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock jsPDF instance methods
@@ -626,6 +627,60 @@ describe('WaiverPdfService', () => {
       expect(grayIndex).toBeGreaterThanOrEqual(0);
       // Black must be called after gray to reset
       expect(blackAfterGray).toBeGreaterThan(grayIndex);
+    });
+  });
+
+  // ===========================================================================
+  // generateWaiverPdfBuffer
+  // ===========================================================================
+
+  describe('generateWaiverPdfBuffer', () => {
+    it('should return a Buffer instead of a Blob', async () => {
+      // The mock output fn returns a Blob by default, but generateWaiverPdfBuffer
+      // calls doc.output('arraybuffer') and wraps with Buffer.from().
+      // We need to mock output to return an ArrayBuffer when called with 'arraybuffer'.
+      (mockOutput as ReturnType<typeof vi.fn>).mockImplementation((format: string) => {
+        if (format === 'arraybuffer') {
+          return new ArrayBuffer(16);
+        }
+        return new Blob(['mock-pdf-data'], { type: 'application/pdf' });
+      });
+
+      const { generateWaiverPdfBuffer } = await import('./WaiverPdfService');
+      const result = generateWaiverPdfBuffer(mockInput);
+
+      expect(Buffer.isBuffer(result)).toBe(true);
+    });
+
+    it('should call output with arraybuffer format', async () => {
+      (mockOutput as ReturnType<typeof vi.fn>).mockImplementation((format: string) => {
+        if (format === 'arraybuffer') {
+          return new ArrayBuffer(16);
+        }
+        return new Blob(['mock-pdf-data'], { type: 'application/pdf' });
+      });
+
+      const { generateWaiverPdfBuffer } = await import('./WaiverPdfService');
+      generateWaiverPdfBuffer(mockInput);
+
+      expect(mockOutput).toHaveBeenCalledWith('arraybuffer');
+    });
+
+    it('should include the same content sections as generateWaiverPdf', async () => {
+      (mockOutput as ReturnType<typeof vi.fn>).mockImplementation((format: string) => {
+        if (format === 'arraybuffer') {
+          return new ArrayBuffer(16);
+        }
+        return new Blob(['mock-pdf-data'], { type: 'application/pdf' });
+      });
+
+      const { generateWaiverPdfBuffer } = await import('./WaiverPdfService');
+      generateWaiverPdfBuffer(mockInput);
+
+      // Verify it includes key sections like the client-side version
+      expect(mockSplitTextToSize).toHaveBeenCalledWith('MEMBER INFORMATION', expect.any(Number));
+      expect(mockSplitTextToSize).toHaveBeenCalledWith('WAIVER AND RELEASE OF LIABILITY', expect.any(Number));
+      expect(mockSplitTextToSize).toHaveBeenCalledWith('SIGNATURE', expect.any(Number));
     });
   });
 
