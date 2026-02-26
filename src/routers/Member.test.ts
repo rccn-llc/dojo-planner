@@ -38,8 +38,10 @@ vi.mock('@/services/EmailService', () => ({
   sendMemberConfirmationEmail: vi.fn(),
 }));
 vi.mock('@/services/WaiverPdfService', () => ({
-  generateWaiverPdfBuffer: vi.fn(),
   generatePdfFilename: vi.fn(),
+}));
+vi.mock('@/services/WaiverPdfService.server', () => ({
+  generateWaiverPdfBuffer: vi.fn(),
 }));
 
 const mockContext: AuditContext = {
@@ -313,7 +315,8 @@ describe('Member Router', () => {
     it('should send email with waiver PDF generation', async () => {
       const { guardRole } = await import('./AuthGuards');
       const { sendMemberConfirmationEmail } = await import('@/services/EmailService');
-      const { generateWaiverPdfBuffer, generatePdfFilename } = await import('@/services/WaiverPdfService');
+      const { generatePdfFilename } = await import('@/services/WaiverPdfService');
+      const { generateWaiverPdfBuffer } = await import('@/services/WaiverPdfService.server');
 
       const mockBuffer = Buffer.from('mock-pdf-content');
       const mockFilename = 'waiver_Doe_John_2025-01-15.pdf';

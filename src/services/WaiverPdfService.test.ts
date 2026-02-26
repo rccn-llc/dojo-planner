@@ -646,7 +646,7 @@ describe('WaiverPdfService', () => {
         return new Blob(['mock-pdf-data'], { type: 'application/pdf' });
       });
 
-      const { generateWaiverPdfBuffer } = await import('./WaiverPdfService');
+      const { generateWaiverPdfBuffer } = await import('./WaiverPdfService.server');
       const result = generateWaiverPdfBuffer(mockInput);
 
       expect(Buffer.isBuffer(result)).toBe(true);
@@ -660,7 +660,7 @@ describe('WaiverPdfService', () => {
         return new Blob(['mock-pdf-data'], { type: 'application/pdf' });
       });
 
-      const { generateWaiverPdfBuffer } = await import('./WaiverPdfService');
+      const { generateWaiverPdfBuffer } = await import('./WaiverPdfService.server');
       generateWaiverPdfBuffer(mockInput);
 
       expect(mockOutput).toHaveBeenCalledWith('arraybuffer');
@@ -674,7 +674,7 @@ describe('WaiverPdfService', () => {
         return new Blob(['mock-pdf-data'], { type: 'application/pdf' });
       });
 
-      const { generateWaiverPdfBuffer } = await import('./WaiverPdfService');
+      const { generateWaiverPdfBuffer } = await import('./WaiverPdfService.server');
       generateWaiverPdfBuffer(mockInput);
 
       // Verify it includes key sections like the client-side version

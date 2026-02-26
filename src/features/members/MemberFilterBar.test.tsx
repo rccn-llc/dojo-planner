@@ -12,7 +12,7 @@ describe('MemberFilterBar', () => {
   const defaultProps = {
     onFiltersChangeAction: vi.fn(),
     availableStatuses: ['active', 'hold', 'trial', 'cancelled', 'past_due'],
-    availableMembershipTypes: ['free-trial', 'monthly', 'annual'],
+    availableMembershipTypes: ['individual', 'head-of-household', 'family-member'],
   };
 
   beforeEach(() => {
@@ -165,14 +165,14 @@ describe('MemberFilterBar', () => {
       const membershipTypeTrigger = page.getByRole('combobox').nth(1);
       await membershipTypeTrigger.click();
 
-      // Select 'monthly' option
-      const monthlyOption = page.getByRole('option', { name: 'membership_type_monthly' });
-      await monthlyOption.click();
+      // Select 'individual' option
+      const individualOption = page.getByRole('option', { name: 'member_type_individual' });
+      await individualOption.click();
 
       expect(mockOnFiltersChange).toHaveBeenCalledWith({
         search: '',
         status: 'all',
-        membershipType: 'monthly',
+        membershipType: 'individual',
       });
     });
 
@@ -184,9 +184,9 @@ describe('MemberFilterBar', () => {
 
       // Check that all membership type options are rendered
       expect(page.getByRole('option', { name: 'all_membership_types_filter' })).toBeInTheDocument();
-      expect(page.getByRole('option', { name: 'membership_type_free_trial' })).toBeInTheDocument();
-      expect(page.getByRole('option', { name: 'membership_type_monthly' })).toBeInTheDocument();
-      expect(page.getByRole('option', { name: 'membership_type_annual' })).toBeInTheDocument();
+      expect(page.getByRole('option', { name: 'member_type_individual' })).toBeInTheDocument();
+      expect(page.getByRole('option', { name: 'member_type_head_of_household' })).toBeInTheDocument();
+      expect(page.getByRole('option', { name: 'member_type_family_member' })).toBeInTheDocument();
     });
   });
 
