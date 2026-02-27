@@ -246,50 +246,42 @@ export async function getReportInsights(
 // Helper functions for chart data
 
 async function getAutopayChartData(organizationId: string, currentYear: number): Promise<ReportChartData> {
-  // Count past_due members per month approximation
-  const monthly: MonthlyDataPoint[] = [];
-  for (let m = 0; m < 12; m++) {
-    const endOfMonth = new Date(currentYear, m + 1, 0, 23, 59, 59);
-    const endOfMonthPrev = new Date(currentYear - 1, m + 1, 0, 23, 59, 59);
+  const monthlyDates = Array.from({ length: 12 }, (_, m) => ({
+    month: m,
+    endOfMonth: new Date(currentYear, m + 1, 0, 23, 59, 59),
+    endOfMonthPrev: new Date(currentYear - 1, m + 1, 0, 23, 59, 59),
+  }));
 
-    const [currentResult] = await db
-      .select({ count: count() })
+  const yearlyDates = Array.from({ length: 5 }, (_, i) => ({
+    year: currentYear - 4 + i,
+    endOfYear: new Date(currentYear - 4 + i, 11, 31, 23, 59, 59),
+  }));
+
+  const pastDueCountAt = (datePoint: Date) =>
+    db.select({ count: count() })
       .from(memberSchema)
       .where(and(
         eq(memberSchema.organizationId, organizationId),
         eq(memberSchema.status, 'past_due'),
-        sql`${memberSchema.createdAt} <= ${endOfMonth}`,
+        sql`${memberSchema.createdAt} <= ${datePoint}`,
       ));
 
-    const [prevResult] = await db
-      .select({ count: count() })
-      .from(memberSchema)
-      .where(and(
-        eq(memberSchema.organizationId, organizationId),
-        eq(memberSchema.status, 'past_due'),
-        sql`${memberSchema.createdAt} <= ${endOfMonthPrev}`,
-      ));
+  const [monthlyCurrentResults, monthlyPrevResults, yearlyResults] = await Promise.all([
+    Promise.all(monthlyDates.map(d => pastDueCountAt(d.endOfMonth))),
+    Promise.all(monthlyDates.map(d => pastDueCountAt(d.endOfMonthPrev))),
+    Promise.all(yearlyDates.map(d => pastDueCountAt(d.endOfYear))),
+  ]);
 
-    monthly.push({
-      month: MONTH_NAMES[m]!,
-      value: currentResult?.count ?? 0,
-      previousYear: prevResult?.count ?? 0,
-    });
-  }
+  const monthly: MonthlyDataPoint[] = monthlyDates.map((d, i) => ({
+    month: MONTH_NAMES[d.month]!,
+    value: monthlyCurrentResults[i]![0]?.count ?? 0,
+    previousYear: monthlyPrevResults[i]![0]?.count ?? 0,
+  }));
 
-  const yearly: YearlyDataPoint[] = [];
-  for (let y = currentYear - 4; y <= currentYear; y++) {
-    const endOfYear = new Date(y, 11, 31, 23, 59, 59);
-    const [result] = await db
-      .select({ count: count() })
-      .from(memberSchema)
-      .where(and(
-        eq(memberSchema.organizationId, organizationId),
-        eq(memberSchema.status, 'past_due'),
-        sql`${memberSchema.createdAt} <= ${endOfYear}`,
-      ));
-    yearly.push({ year: String(y), value: result?.count ?? 0 });
-  }
+  const yearly: YearlyDataPoint[] = yearlyDates.map((d, i) => ({
+    year: String(d.year),
+    value: yearlyResults[i]![0]?.count ?? 0,
+  }));
 
   return { monthly, yearly };
 }
@@ -328,214 +320,183 @@ async function getStatusChartData(
   status: string,
   currentMonthOverride?: number,
 ): Promise<ReportChartData> {
-  const monthly: MonthlyDataPoint[] = [];
   const currentMonth = new Date().getMonth();
 
-  for (let m = 0; m < 12; m++) {
-    const startOfMonth = new Date(currentYear, m, 1);
-    const endOfMonth = new Date(currentYear, m + 1, 0, 23, 59, 59);
-    const startOfMonthPrev = new Date(currentYear - 1, m, 1);
-    const endOfMonthPrev = new Date(currentYear - 1, m + 1, 0, 23, 59, 59);
+  const monthlyDates = Array.from({ length: 12 }, (_, m) => ({
+    month: m,
+    startOfMonth: new Date(currentYear, m, 1),
+    endOfMonth: new Date(currentYear, m + 1, 0, 23, 59, 59),
+    startOfMonthPrev: new Date(currentYear - 1, m, 1),
+    endOfMonthPrev: new Date(currentYear - 1, m + 1, 0, 23, 59, 59),
+  }));
 
-    let currentValue = 0;
-    // Use override for current month if provided (for amount-due chart)
-    if (currentMonthOverride !== undefined && m === currentMonth) {
+  const yearlyDates = Array.from({ length: 5 }, (_, i) => ({
+    year: currentYear - 4 + i,
+    startOfYear: new Date(currentYear - 4 + i, 0, 1),
+    endOfYear: new Date(currentYear - 4 + i, 11, 31, 23, 59, 59),
+  }));
+
+  const txSumInRange = (start: Date, end: Date) =>
+    db.select({ total: sum(transactionSchema.amount) })
+      .from(transactionSchema)
+      .where(and(
+        eq(transactionSchema.organizationId, organizationId),
+        eq(transactionSchema.status, status),
+        gte(transactionSchema.createdAt, start),
+        sql`${transactionSchema.createdAt} <= ${end}`,
+      ));
+
+  // Only query months that don't have an override
+  const monthsToQuery = monthlyDates.filter(d =>
+    !(currentMonthOverride !== undefined && d.month === currentMonth),
+  );
+
+  const [currentResults, prevResults, yearlyResults] = await Promise.all([
+    Promise.all(monthsToQuery.map(d => txSumInRange(d.startOfMonth, d.endOfMonth))),
+    Promise.all(monthlyDates.map(d => txSumInRange(d.startOfMonthPrev, d.endOfMonthPrev))),
+    Promise.all(yearlyDates.map(d => txSumInRange(d.startOfYear, d.endOfYear))),
+  ]);
+
+  // Map queried results back, using override for the overridden month
+  let queryIdx = 0;
+  const monthly: MonthlyDataPoint[] = monthlyDates.map((d, i) => {
+    let currentValue: number;
+    if (currentMonthOverride !== undefined && d.month === currentMonth) {
       currentValue = currentMonthOverride;
     } else {
-      const [currentResult] = await db
-        .select({ total: sum(transactionSchema.amount) })
-        .from(transactionSchema)
-        .where(and(
-          eq(transactionSchema.organizationId, organizationId),
-          eq(transactionSchema.status, status),
-          gte(transactionSchema.createdAt, startOfMonth),
-          sql`${transactionSchema.createdAt} <= ${endOfMonth}`,
-        ));
-      currentValue = Number(currentResult?.total ?? 0);
+      currentValue = Number(currentResults[queryIdx]![0]?.total ?? 0);
+      queryIdx++;
     }
-
-    const [prevResult] = await db
-      .select({ total: sum(transactionSchema.amount) })
-      .from(transactionSchema)
-      .where(and(
-        eq(transactionSchema.organizationId, organizationId),
-        eq(transactionSchema.status, status),
-        gte(transactionSchema.createdAt, startOfMonthPrev),
-        sql`${transactionSchema.createdAt} <= ${endOfMonthPrev}`,
-      ));
-
-    monthly.push({
-      month: MONTH_NAMES[m]!,
+    return {
+      month: MONTH_NAMES[d.month]!,
       value: Math.abs(currentValue),
-      previousYear: Math.abs(Number(prevResult?.total ?? 0)),
-    });
-  }
+      previousYear: Math.abs(Number(prevResults[i]![0]?.total ?? 0)),
+    };
+  });
 
-  const yearly: YearlyDataPoint[] = [];
-  for (let y = currentYear - 4; y <= currentYear; y++) {
-    const startOfYear = new Date(y, 0, 1);
-    const endOfYear = new Date(y, 11, 31, 23, 59, 59);
-    const [result] = await db
-      .select({ total: sum(transactionSchema.amount) })
-      .from(transactionSchema)
-      .where(and(
-        eq(transactionSchema.organizationId, organizationId),
-        eq(transactionSchema.status, status),
-        gte(transactionSchema.createdAt, startOfYear),
-        sql`${transactionSchema.createdAt} <= ${endOfYear}`,
-      ));
-    yearly.push({ year: String(y), value: Math.abs(Number(result?.total ?? 0)) });
-  }
+  const yearly: YearlyDataPoint[] = yearlyDates.map((d, i) => ({
+    year: String(d.year),
+    value: Math.abs(Number(yearlyResults[i]![0]?.total ?? 0)),
+  }));
 
   return { monthly, yearly };
 }
 
 async function getPendingChartData(organizationId: string, currentYear: number): Promise<ReportChartData> {
-  const monthly: MonthlyDataPoint[] = [];
-  for (let m = 0; m < 12; m++) {
-    const startOfMonth = new Date(currentYear, m, 1);
-    const endOfMonth = new Date(currentYear, m + 1, 0, 23, 59, 59);
-    const startOfMonthPrev = new Date(currentYear - 1, m, 1);
-    const endOfMonthPrev = new Date(currentYear - 1, m + 1, 0, 23, 59, 59);
+  const monthlyDates = Array.from({ length: 12 }, (_, m) => ({
+    month: m,
+    startOfMonth: new Date(currentYear, m, 1),
+    endOfMonth: new Date(currentYear, m + 1, 0, 23, 59, 59),
+    startOfMonthPrev: new Date(currentYear - 1, m, 1),
+    endOfMonthPrev: new Date(currentYear - 1, m + 1, 0, 23, 59, 59),
+  }));
 
-    const [currentResult] = await db
-      .select({ total: sum(transactionSchema.amount) })
+  const yearlyDates = Array.from({ length: 5 }, (_, i) => ({
+    year: currentYear - 4 + i,
+    startOfYear: new Date(currentYear - 4 + i, 0, 1),
+    endOfYear: new Date(currentYear - 4 + i, 11, 31, 23, 59, 59),
+  }));
+
+  const pendingSumInRange = (start: Date, end: Date) =>
+    db.select({ total: sum(transactionSchema.amount) })
       .from(transactionSchema)
       .where(and(
         eq(transactionSchema.organizationId, organizationId),
         inArray(transactionSchema.status, ['pending', 'processing']),
-        gte(transactionSchema.createdAt, startOfMonth),
-        sql`${transactionSchema.createdAt} <= ${endOfMonth}`,
+        gte(transactionSchema.createdAt, start),
+        sql`${transactionSchema.createdAt} <= ${end}`,
       ));
 
-    const [prevResult] = await db
-      .select({ total: sum(transactionSchema.amount) })
-      .from(transactionSchema)
-      .where(and(
-        eq(transactionSchema.organizationId, organizationId),
-        inArray(transactionSchema.status, ['pending', 'processing']),
-        gte(transactionSchema.createdAt, startOfMonthPrev),
-        sql`${transactionSchema.createdAt} <= ${endOfMonthPrev}`,
-      ));
+  const [monthlyCurrentResults, monthlyPrevResults, yearlyResults] = await Promise.all([
+    Promise.all(monthlyDates.map(d => pendingSumInRange(d.startOfMonth, d.endOfMonth))),
+    Promise.all(monthlyDates.map(d => pendingSumInRange(d.startOfMonthPrev, d.endOfMonthPrev))),
+    Promise.all(yearlyDates.map(d => pendingSumInRange(d.startOfYear, d.endOfYear))),
+  ]);
 
-    monthly.push({
-      month: MONTH_NAMES[m]!,
-      value: Number(currentResult?.total ?? 0),
-      previousYear: Number(prevResult?.total ?? 0),
-    });
-  }
+  const monthly: MonthlyDataPoint[] = monthlyDates.map((d, i) => ({
+    month: MONTH_NAMES[d.month]!,
+    value: Number(monthlyCurrentResults[i]![0]?.total ?? 0),
+    previousYear: Number(monthlyPrevResults[i]![0]?.total ?? 0),
+  }));
 
-  const yearly: YearlyDataPoint[] = [];
-  for (let y = currentYear - 4; y <= currentYear; y++) {
-    const startOfYear = new Date(y, 0, 1);
-    const endOfYear = new Date(y, 11, 31, 23, 59, 59);
-    const [result] = await db
-      .select({ total: sum(transactionSchema.amount) })
-      .from(transactionSchema)
-      .where(and(
-        eq(transactionSchema.organizationId, organizationId),
-        inArray(transactionSchema.status, ['pending', 'processing']),
-        gte(transactionSchema.createdAt, startOfYear),
-        sql`${transactionSchema.createdAt} <= ${endOfYear}`,
-      ));
-    yearly.push({ year: String(y), value: Number(result?.total ?? 0) });
-  }
+  const yearly: YearlyDataPoint[] = yearlyDates.map((d, i) => ({
+    year: String(d.year),
+    value: Number(yearlyResults[i]![0]?.total ?? 0),
+  }));
 
   return { monthly, yearly };
 }
 
 async function getIncomePerStudentChartData(organizationId: string, currentYear: number): Promise<ReportChartData> {
-  const monthly: MonthlyDataPoint[] = [];
-  for (let m = 0; m < 12; m++) {
-    const startOfMonth = new Date(currentYear, m, 1);
-    const endOfMonth = new Date(currentYear, m + 1, 0, 23, 59, 59);
-    const startOfMonthPrev = new Date(currentYear - 1, m, 1);
-    const endOfMonthPrev = new Date(currentYear - 1, m + 1, 0, 23, 59, 59);
+  const monthlyDates = Array.from({ length: 12 }, (_, m) => ({
+    month: m,
+    startOfMonth: new Date(currentYear, m, 1),
+    endOfMonth: new Date(currentYear, m + 1, 0, 23, 59, 59),
+    startOfMonthPrev: new Date(currentYear - 1, m, 1),
+    endOfMonthPrev: new Date(currentYear - 1, m + 1, 0, 23, 59, 59),
+  }));
 
-    // Current year income
-    const [incomeResult] = await db
-      .select({ total: sum(transactionSchema.amount) })
+  const yearlyDates = Array.from({ length: 5 }, (_, i) => ({
+    year: currentYear - 4 + i,
+    startOfYear: new Date(currentYear - 4 + i, 0, 1),
+    endOfYear: new Date(currentYear - 4 + i, 11, 31, 23, 59, 59),
+  }));
+
+  const incomeInRange = (start: Date, end: Date) =>
+    db.select({ total: sum(transactionSchema.amount) })
       .from(transactionSchema)
       .where(and(
         eq(transactionSchema.organizationId, organizationId),
         eq(transactionSchema.status, 'paid'),
-        gte(transactionSchema.createdAt, startOfMonth),
-        sql`${transactionSchema.createdAt} <= ${endOfMonth}`,
+        gte(transactionSchema.createdAt, start),
+        sql`${transactionSchema.createdAt} <= ${end}`,
       ));
 
-    // Current members at end of month
-    const [membersResult] = await db
-      .select({ count: count() })
+  const memberCountAt = (datePoint: Date) =>
+    db.select({ count: count() })
       .from(memberSchema)
       .where(and(
         eq(memberSchema.organizationId, organizationId),
-        sql`${memberSchema.createdAt} <= ${endOfMonth}`,
-        sql`(${memberSchema.status} != 'cancelled' OR ${memberSchema.updatedAt} > ${endOfMonth})`,
+        sql`${memberSchema.createdAt} <= ${datePoint}`,
+        sql`(${memberSchema.status} != 'cancelled' OR ${memberSchema.updatedAt} > ${datePoint})`,
       ));
 
-    const income = Number(incomeResult?.total ?? 0);
-    const members = membersResult?.count ?? 1;
-    const currentValue = members > 0 ? income / members : 0;
+  const [
+    monthlyIncomeResults,
+    monthlyMemberResults,
+    monthlyPrevIncomeResults,
+    monthlyPrevMemberResults,
+    yearlyIncomeResults,
+    yearlyMemberResults,
+  ] = await Promise.all([
+    Promise.all(monthlyDates.map(d => incomeInRange(d.startOfMonth, d.endOfMonth))),
+    Promise.all(monthlyDates.map(d => memberCountAt(d.endOfMonth))),
+    Promise.all(monthlyDates.map(d => incomeInRange(d.startOfMonthPrev, d.endOfMonthPrev))),
+    Promise.all(monthlyDates.map(d => memberCountAt(d.endOfMonthPrev))),
+    Promise.all(yearlyDates.map(d => incomeInRange(d.startOfYear, d.endOfYear))),
+    Promise.all(yearlyDates.map(d => memberCountAt(d.endOfYear))),
+  ]);
 
-    // Previous year
-    const [prevIncomeResult] = await db
-      .select({ total: sum(transactionSchema.amount) })
-      .from(transactionSchema)
-      .where(and(
-        eq(transactionSchema.organizationId, organizationId),
-        eq(transactionSchema.status, 'paid'),
-        gte(transactionSchema.createdAt, startOfMonthPrev),
-        sql`${transactionSchema.createdAt} <= ${endOfMonthPrev}`,
-      ));
+  const monthly: MonthlyDataPoint[] = monthlyDates.map((d, i) => {
+    const income = Number(monthlyIncomeResults[i]![0]?.total ?? 0);
+    const members = monthlyMemberResults[i]![0]?.count ?? 1;
+    const prevIncome = Number(monthlyPrevIncomeResults[i]![0]?.total ?? 0);
+    const prevMembers = monthlyPrevMemberResults[i]![0]?.count ?? 1;
+    return {
+      month: MONTH_NAMES[d.month]!,
+      value: Math.round((members > 0 ? income / members : 0) * 100) / 100,
+      previousYear: Math.round((prevMembers > 0 ? prevIncome / prevMembers : 0) * 100) / 100,
+    };
+  });
 
-    const [prevMembersResult] = await db
-      .select({ count: count() })
-      .from(memberSchema)
-      .where(and(
-        eq(memberSchema.organizationId, organizationId),
-        sql`${memberSchema.createdAt} <= ${endOfMonthPrev}`,
-        sql`(${memberSchema.status} != 'cancelled' OR ${memberSchema.updatedAt} > ${endOfMonthPrev})`,
-      ));
-
-    const prevIncome = Number(prevIncomeResult?.total ?? 0);
-    const prevMembers = prevMembersResult?.count ?? 1;
-    const prevValue = prevMembers > 0 ? prevIncome / prevMembers : 0;
-
-    monthly.push({
-      month: MONTH_NAMES[m]!,
-      value: Math.round(currentValue * 100) / 100,
-      previousYear: Math.round(prevValue * 100) / 100,
-    });
-  }
-
-  const yearly: YearlyDataPoint[] = [];
-  for (let y = currentYear - 4; y <= currentYear; y++) {
-    const startOfYear = new Date(y, 0, 1);
-    const endOfYear = new Date(y, 11, 31, 23, 59, 59);
-
-    const [incomeResult] = await db
-      .select({ total: sum(transactionSchema.amount) })
-      .from(transactionSchema)
-      .where(and(
-        eq(transactionSchema.organizationId, organizationId),
-        eq(transactionSchema.status, 'paid'),
-        gte(transactionSchema.createdAt, startOfYear),
-        sql`${transactionSchema.createdAt} <= ${endOfYear}`,
-      ));
-
-    const [membersResult] = await db
-      .select({ count: count() })
-      .from(memberSchema)
-      .where(and(
-        eq(memberSchema.organizationId, organizationId),
-        sql`${memberSchema.createdAt} <= ${endOfYear}`,
-        sql`(${memberSchema.status} != 'cancelled' OR ${memberSchema.updatedAt} > ${endOfYear})`,
-      ));
-
-    const income = Number(incomeResult?.total ?? 0);
-    const members = membersResult?.count ?? 1;
-    yearly.push({ year: String(y), value: members > 0 ? Math.round((income / members) * 100) / 100 : 0 });
-  }
+  const yearly: YearlyDataPoint[] = yearlyDates.map((d, i) => {
+    const income = Number(yearlyIncomeResults[i]![0]?.total ?? 0);
+    const members = yearlyMemberResults[i]![0]?.count ?? 1;
+    return {
+      year: String(d.year),
+      value: members > 0 ? Math.round((income / members) * 100) / 100 : 0,
+    };
+  });
 
   return { monthly, yearly };
 }
