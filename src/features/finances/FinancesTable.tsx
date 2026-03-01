@@ -23,6 +23,7 @@ export type Transaction = {
   memberName: string;
   memberId: string;
   status: TransactionStatus;
+  transactionType: string;
 };
 
 type FinancesTableProps = {

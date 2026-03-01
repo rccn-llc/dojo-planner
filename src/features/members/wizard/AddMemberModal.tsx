@@ -170,6 +170,13 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
   };
 
   const handleFinalNext = async () => {
+    // If payment was already declined and member created, user is choosing
+    // to proceed without successful payment — advance to success step.
+    if (wizard.data.paymentStatus === 'declined' && wizard.data.paymentProcessed) {
+      wizard.setStep('success');
+      return;
+    }
+
     try {
       wizard.setIsLoading(true);
       wizard.clearError();
@@ -321,6 +328,8 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
         ? computeDiscountedPrice(wizard.data.membershipPlanPrice, wizard.data.appliedCoupon) ?? 0
         : (wizard.data.membershipPlanPrice ?? 0);
 
+      let paymentDeclined = false;
+
       if (wizard.data.paymentMethod && finalPrice > 0 && result.id) {
         try {
           wizard.updateData({ paymentStatus: 'processing' });
@@ -364,8 +373,11 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
             paymentProcessed: true,
           });
 
-          if (!paymentResult.success && process.env.NODE_ENV === 'development') {
-            console.warn('[Add Member Wizard] Payment declined:', paymentResult.declineReason);
+          if (!paymentResult.success) {
+            paymentDeclined = true;
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('[Add Member Wizard] Payment declined:', paymentResult.declineReason);
+            }
           }
         } catch (paymentError) {
           if (process.env.NODE_ENV === 'development') {
@@ -376,12 +388,19 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
             paymentDeclineReason: 'card_declined',
             paymentProcessed: true,
           });
+          paymentDeclined = true;
         }
       }
 
       // Send confirmation email (fire-and-forget)
       if (result.id) {
         sendConfirmationEmail(result.id);
+      }
+
+      // On payment decline, stay on the payment step so the user can retry
+      // or choose to proceed without successful payment.
+      if (paymentDeclined) {
+        return;
       }
 
       // Move to success step
@@ -420,6 +439,13 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
 
   // Handler for family member final step (after FamilyPaymentStep)
   const handleFamilyMemberFinalNext = async () => {
+    // If payment was already declined and member created, user is choosing
+    // to proceed without successful payment — advance to success step.
+    if (wizard.data.paymentStatus === 'declined' && wizard.data.paymentProcessed) {
+      wizard.setStep('success');
+      return;
+    }
+
     try {
       wizard.setIsLoading(true);
       wizard.clearError();
@@ -541,6 +567,8 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
         ? computeDiscountedPrice(wizard.data.membershipPlanPrice, wizard.data.appliedCoupon) ?? 0
         : (wizard.data.membershipPlanPrice ?? 0);
 
+      let paymentDeclined = false;
+
       if (finalPrice > 0 && result.id && wizard.data.hohMemberId) {
         try {
           wizard.updateData({ paymentStatus: 'processing' });
@@ -590,6 +618,10 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
             paymentDeclineReason: paymentResult.declineReason as PaymentDeclineReason | undefined,
             paymentProcessed: true,
           });
+
+          if (!paymentResult.success) {
+            paymentDeclined = true;
+          }
         } catch (paymentError) {
           if (process.env.NODE_ENV === 'development') {
             console.warn('[Add Member Wizard] Family member payment error:', paymentError);
@@ -599,12 +631,19 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
             paymentDeclineReason: 'card_declined',
             paymentProcessed: true,
           });
+          paymentDeclined = true;
         }
       }
 
       // 5. Send confirmation email (fire-and-forget)
       if (result.id) {
         sendConfirmationEmail(result.id);
+      }
+
+      // On payment decline, stay on the payment step so the user can retry
+      // or choose to proceed without successful payment.
+      if (paymentDeclined) {
+        return;
       }
 
       // 6. Move to success

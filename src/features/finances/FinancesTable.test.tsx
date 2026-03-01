@@ -20,6 +20,7 @@ const createMockTransaction = (overrides: Partial<Transaction> = {}): Transactio
   memberName: 'John Smith',
   memberId: 'M001',
   status: 'paid' as TransactionStatus,
+  transactionType: 'membership_payment',
   ...overrides,
 });
 

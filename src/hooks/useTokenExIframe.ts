@@ -18,6 +18,7 @@ type TokenExIframeInstance = {
 
 type UseTokenExIframeOptions = {
   containerId: string;
+  cvvContainerId?: string;
   config: TokenizationIframeConfig | null;
   theme?: 'light' | 'dark';
 };
@@ -31,13 +32,15 @@ export type TokenizeResult = {
 type UseTokenExIframeReturn = {
   isLoaded: boolean;
   isValid: boolean;
+  isCvvValid: boolean;
   error: string | null;
   tokenize: () => Promise<TokenizeResult>;
 };
 
-export function useTokenExIframe({ containerId, config, theme = 'light' }: UseTokenExIframeOptions): UseTokenExIframeReturn {
+export function useTokenExIframe({ containerId, cvvContainerId, config, theme = 'light' }: UseTokenExIframeOptions): UseTokenExIframeReturn {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isValid, setIsValid] = useState(false);
+  const [isCvvValid, setIsCvvValid] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const iframeRef = useRef<TokenExIframeInstance | null>(null);
   const tokenizeResolveRef = useRef<((result: TokenizeResult) => void) | null>(null);
@@ -80,6 +83,8 @@ export function useTokenExIframe({ containerId, config, theme = 'light' }: UseTo
         return;
       }
 
+      const enableCvv = !!cvvContainerId;
+
       // Initialize the iframe
       const iframe = new tokenEx.Iframe(containerId, {
         origin: config!.origin || window.location.origin,
@@ -90,10 +95,13 @@ export function useTokenExIframe({ containerId, config, theme = 'light' }: UseTo
         pci: true,
         enablePrettyFormat: true,
         enableValidateOnKeyUp: true,
+        enableValidateOnCvvKeyUp: enableCvv,
         debug: process.env.NODE_ENV === 'development',
         inputType: 'text',
-        cvvContainerID: '',
-        cvv: false,
+        cvvContainerID: cvvContainerId || '',
+        cvv: enableCvv,
+        cvvInputType: 'text',
+        cvvPlaceholder: '123',
         styles: {
           base: [
             'font-family: ui-sans-serif, system-ui, sans-serif',
@@ -109,6 +117,22 @@ export function useTokenExIframe({ containerId, config, theme = 'light' }: UseTo
           ].join('; '),
           focus: 'outline: none; border: none',
           error: `color: ${theme === 'dark' ? 'hsl(0 72% 65%)' : 'hsl(0 84% 60%)'}`,
+          cvv: {
+            base: [
+              'font-family: ui-sans-serif, system-ui, sans-serif',
+              'font-size: 14px',
+              'line-height: 20px',
+              'padding: 7px 12px',
+              `color: ${theme === 'dark' ? '#fafafa' : '#000000'}`,
+              `background-color: ${theme === 'dark' ? '#262626' : '#ffffff'}`,
+              'border: none',
+              'outline: none',
+              'width: 100%',
+              'box-sizing: border-box',
+            ].join('; '),
+            focus: 'outline: none; border: none',
+            error: `color: ${theme === 'dark' ? 'hsl(0 72% 65%)' : 'hsl(0 84% 60%)'}`,
+          },
         },
       });
 
@@ -123,8 +147,11 @@ export function useTokenExIframe({ containerId, config, theme = 'light' }: UseTo
 
       iframe.on('validate', (data: unknown) => {
         if (!cancelled) {
-          const validationData = data as { isValid?: boolean };
+          const validationData = data as { isValid?: boolean; isCvvValid?: boolean };
           setIsValid(!!validationData.isValid);
+          if (enableCvv) {
+            setIsCvvValid(!!validationData.isCvvValid);
+          }
         }
       });
 
@@ -188,7 +215,7 @@ export function useTokenExIframe({ containerId, config, theme = 'light' }: UseTo
         scriptEl.parentNode.removeChild(scriptEl);
       }
     };
-  }, [containerId, config, theme]);
+  }, [containerId, cvvContainerId, config, theme]);
 
   const tokenize = useCallback((): Promise<TokenizeResult> => {
     return new Promise((resolve, reject) => {
@@ -218,5 +245,5 @@ export function useTokenExIframe({ containerId, config, theme = 'light' }: UseTo
     });
   }, []);
 
-  return { isLoaded, isValid, error, tokenize };
+  return { isLoaded, isValid, isCvvValid, error, tokenize };
 }

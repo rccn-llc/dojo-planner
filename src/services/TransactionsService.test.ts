@@ -12,19 +12,45 @@ vi.mock('@/models/Schema', () => ({
     id: 'member.id',
     firstName: 'member.firstName',
     lastName: 'member.lastName',
+    memberType: 'member.memberType',
   },
   transactionSchema: {
     id: 'transaction.id',
     organizationId: 'transaction.organizationId',
     memberId: 'transaction.memberId',
+    memberMembershipId: 'transaction.memberMembershipId',
+    eventRegistrationId: 'transaction.eventRegistrationId',
     transactionType: 'transaction.transactionType',
     amount: 'transaction.amount',
     currency: 'transaction.currency',
     status: 'transaction.status',
     paymentMethod: 'transaction.paymentMethod',
     description: 'transaction.description',
+    iqproTransactionId: 'transaction.iqproTransactionId',
     processedAt: 'transaction.processedAt',
     createdAt: 'transaction.createdAt',
+  },
+  memberMembershipSchema: {
+    id: 'memberMembership.id',
+    membershipPlanId: 'memberMembership.membershipPlanId',
+    billingType: 'memberMembership.billingType',
+    startDate: 'memberMembership.startDate',
+    nextPaymentDate: 'memberMembership.nextPaymentDate',
+  },
+  membershipPlanSchema: {
+    id: 'membershipPlan.id',
+    name: 'membershipPlan.name',
+    frequency: 'membershipPlan.frequency',
+    price: 'membershipPlan.price',
+  },
+  eventRegistrationSchema: {
+    id: 'eventRegistration.id',
+    eventId: 'eventRegistration.eventId',
+  },
+  eventSchema: {
+    id: 'event.id',
+    name: 'event.name',
+    eventType: 'event.eventType',
   },
 }));
 
@@ -314,6 +340,175 @@ describe('TransactionsService', () => {
       expect(result[0]?.paymentMethod).toBeNull();
       expect(result[0]?.description).toBeNull();
       expect(result[0]?.processedAt).toBeNull();
+    });
+  });
+
+  describe('getTransactionById', () => {
+    it('should return transaction with membership details', async () => {
+      const mockRow = {
+        id: 'txn-1',
+        memberId: 'member-1',
+        memberFirstName: 'John',
+        memberLastName: 'Smith',
+        memberType: 'individual',
+        transactionType: 'membership_payment',
+        amount: 16000,
+        currency: 'USD',
+        status: 'paid',
+        paymentMethod: 'card',
+        description: 'Monthly payment',
+        iqproTransactionId: 'iqpro_1',
+        processedAt: new Date('2025-04-15'),
+        createdAt: new Date('2025-04-15'),
+        membershipPlanName: 'Adult BJJ Monthly',
+        membershipPlanFrequency: 'Monthly',
+        membershipPlanPrice: 16000,
+        membershipBillingType: 'autopay',
+        membershipStartDate: new Date('2025-01-01'),
+        membershipNextPaymentDate: new Date('2025-05-15'),
+        eventName: null,
+        eventType: null,
+      };
+
+      const mockLimit = vi.fn().mockResolvedValue([mockRow]);
+      const mockWhere = vi.fn().mockReturnValue({ limit: mockLimit });
+      const mockLeftJoin4 = vi.fn().mockReturnValue({ where: mockWhere });
+      const mockLeftJoin3 = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin4 });
+      const mockLeftJoin2 = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin3 });
+      const mockLeftJoin1 = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin2 });
+      const mockInnerJoin = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin1 });
+      const mockFrom = vi.fn().mockReturnValue({ innerJoin: mockInnerJoin });
+      const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
+
+      const { db } = await import('@/libs/DB');
+      vi.mocked(db.select).mockReturnValue(mockSelect() as any);
+
+      const { getTransactionById } = await import('./TransactionsService');
+      const result = await getTransactionById('txn-1', 'org-test-123');
+
+      expect(result).toEqual(mockRow);
+      expect(db.select).toHaveBeenCalledTimes(1);
+      expect(mockInnerJoin).toHaveBeenCalledTimes(1);
+      expect(mockLeftJoin1).toHaveBeenCalledTimes(1);
+      expect(mockLeftJoin2).toHaveBeenCalledTimes(1);
+      expect(mockLeftJoin3).toHaveBeenCalledTimes(1);
+      expect(mockLeftJoin4).toHaveBeenCalledTimes(1);
+      expect(mockLimit).toHaveBeenCalledWith(1);
+    });
+
+    it('should return transaction with event details', async () => {
+      const mockRow = {
+        id: 'txn-2',
+        memberId: 'member-2',
+        memberFirstName: 'Jane',
+        memberLastName: 'Doe',
+        memberType: 'individual',
+        transactionType: 'event_registration',
+        amount: 5000,
+        currency: 'USD',
+        status: 'paid',
+        paymentMethod: 'card',
+        description: 'Seminar registration',
+        iqproTransactionId: null,
+        processedAt: new Date('2025-04-20'),
+        createdAt: new Date('2025-04-20'),
+        membershipPlanName: null,
+        membershipPlanFrequency: null,
+        membershipPlanPrice: null,
+        membershipBillingType: null,
+        membershipStartDate: null,
+        membershipNextPaymentDate: null,
+        eventName: 'BJJ Fundamentals Seminar',
+        eventType: 'seminar',
+      };
+
+      const mockLimit = vi.fn().mockResolvedValue([mockRow]);
+      const mockWhere = vi.fn().mockReturnValue({ limit: mockLimit });
+      const mockLeftJoin4 = vi.fn().mockReturnValue({ where: mockWhere });
+      const mockLeftJoin3 = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin4 });
+      const mockLeftJoin2 = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin3 });
+      const mockLeftJoin1 = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin2 });
+      const mockInnerJoin = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin1 });
+      const mockFrom = vi.fn().mockReturnValue({ innerJoin: mockInnerJoin });
+      const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
+
+      const { db } = await import('@/libs/DB');
+      vi.mocked(db.select).mockReturnValue(mockSelect() as any);
+
+      const { getTransactionById } = await import('./TransactionsService');
+      const result = await getTransactionById('txn-2', 'org-test-123');
+
+      expect(result).toEqual(mockRow);
+      expect(result?.eventName).toBe('BJJ Fundamentals Seminar');
+      expect(result?.eventType).toBe('seminar');
+      expect(result?.membershipPlanName).toBeNull();
+    });
+
+    it('should return null when transaction not found', async () => {
+      const mockLimit = vi.fn().mockResolvedValue([]);
+      const mockWhere = vi.fn().mockReturnValue({ limit: mockLimit });
+      const mockLeftJoin4 = vi.fn().mockReturnValue({ where: mockWhere });
+      const mockLeftJoin3 = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin4 });
+      const mockLeftJoin2 = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin3 });
+      const mockLeftJoin1 = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin2 });
+      const mockInnerJoin = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin1 });
+      const mockFrom = vi.fn().mockReturnValue({ innerJoin: mockInnerJoin });
+      const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
+
+      const { db } = await import('@/libs/DB');
+      vi.mocked(db.select).mockReturnValue(mockSelect() as any);
+
+      const { getTransactionById } = await import('./TransactionsService');
+      const result = await getTransactionById('nonexistent', 'org-test-123');
+
+      expect(result).toBeNull();
+    });
+
+    it('should return base fields when no membership or event FK', async () => {
+      const mockRow = {
+        id: 'txn-3',
+        memberId: 'member-3',
+        memberFirstName: 'Bob',
+        memberLastName: 'Jones',
+        memberType: 'individual',
+        transactionType: 'refund',
+        amount: 3000,
+        currency: 'USD',
+        status: 'paid',
+        paymentMethod: 'card',
+        description: 'Refund for overpayment',
+        iqproTransactionId: null,
+        processedAt: new Date('2025-04-25'),
+        createdAt: new Date('2025-04-25'),
+        membershipPlanName: null,
+        membershipPlanFrequency: null,
+        membershipPlanPrice: null,
+        membershipBillingType: null,
+        membershipStartDate: null,
+        membershipNextPaymentDate: null,
+        eventName: null,
+        eventType: null,
+      };
+
+      const mockLimit = vi.fn().mockResolvedValue([mockRow]);
+      const mockWhere = vi.fn().mockReturnValue({ limit: mockLimit });
+      const mockLeftJoin4 = vi.fn().mockReturnValue({ where: mockWhere });
+      const mockLeftJoin3 = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin4 });
+      const mockLeftJoin2 = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin3 });
+      const mockLeftJoin1 = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin2 });
+      const mockInnerJoin = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin1 });
+      const mockFrom = vi.fn().mockReturnValue({ innerJoin: mockInnerJoin });
+      const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
+
+      const { db } = await import('@/libs/DB');
+      vi.mocked(db.select).mockReturnValue(mockSelect() as any);
+
+      const { getTransactionById } = await import('./TransactionsService');
+      const result = await getTransactionById('txn-3', 'org-test-123');
+
+      expect(result).toEqual(mockRow);
+      expect(result?.membershipPlanName).toBeNull();
+      expect(result?.eventName).toBeNull();
     });
   });
 });

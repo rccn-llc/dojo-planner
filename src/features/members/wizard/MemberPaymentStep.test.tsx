@@ -53,6 +53,7 @@ const translationKeys: Record<string, string> = {
   cancel_button: 'Cancel',
   next_button: 'Next',
   processing_button: 'Processing...',
+  continue_without_payment_button: 'Add Member Anyway',
   payment_approved_title: 'Payment Approved',
   payment_approved_message: 'The payment has been successfully processed.',
   payment_declined_title: 'Payment Declined',
@@ -143,6 +144,19 @@ vi.mock('next-intl', () => ({
     }
     return result;
   },
+}));
+
+// Mock useTokenExIframe — default returns inactive state
+const mockTokenize = vi.fn();
+const mockIframeReturn: { isLoaded: boolean; isValid: boolean; isCvvValid: boolean; error: string | null; tokenize: typeof mockTokenize } = {
+  isLoaded: false,
+  isValid: false,
+  isCvvValid: false,
+  error: null,
+  tokenize: mockTokenize,
+};
+vi.mock('@/hooks/useTokenExIframe', () => ({
+  useTokenExIframe: () => mockIframeReturn,
 }));
 
 const defaultProps = {
@@ -420,6 +434,46 @@ describe('MemberPaymentStep', () => {
     expect(page.getByText('Payment Declined')).toBeTruthy();
     expect(page.getByText(/You can still continue adding this member/)).toBeTruthy();
     expect(page.getByText(/insufficient funds/)).toBeTruthy();
+  });
+
+  it('shows "Add Member Anyway" button when payment is declined', () => {
+    const declinedProps = {
+      ...defaultProps,
+      data: {
+        ...defaultProps.data,
+        cardholderName: 'John Doe',
+        cardNumber: '4111111111111111',
+        cardExpiry: '12/25',
+        cardCvc: '123',
+        paymentProcessed: true,
+        paymentStatus: 'declined' as const,
+        paymentDeclineReason: 'card_declined' as const,
+      },
+    };
+
+    render(
+      <MemberPaymentStep {...declinedProps} />,
+    );
+
+    const button = page.getByText('Add Member Anyway');
+
+    expect(button).toBeTruthy();
+
+    // "Next" button text should not be present
+    const buttons = document.querySelectorAll('button');
+    const buttonTexts = Array.from(buttons).map(b => b.textContent);
+
+    expect(buttonTexts).not.toContain('Next');
+  });
+
+  it('shows "Next" button when payment status is not declined', () => {
+    render(
+      <MemberPaymentStep {...defaultProps} />,
+    );
+
+    const button = page.getByText('Next');
+
+    expect(button).toBeTruthy();
   });
 
   it('shows payment approved alert', () => {
@@ -1735,6 +1789,369 @@ describe('MemberPaymentStep', () => {
       );
 
       expect(page.getByText(/every year/)).toBeTruthy();
+    });
+  });
+
+  // TokenEx iframe integration tests
+  describe('TokenEx iframe integration', () => {
+    const tokenizationConfig = {
+      origin: 'https://example.com',
+      tokenizationId: 'test-id',
+      tokenScheme: 'test-scheme',
+      authenticationKey: 'test-key',
+      timestamp: '2024-01-01T00:00:00Z',
+      iframeScriptUrl: 'https://sandbox.api.basyspro.com/Iframe/iframe/iframe-v3.js',
+    };
+
+    it('renders card number iframe container when tokenization config is provided', () => {
+      mockIframeReturn.isLoaded = true;
+      mockIframeReturn.isValid = false;
+      mockIframeReturn.isCvvValid = false;
+
+      render(
+        <MemberPaymentStep
+          {...defaultProps}
+          tokenizationConfig={tokenizationConfig}
+        />,
+      );
+
+      const iframeContainer = document.getElementById('tokenExIframeDiv');
+
+      expect(iframeContainer).toBeTruthy();
+
+      mockIframeReturn.isLoaded = false;
+    });
+
+    it('renders CVV iframe container when tokenization config is provided', () => {
+      mockIframeReturn.isLoaded = true;
+      mockIframeReturn.isValid = false;
+      mockIframeReturn.isCvvValid = false;
+
+      render(
+        <MemberPaymentStep
+          {...defaultProps}
+          tokenizationConfig={tokenizationConfig}
+        />,
+      );
+
+      const cvvIframeContainer = document.getElementById('tokenExCvvIframeDiv');
+
+      expect(cvvIframeContainer).toBeTruthy();
+
+      mockIframeReturn.isLoaded = false;
+    });
+
+    it('does not render card number input when iframe is active', () => {
+      mockIframeReturn.isLoaded = true;
+
+      render(
+        <MemberPaymentStep
+          {...defaultProps}
+          tokenizationConfig={tokenizationConfig}
+        />,
+      );
+
+      const cardInput = document.querySelector('input#cardNumber');
+
+      expect(cardInput).toBeFalsy();
+
+      mockIframeReturn.isLoaded = false;
+    });
+
+    it('does not render CVC input when iframe is active', () => {
+      mockIframeReturn.isLoaded = true;
+
+      render(
+        <MemberPaymentStep
+          {...defaultProps}
+          tokenizationConfig={tokenizationConfig}
+        />,
+      );
+
+      const cvcInput = document.querySelector('input#cardCvc');
+
+      expect(cvcInput).toBeFalsy();
+
+      mockIframeReturn.isLoaded = false;
+    });
+
+    it('hides iframe containers while loading', () => {
+      mockIframeReturn.isLoaded = false;
+      mockIframeReturn.error = null;
+
+      render(
+        <MemberPaymentStep
+          {...defaultProps}
+          tokenizationConfig={tokenizationConfig}
+        />,
+      );
+
+      const iframeContainer = document.getElementById('tokenExIframeDiv');
+
+      expect(iframeContainer?.classList.contains('hidden')).toBe(true);
+
+      const cvvContainer = document.getElementById('tokenExCvvIframeDiv');
+
+      expect(cvvContainer?.classList.contains('hidden')).toBe(true);
+    });
+
+    it('shows iframe containers after loading', () => {
+      mockIframeReturn.isLoaded = true;
+      mockIframeReturn.error = null;
+
+      render(
+        <MemberPaymentStep
+          {...defaultProps}
+          tokenizationConfig={tokenizationConfig}
+        />,
+      );
+
+      const iframeContainer = document.getElementById('tokenExIframeDiv');
+
+      expect(iframeContainer?.classList.contains('hidden')).toBe(false);
+
+      const cvvContainer = document.getElementById('tokenExCvvIframeDiv');
+
+      expect(cvvContainer?.classList.contains('hidden')).toBe(false);
+
+      mockIframeReturn.isLoaded = false;
+    });
+
+    it('enables Next button when iframe card and CVV are valid with other fields filled', () => {
+      mockIframeReturn.isLoaded = true;
+      mockIframeReturn.isValid = true;
+      mockIframeReturn.isCvvValid = true;
+
+      const completedProps = {
+        ...defaultProps,
+        data: {
+          ...defaultProps.data,
+          cardholderName: 'John Doe',
+          cardExpiry: '12/25',
+        },
+        tokenizationConfig,
+      };
+
+      render(
+        <MemberPaymentStep {...completedProps} />,
+      );
+
+      const nextButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent === 'Next') as HTMLButtonElement;
+
+      expect(nextButton?.disabled).toBe(false);
+
+      mockIframeReturn.isLoaded = false;
+      mockIframeReturn.isValid = false;
+      mockIframeReturn.isCvvValid = false;
+    });
+
+    it('disables Next button when iframe card is valid but CVV is not valid', () => {
+      mockIframeReturn.isLoaded = true;
+      mockIframeReturn.isValid = true;
+      mockIframeReturn.isCvvValid = false;
+
+      const completedProps = {
+        ...defaultProps,
+        data: {
+          ...defaultProps.data,
+          cardholderName: 'John Doe',
+          cardExpiry: '12/25',
+        },
+        tokenizationConfig,
+      };
+
+      render(
+        <MemberPaymentStep {...completedProps} />,
+      );
+
+      const nextButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent === 'Next') as HTMLButtonElement;
+
+      expect(nextButton?.disabled).toBe(true);
+
+      mockIframeReturn.isLoaded = false;
+      mockIframeReturn.isValid = false;
+    });
+
+    it('disables Next button when iframe CVV is valid but card is not valid', () => {
+      mockIframeReturn.isLoaded = true;
+      mockIframeReturn.isValid = false;
+      mockIframeReturn.isCvvValid = true;
+
+      const completedProps = {
+        ...defaultProps,
+        data: {
+          ...defaultProps.data,
+          cardholderName: 'John Doe',
+          cardExpiry: '12/25',
+        },
+        tokenizationConfig,
+      };
+
+      render(
+        <MemberPaymentStep {...completedProps} />,
+      );
+
+      const nextButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent === 'Next') as HTMLButtonElement;
+
+      expect(nextButton?.disabled).toBe(true);
+
+      mockIframeReturn.isLoaded = false;
+      mockIframeReturn.isCvvValid = false;
+    });
+
+    it('still shows expiry input when iframe is active', () => {
+      mockIframeReturn.isLoaded = true;
+
+      render(
+        <MemberPaymentStep
+          {...defaultProps}
+          tokenizationConfig={tokenizationConfig}
+        />,
+      );
+
+      const expiryInput = document.querySelector('input#cardExpiry');
+
+      expect(expiryInput).toBeTruthy();
+
+      mockIframeReturn.isLoaded = false;
+    });
+
+    it('does not use iframe for ACH payment method', () => {
+      mockIframeReturn.isLoaded = true;
+
+      const achProps = {
+        ...defaultProps,
+        data: {
+          ...defaultProps.data,
+          paymentMethod: 'ach' as const,
+        },
+        tokenizationConfig,
+      };
+
+      render(
+        <MemberPaymentStep {...achProps} />,
+      );
+
+      // ACH fields should still be regular inputs
+      const routingInput = document.querySelector('input#achRoutingNumber');
+      const accountInput = document.querySelector('input#achAccountNumber');
+
+      expect(routingInput).toBeTruthy();
+      expect(accountInput).toBeTruthy();
+
+      mockIframeReturn.isLoaded = false;
+    });
+
+    it('shows loading spinner when iframe is not yet loaded', () => {
+      mockIframeReturn.isLoaded = false;
+      mockIframeReturn.error = null;
+
+      render(
+        <MemberPaymentStep
+          {...defaultProps}
+          tokenizationConfig={tokenizationConfig}
+        />,
+      );
+
+      expect(page.getByText(/Loading secure payment field/)).toBeTruthy();
+    });
+
+    it('shows error message when iframe fails to load', () => {
+      mockIframeReturn.isLoaded = false;
+      mockIframeReturn.error = 'Script failed to load';
+
+      render(
+        <MemberPaymentStep
+          {...defaultProps}
+          tokenizationConfig={tokenizationConfig}
+        />,
+      );
+
+      expect(page.getByText(/Failed to load secure payment field/)).toBeTruthy();
+
+      mockIframeReturn.error = null;
+    });
+
+    it('calls tokenize on Next click when iframe is active and card method selected', async () => {
+      mockIframeReturn.isLoaded = true;
+      mockIframeReturn.isValid = true;
+      mockIframeReturn.isCvvValid = true;
+      mockTokenize.mockResolvedValueOnce({ token: 'test-token', firstSix: '424242', lastFour: '4242' });
+
+      const onNextAction = vi.fn();
+      const onUpdateAction = vi.fn();
+      const completedProps = {
+        ...defaultProps,
+        data: {
+          ...defaultProps.data,
+          cardholderName: 'John Doe',
+          cardExpiry: '12/25',
+        },
+        tokenizationConfig,
+        onNextAction,
+        onUpdateAction,
+      };
+
+      render(
+        <MemberPaymentStep {...completedProps} />,
+      );
+
+      const nextButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent === 'Next');
+      if (nextButton) {
+        await userEvent.click(nextButton);
+
+        expect(mockTokenize).toHaveBeenCalled();
+        expect(onUpdateAction).toHaveBeenCalledWith({
+          cardToken: 'test-token',
+          cardFirstSix: '424242',
+          cardLastFour: '4242',
+        });
+        expect(onNextAction).toHaveBeenCalled();
+      }
+
+      mockIframeReturn.isLoaded = false;
+      mockIframeReturn.isValid = false;
+      mockIframeReturn.isCvvValid = false;
+    });
+
+    it('sets declined status when tokenization fails', async () => {
+      mockIframeReturn.isLoaded = true;
+      mockIframeReturn.isValid = true;
+      mockIframeReturn.isCvvValid = true;
+      mockTokenize.mockRejectedValueOnce(new Error('Tokenization failed'));
+
+      const onNextAction = vi.fn();
+      const onUpdateAction = vi.fn();
+      const completedProps = {
+        ...defaultProps,
+        data: {
+          ...defaultProps.data,
+          cardholderName: 'John Doe',
+          cardExpiry: '12/25',
+        },
+        tokenizationConfig,
+        onNextAction,
+        onUpdateAction,
+      };
+
+      render(
+        <MemberPaymentStep {...completedProps} />,
+      );
+
+      const nextButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent === 'Next');
+      if (nextButton) {
+        await userEvent.click(nextButton);
+
+        expect(onUpdateAction).toHaveBeenCalledWith({
+          paymentStatus: 'declined',
+          paymentDeclineReason: 'card_declined',
+        });
+        expect(onNextAction).not.toHaveBeenCalled();
+      }
+
+      mockIframeReturn.isLoaded = false;
+      mockIframeReturn.isValid = false;
+      mockIframeReturn.isCvvValid = false;
     });
   });
 });
