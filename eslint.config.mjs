@@ -60,11 +60,11 @@ export default antfu(
       'ts/consistent-type-definitions': ['error', 'type'], // Use `type` instead of `interface`
       'react/prefer-destructuring-assignment': 'off', // Vscode doesn't support automatically destructuring, it's a pain to add a new variable
       'react-hooks/incompatible-library': 'off', // Disable warning for compilation skipped
+      'react/no-implicit-key': 'off', // Requires type-aware linting not available for all files
       'node/prefer-global/process': 'off', // Allow using `process.env`
       'test/padding-around-all': 'error', // Add padding in test files
       'test/prefer-lowercase-title': 'off', // Allow using uppercase titles in test titles
       'no-console': ['error', { allow: ['warn', 'error', 'info'] }], // Allow info for development logging
-      'react/no-implicit-key': 'off', // Requires type-aware linting not configured in this project
     },
   },
   // --- Test Fixture Rules ---
