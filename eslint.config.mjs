@@ -64,6 +64,7 @@ export default antfu(
       'test/padding-around-all': 'error', // Add padding in test files
       'test/prefer-lowercase-title': 'off', // Allow using uppercase titles in test titles
       'no-console': ['error', { allow: ['warn', 'error', 'info'] }], // Allow info for development logging
+      'react/no-implicit-key': 'off', // Requires type-aware linting not configured in this project
     },
   },
   // --- Test Fixture Rules ---
