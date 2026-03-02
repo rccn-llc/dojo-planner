@@ -16,6 +16,15 @@ function cardNumberLocator(page: Page) {
 }
 
 /**
+ * CVV field locator that works in both modes:
+ * - Fallback: plain <input id="cardCvc"> (when IQPro not configured)
+ * - TokenEx: <div id="tokenExCvvIframeDiv"> (when IQPro configured)
+ */
+function cardCvcLocator(page: Page) {
+  return page.locator('#cardCvc').or(page.locator('#tokenExCvvIframeDiv'));
+}
+
+/**
  * Whether the card number field is a plain <input> (fallback mode).
  * When false, the TokenEx iframe is active and card number can't be filled via E2E.
  */
@@ -169,6 +178,22 @@ async function fillFamilyPaymentStep(page: Page) {
 }
 
 /**
+ * Handle the payment result after submitting. In CI (no IQPro), payment always
+ * fails. The wizard now stays on the payment step showing a decline alert.
+ * Click "Add Member Anyway" to proceed to the success step.
+ */
+async function handlePaymentResult(page: Page) {
+  const success = page.getByText(/has successfully been added as a member/i);
+  const addAnywayBtn = page.getByRole('button', { name: /Add Member Anyway/i });
+
+  await expect(success.or(addAnywayBtn)).toBeVisible({ timeout: 30000 });
+
+  if (await addAnywayBtn.isVisible()) {
+    await addAnywayBtn.click();
+  }
+}
+
+/**
  * Complete the entire HOH wizard flow end-to-end.
  * Creates an HOH member and returns their details for subsequent tests.
  */
@@ -198,6 +223,9 @@ async function completeHOHWizardFlow(page: Page): Promise<MemberDetails> {
 
   await fillPaymentStep(page);
   await page.getByRole('button', { name: 'Next', exact: true }).click();
+
+  // Handle payment decline (IQPro not configured in CI)
+  await handlePaymentResult(page);
 
   // Step 7: Success
   await expect(page.getByText(/has successfully been added as a member/i)).toBeVisible({ timeout: 30000 });
@@ -320,7 +348,7 @@ test.describe('Add Member Wizard', () => {
       // Common card fields always visible
       await expect(page.locator('#cardholderName')).toBeVisible();
       await expect(page.getByPlaceholder('MM/YY')).toBeVisible();
-      await expect(page.locator('#cardCvc')).toBeVisible();
+      await expect(cardCvcLocator(page)).toBeVisible();
 
       // Card number field — matches either plain input or iframe container
       await expect(cardNumberLocator(page)).toBeVisible();
@@ -394,6 +422,9 @@ test.describe('Add Member Wizard', () => {
       // Submit — triggers member creation + payment attempt (payment may fail gracefully)
       await page.getByRole('button', { name: 'Next', exact: true }).click();
 
+      // Handle payment decline (IQPro not configured in CI)
+      await handlePaymentResult(page);
+
       // Step 7: Success
       await expect(page.getByText(/has successfully been added as a member/i)).toBeVisible({ timeout: 30000 });
       await expect(page.getByRole('button', { name: 'Done' })).toBeVisible();
@@ -449,6 +480,9 @@ test.describe('Add Member Wizard', () => {
       // Fill payment details
       await fillPaymentStep(page);
       await page.getByRole('button', { name: 'Next', exact: true }).click();
+
+      // Handle payment decline (IQPro not configured in CI)
+      await handlePaymentResult(page);
 
       // Step 7: Success
       await expect(page.getByText(/has successfully been added as a member/i)).toBeVisible({ timeout: 30000 });
@@ -554,6 +588,9 @@ test.describe('Add Member Wizard', () => {
 
       // Submit — Confirm & Add Member
       await dialog.getByRole('button', { name: /Confirm & Add Member/i }).click();
+
+      // Handle payment decline (IQPro not configured in CI)
+      await handlePaymentResult(page);
 
       // Step 8: Success
       await expect(page.getByText(/has successfully been added as a member/i)).toBeVisible({ timeout: 30000 });

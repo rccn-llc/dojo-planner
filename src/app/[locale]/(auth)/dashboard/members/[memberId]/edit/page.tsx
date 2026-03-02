@@ -331,13 +331,15 @@ function buildMembershipDetails(
   // If we have actual plan data, use it
   if (plan?.name) {
     const isPaid = plan.price && plan.price > 0;
+    // Punchcard / one-time memberships (frequency = 'None', not trial) have no future payments
+    const isOneTime = plan.frequency === 'None' && !plan.isTrial;
     return {
       ...baseDetails,
       membershipType: plan.name,
       membershipFee: plan.price || 0,
       paymentFrequency: plan.frequency || 'N/A',
-      nextPaymentDate: isPaid ? formatMembershipDate(dates?.nextPaymentDate) : 'N/A',
-      nextPaymentAmount: plan.price || 0,
+      nextPaymentDate: (isPaid && !isOneTime) ? formatMembershipDate(dates?.nextPaymentDate) : 'N/A',
+      nextPaymentAmount: isOneTime ? 0 : (plan.price || 0),
     };
   }
 

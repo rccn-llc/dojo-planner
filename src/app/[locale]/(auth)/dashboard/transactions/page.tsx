@@ -60,6 +60,7 @@ export default function TransactionsPage() {
       memberName: [tx.memberFirstName, tx.memberLastName].filter(Boolean).join(' '),
       memberId: tx.memberId,
       status: tx.status as Transaction['status'],
+      transactionType: tx.transactionType,
     }));
   }, [rawTransactions]);
 

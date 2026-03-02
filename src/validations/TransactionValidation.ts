@@ -7,6 +7,10 @@ export const TransactionListValidation = z.object({
   transactionType: z.enum(['membership_payment', 'event_registration', 'signup_fee', 'refund', 'adjustment']).optional(),
 }).optional();
 
+export const GetTransactionValidation = z.object({
+  id: z.string().uuid(),
+});
+
 export const ReportTypeValidation = z.object({
   reportType: z.enum([
     'accounts-autopay-suspended',

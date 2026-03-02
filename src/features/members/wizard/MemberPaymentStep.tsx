@@ -26,6 +26,7 @@ type MemberPaymentStepProps = {
 };
 
 const TOKENEX_CONTAINER_ID = 'tokenExIframeDiv';
+const TOKENEX_CVV_CONTAINER_ID = 'tokenExCvvIframeDiv';
 
 const formatPaymentAmount = (price?: number): string => {
   if (price === undefined || price === null || price === 0) {
@@ -79,10 +80,12 @@ export const MemberPaymentStep = ({
   const {
     isLoaded: iframeLoaded,
     isValid: iframeValid,
+    isCvvValid: iframeCvvValid,
     error: iframeError,
     tokenize: iframeTokenize,
   } = useTokenExIframe({
     containerId: TOKENEX_CONTAINER_ID,
+    cvvContainerId: TOKENEX_CVV_CONTAINER_ID,
     config: tokenizationConfig ?? null,
     theme: resolvedTheme === 'dark' ? 'dark' : 'light',
   });
@@ -196,12 +199,12 @@ export const MemberPaymentStep = ({
   const isAchRoutingNumberInvalid = touched.achRoutingNumber && !data.achRoutingNumber;
   const isAchAccountNumberInvalid = touched.achAccountNumber && !data.achAccountNumber;
 
-  // Card form valid: iframe mode checks iframeValid instead of cardNumber
+  // Card form valid: iframe mode checks iframeValid/iframeCvvValid instead of cardNumber/cardCvc
   const isCardFormValid = paymentMethod === 'card'
     && data.cardholderName
     && (useIframe ? iframeValid : data.cardNumber)
     && data.cardExpiry
-    && data.cardCvc;
+    && (useIframe ? iframeCvvValid : data.cardCvc);
 
   const isAchFormValid = paymentMethod === 'ach'
     && data.achAccountHolder
@@ -551,22 +554,35 @@ export const MemberPaymentStep = ({
             </div>
 
             <div>
-              <label htmlFor="cardCvc" className="block text-sm font-medium">
+              <label htmlFor={useIframe ? TOKENEX_CVV_CONTAINER_ID : 'cardCvc'} className="block text-sm font-medium">
                 {t('card_cvc_label')}
               </label>
-              <Input
-                id="cardCvc"
-                placeholder={t('card_cvc_placeholder')}
-                value={data.cardCvc || ''}
-                onChange={e => handleInputChange('cardCvc', e.target.value)}
-                onBlur={() => handleInputBlur('cardCvc')}
-                error={isCardCvcInvalid}
-                disabled={isLoading}
-                className="mt-1"
-              />
-              {isCardCvcInvalid && (
-                <p className="text-xs text-destructive">{t('card_cvc_error')}</p>
-              )}
+              {useIframe
+                ? (
+                    <div
+                      id={TOKENEX_CVV_CONTAINER_ID}
+                      className={`mt-1 h-9 w-full overflow-hidden rounded-md border border-neutral-600 bg-neutral-100 shadow-xs dark:bg-input/30 [&_iframe]:border-none ${
+                        isLoading ? 'pointer-events-none opacity-50' : ''
+                      } ${!iframeLoaded && !iframeError ? 'hidden' : ''}`}
+                    />
+                  )
+                : (
+                    <>
+                      <Input
+                        id="cardCvc"
+                        placeholder={t('card_cvc_placeholder')}
+                        value={data.cardCvc || ''}
+                        onChange={e => handleInputChange('cardCvc', e.target.value)}
+                        onBlur={() => handleInputBlur('cardCvc')}
+                        error={isCardCvcInvalid}
+                        disabled={isLoading}
+                        className="mt-1"
+                      />
+                      {isCardCvcInvalid && (
+                        <p className="text-xs text-destructive">{t('card_cvc_error')}</p>
+                      )}
+                    </>
+                  )}
             </div>
           </div>
         </div>
@@ -647,6 +663,7 @@ export const MemberPaymentStep = ({
         <Button
           onClick={handleNextClick}
           disabled={!isFormValid || isLoading || tokenizing}
+          variant={paymentStatus === 'declined' ? 'outline' : 'default'}
         >
           {(isLoading || tokenizing)
             ? (
@@ -655,7 +672,9 @@ export const MemberPaymentStep = ({
                   {t('processing_button')}
                 </>
               )
-            : t('next_button')}
+            : paymentStatus === 'declined'
+              ? t('continue_without_payment_button')
+              : t('next_button')}
         </Button>
       </div>
     </div>

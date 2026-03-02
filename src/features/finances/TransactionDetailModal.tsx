@@ -1,8 +1,9 @@
 'use client';
 
 import type { Transaction, TransactionStatus } from './FinancesTable';
+import type { TransactionDetailData } from '@/services/TransactionsService';
 import { useTranslations } from 'next-intl';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -12,6 +13,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Spinner } from '@/components/ui/spinner';
+import { client } from '@/libs/Orpc';
 
 type TransactionDetailModalProps = {
   isOpen: boolean;
@@ -27,116 +30,25 @@ const statusVariantMap: Record<TransactionStatus, 'default' | 'secondary' | 'des
   processing: 'outline',
 };
 
-// Mock detailed transaction data for demonstration (test-data, not real values)
-// These represent different transaction scenarios a dojo might have
-type TransactionDetail = {
-  type: 'membership' | 'family_membership' | 'product' | 'seminar';
-  membershipDetails?: {
-    planName: string;
-    frequency: string;
-    startDate: string;
-    nextPaymentDate: string;
-  };
-  familyMembers?: Array<{
-    id: string;
-    name: string;
-    dueAmount: string;
-    program: string;
-  }>;
-  productDetails?: {
-    items: Array<{
-      name: string;
-      quantity: number;
-      price: string;
-    }>;
-    subtotal: string;
-    tax: string;
-    total: string;
-  };
-  seminarDetails?: {
-    name: string;
-    instructor: string;
-    date: string;
-    location: string;
-  };
+const TRANSACTION_TYPE_LABELS: Record<string, string> = {
+  membership_payment: 'membership',
+  signup_fee: 'signup_fee',
+  event_registration: 'event_registration',
+  refund: 'refund',
+  adjustment: 'adjustment',
+  product_purchase: 'product',
 };
 
-// Mock function to get detailed transaction data based on purpose
-function getTransactionDetails(transaction: Transaction): TransactionDetail {
-  switch (transaction.purpose) {
-    case 'Membership Dues':
-      // Randomly assign family or individual membership based on member ID
-      if (transaction.memberId === 'M001' || transaction.memberId === 'M004') {
-        return {
-          type: 'family_membership',
-          membershipDetails: {
-            planName: 'Family Gold Membership',
-            frequency: 'Monthly',
-            startDate: 'January 1, 2024',
-            nextPaymentDate: 'May 15, 2025',
-          },
-          familyMembers: [
-            { id: 'FM001', name: transaction.memberName, dueAmount: '$80.00', program: 'Adult BJJ' },
-            { id: 'FM002', name: 'Alex Smith', dueAmount: '$40.00', program: 'Kids BJJ' },
-            { id: 'FM003', name: 'Emma Smith', dueAmount: '$40.00', program: 'Kids BJJ' },
-          ],
-        };
-      }
-      return {
-        type: 'membership',
-        membershipDetails: {
-          planName: 'Individual Monthly Membership',
-          frequency: 'Monthly',
-          startDate: 'March 15, 2024',
-          nextPaymentDate: 'May 15, 2025',
-        },
-      };
-    case 'Merchandise':
-      return {
-        type: 'product',
-        productDetails: {
-          items: [
-            { name: 'BJJ Gi - White', quantity: 1, price: '$65.00' },
-            { name: 'Rashguard - Black', quantity: 1, price: '$35.00' },
-          ],
-          subtotal: '$100.00',
-          tax: '$8.00',
-          total: transaction.amount,
-        },
-      };
-    case 'Seminar':
-      return {
-        type: 'seminar',
-        seminarDetails: {
-          name: 'Advanced Guard Passing Seminar',
-          instructor: 'Professor Garcia',
-          date: 'April 22, 2024',
-          location: 'Main Academy',
-        },
-      };
-    case 'Private Lesson':
-      return {
-        type: 'product',
-        productDetails: {
-          items: [
-            { name: 'Private Lesson - 1 Hour', quantity: 1, price: '$50.00' },
-          ],
-          subtotal: '$50.00',
-          tax: '$0.00',
-          total: transaction.amount,
-        },
-      };
-    default:
-      return {
-        type: 'membership',
-        membershipDetails: {
-          planName: 'Standard Membership',
-          frequency: 'Monthly',
-          startDate: 'January 1, 2024',
-          nextPaymentDate: 'May 15, 2025',
-        },
-      };
+function formatDate(date: Date | string | null): string {
+  if (!date) {
+    return 'N/A';
   }
+  return new Date(date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+function isOneTimeMembership(details: TransactionDetailData): boolean {
+  return details.membershipBillingType === 'one-time'
+    && details.membershipPlanFrequency === 'None';
 }
 
 export function TransactionDetailModal({
@@ -145,6 +57,9 @@ export function TransactionDetailModal({
   transaction,
 }: TransactionDetailModalProps) {
   const t = useTranslations('TransactionDetailModal');
+  const [details, setDetails] = useState<TransactionDetailData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const prevTransactionIdRef = useRef<string | null>(null);
 
   const handleOpenChange = useCallback((open: boolean) => {
     if (!open) {
@@ -152,11 +67,40 @@ export function TransactionDetailModal({
     }
   }, [onCloseAction]);
 
+  const fetchDetails = useCallback(async (transactionId: string) => {
+    setLoading(true);
+    setDetails(null);
+    try {
+      const result = await client.transactions.get({ id: transactionId });
+      setDetails(result.transaction);
+    } catch {
+      setDetails(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen || !transaction) {
+      prevTransactionIdRef.current = null;
+      return;
+    }
+
+    if (prevTransactionIdRef.current !== transaction.id) {
+      prevTransactionIdRef.current = transaction.id;
+      fetchDetails(transaction.id);
+    }
+  }, [isOpen, transaction, fetchDetails]);
+
   if (!transaction) {
     return null;
   }
 
-  const details = getTransactionDetails(transaction);
+  const typeKey = TRANSACTION_TYPE_LABELS[transaction.transactionType] ?? transaction.transactionType;
+  const hasMembershipDetails = details?.membershipPlanName
+    && (transaction.transactionType === 'membership_payment' || transaction.transactionType === 'signup_fee');
+  const hasEventDetails = details?.eventName
+    && transaction.transactionType === 'event_registration';
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
@@ -195,133 +139,61 @@ export function TransactionDetailModal({
               </div>
               <div>
                 <span className="text-muted-foreground">{t('type_label')}</span>
-                <p className="font-medium">{t(`type_${details.type}`)}</p>
+                <p className="font-medium">{t(`type_${typeKey}` as Parameters<typeof t>[0])}</p>
               </div>
             </div>
           </div>
 
+          {/* Loading State */}
+          {loading && (
+            <div className="flex items-center justify-center py-4">
+              <Spinner size="sm" />
+              <span className="ml-2 text-sm text-muted-foreground">{t('loading_details')}</span>
+            </div>
+          )}
+
           {/* Membership Details */}
-          {details.type === 'membership' && details.membershipDetails && (
+          {!loading && hasMembershipDetails && details && (
             <div className="space-y-3">
               <h4 className="font-semibold text-foreground">{t('membership_details_title')}</h4>
               <div className="rounded-lg border border-border p-4">
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <span className="text-muted-foreground">{t('plan_name_label')}</span>
-                    <p className="font-medium">{details.membershipDetails.planName}</p>
+                    <p className="font-medium">{details.membershipPlanName}</p>
                   </div>
                   <div>
                     <span className="text-muted-foreground">{t('frequency_label')}</span>
-                    <p className="font-medium">{details.membershipDetails.frequency}</p>
+                    <p className="font-medium">{details.membershipPlanFrequency}</p>
                   </div>
                   <div>
                     <span className="text-muted-foreground">{t('start_date_label')}</span>
-                    <p className="font-medium">{details.membershipDetails.startDate}</p>
+                    <p className="font-medium">{formatDate(details.membershipStartDate)}</p>
                   </div>
-                  <div>
-                    <span className="text-muted-foreground">{t('next_payment_label')}</span>
-                    <p className="font-medium">{details.membershipDetails.nextPaymentDate}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Family Membership Details */}
-          {details.type === 'family_membership' && details.membershipDetails && details.familyMembers && (
-            <div className="space-y-3">
-              <h4 className="font-semibold text-foreground">{t('family_membership_title')}</h4>
-              <div className="rounded-lg border border-border p-4">
-                <div className="mb-4 grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">{t('plan_name_label')}</span>
-                    <p className="font-medium">{details.membershipDetails.planName}</p>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">{t('frequency_label')}</span>
-                    <p className="font-medium">{details.membershipDetails.frequency}</p>
-                  </div>
-                </div>
-                <div className="border-t border-border pt-4">
-                  <p className="mb-2 text-sm font-medium text-foreground">{t('family_members_label')}</p>
-                  <div className="space-y-2">
-                    {details.familyMembers.map(member => (
-                      <div key={member.id} className="flex items-center justify-between text-sm">
-                        <div>
-                          <span className="font-medium">{member.name}</span>
-                          <span className="ml-2 text-muted-foreground">
-                            (
-                            {member.program}
-                            )
-                          </span>
-                        </div>
-                        <span className="font-medium">{member.dueAmount}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Product Purchase Details */}
-          {details.type === 'product' && details.productDetails && (
-            <div className="space-y-3">
-              <h4 className="font-semibold text-foreground">{t('product_details_title')}</h4>
-              <div className="rounded-lg border border-border p-4">
-                <div className="space-y-2">
-                  {details.productDetails.items.map(item => (
-                    <div key={item.name} className="flex items-center justify-between text-sm">
-                      <div>
-                        <span className="font-medium">{item.name}</span>
-                        <span className="ml-2 text-muted-foreground">
-                          x
-                          {item.quantity}
-                        </span>
-                      </div>
-                      <span>{item.price}</span>
+                  {!isOneTimeMembership(details) && (
+                    <div>
+                      <span className="text-muted-foreground">{t('next_payment_label')}</span>
+                      <p className="font-medium">{formatDate(details.membershipNextPaymentDate)}</p>
                     </div>
-                  ))}
-                </div>
-                <div className="mt-4 border-t border-border pt-4 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">{t('subtotal_label')}</span>
-                    <span>{details.productDetails.subtotal}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">{t('tax_label')}</span>
-                    <span>{details.productDetails.tax}</span>
-                  </div>
-                  <div className="mt-2 flex justify-between font-semibold">
-                    <span>{t('total_label')}</span>
-                    <span>{details.productDetails.total}</span>
-                  </div>
+                  )}
                 </div>
               </div>
             </div>
           )}
 
-          {/* Seminar Details */}
-          {details.type === 'seminar' && details.seminarDetails && (
+          {/* Event Details */}
+          {!loading && hasEventDetails && details && (
             <div className="space-y-3">
-              <h4 className="font-semibold text-foreground">{t('seminar_details_title')}</h4>
+              <h4 className="font-semibold text-foreground">{t('event_details_title')}</h4>
               <div className="rounded-lg border border-border p-4">
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div className="col-span-2">
-                    <span className="text-muted-foreground">{t('seminar_name_label')}</span>
-                    <p className="font-medium">{details.seminarDetails.name}</p>
+                    <span className="text-muted-foreground">{t('event_name_label')}</span>
+                    <p className="font-medium">{details.eventName}</p>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">{t('instructor_label')}</span>
-                    <p className="font-medium">{details.seminarDetails.instructor}</p>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">{t('seminar_date_label')}</span>
-                    <p className="font-medium">{details.seminarDetails.date}</p>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">{t('location_label')}</span>
-                    <p className="font-medium">{details.seminarDetails.location}</p>
+                    <span className="text-muted-foreground">{t('event_type_label')}</span>
+                    <p className="font-medium capitalize">{details.eventType}</p>
                   </div>
                 </div>
               </div>

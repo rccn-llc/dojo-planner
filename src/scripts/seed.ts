@@ -31,6 +31,7 @@ import {
   classTagSchema,
   couponSchema,
   eventBillingSchema,
+  eventRegistrationSchema,
   eventSchema,
   eventSessionSchema,
   eventTagSchema,
@@ -974,8 +975,12 @@ async function seedOrganization(organizationId: string) {
 
   // 4. Seed Events
   console.info('  🎪 Seeding events...');
+  const eventIdMap: Record<string, string> = {};
+  const eventBillingIdMap: Record<string, string[]> = {};
   for (const eventData of eventsData) {
     const eventId = randomUUID();
+    eventIdMap[eventData.slug] = eventId;
+    eventBillingIdMap[eventData.slug] = [];
     await db.insert(eventSchema).values({
       id: eventId,
       organizationId,
@@ -999,8 +1004,10 @@ async function seedOrganization(organizationId: string) {
 
     // Create event pricing
     for (const pricing of eventData.pricing) {
+      const billingId = randomUUID();
+      eventBillingIdMap[eventData.slug]!.push(billingId);
       await db.insert(eventBillingSchema).values({
-        id: randomUUID(),
+        id: billingId,
         eventId,
         name: pricing.name,
         price: pricing.price,
@@ -1101,14 +1108,6 @@ async function seedOrganization(organizationId: string) {
 
   // 9. Seed Catalog Items with Sizes and Images
   console.info('  📦 Seeding catalog items...');
-  // First, get the event IDs for event_access items
-  const eventIdMap: Record<string, string> = {};
-  const events = await db.select({ id: eventSchema.id, slug: eventSchema.slug }).from(eventSchema).where(eq(eventSchema.organizationId, organizationId));
-  for (const event of events) {
-    if (event.slug) {
-      eventIdMap[event.slug] = event.id;
-    }
-  }
 
   for (const item of catalogItemsData) {
     const itemId = randomUUID();
@@ -1358,6 +1357,7 @@ async function seedOrganization(organizationId: string) {
     organizationId: string;
     memberId: string;
     memberMembershipId?: string;
+    eventRegistrationId?: string;
     transactionType: string;
     amount: number;
     status: string;
@@ -1371,6 +1371,7 @@ async function seedOrganization(organizationId: string) {
       organizationId: values.organizationId,
       memberId: values.memberId,
       memberMembershipId: values.memberMembershipId ?? null,
+      eventRegistrationId: values.eventRegistrationId ?? null,
       transactionType: values.transactionType,
       amount: values.amount,
       currency: 'USD',
@@ -1492,23 +1493,42 @@ async function seedOrganization(organizationId: string) {
 
   // Event registration transactions
   const eventTxData = [
-    { memberIndex: 0, amount: 149.99, date: new Date('2025-12-20'), method: 'card', desc: 'BJJ Fundamentals Seminar - Card ending 4242', status: 'paid' },
-    { memberIndex: 1, amount: 149.99, date: new Date('2025-12-22'), method: 'card', desc: 'BJJ Fundamentals Seminar - Card ending 5678', status: 'paid' },
-    { memberIndex: 3, amount: 199.99, date: new Date('2026-01-05'), method: 'card', desc: 'BJJ Fundamentals Seminar - Card ending 3456', status: 'paid' },
-    { memberIndex: 6, amount: 149.99, date: new Date('2026-01-03'), method: 'card', desc: 'BJJ Fundamentals Seminar - Card ending 9999', status: 'paid' },
-    { memberIndex: 0, amount: 60, date: new Date('2026-01-25'), method: 'card', desc: 'Master Rodriguez Workshop - Card ending 4242', status: 'paid' },
-    { memberIndex: 1, amount: 60, date: new Date('2026-01-28'), method: 'card', desc: 'Master Rodriguez Workshop - Card ending 5678', status: 'paid' },
-    { memberIndex: 3, amount: 60, date: new Date('2026-01-20'), method: 'cash', desc: 'Master Rodriguez Workshop - Cash', status: 'paid' },
-    { memberIndex: 6, amount: 60, date: new Date('2026-01-22'), method: 'card', desc: 'Master Rodriguez Workshop - Card ending 9999', status: 'pending' },
-    { memberIndex: 7, amount: 75, date: new Date('2026-02-01'), method: 'bank_transfer', desc: 'Master Rodriguez Workshop - Bank transfer', status: 'processing' },
-    { memberIndex: 4, amount: 149.99, date: new Date('2025-06-10'), method: 'card', desc: 'BJJ Fundamentals Seminar - Card ending 7890', status: 'refunded' },
+    { memberIndex: 0, eventSlug: 'bjj-fundamentals-seminar-2026', billingIndex: 0, amount: 149.99, date: new Date('2025-12-20'), method: 'card', desc: 'BJJ Fundamentals Seminar - Card ending 4242', status: 'paid' },
+    { memberIndex: 1, eventSlug: 'bjj-fundamentals-seminar-2026', billingIndex: 0, amount: 149.99, date: new Date('2025-12-22'), method: 'card', desc: 'BJJ Fundamentals Seminar - Card ending 5678', status: 'paid' },
+    { memberIndex: 3, eventSlug: 'bjj-fundamentals-seminar-2026', billingIndex: 1, amount: 199.99, date: new Date('2026-01-05'), method: 'card', desc: 'BJJ Fundamentals Seminar - Card ending 3456', status: 'paid' },
+    { memberIndex: 6, eventSlug: 'bjj-fundamentals-seminar-2026', billingIndex: 0, amount: 149.99, date: new Date('2026-01-03'), method: 'card', desc: 'BJJ Fundamentals Seminar - Card ending 9999', status: 'paid' },
+    { memberIndex: 0, eventSlug: 'master-rodriguez-seminar-2026', billingIndex: 0, amount: 60, date: new Date('2026-01-25'), method: 'card', desc: 'Master Rodriguez Workshop - Card ending 4242', status: 'paid' },
+    { memberIndex: 1, eventSlug: 'master-rodriguez-seminar-2026', billingIndex: 0, amount: 60, date: new Date('2026-01-28'), method: 'card', desc: 'Master Rodriguez Workshop - Card ending 5678', status: 'paid' },
+    { memberIndex: 3, eventSlug: 'master-rodriguez-seminar-2026', billingIndex: 0, amount: 60, date: new Date('2026-01-20'), method: 'cash', desc: 'Master Rodriguez Workshop - Cash', status: 'paid' },
+    { memberIndex: 6, eventSlug: 'master-rodriguez-seminar-2026', billingIndex: 0, amount: 60, date: new Date('2026-01-22'), method: 'card', desc: 'Master Rodriguez Workshop - Card ending 9999', status: 'pending' },
+    { memberIndex: 7, eventSlug: 'master-rodriguez-seminar-2026', billingIndex: 1, amount: 75, date: new Date('2026-02-01'), method: 'bank_transfer', desc: 'Master Rodriguez Workshop - Bank transfer', status: 'processing' },
+    { memberIndex: 4, eventSlug: 'bjj-fundamentals-seminar-2026', billingIndex: 0, amount: 149.99, date: new Date('2025-06-10'), method: 'card', desc: 'BJJ Fundamentals Seminar - Card ending 7890', status: 'refunded' },
   ];
 
   for (const tx of eventTxData) {
     const memberId = memberIds[tx.memberIndex]!;
+    const eventId = eventIdMap[tx.eventSlug]!;
+    const billingIds = eventBillingIdMap[tx.eventSlug]!;
+    const billingId = billingIds[tx.billingIndex];
+
+    // Create event registration record
+    const registrationId = randomUUID();
+    const regStatus = tx.status === 'refunded' ? 'cancelled' : 'registered';
+    await db.insert(eventRegistrationSchema).values({
+      id: registrationId,
+      memberId,
+      eventId,
+      eventBillingId: billingId ?? null,
+      status: regStatus,
+      amountPaid: tx.amount,
+      registeredAt: tx.date,
+      cancelledAt: tx.status === 'refunded' ? new Date(tx.date.getTime() + 86400000 * 7) : null,
+    }).onConflictDoNothing();
+
     await createTransaction({
       organizationId,
       memberId,
+      eventRegistrationId: registrationId,
       transactionType: 'event_registration',
       amount: tx.amount,
       status: tx.status,

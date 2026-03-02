@@ -1,9 +1,9 @@
 'use client';
 
 import type { Coupon } from '@/features/marketing';
-import type { AddMemberWizardData, AppliedCoupon, PaymentMethod } from '@/hooks/useAddMemberWizard';
+import type { AddMemberWizardData, AppliedCoupon, PaymentDeclineReason, PaymentMethod } from '@/hooks/useAddMemberWizard';
 import type { TokenizationIframeConfig } from '@/libs/IQPro';
-import { CreditCard, Landmark, Loader2, Tag } from 'lucide-react';
+import { AlertCircle, CreditCard, Landmark, Loader2, Tag } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useTheme } from 'next-themes';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -25,6 +25,7 @@ type FamilyPaymentStepProps = {
 };
 
 const TOKENEX_CONTAINER_ID = 'tokenExFamilyIframeDiv';
+const TOKENEX_CVV_CONTAINER_ID = 'tokenExFamilyCvvIframeDiv';
 
 const formatPaymentAmount = (price?: number): string => {
   if (price === undefined || price === null || price === 0) {
@@ -67,6 +68,24 @@ export const FamilyPaymentStep = ({
   const originalPrice = data.membershipPlanPrice ?? 0;
   const frequencyLabel = getFrequencyLabel(data.membershipPlanFrequency);
   const paymentMethod = data.paymentMethod || 'card';
+  const paymentStatus = data.paymentStatus;
+
+  const getDeclineReasonMessage = (reason?: PaymentDeclineReason): string => {
+    switch (reason) {
+      case 'insufficient_funds':
+        return tPayment('decline_reason_insufficient_funds');
+      case 'invalid_cvc':
+        return tPayment('decline_reason_invalid_cvc');
+      case 'expired_card':
+        return tPayment('decline_reason_expired_card');
+      case 'card_declined':
+        return tPayment('decline_reason_card_declined');
+      case 'ach_failed':
+        return tPayment('decline_reason_ach_failed');
+      default:
+        return tPayment('decline_reason_generic');
+    }
+  };
 
   // Only init iframe when HOH has no card and we need to collect payment
   const useIframe = !hohHasCard && !!tokenizationConfig;
@@ -82,10 +101,12 @@ export const FamilyPaymentStep = ({
   const {
     isLoaded: iframeLoaded,
     isValid: iframeValid,
+    isCvvValid: iframeCvvValid,
     error: iframeError,
     tokenize: iframeTokenize,
   } = useTokenExIframe({
     containerId: TOKENEX_CONTAINER_ID,
+    cvvContainerId: TOKENEX_CVV_CONTAINER_ID,
     config: useIframe ? (tokenizationConfig ?? null) : null,
     theme: resolvedTheme === 'dark' ? 'dark' : 'light',
   });
@@ -160,7 +181,7 @@ export const FamilyPaymentStep = ({
     && data.cardholderName
     && (useIframe ? iframeValid : data.cardNumber)
     && data.cardExpiry
-    && data.cardCvc;
+    && (useIframe ? iframeCvvValid : data.cardCvc);
   const isAchFormValid = paymentMethod === 'ach'
     && data.achAccountHolder
     && data.achRoutingNumber
@@ -399,7 +420,7 @@ export const FamilyPaymentStep = ({
                         )}
                         <div
                           id={TOKENEX_CONTAINER_ID}
-                          className={`mt-1 h-10 w-full overflow-hidden rounded-md border border-input bg-background ${
+                          className={`mt-1 h-9 w-full overflow-hidden rounded-md border border-neutral-600 bg-neutral-100 shadow-xs dark:bg-input/30 [&_iframe]:border-none ${
                             isLoading ? 'pointer-events-none opacity-50' : ''
                           } ${!iframeLoaded && !iframeError ? 'hidden' : ''}`}
                         />
@@ -444,22 +465,35 @@ export const FamilyPaymentStep = ({
                   )}
                 </div>
                 <div>
-                  <label htmlFor="familyCardCvc" className="block text-sm font-medium">
+                  <label htmlFor={useIframe ? TOKENEX_CVV_CONTAINER_ID : 'familyCardCvc'} className="block text-sm font-medium">
                     {tPayment('card_cvc_label')}
                   </label>
-                  <Input
-                    id="familyCardCvc"
-                    placeholder={tPayment('card_cvc_placeholder')}
-                    value={data.cardCvc || ''}
-                    onChange={e => handleInputChange('cardCvc', e.target.value)}
-                    onBlur={() => handleInputBlur('cardCvc')}
-                    error={isCardCvcInvalid}
-                    disabled={isLoading}
-                    className="mt-1"
-                  />
-                  {isCardCvcInvalid && (
-                    <p className="text-xs text-destructive">{tPayment('card_cvc_error')}</p>
-                  )}
+                  {useIframe
+                    ? (
+                        <div
+                          id={TOKENEX_CVV_CONTAINER_ID}
+                          className={`mt-1 h-9 w-full overflow-hidden rounded-md border border-neutral-600 bg-neutral-100 shadow-xs dark:bg-input/30 [&_iframe]:border-none ${
+                            isLoading ? 'pointer-events-none opacity-50' : ''
+                          } ${!iframeLoaded && !iframeError ? 'hidden' : ''}`}
+                        />
+                      )
+                    : (
+                        <>
+                          <Input
+                            id="familyCardCvc"
+                            placeholder={tPayment('card_cvc_placeholder')}
+                            value={data.cardCvc || ''}
+                            onChange={e => handleInputChange('cardCvc', e.target.value)}
+                            onBlur={() => handleInputBlur('cardCvc')}
+                            error={isCardCvcInvalid}
+                            disabled={isLoading}
+                            className="mt-1"
+                          />
+                          {isCardCvcInvalid && (
+                            <p className="text-xs text-destructive">{tPayment('card_cvc_error')}</p>
+                          )}
+                        </>
+                      )}
                 </div>
               </div>
             </div>
@@ -527,6 +561,33 @@ export const FamilyPaymentStep = ({
         </>
       )}
 
+      {/* Payment Status Alert */}
+      {paymentStatus === 'declined' && (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/30">
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <div>
+            <p className="font-medium text-amber-800 dark:text-amber-200">
+              {tPayment('payment_declined_title')}
+            </p>
+            <p className="text-sm text-amber-700 dark:text-amber-300">
+              {getDeclineReasonMessage(data.paymentDeclineReason)}
+            </p>
+            <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
+              {tPayment('payment_declined_continue_message')}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {paymentStatus === 'processing' && (
+        <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/30">
+          <Loader2 className="h-5 w-5 shrink-0 animate-spin text-blue-600 dark:text-blue-400" />
+          <p className="text-sm text-blue-700 dark:text-blue-300">
+            {tPayment('payment_processing_message')}
+          </p>
+        </div>
+      )}
+
       {/* Action Buttons */}
       <div className="flex justify-between gap-3 pt-6">
         <div className="flex gap-3">
@@ -540,6 +601,7 @@ export const FamilyPaymentStep = ({
         <Button
           onClick={handleConfirm}
           disabled={!canProceed || isLoading || tokenizing}
+          variant={paymentStatus === 'declined' ? 'outline' : 'default'}
         >
           {(isLoading || tokenizing)
             ? (
@@ -548,7 +610,9 @@ export const FamilyPaymentStep = ({
                   {t('processing_button')}
                 </>
               )
-            : t('confirm_button')}
+            : paymentStatus === 'declined'
+              ? tPayment('continue_without_payment_button')
+              : t('confirm_button')}
         </Button>
       </div>
     </div>
