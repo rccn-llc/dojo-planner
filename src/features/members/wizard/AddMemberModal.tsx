@@ -323,6 +323,54 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
         console.info('[Add Member Wizard] Signed waiver created for member:', result.id);
       }
 
+      // HOH capture-only: register payment method without processing a charge
+      if (wizard.data.membershipSkipped && wizard.data.memberType === 'head-of-household' && wizard.data.paymentMethod && result.id) {
+        try {
+          wizard.updateData({ paymentStatus: 'processing' });
+
+          const registerResult = await client.payment.registerPaymentMethod({
+            memberId: result.id,
+            memberEmail: wizard.data.email,
+            memberFirstName: wizard.data.firstName,
+            memberLastName: wizard.data.lastName,
+            ...(wizard.data.phone && { memberPhone: wizard.data.phone }),
+            ...(wizard.data.address && { memberAddress: wizard.data.address }),
+            paymentMethod: wizard.data.paymentMethod,
+            ...(wizard.data.cardholderName && { cardholderName: wizard.data.cardholderName }),
+            ...((cardTokenRef.current || wizard.data.cardToken) && { cardToken: cardTokenRef.current || wizard.data.cardToken }),
+            ...((cardFirstSixRef.current || wizard.data.cardFirstSix) && { cardFirstSix: cardFirstSixRef.current || wizard.data.cardFirstSix }),
+            ...((cardLastFourRef.current || wizard.data.cardLastFour) && { cardLastFour: cardLastFourRef.current || wizard.data.cardLastFour }),
+            ...(wizard.data.cardNumber && !cardTokenRef.current && !wizard.data.cardToken && { cardNumber: wizard.data.cardNumber }),
+            ...(wizard.data.cardExpiry && { cardExpiry: wizard.data.cardExpiry }),
+            ...(wizard.data.cardCvc && { cardCvc: wizard.data.cardCvc }),
+            ...(wizard.data.achAccountHolder && { achAccountHolder: wizard.data.achAccountHolder }),
+            ...(wizard.data.achRoutingNumber && { achRoutingNumber: wizard.data.achRoutingNumber }),
+            ...(wizard.data.achAccountNumber && { achAccountNumber: wizard.data.achAccountNumber }),
+          });
+
+          if (!registerResult.success) {
+            wizard.setError(registerResult.error || 'Failed to save payment method.');
+            wizard.setIsLoading(false);
+            return;
+          }
+
+          wizard.updateData({ paymentStatus: 'approved', paymentProcessed: true });
+        } catch (registerError) {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('[Add Member Wizard] Payment method registration error:', registerError);
+          }
+          wizard.setError('Failed to save payment method. Please try again.');
+          wizard.setIsLoading(false);
+          return;
+        }
+
+        // Send confirmation email (no waiver for capture-only)
+        sendConfirmationEmail(result.id);
+        wizard.setStep('success');
+        wizard.setIsLoading(false);
+        return;
+      }
+
       // Process payment if payment details were collected and amount > 0
       const finalPrice = wizard.data.appliedCoupon
         ? computeDiscountedPrice(wizard.data.membershipPlanPrice, wizard.data.appliedCoupon) ?? 0
@@ -754,6 +802,7 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
               availableCoupons={availableCoupons}
               tokenizationConfig={tokenizationConfig}
               memberType={wizard.data.memberType || undefined}
+              captureOnly={!!wizard.data.membershipSkipped && wizard.data.memberType === 'head-of-household'}
             />
           )}
 

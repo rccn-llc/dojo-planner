@@ -19,6 +19,7 @@ vi.mock('@/services/AuditService', () => ({
 }));
 vi.mock('@/services/MemberPaymentService', () => ({
   processMemberPayment: vi.fn(),
+  registerPaymentMethod: vi.fn(),
 }));
 vi.mock('@/libs/IQPro', () => ({
   getTokenizationConfig: vi.fn(),
@@ -317,6 +318,120 @@ describe('Payment Router', () => {
       const input = { origin: 'http://localhost:3000' };
 
       await expect(callHandler(getTokenizationIframeConfig, input)).rejects.toThrow(error);
+    });
+  });
+
+  describe('registerPaymentMethod', () => {
+    const registerInput = {
+      memberId: 'test-member-123',
+      memberEmail: 'member@test.com',
+      memberFirstName: 'John',
+      memberLastName: 'Doe',
+      paymentMethod: 'card' as const,
+    };
+
+    it('should return result on successful registration', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { registerPaymentMethod: registerService } = await import('@/services/MemberPaymentService');
+      const { audit } = await import('@/services/AuditService');
+
+      const mockResult = {
+        success: true,
+        paymentMethodId: 'test-pm-001',
+      };
+
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(registerService).mockResolvedValue(mockResult);
+
+      const { registerPaymentMethod } = await import('./Payment');
+      const result = await callHandler(registerPaymentMethod, registerInput);
+
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ADMIN);
+      expect(registerService).toHaveBeenCalledWith({
+        organizationId: 'test-org-456',
+        ...registerInput,
+      });
+      expect(audit).toHaveBeenCalledWith(
+        mockContext,
+        AUDIT_ACTION.PAYMENT_METHOD_REGISTER,
+        AUDIT_ENTITY_TYPE.PAYMENT_METHOD,
+        {
+          entityId: 'test-pm-001',
+          status: 'success',
+          error: undefined,
+        },
+      );
+      expect(result).toEqual(mockResult);
+    });
+
+    it('should audit with failure status when registration fails', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { registerPaymentMethod: registerService } = await import('@/services/MemberPaymentService');
+      const { audit } = await import('@/services/AuditService');
+
+      const failResult = {
+        success: false,
+        error: 'Card tokenization failed',
+      };
+
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(registerService).mockResolvedValue(failResult);
+
+      const { registerPaymentMethod } = await import('./Payment');
+      const result = await callHandler(registerPaymentMethod, registerInput);
+
+      expect(result).toEqual(failResult);
+      expect(audit).toHaveBeenCalledWith(
+        mockContext,
+        AUDIT_ACTION.PAYMENT_METHOD_REGISTER,
+        AUDIT_ENTITY_TYPE.PAYMENT_METHOD,
+        {
+          entityId: undefined,
+          status: 'failure',
+          error: 'Card tokenization failed',
+        },
+      );
+    });
+
+    it('should wrap non-ORPC errors in ORPCError with status 500', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { registerPaymentMethod: registerService } = await import('@/services/MemberPaymentService');
+      const { audit } = await import('@/services/AuditService');
+
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(registerService).mockRejectedValue(new Error('Gateway timeout'));
+
+      const { registerPaymentMethod } = await import('./Payment');
+
+      await expect(callHandler(registerPaymentMethod, registerInput)).rejects.toThrow(
+        new ORPCError('Failed to register payment method. Please try again.', { status: 500 }),
+      );
+
+      expect(audit).toHaveBeenCalledWith(
+        mockContext,
+        AUDIT_ACTION.PAYMENT_METHOD_REGISTER,
+        AUDIT_ENTITY_TYPE.PAYMENT_METHOD,
+        {
+          status: 'failure',
+          error: 'Gateway timeout',
+        },
+      );
+    });
+
+    it('should rethrow ORPCError without wrapping', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { registerPaymentMethod: registerService } = await import('@/services/MemberPaymentService');
+
+      const orpcError = new ORPCError('BAD_REQUEST', {
+        message: 'Invalid payment data',
+      });
+
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(registerService).mockRejectedValue(orpcError);
+
+      const { registerPaymentMethod } = await import('./Payment');
+
+      await expect(callHandler(registerPaymentMethod, registerInput)).rejects.toThrow(orpcError);
     });
   });
 });

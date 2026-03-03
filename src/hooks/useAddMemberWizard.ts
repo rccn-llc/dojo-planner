@@ -85,6 +85,9 @@ export type AddMemberWizardData = {
   hohPaymentMethodLast4?: string;
   hohPaymentMethodType?: PaymentMethod;
 
+  // Membership skipped (HOH only — no membership selected, card capture only)
+  membershipSkipped?: boolean;
+
   // Coupon applied to payment
   appliedCoupon?: AppliedCoupon | null;
 
@@ -175,6 +178,7 @@ export const useAddMemberWizard = () => {
       waiverSignedAt: undefined,
       waiverSkipped: undefined,
       waiverRenderedContent: undefined,
+      membershipSkipped: undefined,
       paymentMethod: undefined,
       billingType: undefined,
       cardholderName: undefined,

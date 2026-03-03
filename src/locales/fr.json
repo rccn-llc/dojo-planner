@@ -373,7 +373,8 @@
       "trial_badge": "Essai",
       "back_button": "Retour",
       "cancel_button": "Annuler",
-      "next_button": "Suivant"
+      "next_button": "Suivant",
+      "skip_button": "Passer pour l'instant"
     },
     "MemberPaymentStep": {
       "pay_amount": "Payer {amount}",
@@ -431,7 +432,11 @@
       "decline_reason_ach_failed": "La transaction ACH a échoué. Veuillez vérifier les détails du compte et réessayer.",
       "decline_reason_generic": "Le paiement n'a pas pu être traité. Veuillez réessayer ou utiliser un autre mode de paiement.",
       "card_number_iframe_loading": "Chargement du champ de paiement sécurisé...",
-      "card_number_iframe_error": "Échec du chargement du champ de paiement sécurisé. Veuillez actualiser et réessayer."
+      "card_number_iframe_error": "Échec du chargement du champ de paiement sécurisé. Veuillez actualiser et réessayer.",
+      "capture_only_title": "Enregistrer le moyen de paiement",
+      "capture_only_description": "Enregistrez une carte pour ce chef de famille. Aucun paiement ne sera effectué aujourd'hui.",
+      "capture_only_notice": "Ce moyen de paiement sera conservé. Si des membres de la famille sont ajoutés ou si un abonnement est sélectionné plus tard, la facturation utilisera cette carte.",
+      "save_payment_method_button": "Enregistrer le moyen de paiement"
     },
     "HOHSelectionStep": {
       "title": "Sélectionner le chef de famille",
@@ -474,6 +479,15 @@
       "email_confirmation": "Un email de confirmation sera envoyé à {email}",
       "done_button": "Terminé"
     }
+  },
+  "AddFamilyMembersModal": {
+    "title": "Ajouter des membres de la famille",
+    "subtitle": "Ajouter des membres de la famille pour {hohName}",
+    "member_success_title": "Membre de la famille ajouté !",
+    "member_success_description": "{name} a été ajouté(e) avec succès en tant que membre de la famille.",
+    "members_added_count": "{count, plural, one {# membre de la famille ajouté cette session} other {# membres de la famille ajoutés cette session}}",
+    "add_another_button": "Ajouter un autre membre",
+    "done_button": "Terminé"
   },
   "ClassesPage": {
     "title": "Cours/Événements",
