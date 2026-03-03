@@ -1,4 +1,4 @@
-import type { ProcessMemberPaymentParams } from './MemberPaymentService';
+import type { ProcessMemberPaymentParams, RegisterPaymentMethodParams } from './MemberPaymentService';
 import type { IPaymentProvider } from './PaymentProviderService';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -611,6 +611,145 @@ describe('MemberPaymentService', () => {
         '[MemberPayment] Payment processing failed',
         expect.objectContaining({ error: expect.any(Error) }),
       );
+    });
+  });
+
+  // ── 9. registerPaymentMethod ─────────────────────────────────────
+
+  describe('registerPaymentMethod', () => {
+    function makeRegisterParams(overrides?: Partial<RegisterPaymentMethodParams>): RegisterPaymentMethodParams {
+      return {
+        organizationId: 'test-org-456',
+        memberId: 'test-member-123',
+        memberEmail: 'john@example.com',
+        memberFirstName: 'John',
+        memberLastName: 'Doe',
+        paymentMethod: 'card',
+        cardholderName: 'John Doe',
+        cardNumber: '4111111111111111',
+        cardExpiry: '12/28',
+        cardCvc: '123',
+        ...overrides,
+      };
+    }
+
+    it('should throw error when payment is not enabled', async () => {
+      const { isPaymentEnabled } = await import('./PaymentProviderService');
+      vi.mocked(isPaymentEnabled).mockReturnValue(false);
+
+      const { registerPaymentMethod } = await import('./MemberPaymentService');
+
+      await expect(registerPaymentMethod(makeRegisterParams())).rejects.toThrow(
+        'Payment processing is not configured',
+      );
+    });
+
+    it('should register payment method successfully when no existing IQPro customer', async () => {
+      mockRandomUUID.mockReset().mockReturnValueOnce('test-uuid-pm-001');
+
+      const mockProvider = makeMockProvider();
+
+      const { isPaymentEnabled, getPaymentProvider } = await import('./PaymentProviderService');
+      vi.mocked(isPaymentEnabled).mockReturnValue(true);
+      vi.mocked(getPaymentProvider).mockResolvedValue(mockProvider);
+
+      const { db } = await import('@/libs/DB');
+      const insertCalls: any[] = [];
+      const { mockUpdateSet } = setupDbMocks(db, { existingCustomerId: null, captureInserts: insertCalls });
+
+      const { registerPaymentMethod } = await import('./MemberPaymentService');
+      const result = await registerPaymentMethod(makeRegisterParams());
+
+      expect(result).toEqual({ success: true, paymentMethodId: 'test-uuid-pm-001' });
+
+      // Should have created a new customer
+      expect(mockProvider.createCustomer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          organizationId: 'test-org-456',
+          memberId: 'test-member-123',
+          email: 'john@example.com',
+          firstName: 'John',
+          lastName: 'Doe',
+        }),
+      );
+
+      // Should have stored the new customer ID in DB
+      expect(db.update).toHaveBeenCalled();
+      expect(mockUpdateSet).toHaveBeenCalledWith({ iqproCustomerId: 'test-customer-789' });
+
+      // Should have created a payment method via provider
+      expect(mockProvider.createPaymentMethod).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customerId: 'test-customer-789',
+          paymentMethod: 'card',
+          cardholderName: 'John Doe',
+          cardNumber: '4111111111111111',
+          cardExpiry: '12/28',
+          cardCvc: '123',
+        }),
+      );
+
+      // Should have inserted payment method record to DB
+      const pmInsert = insertCalls.find((c: any) => c.iqproPaymentMethodId === 'test-pm-ext-001');
+
+      expect(pmInsert).toBeDefined();
+      expect(pmInsert).toEqual(
+        expect.objectContaining({
+          id: 'test-uuid-pm-001',
+          memberId: 'test-member-123',
+          iqproPaymentMethodId: 'test-pm-ext-001',
+          type: 'card',
+          last4: '1111',
+          isDefault: true,
+        }),
+      );
+    });
+
+    it('should register payment method successfully when customer already exists', async () => {
+      mockRandomUUID.mockReset().mockReturnValueOnce('test-uuid-pm-001');
+
+      const mockProvider = makeMockProvider();
+
+      const { isPaymentEnabled, getPaymentProvider } = await import('./PaymentProviderService');
+      vi.mocked(isPaymentEnabled).mockReturnValue(true);
+      vi.mocked(getPaymentProvider).mockResolvedValue(mockProvider);
+
+      const { db } = await import('@/libs/DB');
+      setupDbMocks(db, { existingCustomerId: 'existing-cust-999' });
+
+      const { registerPaymentMethod } = await import('./MemberPaymentService');
+      const result = await registerPaymentMethod(makeRegisterParams());
+
+      expect(result).toEqual({ success: true, paymentMethodId: 'test-uuid-pm-001' });
+
+      // Should NOT have created a new customer
+      expect(mockProvider.createCustomer).not.toHaveBeenCalled();
+
+      // Should still have created the payment method using the existing customer
+      expect(mockProvider.createPaymentMethod).toHaveBeenCalledWith(
+        expect.objectContaining({ customerId: 'existing-cust-999' }),
+      );
+    });
+
+    it('should return error on provider failure', async () => {
+      const mockProvider = makeMockProvider({
+        createPaymentMethod: vi.fn().mockRejectedValue(new Error('Card tokenization failed')),
+      });
+
+      const { isPaymentEnabled, getPaymentProvider } = await import('./PaymentProviderService');
+      vi.mocked(isPaymentEnabled).mockReturnValue(true);
+      vi.mocked(getPaymentProvider).mockResolvedValue(mockProvider);
+
+      const { db } = await import('@/libs/DB');
+      setupDbMocks(db, { existingCustomerId: 'existing-cust-999' });
+
+      const { registerPaymentMethod } = await import('./MemberPaymentService');
+      const result = await registerPaymentMethod(makeRegisterParams());
+
+      expect(result).toEqual({
+        success: false,
+        error: 'Card tokenization failed',
+      });
     });
   });
 });

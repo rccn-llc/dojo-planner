@@ -4,10 +4,10 @@ import * as z from 'zod';
 import { getTokenizationConfig } from '@/libs/IQPro';
 import { logger } from '@/libs/Logger';
 import { audit } from '@/services/AuditService';
-import { processMemberPayment } from '@/services/MemberPaymentService';
+import { processMemberPayment, registerPaymentMethod as registerPaymentMethodService } from '@/services/MemberPaymentService';
 import { AUDIT_ACTION, AUDIT_ENTITY_TYPE } from '@/types/Audit';
 import { ORG_ROLE } from '@/types/Auth';
-import { ProcessPaymentValidation } from '@/validations/PaymentValidation';
+import { ProcessPaymentValidation, RegisterPaymentMethodValidation } from '@/validations/PaymentValidation';
 
 import { guardRole } from './AuthGuards';
 
@@ -69,5 +69,50 @@ export const processPayment = os
       throw error instanceof ORPCError
         ? error
         : new ORPCError('Payment processing failed. Please try again.', { status: 500 });
+    }
+  });
+
+export const registerPaymentMethod = os
+  .input(RegisterPaymentMethodValidation)
+  .handler(async ({ input }) => {
+    const context = await guardRole(ORG_ROLE.ADMIN);
+
+    try {
+      logger.info('[Payment] Registering payment method (no charge)', {
+        memberId: input.memberId,
+        paymentMethod: input.paymentMethod,
+      });
+
+      const result = await registerPaymentMethodService({
+        organizationId: context.orgId,
+        ...input,
+      });
+
+      await audit(context, AUDIT_ACTION.PAYMENT_METHOD_REGISTER, AUDIT_ENTITY_TYPE.PAYMENT_METHOD, {
+        entityId: result.paymentMethodId,
+        status: result.success ? 'success' : 'failure',
+        error: result.error,
+      });
+
+      if (!result.success) {
+        logger.warn('[Payment] Payment method registration failed', {
+          memberId: input.memberId,
+          error: result.error,
+        });
+      }
+
+      return result;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('[Payment] Payment method registration error', { error });
+
+      await audit(context, AUDIT_ACTION.PAYMENT_METHOD_REGISTER, AUDIT_ENTITY_TYPE.PAYMENT_METHOD, {
+        status: 'failure',
+        error: errorMessage,
+      });
+
+      throw error instanceof ORPCError
+        ? error
+        : new ORPCError('Failed to register payment method. Please try again.', { status: 500 });
     }
   });

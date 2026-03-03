@@ -23,6 +23,7 @@ type MemberPaymentStepProps = {
   availableCoupons?: Coupon[];
   tokenizationConfig?: TokenizationIframeConfig | null;
   memberType?: MemberType;
+  captureOnly?: boolean;
 };
 
 const TOKENEX_CONTAINER_ID = 'tokenExIframeDiv';
@@ -59,6 +60,7 @@ export const MemberPaymentStep = ({
   availableCoupons = [],
   tokenizationConfig,
   memberType,
+  captureOnly = false,
 }: MemberPaymentStepProps) => {
   const t = useTranslations('AddMemberWizard.MemberPaymentStep');
   const tHOH = useTranslations('AddMemberWizard.MemberPaymentStep_HOHNotice');
@@ -265,30 +267,51 @@ export const MemberPaymentStep = ({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">
-          {hasCouponApplied
-            ? (
-                <>
-                  {t('pay_amount', { amount: paymentAmount })}
-                  {' '}
-                  <span className="text-base font-normal text-muted-foreground line-through">
-                    {originalAmountText}
-                  </span>
-                </>
-              )
-            : t('pay_amount', { amount: paymentAmount })}
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          {t('payment_description', {
-            plan: planText,
-            amount: paymentAmount,
-            period: periodText,
-          })}
-        </p>
+        {captureOnly
+          ? (
+              <>
+                <h2 className="text-lg font-semibold">{t('capture_only_title')}</h2>
+                <p className="text-sm text-muted-foreground">{t('capture_only_description')}</p>
+              </>
+            )
+          : (
+              <>
+                <h2 className="text-lg font-semibold">
+                  {hasCouponApplied
+                    ? (
+                        <>
+                          {t('pay_amount', { amount: paymentAmount })}
+                          {' '}
+                          <span className="text-base font-normal text-muted-foreground line-through">
+                            {originalAmountText}
+                          </span>
+                        </>
+                      )
+                    : t('pay_amount', { amount: paymentAmount })}
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  {t('payment_description', {
+                    plan: planText,
+                    amount: paymentAmount,
+                    period: periodText,
+                  })}
+                </p>
+              </>
+            )}
       </div>
 
-      {/* HOH Billing Notice */}
-      {memberType === 'head-of-household' && (
+      {/* Capture-only info notice */}
+      {captureOnly && (
+        <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/30">
+          <Info className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
+          <p className="text-sm text-blue-700 dark:text-blue-300">
+            {t('capture_only_notice')}
+          </p>
+        </div>
+      )}
+
+      {/* HOH Billing Notice (only when processing a payment, not capture-only) */}
+      {!captureOnly && memberType === 'head-of-household' && (
         <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/30">
           <Info className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
           <p className="text-sm text-blue-700 dark:text-blue-300">
@@ -297,8 +320,8 @@ export const MemberPaymentStep = ({
         </div>
       )}
 
-      {/* Coupon Selection */}
-      {validCoupons.length > 0 && originalPrice > 0 && (
+      {/* Coupon Selection (hidden in capture-only mode) */}
+      {!captureOnly && validCoupons.length > 0 && originalPrice > 0 && (
         <div>
           <label htmlFor="couponSelect" className="block text-sm font-medium">
             {t('coupon_label')}
@@ -332,8 +355,8 @@ export const MemberPaymentStep = ({
         </div>
       )}
 
-      {/* Savings Alert */}
-      {hasCouponApplied && (
+      {/* Savings Alert (hidden in capture-only mode) */}
+      {!captureOnly && hasCouponApplied && (
         <div className="flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950/30">
           <Tag className="mt-0.5 h-5 w-5 shrink-0 text-green-600 dark:text-green-400" />
           <div>
@@ -347,8 +370,8 @@ export const MemberPaymentStep = ({
         </div>
       )}
 
-      {/* Billing Type Selection (only for recurring memberships) */}
-      {isRecurringMembership && originalPrice > 0 && (
+      {/* Billing Type Selection (hidden in capture-only mode) */}
+      {!captureOnly && isRecurringMembership && originalPrice > 0 && (
         <div>
           <label className="mb-2 block text-sm font-medium">
             {t('billing_type_label')}
@@ -396,8 +419,8 @@ export const MemberPaymentStep = ({
         </div>
       )}
 
-      {/* Payment Status Alerts */}
-      {paymentStatus === 'approved' && (
+      {/* Payment Status Alerts (hidden in capture-only mode) */}
+      {!captureOnly && paymentStatus === 'approved' && (
         <div className="flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950/30">
           <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600 dark:text-green-400" />
           <div>
@@ -411,7 +434,7 @@ export const MemberPaymentStep = ({
         </div>
       )}
 
-      {paymentStatus === 'declined' && (
+      {!captureOnly && paymentStatus === 'declined' && (
         <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/30">
           <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
           <div>
@@ -428,7 +451,7 @@ export const MemberPaymentStep = ({
         </div>
       )}
 
-      {paymentStatus === 'processing' && (
+      {!captureOnly && paymentStatus === 'processing' && (
         <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/30">
           <Loader2 className="h-5 w-5 shrink-0 animate-spin text-blue-600 dark:text-blue-400" />
           <p className="text-sm text-blue-700 dark:text-blue-300">
@@ -672,9 +695,11 @@ export const MemberPaymentStep = ({
                   {t('processing_button')}
                 </>
               )
-            : paymentStatus === 'declined'
-              ? t('continue_without_payment_button')
-              : t('next_button')}
+            : captureOnly
+              ? t('save_payment_method_button')
+              : paymentStatus === 'declined'
+                ? t('continue_without_payment_button')
+                : t('next_button')}
         </Button>
       </div>
     </div>

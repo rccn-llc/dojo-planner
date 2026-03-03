@@ -15,10 +15,13 @@ import { MemberBreadcrumb } from '@/components/ui/breadcrumb/MemberBreadcrumb';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { transformCouponsToUi } from '@/features/marketing';
 import { ChangeMembershipModal } from '@/features/members/details/ChangeMembershipModal';
 import { EditContactInfoModal } from '@/features/members/details/EditContactInfoModal';
 import { MemberDetailAttendance } from '@/features/members/details/MemberDetailAttendance';
 import { MemberDetailNotes } from '@/features/members/details/MemberDetailNotes';
+import { AddFamilyMembersModal } from '@/features/members/wizard/AddFamilyMembersModal';
+import { useCouponsCache } from '@/hooks/useCouponsCache';
 import { invalidateMembersCache, useMembersCache } from '@/hooks/useMembersCache';
 import { client } from '@/libs/Orpc';
 import { generateAndDownloadWaiverPdf, generatePdfFilename } from '@/services/WaiverPdfService';
@@ -527,6 +530,10 @@ export default function EditMemberPage() {
   // Fetch members from cache
   const { members } = useMembersCache(organization?.id);
 
+  // Fetch coupons for family member modal
+  const { coupons: rawCoupons } = useCouponsCache(organization?.id);
+  const availableCoupons = useMemo(() => transformCouponsToUi(rawCoupons), [rawCoupons]);
+
   // State for member data
   const [state, dispatch] = useReducer(pageReducer, {
     originalData: null,
@@ -560,10 +567,30 @@ export default function EditMemberPage() {
   // State for family members (only for HOH members)
   const [familyMembersData, setFamilyMembersData] = useState<FamilyMember[]>([]);
 
+  // State for add family members modal
+  const [isAddFamilyModalOpen, setIsAddFamilyModalOpen] = useState(false);
+
   // Get the current member from cache for membership info
   const currentMember: Member | undefined = members?.find(m => m.id === memberId);
   const currentMembership = currentMember?.currentMembership;
   const hasActiveMembership = currentMembership?.status === 'active';
+
+  // Build HOH data for family member modal
+  const hohMemberData = useMemo(() => {
+    if (!currentMember) {
+      return null;
+    }
+    const memberName = `${currentMember.firstName || ''} ${currentMember.lastName || ''}`.trim();
+    const primaryPayment = paymentMethods[0];
+    return {
+      id: currentMember.id,
+      name: memberName,
+      email: currentMember.email || '',
+      hasPaymentMethod: paymentMethods.length > 0,
+      paymentMethodLast4: primaryPayment?.last4 ?? undefined,
+      paymentMethodType: primaryPayment?.type === 'card' ? 'card' as const : primaryPayment?.type === 'bank_transfer' ? 'ach' as const : undefined,
+    };
+  }, [currentMember, paymentMethods]);
 
   const handleOpenMembershipModal = (mode: 'add' | 'change') => {
     setMembershipModalMode(mode);
@@ -723,30 +750,37 @@ export default function EditMemberPage() {
 
   // Fetch family members if this member is a head of household
   const isHOH = currentMember?.memberType === 'head-of-household';
-  useEffect(() => {
+  const fetchFamilyMembers = useCallback(async () => {
     if (!memberId || !isHOH) {
       return;
     }
-    const fetchFamilyMembers = async () => {
-      try {
-        const result = await client.member.listFamilyMembers({ memberId });
-        const mapped: FamilyMember[] = result.familyMembers.map((fm: { id: string; firstName: string; lastName: string; photoUrl: string | null; status: string | null; relationship: string }) => ({
-          id: fm.id,
-          name: `${fm.firstName} ${fm.lastName}`,
-          relationship: fm.relationship,
-          photoUrl: fm.photoUrl || undefined,
-          membershipType: 'Family Member',
-          status: (fm.status === 'on-hold' ? 'on-hold' : fm.status === 'cancelled' ? 'cancelled' : 'active') as 'active' | 'on-hold' | 'cancelled',
-          amount: 0,
-        }));
-        setFamilyMembersData(mapped);
-      } catch (err) {
-        console.warn('[Edit Member] Failed to fetch family members:', err);
-        setFamilyMembersData([]);
-      }
-    };
-    fetchFamilyMembers();
+    try {
+      const result = await client.member.listFamilyMembers({ memberId });
+      const mapped: FamilyMember[] = result.familyMembers.map((fm: { id: string; firstName: string; lastName: string; photoUrl: string | null; status: string | null; relationship: string }) => ({
+        id: fm.id,
+        name: `${fm.firstName} ${fm.lastName}`,
+        relationship: fm.relationship,
+        photoUrl: fm.photoUrl || undefined,
+        membershipType: 'Family Member',
+        status: (fm.status === 'on-hold' ? 'on-hold' : fm.status === 'cancelled' ? 'cancelled' : 'active') as 'active' | 'on-hold' | 'cancelled',
+        amount: 0,
+      }));
+      setFamilyMembersData(mapped);
+    } catch (err) {
+      console.warn('[Edit Member] Failed to fetch family members:', err);
+      setFamilyMembersData([]);
+    }
   }, [memberId, isHOH]);
+
+  useEffect(() => {
+    fetchFamilyMembers();
+  }, [fetchFamilyMembers]);
+
+  const handleAddFamilyModalClose = useCallback(async () => {
+    setIsAddFamilyModalOpen(false);
+    await fetchFamilyMembers();
+    await invalidateMembersCache();
+  }, [fetchFamilyMembers]);
 
   // Derive applied coupon from signed waivers (most recent with coupon data)
   const appliedCoupon = useMemo(() => {
@@ -1351,7 +1385,7 @@ export default function EditMemberPage() {
                   </div>
                   <h3 className="font-semibold text-foreground">Add Family Member</h3>
                   <p className="text-sm text-muted-foreground">Create a new family membership</p>
-                  <Button variant="outline" className="mt-2">
+                  <Button variant="outline" className="mt-2" onClick={() => setIsAddFamilyModalOpen(true)}>
                     Add Family Member
                   </Button>
                 </div>
@@ -1377,6 +1411,15 @@ export default function EditMemberPage() {
           memberName={state.currentData.memberName}
           notes={MOCK_NOTES}
           onAddNote={content => console.info('New note added:', content)}
+        />
+      )}
+
+      {hohMemberData && (
+        <AddFamilyMembersModal
+          isOpen={isAddFamilyModalOpen}
+          onCloseAction={handleAddFamilyModalClose}
+          hohMember={hohMemberData}
+          availableCoupons={availableCoupons}
         />
       )}
     </div>

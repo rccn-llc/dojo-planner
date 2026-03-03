@@ -72,6 +72,45 @@ export type ProcessMemberPaymentResult = {
   error?: string;
 };
 
+export type RegisterPaymentMethodParams = {
+  organizationId: string;
+  memberId: string;
+  memberEmail: string;
+  memberFirstName: string;
+  memberLastName: string;
+  memberPhone?: string;
+  memberAddress?: {
+    street: string;
+    apartment?: string;
+    city: string;
+    state: string;
+    zipCode: string;
+    country: string;
+  };
+
+  paymentMethod: PaymentMethod;
+
+  // Card fields
+  cardholderName?: string;
+  cardNumber?: string;
+  cardToken?: string;
+  cardFirstSix?: string;
+  cardLastFour?: string;
+  cardExpiry?: string;
+  cardCvc?: string;
+
+  // ACH fields
+  achAccountHolder?: string;
+  achRoutingNumber?: string;
+  achAccountNumber?: string;
+};
+
+export type RegisterPaymentMethodResult = {
+  success: boolean;
+  paymentMethodId?: string;
+  error?: string;
+};
+
 // ===== Main orchestration function =====
 
 export async function processMemberPayment(
@@ -156,6 +195,84 @@ export async function processMemberPayment(
     return {
       success: false,
       status: 'declined',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
+
+// ===== Register payment method only (no charge) =====
+
+export async function registerPaymentMethod(
+  params: RegisterPaymentMethodParams,
+): Promise<RegisterPaymentMethodResult> {
+  if (!isPaymentEnabled()) {
+    throw new Error('Payment processing is not configured. Set IQPRO_* environment variables.');
+  }
+
+  const provider = await getPaymentProvider();
+
+  try {
+    // Step 1: Get or create customer
+    const existing = await db
+      .select({ iqproCustomerId: memberSchema.iqproCustomerId })
+      .from(memberSchema)
+      .where(eq(memberSchema.id, params.memberId))
+      .limit(1);
+
+    let customerId = existing[0]?.iqproCustomerId ?? null;
+
+    if (!customerId) {
+      customerId = await provider.createCustomer({
+        organizationId: params.organizationId,
+        memberId: params.memberId,
+        email: params.memberEmail,
+        firstName: params.memberFirstName,
+        lastName: params.memberLastName,
+        phone: params.memberPhone,
+        address: params.memberAddress,
+      });
+
+      await db
+        .update(memberSchema)
+        .set({ iqproCustomerId: customerId })
+        .where(eq(memberSchema.id, params.memberId));
+
+      logger.info('[MemberPayment] Created customer for payment method registration', { customerId });
+    }
+
+    // Step 2: Create payment method (no charge)
+    const pmResult = await provider.createPaymentMethod({
+      customerId,
+      paymentMethod: params.paymentMethod,
+      cardholderName: params.cardholderName,
+      cardNumber: params.cardNumber,
+      cardToken: params.cardToken,
+      cardFirstSix: params.cardFirstSix,
+      cardLastFour: params.cardLastFour,
+      cardExpiry: params.cardExpiry,
+      cardCvc: params.cardCvc,
+      achAccountHolder: params.achAccountHolder,
+      achRoutingNumber: params.achRoutingNumber,
+      achAccountNumber: params.achAccountNumber,
+    });
+
+    const paymentMethodDbId = randomUUID();
+    await db.insert(paymentMethodSchema).values({
+      id: paymentMethodDbId,
+      memberId: params.memberId,
+      iqproPaymentMethodId: pmResult.paymentMethodId,
+      type: params.paymentMethod,
+      last4: pmResult.last4,
+      isDefault: true,
+    });
+
+    logger.info('[MemberPayment] Payment method registered (no charge)', { paymentMethodDbId });
+
+    return { success: true, paymentMethodId: paymentMethodDbId };
+  } catch (error) {
+    logger.error('[MemberPayment] Payment method registration failed', { error });
+    return {
+      success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
     };
   }

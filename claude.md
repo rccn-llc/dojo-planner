@@ -52,7 +52,7 @@ src/
 │   ├── Transactions.ts    # Transaction listing with filters
 │   ├── Dashboard.ts       # Membership stats, financial stats, chart data
 │   ├── Reports.ts         # Report values, chart data, dynamic insights
-│   ├── Payment.ts         # Payment processing (one-time + autopay subscriptions)
+│   ├── Payment.ts         # Payment processing (one-time + autopay subscriptions) + payment method registration (no charge)
 │   └── Waivers.ts         # Waiver templates, signing, versioning, membership associations, merge fields
 │
 ├── services/              # Business logic layer
@@ -73,14 +73,14 @@ src/
 │   ├── EmailService.ts    # Resend email integration with PDF attachment support
 │   ├── PaymentProviderService.ts # Payment provider abstraction (interface + factory)
 │   ├── IQProPaymentService.ts # IQPro implementation of payment provider
-│   └── MemberPaymentService.ts # Member payment orchestration (customer → method → charge/subscription)
+│   └── MemberPaymentService.ts # Member payment orchestration (customer → method → charge/subscription) + registerPaymentMethod (no charge)
 │
 ├── models/
 │   └── Schema.ts          # Drizzle ORM tables (25+ tables)
 │
 ├── components/ui/         # Shadcn UI components (37+)
 ├── templates/             # Page templates & cards (34)
-├── hooks/                 # React hooks (21+)
+├── hooks/                 # React hooks (22+)
 ├── libs/                  # Core utilities
 │   ├── DB.ts              # Database client
 │   ├── Env.ts             # Environment validation (t3-oss)
@@ -185,10 +185,12 @@ The Add Member flow is a multi-step modal wizard (`AddMemberModal.tsx`) using th
 1. **Member Type** — Select member type (individual, family-member, head-of-household)
 2. **Details** — Name, email, phone, date of birth (required), address
 3. **Photo** — Optional member photo upload
-4. **Subscription** — Choose membership plan
-5. **Waiver** — Sign applicable waiver(s) for the selected membership plan (auto-skipped if none required)
-6. **Payment** — Payment information (HOH sees a notice about future family member billing)
+4. **Subscription** — Choose membership plan (HOH only: optional — "Skip for now" button available)
+5. **Waiver** — Sign applicable waiver(s) for the selected membership plan (auto-skipped if none required or if HOH skipped membership)
+6. **Payment** — Payment information (HOH sees a notice about future family member billing). If HOH skipped membership: "capture only" mode — saves card on file with no charge, shows info alert about future use
 7. **Success** — Confirmation + email sent
+
+**HOH Skip Membership Flow:** When a HOH clicks "Skip for now" on the subscription step, `membershipSkipped` is set to `true`, all membership fields are cleared, the waiver step auto-skips (no plan = no waivers), and the payment step enters "capture only" mode. This calls `payment.registerPaymentMethod` instead of `payment.process` — it creates/finds the IQPro customer and saves the payment method without processing a charge. The saved card can be used later for family member billing or when the HOH adds a membership.
 
 **Steps (Family Member):**
 1. **Member Type** — Select family-member
@@ -203,15 +205,41 @@ The Add Member flow is a multi-step modal wizard (`AddMemberModal.tsx`) using th
 **After member creation:** A confirmation email is sent via Resend with the signed waiver PDF attached (fire-and-forget, doesn't block wizard).
 
 **Key Files:**
-- `src/features/members/wizard/AddMemberModal.tsx` — Wizard orchestrator, handles member + signed waiver creation, family member linking, email sending
+- `src/features/members/wizard/AddMemberModal.tsx` — Wizard orchestrator, handles member + signed waiver creation, family member linking, email sending, HOH capture-only payment
 - `src/features/members/wizard/HOHSelectionStep.tsx` — Search/select HOH, fetch payment methods
 - `src/features/members/wizard/FamilyPaymentStep.tsx` — HOH card confirmation or fallback payment form
-- `src/features/members/wizard/MemberPaymentStep.tsx` — Payment form with HOH billing notice
+- `src/features/members/wizard/MemberPaymentStep.tsx` — Payment form with HOH billing notice + `captureOnly` mode for HOH skip membership
+- `src/features/members/wizard/MemberMembershipStep.tsx` — Membership plan selection with "Skip for now" button for HOH
 - `src/features/members/wizard/MemberWaiverStep.tsx` — Fetches waivers for membership, resolves merge field placeholders, captures signature
 - `src/features/waivers/signing/SignatureCanvas.tsx` — Reusable signature capture (react-signature-canvas, supports mouse + touch)
-- `src/hooks/useAddMemberWizard.ts` — Wizard state management hook with `getStepsForMemberType()` for conditional routing + HOH data fields
+- `src/hooks/useAddMemberWizard.ts` — Wizard state management hook with `getStepsForMemberType()` for conditional routing + HOH data fields + `membershipSkipped` flag
 - `src/services/WaiverPdfService.ts` — PDF generation: client-side Blob (`generateWaiverPdf`) + server-side Buffer (`generateWaiverPdfBuffer`)
 - `src/services/EmailService.ts` — Resend integration for confirmation emails with waiver PDF attachment
+
+### Add Family Members from Detail Page
+
+The HOH member detail page has an "Add Family Member" button that opens a modal wizard (`AddFamilyMembersModal.tsx`) for adding multiple family members sequentially. Each member goes through all steps before the user can add another or finish.
+
+**Steps (per family member):**
+1. **Details** — Name, email, phone, date of birth, address (no member-type step; always family-member)
+2. **Photo** — Optional member photo upload
+3. **Subscription** — Choose membership plan
+4. **Waiver** — Sign applicable waiver(s) (auto-skipped if none required)
+5. **Family Payment** — Uses HOH's card on file or collects new payment details
+6. **Member Success** — Shows confirmation, completed members count, "Add Another Family Member" or "Done"
+
+**Flow Details:**
+- HOH data (id, name, email, payment method) is pre-filled from the detail page — no HOH selection step needed
+- After each member: create member → signed waiver → link to HOH → process payment → send email → track completed
+- "Add Another" resets per-member fields but preserves HOH context and completed members list
+- `paymentStepKey` increments on each "Add Another" to force TokenEx iframe re-initialization
+- After first member's payment, re-checks HOH payment methods (first member may have registered a new card)
+- On modal close: re-fetches family members list to update the detail page
+
+**Key Files:**
+- `src/features/members/wizard/AddFamilyMembersModal.tsx` — Modal orchestrator for multi-family-member add
+- `src/features/members/wizard/FamilyMemberSuccessStep.tsx` — Success step with "Add Another" / "Done" buttons and completed members list
+- `src/hooks/useFamilyMemberWizard.ts` — Wizard state management with fixed family-member steps, `completedMembers` tracking, `resetForNextMember()`, `updateHOHPaymentInfo()`
 
 ### Member Detail Page
 
@@ -221,6 +249,7 @@ The member detail/edit page (`members/[memberId]/edit/page.tsx`) displays:
 - Signed waivers with template name and version, with PDF download
 - Payment method and billing history
 - Family members (displayed only when member is Head of Household, fetched via `listFamilyMembers` endpoint)
+- "Add Family Member" button (HOH only) — opens `AddFamilyMembersModal` for adding multiple family members
 - Attendance records and notes
 
 ## Vendor Integrations
@@ -751,7 +780,7 @@ try {
 }
 ```
 
-**Audit Actions (64 total):**
+**Audit Actions (71 total):**
 ```typescript
 // Member operations
 AUDIT_ACTION.MEMBER_CREATE;
@@ -798,6 +827,7 @@ AUDIT_ACTION.MERGE_FIELD_DELETE;
 
 // Payment operations
 AUDIT_ACTION.PAYMENT_PROCESS;
+AUDIT_ACTION.PAYMENT_METHOD_REGISTER;
 
 // Family member operations
 AUDIT_ACTION.FAMILY_MEMBER_LINK;

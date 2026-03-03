@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ProcessPaymentValidation } from './PaymentValidation';
+import { ProcessPaymentValidation, RegisterPaymentMethodValidation } from './PaymentValidation';
 
 const validCardPayment = {
   memberId: 'test-member-123',
@@ -588,5 +588,115 @@ describe('ProcessPaymentValidation', () => {
         expect(result.success).toBe(true);
       }
     });
+  });
+});
+
+// ===========================================================================
+// RegisterPaymentMethodValidation
+// ===========================================================================
+
+const validCardRegistration = {
+  memberId: 'test-member-123',
+  memberEmail: 'john@test-dojo.com',
+  memberFirstName: 'John',
+  memberLastName: 'Doe',
+  paymentMethod: 'card' as const,
+};
+
+const validAchRegistration = {
+  memberId: 'test-member-456',
+  memberEmail: 'jane@test-dojo.com',
+  memberFirstName: 'Jane',
+  memberLastName: 'Smith',
+  paymentMethod: 'ach' as const,
+};
+
+describe('RegisterPaymentMethodValidation', () => {
+  it('should accept valid card registration input', () => {
+    const result = RegisterPaymentMethodValidation.safeParse({
+      ...validCardRegistration,
+      cardholderName: 'John Doe',
+      cardNumber: '4111111111111111',
+      cardExpiry: '12/28',
+      cardCvc: '123',
+    });
+
+    expect(result.success).toBe(true);
+
+    if (result.success) {
+      expect(result.data.memberId).toBe('test-member-123');
+      expect(result.data.memberEmail).toBe('john@test-dojo.com');
+      expect(result.data.memberFirstName).toBe('John');
+      expect(result.data.memberLastName).toBe('Doe');
+      expect(result.data.paymentMethod).toBe('card');
+    }
+  });
+
+  it('should accept valid ACH registration input', () => {
+    const result = RegisterPaymentMethodValidation.safeParse({
+      ...validAchRegistration,
+      achAccountHolder: 'Jane Smith',
+      achRoutingNumber: '021000021',
+      achAccountNumber: '123456789',
+    });
+
+    expect(result.success).toBe(true);
+
+    if (result.success) {
+      expect(result.data.memberId).toBe('test-member-456');
+      expect(result.data.paymentMethod).toBe('ach');
+      expect(result.data.achAccountHolder).toBe('Jane Smith');
+      expect(result.data.achRoutingNumber).toBe('021000021');
+      expect(result.data.achAccountNumber).toBe('123456789');
+    }
+  });
+
+  it('should reject missing memberId', () => {
+    const { memberId: _, ...withoutMemberId } = validCardRegistration;
+    const result = RegisterPaymentMethodValidation.safeParse(withoutMemberId);
+
+    expect(result.success).toBe(false);
+  });
+
+  it('should reject empty memberId', () => {
+    const result = RegisterPaymentMethodValidation.safeParse({
+      ...validCardRegistration,
+      memberId: '',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('should reject invalid email', () => {
+    const result = RegisterPaymentMethodValidation.safeParse({
+      ...validCardRegistration,
+      memberEmail: 'not-an-email',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('should accept with optional address', () => {
+    const result = RegisterPaymentMethodValidation.safeParse({
+      ...validCardRegistration,
+      memberPhone: '555-987-6543',
+      memberAddress: {
+        street: '123 Dojo Lane',
+        apartment: 'Suite 5',
+        city: 'Springfield',
+        state: 'IL',
+        zipCode: '62704',
+        country: 'US',
+      },
+    });
+
+    expect(result.success).toBe(true);
+
+    if (result.success) {
+      expect(result.data.memberPhone).toBe('555-987-6543');
+      expect(result.data.memberAddress?.street).toBe('123 Dojo Lane');
+      expect(result.data.memberAddress?.apartment).toBe('Suite 5');
+      expect(result.data.memberAddress?.city).toBe('Springfield');
+    }
   });
 });

@@ -373,7 +373,8 @@
       "trial_badge": "Trial",
       "back_button": "Back",
       "cancel_button": "Cancel",
-      "next_button": "Next"
+      "next_button": "Next",
+      "skip_button": "Skip for now"
     },
     "MemberPaymentStep": {
       "pay_amount": "Pay {amount}",
@@ -431,7 +432,11 @@
       "decline_reason_ach_failed": "The ACH transaction failed. Please verify the account details and try again.",
       "decline_reason_generic": "The payment could not be processed. Please try again or use a different payment method.",
       "card_number_iframe_loading": "Loading secure payment field...",
-      "card_number_iframe_error": "Failed to load secure payment field. Please refresh and try again."
+      "card_number_iframe_error": "Failed to load secure payment field. Please refresh and try again.",
+      "capture_only_title": "Save Payment Method",
+      "capture_only_description": "Save a card on file for this Head of Household. No charge will be processed today.",
+      "capture_only_notice": "This payment method will be kept on file. If family members are added or a membership is selected later, billing will use this card.",
+      "save_payment_method_button": "Save Payment Method"
     },
     "HOHSelectionStep": {
       "title": "Select Head of Household",
@@ -474,6 +479,15 @@
       "email_confirmation": "A confirmation email will be sent to {email}",
       "done_button": "Done"
     }
+  },
+  "AddFamilyMembersModal": {
+    "title": "Add Family Members",
+    "subtitle": "Add family members for {hohName}",
+    "member_success_title": "Family Member Added!",
+    "member_success_description": "{name} has been successfully added as a family member.",
+    "members_added_count": "{count, plural, one {# family member added this session} other {# family members added this session}}",
+    "add_another_button": "Add Another Family Member",
+    "done_button": "Done"
   },
   "ClassesPage": {
     "title": "Classes/Events",

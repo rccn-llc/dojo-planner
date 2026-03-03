@@ -22,8 +22,8 @@ describe('Audit Types', () => {
       // + 4 coupon + 4 enrollment/registration + 2 attendance + 3 transaction + 3 tag + 2 image
       // + 12 catalog (6 item + 3 variant + 3 category + 1 stock + 2 image)
       // + 8 waiver (4 template + 1 signed + 3 membership waiver)
-      // + 3 merge field + 1 payment + 1 family member link = 70
-      expect(actionCount).toBe(70);
+      // + 3 merge field + 1 payment + 1 payment method register + 1 family member link = 71
+      expect(actionCount).toBe(71);
     });
   });
 
@@ -39,8 +39,8 @@ describe('Audit Types', () => {
       // member, membership, membershipPlan, program, class, classSchedule, classScheduleException,
       // event, eventSession, coupon, classEnrollment, eventRegistration, attendance, transaction, tag, image
       // + catalogItem, catalogVariant, catalogCategory, catalogImage
-      // + waiverTemplate, signedWaiver, membershipWaiver, waiverMergeField + familyMember = 25
-      expect(entityCount).toBe(25);
+      // + waiverTemplate, signedWaiver, membershipWaiver, waiverMergeField + familyMember + paymentMethod = 26
+      expect(entityCount).toBe(26);
     });
   });
 

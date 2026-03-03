@@ -167,8 +167,26 @@ export const MemberMembershipStep = ({
 
   const handleNext = async () => {
     if (data.membershipPlanId) {
+      // Clear membershipSkipped if user selected a plan after previously skipping
+      if (data.membershipSkipped) {
+        onUpdate({ membershipSkipped: false });
+      }
       await onNext();
     }
+  };
+
+  const handleSkip = async () => {
+    onUpdate({
+      membershipPlanId: null,
+      membershipPlanPrice: undefined,
+      membershipPlanFrequency: undefined,
+      membershipPlanName: undefined,
+      membershipPlanIsTrial: undefined,
+      membershipPlanContractLength: undefined,
+      membershipPlanSignupFee: undefined,
+      membershipSkipped: true,
+    });
+    await onNext();
   };
 
   const formatPrice = (price: number, frequency: string) => {
@@ -276,9 +294,16 @@ export const MemberMembershipStep = ({
             {t('cancel_button')}
           </Button>
         </div>
-        <Button onClick={handleNext} disabled={!data.membershipPlanId || isLoading || isFetchingPlans}>
-          {isLoading ? `${t('next_button')}...` : t('next_button')}
-        </Button>
+        <div className="flex gap-3">
+          {data.memberType === 'head-of-household' && (
+            <Button variant="ghost" onClick={handleSkip} disabled={isLoading || isFetchingPlans}>
+              {t('skip_button')}
+            </Button>
+          )}
+          <Button onClick={handleNext} disabled={!data.membershipPlanId || isLoading || isFetchingPlans}>
+            {isLoading ? `${t('next_button')}...` : t('next_button')}
+          </Button>
+        </div>
       </div>
     </div>
   );

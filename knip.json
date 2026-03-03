@@ -21,7 +21,5 @@
     "production",
     "stripe"
   ],
-  "ignore": [
-    ".storybook/vitest.config.mts"
-  ]
+  "ignore": []
 }

@@ -65,6 +65,7 @@ export const AUDIT_ACTION = {
 
   // Payment operations
   PAYMENT_PROCESS: 'payment.process',
+  PAYMENT_METHOD_REGISTER: 'paymentMethod.register',
 
   // Tag operations
   TAG_CREATE: 'tag.create',
@@ -143,6 +144,7 @@ export const AUDIT_ENTITY_TYPE = {
   MEMBERSHIP_WAIVER: 'membershipWaiver',
   WAIVER_MERGE_FIELD: 'waiverMergeField',
   FAMILY_MEMBER: 'familyMember',
+  PAYMENT_METHOD: 'paymentMethod',
 } as const;
 
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPE)[keyof typeof AUDIT_ENTITY_TYPE];

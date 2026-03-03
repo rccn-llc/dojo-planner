@@ -22,7 +22,7 @@ import { earningsChart, financialStats, memberAverageChart, membershipStats } fr
 import { list as listEvents } from './Events';
 import { addMembership, changeMembership, create as createMember, getHOHPaymentMethods, linkFamily, listAllMembershipPlans, listFamily, listMembershipPlans, listMemberTransactions, listPaymentMethods, remove as removeMember, restore as restoreMember, searchHOH, sendConfirmationEmail, updateLastAccessed, update as updateMember, updateContactInfo as updateMemberContactInfo, updateMemberType } from './Member';
 import { list as listMembers } from './Members';
-import { getTokenizationIframeConfig, processPayment } from './Payment';
+import { getTokenizationIframeConfig, processPayment, registerPaymentMethod } from './Payment';
 import { chartData as reportChartData, currentValues as reportCurrentValues, insights as reportInsights } from './Reports';
 import { listAll as listAllTags, listClassTags, listMembershipTags } from './Tags';
 import { get as getTransaction, list as listTransactions } from './Transactions';
@@ -91,6 +91,7 @@ export const router = {
   },
   payment: {
     process: processPayment,
+    registerPaymentMethod,
     getTokenizationConfig: getTokenizationIframeConfig,
   },
   dashboard: {
