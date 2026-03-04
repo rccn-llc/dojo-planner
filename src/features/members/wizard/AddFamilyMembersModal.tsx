@@ -341,6 +341,7 @@ export const AddFamilyMembersModal = ({
               ...(wizard.data.achAccountHolder && { achAccountHolder: wizard.data.achAccountHolder }),
               ...(wizard.data.achRoutingNumber && { achRoutingNumber: wizard.data.achRoutingNumber }),
               ...(wizard.data.achAccountNumber && { achAccountNumber: wizard.data.achAccountNumber }),
+              ...(wizard.data.achAccountType && { achAccountType: wizard.data.achAccountType }),
             }),
             ...(wizard.data.membershipPlanId && { membershipPlanId: wizard.data.membershipPlanId }),
             ...(wizard.data.membershipPlanFrequency && { membershipPlanFrequency: wizard.data.membershipPlanFrequency }),

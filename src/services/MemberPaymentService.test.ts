@@ -301,6 +301,32 @@ describe('MemberPaymentService', () => {
         }),
       );
     });
+
+    it('should pass achAccountType through to provider for ACH payments', async () => {
+      const mockProvider = makeMockProvider();
+
+      const { isPaymentEnabled, getPaymentProvider } = await import('./PaymentProviderService');
+      vi.mocked(isPaymentEnabled).mockReturnValue(true);
+      vi.mocked(getPaymentProvider).mockResolvedValue(mockProvider);
+
+      const { db } = await import('@/libs/DB');
+      setupDbMocks(db, { existingCustomerId: 'test-customer-789' });
+
+      const { processMemberPayment } = await import('./MemberPaymentService');
+      await processMemberPayment(makeBaseParams({
+        paymentMethod: 'ach',
+        achAccountHolder: 'John Doe',
+        achRoutingNumber: '021000021',
+        achAccountNumber: '123456789',
+        achAccountType: 'Savings',
+      }));
+
+      expect(mockProvider.createPaymentMethod).toHaveBeenCalledWith(
+        expect.objectContaining({
+          achAccountType: 'Savings',
+        }),
+      );
+    });
   });
 
   // ── 5. One-time payment ──────────────────────────────────────────
@@ -728,6 +754,34 @@ describe('MemberPaymentService', () => {
       // Should still have created the payment method using the existing customer
       expect(mockProvider.createPaymentMethod).toHaveBeenCalledWith(
         expect.objectContaining({ customerId: 'existing-cust-999' }),
+      );
+    });
+
+    it('should pass achAccountType through to provider for ACH registration', async () => {
+      mockRandomUUID.mockReset().mockReturnValueOnce('test-uuid-pm-001');
+
+      const mockProvider = makeMockProvider();
+
+      const { isPaymentEnabled, getPaymentProvider } = await import('./PaymentProviderService');
+      vi.mocked(isPaymentEnabled).mockReturnValue(true);
+      vi.mocked(getPaymentProvider).mockResolvedValue(mockProvider);
+
+      const { db } = await import('@/libs/DB');
+      setupDbMocks(db, { existingCustomerId: 'existing-cust-999' });
+
+      const { registerPaymentMethod } = await import('./MemberPaymentService');
+      await registerPaymentMethod(makeRegisterParams({
+        paymentMethod: 'ach',
+        achAccountHolder: 'Jane Smith',
+        achRoutingNumber: '021000021',
+        achAccountNumber: '123456789',
+        achAccountType: 'Savings',
+      }));
+
+      expect(mockProvider.createPaymentMethod).toHaveBeenCalledWith(
+        expect.objectContaining({
+          achAccountType: 'Savings',
+        }),
       );
     });
 

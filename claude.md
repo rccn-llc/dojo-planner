@@ -331,9 +331,9 @@ npm run stripe:setup-price # Create test prices
 **Purpose:** Processes member-level payments (one-time charges and recurring autopay subscriptions). Organization-level SaaS billing continues through Stripe.
 
 **Key Files:**
-- `src/libs/IQPro.ts` - Client singleton, OAuth token management, tokenization config endpoint, gateway processor lookup (`getGatewayProcessors`)
+- `src/libs/IQPro.ts` - Client singleton, OAuth token management, tokenization config endpoint, ACH tokenization (`tokenizeAch`), gateway processor lookup (`getGatewayProcessors`)
 - `src/services/PaymentProviderService.ts` - Provider-agnostic interface + factory
-- `src/services/IQProPaymentService.ts` - IQPro implementation (InsertCard schema with token + maskedCard BIN format)
+- `src/services/IQProPaymentService.ts` - IQPro implementation (InsertCard schema with token + maskedCard BIN format; ACH tokenization via `tokenizeAch` before InsertAch)
 - `src/services/MemberPaymentService.ts` - Payment orchestration (customer → method → charge/subscription → DB)
 - `src/routers/Payment.ts` - ORPC `payment.process` + `payment.getTokenizationConfig` endpoints
 - `src/validations/PaymentValidation.ts` - Zod input schema
@@ -353,9 +353,20 @@ Raw card numbers must never touch our servers. Card data is tokenized via a Toke
 
 **CSP domains for TokenEx:** `sandbox.api.basyspro.com`, `api.basyspro.com`, `*.tokenex.com` (configured in `next.config.ts`)
 
+**ACH Tokenization (Server-Side):**
+
+Unlike card tokenization (client-side iframe), ACH tokenization is a server-side API call:
+
+1. User enters routing number, account number, and account type (Checking/Savings) into standard HTML inputs
+2. On submit, server calls `tokenizeAch()` → `POST {IQPRO_BASE_URL}/vault/api/v1/Tokenize/Ach` with OAuth bearer token
+3. Request body: `{ accountNumber, routingNumber, secCode: 'WEB', achAccountType: 'Checking' | 'Savings' }`
+4. Response returns `achToken` (checked in `json.achToken`, `json.data?.achToken`, `json.token`)
+5. `achToken` is used in payment method creation: `{ achToken, secCode, routingNumber, accountType, checkNumber: null, accountHolderAuth: { dlState: null, dlNumber: null } }`
+6. Falls back to raw account number if tokenization fails (for local dev without vault access)
+
 **Payment Flow:**
 1. Get or create IQPro customer (stored as `iqproCustomerId` on member)
-2. Register payment method — card uses `InsertCard` schema with `token` + `maskedCard` (BIN format); ACH uses `InsertAch` schema
+2. Register payment method — card uses `InsertCard` schema with `token` + `maskedCard` (BIN format); ACH uses `tokenizeAch` + `InsertAch` schema with `achToken`
 3. One-time: process transaction → save to `transaction` table
 4. Autopay: create subscription → save `iqproSubscriptionId` on membership
 

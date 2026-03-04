@@ -217,6 +217,15 @@ describe('ProcessPaymentValidation', () => {
       expect(result.success).toBe(false);
     });
 
+    it('should reject invalid achAccountType value', () => {
+      const result = ProcessPaymentValidation.safeParse({
+        ...validAchPayment,
+        achAccountType: 'Business',
+      });
+
+      expect(result.success).toBe(false);
+    });
+
     it('should reject negative amount', () => {
       const result = ProcessPaymentValidation.safeParse({
         ...validCardPayment,
@@ -306,6 +315,42 @@ describe('ProcessPaymentValidation', () => {
         expect(result.data.achAccountHolder).toBeUndefined();
         expect(result.data.achRoutingNumber).toBeUndefined();
         expect(result.data.achAccountNumber).toBeUndefined();
+      }
+    });
+
+    it('should accept achAccountType as Checking', () => {
+      const result = ProcessPaymentValidation.safeParse({
+        ...validAchPayment,
+        achAccountType: 'Checking',
+      });
+
+      expect(result.success).toBe(true);
+
+      if (result.success) {
+        expect(result.data.achAccountType).toBe('Checking');
+      }
+    });
+
+    it('should accept achAccountType as Savings', () => {
+      const result = ProcessPaymentValidation.safeParse({
+        ...validAchPayment,
+        achAccountType: 'Savings',
+      });
+
+      expect(result.success).toBe(true);
+
+      if (result.success) {
+        expect(result.data.achAccountType).toBe('Savings');
+      }
+    });
+
+    it('should accept without achAccountType (optional)', () => {
+      const result = ProcessPaymentValidation.safeParse(validAchPayment);
+
+      expect(result.success).toBe(true);
+
+      if (result.success) {
+        expect(result.data.achAccountType).toBeUndefined();
       }
     });
 
@@ -671,6 +716,47 @@ describe('RegisterPaymentMethodValidation', () => {
     const result = RegisterPaymentMethodValidation.safeParse({
       ...validCardRegistration,
       memberEmail: 'not-an-email',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('should accept ACH registration with achAccountType Checking', () => {
+    const result = RegisterPaymentMethodValidation.safeParse({
+      ...validAchRegistration,
+      achAccountHolder: 'Jane Smith',
+      achRoutingNumber: '021000021',
+      achAccountNumber: '123456789',
+      achAccountType: 'Checking',
+    });
+
+    expect(result.success).toBe(true);
+
+    if (result.success) {
+      expect(result.data.achAccountType).toBe('Checking');
+    }
+  });
+
+  it('should accept ACH registration with achAccountType Savings', () => {
+    const result = RegisterPaymentMethodValidation.safeParse({
+      ...validAchRegistration,
+      achAccountHolder: 'Jane Smith',
+      achRoutingNumber: '021000021',
+      achAccountNumber: '123456789',
+      achAccountType: 'Savings',
+    });
+
+    expect(result.success).toBe(true);
+
+    if (result.success) {
+      expect(result.data.achAccountType).toBe('Savings');
+    }
+  });
+
+  it('should reject invalid achAccountType in registration', () => {
+    const result = RegisterPaymentMethodValidation.safeParse({
+      ...validAchRegistration,
+      achAccountType: 'Business',
     });
 
     expect(result.success).toBe(false);

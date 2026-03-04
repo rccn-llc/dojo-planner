@@ -55,6 +55,7 @@ export type ProcessMemberPaymentParams = {
   achAccountHolder?: string;
   achRoutingNumber?: string;
   achAccountNumber?: string;
+  achAccountType?: 'Checking' | 'Savings';
 
   // Membership context
   membershipPlanId?: string;
@@ -103,6 +104,7 @@ export type RegisterPaymentMethodParams = {
   achAccountHolder?: string;
   achRoutingNumber?: string;
   achAccountNumber?: string;
+  achAccountType?: 'Checking' | 'Savings';
 };
 
 export type RegisterPaymentMethodResult = {
@@ -165,6 +167,7 @@ export async function processMemberPayment(
       achAccountHolder: params.achAccountHolder,
       achRoutingNumber: params.achRoutingNumber,
       achAccountNumber: params.achAccountNumber,
+      achAccountType: params.achAccountType,
     });
 
     const paymentMethodDbId = randomUUID();
@@ -254,6 +257,7 @@ export async function registerPaymentMethod(
       achAccountHolder: params.achAccountHolder,
       achRoutingNumber: params.achRoutingNumber,
       achAccountNumber: params.achAccountNumber,
+      achAccountType: params.achAccountType,
     });
 
     const paymentMethodDbId = randomUUID();

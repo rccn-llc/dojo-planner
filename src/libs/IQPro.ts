@@ -152,6 +152,65 @@ export async function getTokenizationConfig(clientOrigin: string): Promise<Token
   };
 }
 
+// ===== ACH Tokenization =====
+
+export type AchAccountType = 'Checking' | 'Savings';
+
+export type TokenizeAchParams = {
+  accountNumber: string;
+  routingNumber: string;
+  secCode?: string;
+  achAccountType?: AchAccountType;
+};
+
+export type TokenizeAchResult = {
+  achToken: string;
+};
+
+/**
+ * Tokenize an ACH account number via the IQPro Vault API.
+ * Returns an achToken that can be used in place of the raw account number.
+ */
+export async function tokenizeAch(params: TokenizeAchParams): Promise<TokenizeAchResult> {
+  if (!isIQProConfigured()) {
+    throw new Error('IQPro is not configured');
+  }
+
+  const token = await getOAuthToken();
+  const baseUrl = Env.IQPRO_BASE_URL!;
+
+  const res = await fetch(`${baseUrl}/vault/api/v1/Tokenize/Ach`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      accountNumber: params.accountNumber,
+      routingNumber: params.routingNumber,
+      secCode: params.secCode ?? 'WEB',
+      achAccountType: params.achAccountType ?? 'Checking',
+    }),
+  });
+
+  if (!res.ok) {
+    const errorBody = await res.text().catch(() => '');
+    logger.error('[IQPro] ACH tokenization failed', { status: res.status, body: errorBody });
+    throw new Error(`ACH tokenization failed: ${res.status}`);
+  }
+
+  const json = await res.json();
+  const achToken = (json?.achToken ?? json?.data?.achToken ?? json?.token) as string | undefined;
+
+  if (!achToken) {
+    logger.error('[IQPro] ACH tokenization response missing achToken', { keys: Object.keys(json ?? {}) });
+    throw new Error('ACH tokenization response missing achToken');
+  }
+
+  logger.info('[IQPro] ACH tokenized successfully');
+  return { achToken };
+}
+
 // ===== Gateway processor config =====
 
 export type GatewayProcessors = {

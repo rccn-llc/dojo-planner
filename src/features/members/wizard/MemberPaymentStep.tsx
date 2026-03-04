@@ -154,6 +154,8 @@ export const MemberPaymentStep = ({
   const handlePaymentMethodChange = (method: PaymentMethod) => {
     onUpdateAction({
       paymentMethod: method,
+      // Default account type when switching to ACH
+      ...(method === 'ach' && !data.achAccountType && { achAccountType: 'Checking' as const }),
       // Reset payment status when changing method
       paymentStatus: undefined,
       paymentDeclineReason: undefined,
@@ -631,6 +633,25 @@ export const MemberPaymentStep = ({
             {isAchAccountHolderInvalid && (
               <p className="text-xs text-destructive">{t('ach_account_holder_error')}</p>
             )}
+          </div>
+
+          <div>
+            <label htmlFor="achAccountType" className="block text-sm font-medium">
+              {t('ach_account_type_label')}
+            </label>
+            <Select
+              value={data.achAccountType || 'Checking'}
+              onValueChange={value => handleInputChange('achAccountType', value)}
+              disabled={isLoading}
+            >
+              <SelectTrigger id="achAccountType" className="mt-1">
+                <SelectValue placeholder={t('ach_account_type_placeholder')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Checking">{t('ach_account_type_checking')}</SelectItem>
+                <SelectItem value="Savings">{t('ach_account_type_savings')}</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div>

@@ -67,6 +67,10 @@ const translationKeys: Record<string, string> = {
   decline_reason_generic: 'The payment could not be processed.',
   card_number_iframe_loading: 'Loading secure payment field...',
   card_number_iframe_error: 'Failed to load secure payment field. Please refresh and try again.',
+  ach_account_type_label: 'Account type',
+  ach_account_type_placeholder: 'Select account type',
+  ach_account_type_checking: 'Checking',
+  ach_account_type_savings: 'Savings',
 };
 
 // Mock coupon data for testing
@@ -240,6 +244,7 @@ describe('MemberPaymentStep', () => {
 
     expect(onUpdateAction).toHaveBeenCalledWith({
       paymentMethod: 'ach',
+      achAccountType: 'Checking',
       paymentStatus: undefined,
       paymentDeclineReason: undefined,
       paymentProcessed: false,
@@ -271,6 +276,7 @@ describe('MemberPaymentStep', () => {
     );
 
     expect(page.getByLabelText(/Account holder name/)).toBeTruthy();
+    expect(page.getByLabelText(/Account type/)).toBeTruthy();
     expect(page.getByLabelText(/Routing number/)).toBeTruthy();
     expect(page.getByLabelText(/Account number/)).toBeTruthy();
   });

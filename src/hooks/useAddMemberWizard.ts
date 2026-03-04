@@ -76,6 +76,7 @@ export type AddMemberWizardData = {
   achAccountHolder?: string;
   achRoutingNumber?: string;
   achAccountNumber?: string;
+  achAccountType?: 'Checking' | 'Savings';
 
   // HOH (Head of Household) fields — used when memberType is 'family-member'
   hohMemberId?: string;
@@ -191,6 +192,7 @@ export const useAddMemberWizard = () => {
       achAccountHolder: undefined,
       achRoutingNumber: undefined,
       achAccountNumber: undefined,
+      achAccountType: undefined,
       hohMemberId: undefined,
       hohMemberName: undefined,
       hohMemberEmail: undefined,
