@@ -1892,5 +1892,32 @@
     "classes_remaining": "Classes Remaining",
     "classes_used": "Classes Used",
     "total_classes": "Total Classes"
+  },
+  "ConvertMember": {
+    "dialog_title_confirm": "Convert Member Type",
+    "dialog_title_subscription": "Choose Membership Plan",
+    "dialog_title_waiver": "Sign Waiver",
+    "dialog_title_payment": "Payment Information",
+    "dialog_title_success": "Conversion Complete",
+    "ConfirmStep": {
+      "title": "Convert Member Type",
+      "subtitle": "Review the changes for {name}",
+      "current_type": "Current Type",
+      "new_type": "New Type",
+      "hoh_to_individual_description": "This member will be converted from Head of Household to Individual.",
+      "individual_to_hoh_description": "This member will be converted from Individual to Head of Household. You can add family members afterward from the member detail page.",
+      "family_to_individual_description": "This member will be unlinked from {hohName} and converted to an Individual member. They will need their own membership and payment method.",
+      "needs_membership_notice": "A membership plan must be selected in the next step.",
+      "needs_payment_notice": "A payment method must be provided in the next step.",
+      "family_needs_membership_and_payment": "This member will need their own membership plan and payment method.",
+      "continue_button": "Continue",
+      "cancel_button": "Cancel"
+    },
+    "SuccessStep": {
+      "title": "Conversion Complete",
+      "description": "{name} has been successfully converted.",
+      "membership_added": "Membership: {planName}",
+      "done_button": "Done"
+    }
   }
 }

@@ -2,11 +2,12 @@
 
 import type { AttendanceRecord, PunchcardInfo } from '@/features/members/details/MemberDetailAttendance';
 import type { MemberNote } from '@/features/members/details/MemberDetailNotes';
+import type { ConversionType } from '@/hooks/useConvertMemberWizard';
 import type { Member } from '@/hooks/useMembersCache';
 import type { MemberPaymentMethodData } from '@/services/MembersService';
 import type { SignedWaiverWithTemplateName } from '@/services/WaiversService';
 import { useOrganization } from '@clerk/nextjs';
-import { Download, Plus, Trash2 } from 'lucide-react';
+import { ArrowRightLeft, Download, Plus, Trash2 } from 'lucide-react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -14,8 +15,10 @@ import { Badge } from '@/components/ui/badge';
 import { MemberBreadcrumb } from '@/components/ui/breadcrumb/MemberBreadcrumb';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { transformCouponsToUi } from '@/features/marketing';
+import { ConvertMemberModal } from '@/features/members/conversion/ConvertMemberModal';
 import { ChangeMembershipModal } from '@/features/members/details/ChangeMembershipModal';
 import { EditContactInfoModal } from '@/features/members/details/EditContactInfoModal';
 import { MemberDetailAttendance } from '@/features/members/details/MemberDetailAttendance';
@@ -570,6 +573,13 @@ export default function EditMemberPage() {
   // State for add family members modal
   const [isAddFamilyModalOpen, setIsAddFamilyModalOpen] = useState(false);
 
+  // State for convert member modal
+  const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
+  const [conversionType, setConversionType] = useState<ConversionType | null>(null);
+
+  // HOH data for family members (who is this family member's HOH?)
+  const [currentHOH, setCurrentHOH] = useState<{ id: string; name: string } | null>(null);
+
   // Get the current member from cache for membership info
   const currentMember: Member | undefined = members?.find(m => m.id === memberId);
   const currentMembership = currentMember?.currentMembership;
@@ -597,20 +607,15 @@ export default function EditMemberPage() {
     setIsChangeMembershipModalOpen(true);
   };
 
-  const handleMemberTypeChange = async (value: string) => {
-    if (!memberId) {
-      return;
-    }
-    try {
-      await client.member.updateMemberType({
-        id: memberId,
-        memberType: value as 'individual' | 'family-member' | 'head-of-household',
-      });
-      await invalidateMembersCache();
-    } catch (err) {
-      console.warn('[Edit Member] Failed to update member type:', err);
-      dispatch({ type: 'SET_ERROR', payload: 'Failed to update member type' });
-    }
+  const handleOpenConvertModal = (type: ConversionType) => {
+    setConversionType(type);
+    setIsConvertModalOpen(true);
+  };
+
+  const handleConvertModalClose = async () => {
+    setIsConvertModalOpen(false);
+    setConversionType(null);
+    await invalidateMembersCache();
   };
 
   // Handler to sync tab from URL
@@ -782,6 +787,26 @@ export default function EditMemberPage() {
     await invalidateMembersCache();
   }, [fetchFamilyMembers]);
 
+  // Fetch HOH data for family members (to support conversion)
+  const isFamilyMember = currentMember?.memberType === 'family-member';
+  const fetchCurrentHOH = useCallback(async () => {
+    if (!memberId || !isFamilyMember) {
+      setCurrentHOH(null);
+      return;
+    }
+    try {
+      const result = await client.member.getHOHForMember({ memberId });
+      if (result.hoh) {
+        setCurrentHOH({ id: result.hoh.id, name: `${result.hoh.firstName} ${result.hoh.lastName}` });
+      }
+    } catch {
+      setCurrentHOH(null);
+    }
+  }, [memberId, isFamilyMember]);
+  useEffect(() => {
+    fetchCurrentHOH();
+  }, [fetchCurrentHOH]);
+
   // Derive applied coupon from signed waivers (most recent with coupon data)
   const appliedCoupon = useMemo(() => {
     const waiverWithCoupon = signedWaivers
@@ -839,9 +864,22 @@ export default function EditMemberPage() {
     );
   }, [organization?.name]);
 
-  const handleRemoveFamilyMember = useCallback((familyMemberId: string) => {
-    dispatch({ type: 'REMOVE_FAMILY_MEMBER', payload: familyMemberId });
-  }, []);
+  const handleRemoveFamilyMember = useCallback(async (familyMemberId: string) => {
+    if (!memberId) {
+      return;
+    }
+    try {
+      await client.member.unlinkFamilyMember({
+        memberId: familyMemberId,
+        hohMemberId: memberId,
+      });
+      dispatch({ type: 'REMOVE_FAMILY_MEMBER', payload: familyMemberId });
+      setFamilyMembersData(prev => prev.filter(m => m.id !== familyMemberId));
+    } catch (err) {
+      console.warn('[Edit Member] Failed to unlink family member:', err);
+      dispatch({ type: 'SET_ERROR', payload: 'Failed to remove family member' });
+    }
+  }, [memberId]);
 
   const handleTabChange = useCallback((tab: Tab) => {
     dispatch({ type: 'SET_ACTIVE_TAB', payload: tab });
@@ -852,7 +890,7 @@ export default function EditMemberPage() {
   }, [router]);
 
   const handleCancel = () => {
-    router.push(`/${locale}/dashboard/members`);
+    router.back();
   };
 
   // Show loading state
@@ -897,16 +935,54 @@ export default function EditMemberPage() {
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-foreground">{state.currentData.memberName}</h1>
-            <Select value={currentMember?.memberType || 'individual'} onValueChange={handleMemberTypeChange}>
-              <SelectTrigger className="h-8 w-auto gap-1 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="individual">Individual</SelectItem>
-                <SelectItem value="head-of-household">Head of Household</SelectItem>
-                <SelectItem value="family-member">Family Member</SelectItem>
-              </SelectContent>
-            </Select>
+            <Badge variant="outline" className="text-sm">
+              {currentMember?.memberType === 'head-of-household'
+                ? 'Head of Household'
+                : currentMember?.memberType === 'family-member'
+                  ? 'Family Member'
+                  : 'Individual'}
+            </Badge>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 gap-1 text-sm">
+                  <ArrowRightLeft className="h-3.5 w-3.5" />
+                  Convert
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {currentMember?.memberType === 'head-of-household' && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span>
+                          <DropdownMenuItem
+                            disabled={familyMembersData.length > 0}
+                            onClick={() => handleOpenConvertModal('hoh-to-individual')}
+                          >
+                            Convert to Individual
+                          </DropdownMenuItem>
+                        </span>
+                      </TooltipTrigger>
+                      {familyMembersData.length > 0 && (
+                        <TooltipContent>
+                          Remove all family members before converting to Individual
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+                {currentMember?.memberType === 'individual' && (
+                  <DropdownMenuItem onClick={() => handleOpenConvertModal('individual-to-hoh')}>
+                    Convert to Head of Household
+                  </DropdownMenuItem>
+                )}
+                {currentMember?.memberType === 'family-member' && (
+                  <DropdownMenuItem onClick={() => handleOpenConvertModal('family-to-individual')}>
+                    Convert to Individual
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary">{state.currentData.billingContactRole}</Badge>
@@ -1419,6 +1495,24 @@ export default function EditMemberPage() {
           isOpen={isAddFamilyModalOpen}
           onCloseAction={handleAddFamilyModalClose}
           hohMember={hohMemberData}
+          availableCoupons={availableCoupons}
+        />
+      )}
+
+      {conversionType && currentMember && (
+        <ConvertMemberModal
+          isOpen={isConvertModalOpen}
+          onCloseAction={handleConvertModalClose}
+          memberId={currentMember.id}
+          memberName={`${currentMember.firstName || ''} ${currentMember.lastName || ''}`.trim()}
+          memberEmail={currentMember.email || ''}
+          currentMemberType={(currentMember.memberType as 'individual' | 'family-member' | 'head-of-household') || 'individual'}
+          memberDateOfBirth={currentMember.dateOfBirth ? new Date(currentMember.dateOfBirth) : undefined}
+          conversionType={conversionType}
+          hasMembership={hasActiveMembership}
+          hasPaymentMethod={paymentMethods.length > 0}
+          currentHOHId={currentHOH?.id}
+          currentHOHName={currentHOH?.name}
           availableCoupons={availableCoupons}
         />
       )}

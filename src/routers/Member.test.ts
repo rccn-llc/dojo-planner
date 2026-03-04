@@ -22,6 +22,8 @@ vi.mock('@/services/AuditService', () => ({
 vi.mock('@/services/MembersService', () => ({
   getHeadOfHouseholdMembers: vi.fn(),
   linkFamilyMember: vi.fn(),
+  unlinkFamilyMember: vi.fn(),
+  getHOHForFamilyMember: vi.fn(),
   getFamilyMembers: vi.fn(),
   getMemberPaymentMethods: vi.fn(),
   createMember: vi.fn(),
@@ -435,6 +437,144 @@ describe('Member Router', () => {
         }),
       );
       expect(result).toEqual({ sent: true });
+    });
+  });
+
+  describe('unlinkFamily', () => {
+    const unlinkInput = {
+      hohMemberId: 'hoh-member-123',
+      memberId: 'family-member-456',
+    };
+
+    it('should unlink family member and audit success', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { unlinkFamilyMember } = await import('@/services/MembersService');
+      const { audit } = await import('@/services/AuditService');
+
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(unlinkFamilyMember).mockResolvedValue(undefined as never);
+
+      const { unlinkFamily } = await import('./Member');
+      const result = await callHandler(unlinkFamily, unlinkInput);
+
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ADMIN);
+      expect(unlinkFamilyMember).toHaveBeenCalledWith('hoh-member-123', 'family-member-456');
+      expect(audit).toHaveBeenCalledWith(
+        mockContext,
+        AUDIT_ACTION.FAMILY_MEMBER_UNLINK,
+        AUDIT_ENTITY_TYPE.FAMILY_MEMBER,
+        {
+          entityId: 'family-member-456',
+          status: 'success',
+        },
+      );
+      expect(result).toEqual({ unlinked: true });
+    });
+
+    it('should audit failure and throw ORPCError when unlinkFamilyMember throws', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { unlinkFamilyMember } = await import('@/services/MembersService');
+      const { audit } = await import('@/services/AuditService');
+
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(unlinkFamilyMember).mockRejectedValue(new Error('Database constraint violation'));
+
+      const { unlinkFamily } = await import('./Member');
+
+      await expect(callHandler(unlinkFamily, unlinkInput)).rejects.toThrow(
+        new ORPCError('Failed to unlink family member. Please try again.', { status: 500 }),
+      );
+
+      expect(audit).toHaveBeenCalledWith(
+        mockContext,
+        AUDIT_ACTION.FAMILY_MEMBER_UNLINK,
+        AUDIT_ENTITY_TYPE.FAMILY_MEMBER,
+        {
+          entityId: 'family-member-456',
+          status: 'failure',
+          error: 'Database constraint violation',
+        },
+      );
+    });
+
+    it('should rethrow ORPCError from service without wrapping', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { unlinkFamilyMember } = await import('@/services/MembersService');
+
+      const orpcError = new ORPCError('Member not found', { status: 404 });
+
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(unlinkFamilyMember).mockRejectedValue(orpcError);
+
+      const { unlinkFamily } = await import('./Member');
+
+      await expect(callHandler(unlinkFamily, unlinkInput)).rejects.toThrow(orpcError);
+    });
+
+    it('should handle non-Error thrown values in catch block', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { unlinkFamilyMember } = await import('@/services/MembersService');
+      const { audit } = await import('@/services/AuditService');
+
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(unlinkFamilyMember).mockRejectedValue('string error');
+
+      const { unlinkFamily } = await import('./Member');
+
+      await expect(callHandler(unlinkFamily, unlinkInput)).rejects.toThrow(
+        new ORPCError('Failed to unlink family member. Please try again.', { status: 500 }),
+      );
+
+      expect(audit).toHaveBeenCalledWith(
+        mockContext,
+        AUDIT_ACTION.FAMILY_MEMBER_UNLINK,
+        AUDIT_ENTITY_TYPE.FAMILY_MEMBER,
+        {
+          entityId: 'family-member-456',
+          status: 'failure',
+          error: 'Unknown error',
+        },
+      );
+    });
+  });
+
+  describe('getHOHForMember', () => {
+    it('should return HOH data for a family member', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { getHOHForFamilyMember } = await import('@/services/MembersService');
+
+      const mockHOH = {
+        id: 'hoh-1',
+        firstName: 'John',
+        lastName: 'Doe',
+        email: 'john@test.com',
+        phone: '555-1234',
+        photoUrl: null,
+        status: 'active',
+      };
+
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
+      vi.mocked(getHOHForFamilyMember).mockResolvedValue(mockHOH);
+
+      const { getHOHForMember } = await import('./Member');
+      const result = await callHandler(getHOHForMember, { memberId: 'fm-123' });
+
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
+      expect(getHOHForFamilyMember).toHaveBeenCalledWith('fm-123');
+      expect(result).toEqual({ hoh: mockHOH });
+    });
+
+    it('should return null hoh when member has no HOH', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { getHOHForFamilyMember } = await import('@/services/MembersService');
+
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
+      vi.mocked(getHOHForFamilyMember).mockResolvedValue(null);
+
+      const { getHOHForMember } = await import('./Member');
+      const result = await callHandler(getHOHForMember, { memberId: 'individual-123' });
+
+      expect(result).toEqual({ hoh: null });
     });
   });
 

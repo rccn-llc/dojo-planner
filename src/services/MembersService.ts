@@ -653,3 +653,42 @@ export async function getFamilyMembers(hohMemberId: string): Promise<FamilyMembe
     .innerJoin(memberSchema, eq(familyMemberSchema.relatedMemberId, memberSchema.id))
     .where(eq(familyMemberSchema.memberId, hohMemberId));
 }
+
+/**
+ * Unlink a family member from their Head of Household.
+ * Deletes the relationship row from the family_member table.
+ */
+export async function unlinkFamilyMember(hohMemberId: string, familyMemberId: string) {
+  return db
+    .delete(familyMemberSchema)
+    .where(
+      and(
+        eq(familyMemberSchema.memberId, hohMemberId),
+        eq(familyMemberSchema.relatedMemberId, familyMemberId),
+      ),
+    )
+    .returning();
+}
+
+/**
+ * Get the Head of Household for a given family member.
+ * Looks up the family_member table where relatedMemberId = familyMemberId.
+ */
+export async function getHOHForFamilyMember(familyMemberId: string): Promise<HOHMemberData | null> {
+  const result = await db
+    .select({
+      id: memberSchema.id,
+      firstName: memberSchema.firstName,
+      lastName: memberSchema.lastName,
+      email: memberSchema.email,
+      phone: memberSchema.phone,
+      photoUrl: memberSchema.photoUrl,
+      status: memberSchema.status,
+    })
+    .from(familyMemberSchema)
+    .innerJoin(memberSchema, eq(familyMemberSchema.memberId, memberSchema.id))
+    .where(eq(familyMemberSchema.relatedMemberId, familyMemberId))
+    .limit(1);
+
+  return result[0] ?? null;
+}

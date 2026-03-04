@@ -1901,5 +1901,32 @@
     "classes_remaining": "Cours restants",
     "classes_used": "Cours utilisés",
     "total_classes": "Total de cours"
+  },
+  "ConvertMember": {
+    "dialog_title_confirm": "Convertir le type de membre",
+    "dialog_title_subscription": "Choisir un plan d'adhésion",
+    "dialog_title_waiver": "Signer la décharge",
+    "dialog_title_payment": "Informations de paiement",
+    "dialog_title_success": "Conversion terminée",
+    "ConfirmStep": {
+      "title": "Convertir le type de membre",
+      "subtitle": "Vérifier les changements pour {name}",
+      "current_type": "Type actuel",
+      "new_type": "Nouveau type",
+      "hoh_to_individual_description": "Ce membre sera converti de Chef de famille à Individuel.",
+      "individual_to_hoh_description": "Ce membre sera converti d'Individuel à Chef de famille. Vous pourrez ajouter des membres de famille ensuite depuis la page de détail.",
+      "family_to_individual_description": "Ce membre sera dissocié de {hohName} et converti en membre Individuel. Il aura besoin de son propre plan d'adhésion et moyen de paiement.",
+      "needs_membership_notice": "Un plan d'adhésion doit être sélectionné à l'étape suivante.",
+      "needs_payment_notice": "Un moyen de paiement doit être fourni à l'étape suivante.",
+      "family_needs_membership_and_payment": "Ce membre aura besoin de son propre plan d'adhésion et moyen de paiement.",
+      "continue_button": "Continuer",
+      "cancel_button": "Annuler"
+    },
+    "SuccessStep": {
+      "title": "Conversion terminée",
+      "description": "{name} a été converti avec succès.",
+      "membership_added": "Adhésion : {planName}",
+      "done_button": "Terminé"
+    }
   }
 }
