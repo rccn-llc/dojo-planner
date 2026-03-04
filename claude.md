@@ -31,7 +31,7 @@ src/
 │   ├── dashboard/         # Analytics views
 │   ├── finances/          # Transaction tracking
 │   ├── marketing/         # Coupons/promos
-│   ├── members/           # Member management
+│   ├── members/           # Member management (wizard, conversion, details)
 │   ├── memberships/       # Membership plans
 │   ├── programs/          # Training programs
 │   ├── reports/           # Analytics/reporting
@@ -43,7 +43,7 @@ src/
 ├── routers/               # ORPC API handlers
 │   ├── AuthGuards.ts      # Auth middleware with role hierarchy
 │   ├── Catalog.ts         # Catalog items, variants, categories, images
-│   ├── Member.ts          # Member CRUD, family linking, HOH search, confirmation email
+│   ├── Member.ts          # Member CRUD, family linking/unlinking, HOH search, member type conversion, confirmation email
 │   ├── Members.ts         # Members list ops
 │   ├── Classes.ts         # Classes list & tags
 │   ├── Events.ts          # Events list
@@ -241,6 +241,36 @@ The HOH member detail page has an "Add Family Member" button that opens a modal 
 - `src/features/members/wizard/FamilyMemberSuccessStep.tsx` — Success step with "Add Another" / "Done" buttons and completed members list
 - `src/hooks/useFamilyMemberWizard.ts` — Wizard state management with fixed family-member steps, `completedMembers` tracking, `resetForNextMember()`, `updateHOHPaymentInfo()`
 
+### Convert Member Type
+
+The Convert Member feature (`ConvertMemberModal.tsx`) is a guided wizard for safely converting members between types, enforcing business rules and handling membership/payment transitions.
+
+**Conversion Flows:**
+
+| Conversion | Preconditions | Steps |
+|------------|--------------|-------|
+| HOH → Individual | No linked family members | Confirm → (Subscription if no membership) → (Waiver if needed) → (Payment if no method) → Success |
+| Individual → HOH | None | Confirm → Success |
+| Family Member → Individual | None | Confirm → Subscription → Waiver → Payment → Success |
+
+**UI Integration:** The member detail page shows a read-only type badge + "Convert" dropdown menu with available conversions. HOH → Individual is disabled with tooltip when family members exist.
+
+**Business Rules:**
+- HOH → Individual: Unlinks from family structure; requires active membership and payment method (wizard collects if missing)
+- Individual → HOH: Simple type change; can add family members afterward from detail page
+- Family Member → Individual: Unlinks from HOH, old membership not carried over, must select fresh plan + own payment method
+
+**Key Files:**
+- `src/features/members/conversion/ConvertMemberModal.tsx` — Wizard orchestrator modal, reuses existing step components via adapter pattern
+- `src/features/members/conversion/ConvertConfirmStep.tsx` — Type transition preview with conversion-specific messaging
+- `src/features/members/conversion/ConvertSuccessStep.tsx` — Success confirmation with optional membership info
+- `src/hooks/useConvertMemberWizard.ts` — Wizard state management with `getStepsForConversion()` dynamic step routing
+- `src/validations/MemberValidation.ts` — `UnlinkFamilyMemberValidation`, `GetHOHForMemberValidation`
+
+**API Endpoints (Member router):**
+- `member.unlinkFamilyMember` — Unlinks a family member from HOH (ADMIN role, audit: `FAMILY_MEMBER_UNLINK`)
+- `member.getHOHForMember` — Gets HOH data for a family member (FRONT_DESK role)
+
 ### Member Detail Page
 
 The member detail/edit page (`members/[memberId]/edit/page.tsx`) displays:
@@ -250,6 +280,7 @@ The member detail/edit page (`members/[memberId]/edit/page.tsx`) displays:
 - Payment method and billing history
 - Family members (displayed only when member is Head of Household, fetched via `listFamilyMembers` endpoint)
 - "Add Family Member" button (HOH only) — opens `AddFamilyMembersModal` for adding multiple family members
+- "Convert" dropdown menu — opens `ConvertMemberModal` for type conversion with business rule enforcement
 - Attendance records and notes
 
 ## Vendor Integrations
@@ -842,6 +873,8 @@ AUDIT_ACTION.PAYMENT_METHOD_REGISTER;
 
 // Family member operations
 AUDIT_ACTION.FAMILY_MEMBER_LINK;
+AUDIT_ACTION.FAMILY_MEMBER_UNLINK;
+AUDIT_ACTION.MEMBER_CONVERT;
 
 // See src/types/Audit.ts for full list
 ```

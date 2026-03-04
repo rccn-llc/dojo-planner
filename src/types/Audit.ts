@@ -111,6 +111,10 @@ export const AUDIT_ACTION = {
 
   // Family member operations
   FAMILY_MEMBER_LINK: 'familyMember.link',
+  FAMILY_MEMBER_UNLINK: 'familyMember.unlink',
+
+  // Member conversion operations
+  MEMBER_CONVERT: 'member.convert',
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTION)[keyof typeof AUDIT_ACTION];

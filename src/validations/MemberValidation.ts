@@ -78,6 +78,15 @@ export const UpdateMemberTypeValidation = z.object({
   memberType: z.enum(['individual', 'family-member', 'head-of-household']),
 });
 
+export const UnlinkFamilyMemberValidation = z.object({
+  memberId: z.string().min(1),
+  hohMemberId: z.string().min(1),
+});
+
+export const GetHOHForMemberValidation = z.object({
+  memberId: z.string().min(1),
+});
+
 export const SendConfirmationEmailValidation = z.object({
   memberId: z.string().min(1),
   memberEmail: z.string().email(),

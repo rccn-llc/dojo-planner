@@ -5,12 +5,12 @@ import { z } from 'zod';
 import { logger } from '@/libs/Logger';
 import { audit } from '@/services/AuditService';
 import { sendMemberConfirmationEmail } from '@/services/EmailService';
-import { addMemberMembership, changeMemberMembership, createMember, getAllMembershipPlans, getFamilyMembers, getHeadOfHouseholdMembers, getMemberPaymentMethods, getMembershipPlans, getMemberTransactions, linkFamilyMember, updateMember, updateMemberContactInfo, updateMemberStatus } from '@/services/MembersService';
+import { addMemberMembership, changeMemberMembership, createMember, getAllMembershipPlans, getFamilyMembers, getHeadOfHouseholdMembers, getHOHForFamilyMember, getMemberPaymentMethods, getMembershipPlans, getMemberTransactions, linkFamilyMember, unlinkFamilyMember, updateMember, updateMemberContactInfo, updateMemberStatus } from '@/services/MembersService';
 import { generatePdfFilename } from '@/services/WaiverPdfService';
 import { generateWaiverPdfBuffer } from '@/services/WaiverPdfService.server';
 import { AUDIT_ACTION, AUDIT_ENTITY_TYPE } from '@/types/Audit';
 import { ORG_ROLE } from '@/types/Auth';
-import { DeleteMemberValidation, EditMemberValidation, GetHOHPaymentMethodsValidation, LinkFamilyMemberValidation, ListFamilyMembersValidation, MemberPaymentMethodsValidation, MemberTransactionsValidation, MemberValidation, SearchHOHValidation, SendConfirmationEmailValidation, UpdateMemberContactInfoValidation, UpdateMemberTypeValidation } from '@/validations/MemberValidation';
+import { DeleteMemberValidation, EditMemberValidation, GetHOHForMemberValidation, GetHOHPaymentMethodsValidation, LinkFamilyMemberValidation, ListFamilyMembersValidation, MemberPaymentMethodsValidation, MemberTransactionsValidation, MemberValidation, SearchHOHValidation, SendConfirmationEmailValidation, UnlinkFamilyMemberValidation, UpdateMemberContactInfoValidation, UpdateMemberTypeValidation } from '@/validations/MemberValidation';
 import { guardAuth, guardRole } from './AuthGuards';
 
 export const create = os
@@ -481,6 +481,45 @@ export const getHOHPaymentMethods = os
     await guardRole(ORG_ROLE.ADMIN);
     const paymentMethods = await getMemberPaymentMethods(input.hohMemberId);
     return { paymentMethods };
+  });
+
+export const unlinkFamily = os
+  .input(UnlinkFamilyMemberValidation)
+  .handler(async ({ input }) => {
+    const context = await guardRole(ORG_ROLE.ADMIN);
+
+    try {
+      await unlinkFamilyMember(input.hohMemberId, input.memberId);
+
+      await audit(context, AUDIT_ACTION.FAMILY_MEMBER_UNLINK, AUDIT_ENTITY_TYPE.FAMILY_MEMBER, {
+        entityId: input.memberId,
+        status: 'success',
+      });
+
+      logger.info(`Family member unlinked: ${input.memberId} from HOH: ${input.hohMemberId}`);
+      return { unlinked: true };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`Failed to unlink family member: ${errorMessage}`);
+
+      await audit(context, AUDIT_ACTION.FAMILY_MEMBER_UNLINK, AUDIT_ENTITY_TYPE.FAMILY_MEMBER, {
+        entityId: input.memberId,
+        status: 'failure',
+        error: errorMessage,
+      });
+
+      throw error instanceof ORPCError
+        ? error
+        : new ORPCError('Failed to unlink family member. Please try again.', { status: 500 });
+    }
+  });
+
+export const getHOHForMember = os
+  .input(GetHOHForMemberValidation)
+  .handler(async ({ input }) => {
+    await guardRole(ORG_ROLE.FRONT_DESK);
+    const hoh = await getHOHForFamilyMember(input.memberId);
+    return { hoh };
   });
 
 export const sendConfirmationEmail = os

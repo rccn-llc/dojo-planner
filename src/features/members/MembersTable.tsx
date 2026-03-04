@@ -35,6 +35,8 @@ type MembersTableProps = {
   onRowClickAction: (memberId: string) => void;
   loading?: boolean;
   headerActions?: React.ReactNode;
+  initialPage?: number;
+  onPageChangeAction?: (page: number) => void;
 };
 
 type SortField = 'firstName' | 'membershipType' | 'amountDue' | 'nextPayment' | 'status' | 'lastAccessedAt';
@@ -45,6 +47,8 @@ export function MembersTable({
   onRowClickAction,
   loading = false,
   headerActions,
+  initialPage = 0,
+  onPageChangeAction,
 }: MembersTableProps) {
   const [filters, setFilters] = useState<MemberFilters>({
     search: '',
@@ -53,12 +57,17 @@ export function MembersTable({
   });
   const [sortField, setSortField] = useState<SortField>('firstName');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-  const [currentPage, setCurrentPage] = useState(0);
+  const [currentPage, setCurrentPage] = useState(initialPage);
   const ROWS_PER_PAGE = 10;
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    onPageChangeAction?.(page);
+  };
 
   const handleFiltersChange = (newFilters: MemberFilters) => {
     setFilters(newFilters);
-    setCurrentPage(0);
+    handlePageChange(0);
   };
 
   // Compute available statuses from actual member data
@@ -158,7 +167,7 @@ export function MembersTable({
       setSortField(field);
       setSortDirection('asc');
     }
-    setCurrentPage(0);
+    handlePageChange(0);
   };
 
   const stats = useMemo(() => ({
@@ -489,7 +498,7 @@ export function MembersTable({
             totalPages={totalPages}
             totalItems={sortedMembers.length}
             itemsPerPage={ROWS_PER_PAGE}
-            onPageChangeAction={setCurrentPage}
+            onPageChangeAction={handlePageChange}
           />
         )}
       </div>

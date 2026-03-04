@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DeleteMemberValidation,
   EditMemberValidation,
+  GetHOHForMemberValidation,
   GetHOHPaymentMethodsValidation,
   LinkFamilyMemberValidation,
   ListFamilyMembersValidation,
@@ -10,6 +11,7 @@ import {
   MemberValidation,
   SearchHOHValidation,
   SendConfirmationEmailValidation,
+  UnlinkFamilyMemberValidation,
   UpdateMemberContactInfoValidation,
   UpdateMemberTypeValidation,
 } from './MemberValidation';
@@ -527,6 +529,61 @@ describe('MemberValidation', () => {
       });
 
       expect(result.success).toBe(true);
+    });
+  });
+
+  describe('UnlinkFamilyMemberValidation schema', () => {
+    it('should validate with correct data', () => {
+      const result = UnlinkFamilyMemberValidation.safeParse({
+        memberId: 'member-123',
+        hohMemberId: 'hoh-456',
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should fail when memberId is empty', () => {
+      const result = UnlinkFamilyMemberValidation.safeParse({
+        memberId: '',
+        hohMemberId: 'hoh-456',
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('should fail when hohMemberId is empty', () => {
+      const result = UnlinkFamilyMemberValidation.safeParse({
+        memberId: 'member-123',
+        hohMemberId: '',
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('should fail when fields are missing', () => {
+      const result = UnlinkFamilyMemberValidation.safeParse({});
+
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('GetHOHForMemberValidation schema', () => {
+    it('should validate with valid memberId', () => {
+      const result = GetHOHForMemberValidation.safeParse({ memberId: 'member-123' });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should fail when memberId is empty', () => {
+      const result = GetHOHForMemberValidation.safeParse({ memberId: '' });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('should fail when memberId is missing', () => {
+      const result = GetHOHForMemberValidation.safeParse({});
+
+      expect(result.success).toBe(false);
     });
   });
 
