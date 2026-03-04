@@ -35,6 +35,7 @@ export const ProcessPaymentValidation = z.object({
   achAccountHolder: z.string().optional(),
   achRoutingNumber: z.string().optional(),
   achAccountNumber: z.string().optional(),
+  achAccountType: z.enum(['Checking', 'Savings']).optional(),
 
   // Membership context
   membershipPlanId: z.string().optional(),
@@ -85,4 +86,5 @@ export const RegisterPaymentMethodValidation = z.object({
   achAccountHolder: z.string().optional(),
   achRoutingNumber: z.string().optional(),
   achAccountNumber: z.string().optional(),
+  achAccountType: z.enum(['Checking', 'Savings']).optional(),
 });

@@ -42,6 +42,7 @@ export type CreatePaymentMethodParams = {
   achAccountHolder?: string;
   achRoutingNumber?: string;
   achAccountNumber?: string;
+  achAccountType?: 'Checking' | 'Savings';
 };
 
 export type CreatePaymentMethodResult = {

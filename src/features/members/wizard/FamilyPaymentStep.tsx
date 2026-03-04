@@ -165,7 +165,10 @@ export const FamilyPaymentStep = ({
   };
 
   const handlePaymentMethodChange = (method: PaymentMethod) => {
-    onUpdateAction({ paymentMethod: method });
+    onUpdateAction({
+      paymentMethod: method,
+      ...(method === 'ach' && !data.achAccountType && { achAccountType: 'Checking' as const }),
+    });
   };
 
   // Validation for no-card payment form
@@ -519,6 +522,24 @@ export const FamilyPaymentStep = ({
                 {isAchAccountHolderInvalid && (
                   <p className="text-xs text-destructive">{tPayment('ach_account_holder_error')}</p>
                 )}
+              </div>
+              <div>
+                <label htmlFor="familyAchAccountType" className="block text-sm font-medium">
+                  {tPayment('ach_account_type_label')}
+                </label>
+                <Select
+                  value={data.achAccountType || 'Checking'}
+                  onValueChange={value => handleInputChange('achAccountType', value)}
+                  disabled={isLoading}
+                >
+                  <SelectTrigger id="familyAchAccountType" className="mt-1">
+                    <SelectValue placeholder={tPayment('ach_account_type_placeholder')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Checking">{tPayment('ach_account_type_checking')}</SelectItem>
+                    <SelectItem value="Savings">{tPayment('ach_account_type_savings')}</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <label htmlFor="familyAchRoutingNumber" className="block text-sm font-medium">

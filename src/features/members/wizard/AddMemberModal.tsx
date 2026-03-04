@@ -346,6 +346,7 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
             ...(wizard.data.achAccountHolder && { achAccountHolder: wizard.data.achAccountHolder }),
             ...(wizard.data.achRoutingNumber && { achRoutingNumber: wizard.data.achRoutingNumber }),
             ...(wizard.data.achAccountNumber && { achAccountNumber: wizard.data.achAccountNumber }),
+            ...(wizard.data.achAccountType && { achAccountType: wizard.data.achAccountType }),
           });
 
           if (!registerResult.success) {
@@ -409,6 +410,7 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
             ...(wizard.data.achAccountHolder && { achAccountHolder: wizard.data.achAccountHolder }),
             ...(wizard.data.achRoutingNumber && { achRoutingNumber: wizard.data.achRoutingNumber }),
             ...(wizard.data.achAccountNumber && { achAccountNumber: wizard.data.achAccountNumber }),
+            ...(wizard.data.achAccountType && { achAccountType: wizard.data.achAccountType }),
             // Membership context
             ...(wizard.data.membershipPlanId && { membershipPlanId: wizard.data.membershipPlanId }),
             ...(wizard.data.membershipPlanFrequency && { membershipPlanFrequency: wizard.data.membershipPlanFrequency }),
@@ -655,6 +657,7 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
               ...(wizard.data.achAccountHolder && { achAccountHolder: wizard.data.achAccountHolder }),
               ...(wizard.data.achRoutingNumber && { achRoutingNumber: wizard.data.achRoutingNumber }),
               ...(wizard.data.achAccountNumber && { achAccountNumber: wizard.data.achAccountNumber }),
+              ...(wizard.data.achAccountType && { achAccountType: wizard.data.achAccountType }),
             }),
             ...(wizard.data.membershipPlanId && { membershipPlanId: wizard.data.membershipPlanId }),
             ...(wizard.data.membershipPlanFrequency && { membershipPlanFrequency: wizard.data.membershipPlanFrequency }),

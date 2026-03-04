@@ -19,7 +19,7 @@ import type {
   SubscriptionResult,
 } from './PaymentProviderService';
 
-import { getGatewayProcessors, getIQProClient } from '@/libs/IQPro';
+import { getGatewayProcessors, getIQProClient, tokenizeAch } from '@/libs/IQPro';
 import { logger } from '@/libs/Logger';
 
 // Minimal shape of the IQPro client used by this service.
@@ -153,13 +153,34 @@ export class IQProPaymentProvider implements IPaymentProvider {
       };
     }
 
-    // ACH — IQPro InsertAch schema: { token, routingNumber, accountType, secCode?, maskedAccount? }
+    // ACH — tokenize account number via Vault API, then create payment method
+    const accountType = params.achAccountType ?? 'Checking';
+
+    let achToken: string;
+    try {
+      const tokenResult = await tokenizeAch({
+        accountNumber: params.achAccountNumber!,
+        routingNumber: params.achRoutingNumber!,
+        secCode: 'WEB',
+        achAccountType: accountType,
+      });
+      achToken = tokenResult.achToken;
+    } catch (tokenError) {
+      logger.error('[IQPro] ACH tokenization failed, falling back to raw account number', { tokenError });
+      achToken = params.achAccountNumber!;
+    }
+
     const pm = await client.customers.createPaymentMethod(params.customerId, {
       ach: {
-        token: params.achAccountNumber,
-        routingNumber: params.achRoutingNumber,
-        accountType: 'Checking',
+        achToken,
         secCode: 'WEB',
+        routingNumber: params.achRoutingNumber,
+        accountType,
+        checkNumber: null,
+        accountHolderAuth: {
+          dlState: null,
+          dlNumber: null,
+        },
       },
       isDefault: true,
     });

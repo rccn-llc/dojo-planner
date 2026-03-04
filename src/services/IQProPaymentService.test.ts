@@ -7,6 +7,7 @@ vi.mock('@/libs/IQPro', () => ({
     cardProcessorId: 'test-card-processor-001',
     achProcessorId: 'test-ach-processor-001',
   }),
+  tokenizeAch: vi.fn().mockResolvedValue({ achToken: 'ach-tok-test-001' }),
 }));
 
 // Mock the logger to suppress output during tests
@@ -203,8 +204,9 @@ describe('IQProPaymentProvider', () => {
       expect(result.last4).toBe('1234');
     });
 
-    it('passes bank account details for ACH payment method', async () => {
+    it('tokenizes ACH and passes achToken to payment method creation', async () => {
       const provider = await getProviderWithClient();
+      const { tokenizeAch } = await import('@/libs/IQPro');
 
       mockClient.customers.createPaymentMethod.mockResolvedValue({
         paymentMethodId: 'test-pm-ach-456',
@@ -224,17 +226,90 @@ describe('IQProPaymentProvider', () => {
         last4: '6789',
       });
 
+      // Verify tokenizeAch was called with correct params
+      expect(tokenizeAch).toHaveBeenCalledWith({
+        accountNumber: '123456789',
+        routingNumber: '021000021',
+        secCode: 'WEB',
+        achAccountType: 'Checking',
+      });
+
+      // Verify the tokenized achToken is used in the payment method creation
       expect(mockClient.customers.createPaymentMethod).toHaveBeenCalledWith(
         'test-customer-123',
         {
           ach: {
-            token: '123456789',
+            achToken: 'ach-tok-test-001',
+            secCode: 'WEB',
             routingNumber: '021000021',
             accountType: 'Checking',
-            secCode: 'WEB',
+            checkNumber: null,
+            accountHolderAuth: { dlState: null, dlNumber: null },
           },
           isDefault: true,
         },
+      );
+    });
+
+    it('passes Savings account type for ACH when specified', async () => {
+      const provider = await getProviderWithClient();
+      const { tokenizeAch } = await import('@/libs/IQPro');
+
+      mockClient.customers.createPaymentMethod.mockResolvedValue({
+        paymentMethodId: 'test-pm-ach-savings',
+        last4: '6789',
+      });
+
+      await provider.createPaymentMethod({
+        customerId: 'test-customer-123',
+        paymentMethod: 'ach',
+        achAccountHolder: 'John Doe',
+        achRoutingNumber: '021000021',
+        achAccountNumber: '123456789',
+        achAccountType: 'Savings',
+      });
+
+      expect(tokenizeAch).toHaveBeenCalledWith(
+        expect.objectContaining({ achAccountType: 'Savings' }),
+      );
+
+      expect(mockClient.customers.createPaymentMethod).toHaveBeenCalledWith(
+        'test-customer-123',
+        expect.objectContaining({
+          ach: expect.objectContaining({ accountType: 'Savings' }),
+        }),
+      );
+    });
+
+    it('falls back to raw account number when ACH tokenization fails', async () => {
+      const provider = await getProviderWithClient();
+      const { tokenizeAch } = await import('@/libs/IQPro');
+      vi.mocked(tokenizeAch).mockRejectedValueOnce(new Error('Tokenization unavailable'));
+
+      mockClient.customers.createPaymentMethod.mockResolvedValue({
+        paymentMethodId: 'test-pm-ach-fallback',
+        last4: '6789',
+      });
+
+      const result = await provider.createPaymentMethod({
+        customerId: 'test-customer-123',
+        paymentMethod: 'ach',
+        achAccountHolder: 'John Doe',
+        achRoutingNumber: '021000021',
+        achAccountNumber: '123456789',
+      });
+
+      expect(result).toEqual({
+        paymentMethodId: 'test-pm-ach-fallback',
+        last4: '6789',
+      });
+
+      // Should fall back to raw account number as achToken
+      expect(mockClient.customers.createPaymentMethod).toHaveBeenCalledWith(
+        'test-customer-123',
+        expect.objectContaining({
+          ach: expect.objectContaining({ achToken: '123456789' }),
+        }),
       );
     });
 
