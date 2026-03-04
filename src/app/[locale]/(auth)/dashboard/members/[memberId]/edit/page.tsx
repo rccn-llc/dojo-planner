@@ -578,8 +578,7 @@ export default function EditMemberPage() {
   const [conversionType, setConversionType] = useState<ConversionType | null>(null);
 
   // HOH data for family members (who is this family member's HOH?)
-  const [currentHOHId, setCurrentHOHId] = useState<string | undefined>(undefined);
-  const [currentHOHName, setCurrentHOHName] = useState<string | undefined>(undefined);
+  const [currentHOH, setCurrentHOH] = useState<{ id: string; name: string } | null>(null);
 
   // Get the current member from cache for membership info
   const currentMember: Member | undefined = members?.find(m => m.id === memberId);
@@ -790,24 +789,23 @@ export default function EditMemberPage() {
 
   // Fetch HOH data for family members (to support conversion)
   const isFamilyMember = currentMember?.memberType === 'family-member';
-  useEffect(() => {
+  const fetchCurrentHOH = useCallback(async () => {
     if (!memberId || !isFamilyMember) {
-      setCurrentHOHId(undefined);
-      setCurrentHOHName(undefined);
+      setCurrentHOH(null);
       return;
     }
-    client.member.getHOHForMember({ memberId })
-      .then((result) => {
-        if (result.hoh) {
-          setCurrentHOHId(result.hoh.id);
-          setCurrentHOHName(`${result.hoh.firstName} ${result.hoh.lastName}`);
-        }
-      })
-      .catch(() => {
-        setCurrentHOHId(undefined);
-        setCurrentHOHName(undefined);
-      });
+    try {
+      const result = await client.member.getHOHForMember({ memberId });
+      if (result.hoh) {
+        setCurrentHOH({ id: result.hoh.id, name: `${result.hoh.firstName} ${result.hoh.lastName}` });
+      }
+    } catch {
+      setCurrentHOH(null);
+    }
   }, [memberId, isFamilyMember]);
+  useEffect(() => {
+    fetchCurrentHOH();
+  }, [fetchCurrentHOH]);
 
   // Derive applied coupon from signed waivers (most recent with coupon data)
   const appliedCoupon = useMemo(() => {
@@ -1513,8 +1511,8 @@ export default function EditMemberPage() {
           conversionType={conversionType}
           hasMembership={hasActiveMembership}
           hasPaymentMethod={paymentMethods.length > 0}
-          currentHOHId={currentHOHId}
-          currentHOHName={currentHOHName}
+          currentHOHId={currentHOH?.id}
+          currentHOHName={currentHOH?.name}
           availableCoupons={availableCoupons}
         />
       )}
