@@ -142,8 +142,9 @@ jobs:
     strategy:
       matrix:
         node-version: [22.x]
+        shard: [1/2, 2/2]
 
-    name: Run E2E tests
+    name: E2E (${{ matrix.shard }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [build]
@@ -162,7 +163,7 @@ jobs:
       - name: Run E2E tests
         uses: docker://mcr.microsoft.com/playwright:v1.58.1-noble
         with:
-          args: sh -c "HOME=/root npm run test:e2e" # Set HOME to /root to avoid Playwright error with Firebox
+          args: sh -c "HOME=/root npm run test:e2e -- --shard=${{ matrix.shard }}"
         env:
           CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
 
@@ -170,7 +171,7 @@ jobs:
         uses: actions/upload-artifact@v5
         if: always()
         with:
-          name: test-results
+          name: test-results-${{ strategy.job-index }}
           path: |
             test-results/
             playwright-report/

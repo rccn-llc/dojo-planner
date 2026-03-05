@@ -70,17 +70,5 @@ export default defineConfig<ChromaticConfig>({
       },
       dependencies: ['setup'],
     },
-    ...(process.env.CI
-      ? [
-          {
-            name: 'firefox',
-            use: {
-              ...devices['Desktop Firefox'],
-              storageState: '.playwright/auth.json',
-            },
-            dependencies: ['setup'],
-          },
-        ]
-      : []),
   ],
 });
