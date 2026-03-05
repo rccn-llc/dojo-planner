@@ -48,6 +48,8 @@ export type CreatePaymentMethodParams = {
 export type CreatePaymentMethodResult = {
   paymentMethodId: string;
   last4?: string;
+  /** ACH token from vault tokenization — needed for ACH transaction processing */
+  achToken?: string;
 };
 
 export type ProcessPaymentParams = {
@@ -57,6 +59,13 @@ export type ProcessPaymentParams = {
   currency: string;
   description: string;
   metadata?: Record<string, string>;
+  /** ACH-specific fields — included in the transaction payload per IQPro docs */
+  ach?: {
+    achToken: string;
+    secCode: string;
+    routingNumber: string;
+    accountType: string;
+  };
 };
 
 export type PaymentResult = {

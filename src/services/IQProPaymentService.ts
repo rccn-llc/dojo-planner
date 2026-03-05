@@ -39,10 +39,13 @@ type IQProClientShape = {
   };
   transactions: {
     create: (params: Record<string, unknown>) => Promise<{ id: string; status?: string; processorResponseMessage?: string; amount?: number }>;
+    getServiceContext: () => { gatewayContext?: { gatewayId: string } };
   };
   subscriptions: {
     create: (params: Record<string, unknown>) => Promise<{ subscriptionId?: string }>;
   };
+  // Raw HTTP method for direct API calls (bypassing SDK service layer)
+  post: <T = Record<string, unknown>>(path: string, body?: unknown) => Promise<T>;
 };
 
 async function requireClient(): Promise<IQProClientShape> {
@@ -156,23 +159,17 @@ export class IQProPaymentProvider implements IPaymentProvider {
     // ACH — tokenize account number via Vault API, then create payment method
     const accountType = params.achAccountType ?? 'Checking';
 
-    let achToken: string;
-    try {
-      const tokenResult = await tokenizeAch({
-        accountNumber: params.achAccountNumber!,
-        routingNumber: params.achRoutingNumber!,
-        secCode: 'WEB',
-        achAccountType: accountType,
-      });
-      achToken = tokenResult.achToken;
-    } catch (tokenError) {
-      logger.error('[IQPro] ACH tokenization failed, falling back to raw account number', { tokenError });
-      achToken = params.achAccountNumber!;
-    }
+    const tokenResult = await tokenizeAch({
+      accountNumber: params.achAccountNumber!,
+      routingNumber: params.achRoutingNumber!,
+      secCode: 'WEB',
+      achAccountType: accountType,
+    });
+    const achToken = tokenResult.achToken;
 
     const pm = await client.customers.createPaymentMethod(params.customerId, {
       ach: {
-        achToken,
+        token: achToken,
         secCode: 'WEB',
         routingNumber: params.achRoutingNumber,
         accountType,
@@ -190,6 +187,7 @@ export class IQProPaymentProvider implements IPaymentProvider {
     return {
       paymentMethodId: pmId,
       last4: pm.last4 ?? pm.ach?.maskedAccount?.slice(-4) ?? params.achAccountNumber?.slice(-4),
+      achToken,
     };
   }
 
@@ -199,35 +197,91 @@ export class IQProPaymentProvider implements IPaymentProvider {
     logger.info('[IQPro] Processing payment', {
       customerId: params.customerId,
       amount: params.amount,
+      method: params.ach ? 'ach' : 'card',
     });
 
     try {
-      // Amount is in dollars from the app – IQPro expects cents
-      const amountCents = Math.round(params.amount * 100);
+      let tx: { id: string; status?: string; processorResponseMessage?: string };
 
-      const tx = await client.transactions.create({
-        customerId: params.customerId,
-        amount: amountCents,
-        currency: params.currency,
-        description: params.description,
-        Remit: {
-          totalAmount: amountCents,
-        },
-        paymentMethod: {
-          customer: {
-            customerId: params.customerId,
-            customerPaymentMethodId: params.paymentMethodId,
+      if (params.ach) {
+        // ACH transactions: bypass SDK and call API directly per ach.docx
+        // The SDK's transactions.create() strips the ach object from the payload,
+        // but the API requires it for ACH processing.
+        const gatewayContext = client.transactions.getServiceContext().gatewayContext;
+        if (!gatewayContext) {
+          throw new Error('Gateway context is required for transaction processing');
+        }
+
+        const apiPayload = {
+          type: 'Sale',
+          remit: {
+            baseAmount: params.amount,
+            totalAmount: params.amount,
+            currencyCode: params.currency,
           },
-        },
-        metadata: params.metadata,
-      });
+          paymentMethod: {
+            customer: {
+              customerId: params.customerId,
+              customerPaymentMethodId: params.paymentMethodId,
+            },
+          },
+          ach: {
+            achToken: params.ach.achToken,
+            secCode: params.ach.secCode,
+            routingNumber: params.ach.routingNumber,
+            accountType: params.ach.accountType,
+            checkNumber: null,
+            accountHolderAuth: {
+              dlState: null,
+              dlNumber: null,
+            },
+          },
+          ...(params.description && { caption: params.description.substring(0, 19) }),
+        };
+
+        const response = await client.post<Record<string, unknown>>(
+          `/api/gateway/${gatewayContext.gatewayId}/transaction`,
+          apiPayload,
+        );
+
+        // Extract transaction data from API response wrapper
+        const data = (response as Record<string, unknown>).data ?? response;
+        const txData = (data as Record<string, unknown>).transaction ?? data;
+        const raw = txData as Record<string, unknown>;
+
+        tx = {
+          id: (raw.transactionId ?? raw.id ?? '') as string,
+          status: (raw.status ?? '') as string,
+          processorResponseMessage: raw.processorResponseMessage as string | undefined,
+        };
+      } else {
+        // Card transactions: use SDK which handles field mapping
+        const amountCents = Math.round(params.amount * 100);
+
+        tx = await client.transactions.create({
+          customerId: params.customerId,
+          amount: amountCents,
+          currency: params.currency,
+          description: params.description,
+          Remit: {
+            totalAmount: amountCents,
+          },
+          paymentMethod: {
+            customer: {
+              customerId: params.customerId,
+              customerPaymentMethodId: params.paymentMethodId,
+            },
+          },
+          metadata: params.metadata,
+        });
+      }
 
       const statusStr = typeof tx.status === 'string'
-        ? tx.status
+        ? tx.status.toLowerCase()
         : '';
 
       const mapped: PaymentResult['status']
-        = statusStr === 'captured' || statusStr === 'settled' || statusStr === 'authorized'
+        = statusStr === 'captured' || statusStr === 'settled' || statusStr === 'authorized' || statusStr === 'pendingsettlement'
           ? 'approved'
           : statusStr === 'declined' || statusStr === 'failed'
             ? 'declined'
@@ -311,7 +365,15 @@ export class IQProPaymentProvider implements IPaymentProvider {
         country,
       };
 
-      const subscription = await client.subscriptions.create({
+      // Bypass SDK's subscriptions.create() because its transformDates() crashes
+      // when the API response doesn't include a recurrence object. Use client.post()
+      // directly to avoid the SDK's response parsing.
+      const gatewayContext = client.transactions.getServiceContext().gatewayContext;
+      if (!gatewayContext) {
+        throw new Error('Gateway context is required for subscription creation');
+      }
+
+      const subscriptionPayload = {
         customerId: params.customerId,
         subscriptionStatusId: 1, // Active
         name: params.description,
@@ -343,13 +405,23 @@ export class IQProPaymentProvider implements IPaymentProvider {
             unitOfMeasureId: params.frequency === 'annual' ? 4 : 3, // YEAR=4 or MONTH=3
           },
         ],
-      });
+      };
 
-      logger.info('[IQPro] Subscription created', { subscriptionId: subscription.subscriptionId });
+      const response = await client.post<Record<string, unknown>>(
+        `/api/gateway/${gatewayContext.gatewayId}/subscription`,
+        subscriptionPayload,
+      );
+
+      // Extract subscription ID from API response
+      const data = (response as Record<string, unknown>).data ?? response;
+      const subData = data as Record<string, unknown>;
+      const subscriptionId = (subData.subscriptionId ?? subData.id ?? '') as string;
+
+      logger.info('[IQPro] Subscription created', { subscriptionId });
 
       return {
         success: true,
-        subscriptionId: subscription.subscriptionId,
+        subscriptionId,
       };
     } catch (error) {
       logger.error('[IQPro] Subscription creation failed', { error });

@@ -24,7 +24,7 @@ const contentSecurityPolicy = [
   // Workers: self + blob (for Clerk)
   'worker-src \'self\' blob:',
   // Connections: self + Clerk API + Sentry + Upstash + Better Stack + TokenEx/BasysPro
-  'connect-src \'self\' https://api.clerk.com https://*.clerk.com https://*.clerk.accounts.dev https://*.ingest.sentry.io https://o-*.ingest.sentry.io https://sentry.io https://*.upstash.io https://*.betterstack.com https://logs.betterstack.com https://sandbox.api.basyspro.com https://api.basyspro.com https://*.tokenex.com',
+  'connect-src \'self\' https://api.clerk.com https://*.clerk.com https://*.clerk.accounts.dev https://clerk-telemetry.com https://*.ingest.sentry.io https://o-*.ingest.sentry.io https://sentry.io https://*.upstash.io https://*.betterstack.com https://logs.betterstack.com https://sandbox.api.basyspro.com https://api.basyspro.com https://*.tokenex.com',
   // Base URI: restrict to self
   'base-uri \'self\'',
   // Form actions: self + Clerk for OAuth/social login flows

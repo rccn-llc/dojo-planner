@@ -177,9 +177,10 @@ export async function tokenizeAch(params: TokenizeAchParams): Promise<TokenizeAc
   }
 
   const token = await getOAuthToken();
-  const baseUrl = Env.IQPRO_BASE_URL!;
+  // The vault API lives at the domain root, not under the /iqsaas/v1 path prefix
+  const vaultBaseUrl = new URL(Env.IQPRO_BASE_URL!).origin;
 
-  const res = await fetch(`${baseUrl}/vault/api/v1/Tokenize/Ach`, {
+  const res = await fetch(`${vaultBaseUrl}/vault/api/v1/Tokenize/Ach`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -200,10 +201,14 @@ export async function tokenizeAch(params: TokenizeAchParams): Promise<TokenizeAc
   }
 
   const json = await res.json();
-  const achToken = (json?.achToken ?? json?.data?.achToken ?? json?.token) as string | undefined;
+  // The vault API returns { data: { achId, maskedAccount } }
+  const achToken = (json?.data?.achId ?? json?.achToken ?? json?.data?.achToken ?? json?.token) as string | undefined;
 
   if (!achToken) {
-    logger.error('[IQPro] ACH tokenization response missing achToken', { keys: Object.keys(json ?? {}) });
+    logger.error('[IQPro] ACH tokenization response missing achToken', {
+      keys: Object.keys(json ?? {}),
+      dataKeys: json?.data ? Object.keys(json.data) : 'no data',
+    });
     throw new Error('ACH tokenization response missing achToken');
   }
 

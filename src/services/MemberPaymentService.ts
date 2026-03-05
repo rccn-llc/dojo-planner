@@ -188,11 +188,21 @@ export async function processMemberPayment(
       = params.billingType === 'autopay'
         && (frequency === 'monthly' || frequency === 'annual');
 
+    // Build ACH data for transaction if this is an ACH payment
+    const achData = params.paymentMethod === 'ach' && pmResult.achToken
+      ? {
+          achToken: pmResult.achToken,
+          secCode: 'WEB',
+          routingNumber: params.achRoutingNumber!,
+          accountType: params.achAccountType ?? 'Checking',
+        }
+      : undefined;
+
     if (isAutopay) {
       return await handleAutopay(provider, params, customerId, pmResult.paymentMethodId, frequency as 'monthly' | 'annual');
     }
 
-    return await handleOneTimePayment(provider, params, customerId, pmResult.paymentMethodId);
+    return await handleOneTimePayment(provider, params, customerId, pmResult.paymentMethodId, achData);
   } catch (error) {
     logger.error('[MemberPayment] Payment processing failed', { error });
     return {
@@ -341,6 +351,7 @@ async function handleOneTimePayment(
   params: ProcessMemberPaymentParams,
   customerId: string,
   paymentMethodId: string,
+  achData?: { achToken: string; secCode: string; routingNumber: string; accountType: string },
 ): Promise<ProcessMemberPaymentResult> {
   const payResult = await provider.processPayment({
     customerId,
@@ -354,6 +365,7 @@ async function handleOneTimePayment(
       ...(params.membershipPlanId && { membershipPlanId: params.membershipPlanId }),
       ...(params.appliedCoupon?.code && { couponCode: params.appliedCoupon.code }),
     },
+    ach: achData,
   });
 
   // Persist transaction record

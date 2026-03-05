@@ -100,6 +100,21 @@ describe('tokenizeAch', () => {
     expect(result).toEqual({ achToken: 'ach-tok-nested' });
   });
 
+  it('should handle achId nested in data object', async () => {
+    const tokenizeAch = await getTokenizeAch();
+
+    mockOAuthAndAchTokenize(
+      new Response(JSON.stringify({ statusCode: 'OK', data: { achId: 'ach-id-vault', maskedAccount: '12*****89' } }), { status: 200 }),
+    );
+
+    const result = await tokenizeAch({
+      accountNumber: '123456789',
+      routingNumber: '021000021',
+    });
+
+    expect(result).toEqual({ achToken: 'ach-id-vault' });
+  });
+
   it('should handle token field as fallback', async () => {
     const tokenizeAch = await getTokenizeAch();
 
