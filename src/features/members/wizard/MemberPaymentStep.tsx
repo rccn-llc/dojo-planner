@@ -104,6 +104,13 @@ export const MemberPaymentStep = ({
   const billingType: BillingType = data.billingType
     || (isRecurringMembership ? 'autopay' : 'one-time');
 
+  // Sync computed default billing type to wizard data so it's available in AddMemberModal
+  useEffect(() => {
+    if (!data.billingType && billingType) {
+      onUpdateAction({ billingType });
+    }
+  }, [data.billingType, billingType, onUpdateAction]);
+
   // Get valid membership coupons
   const validCoupons = useMemo(() => {
     return getValidMembershipCoupons(availableCoupons);

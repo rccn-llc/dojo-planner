@@ -22,6 +22,11 @@ const mockUser = {
   update: mockUpdate,
   createEmailAddress: mockCreateEmailAddress,
   createPhoneNumber: mockCreatePhoneNumber,
+  totpEnabled: false,
+  createTOTP: vi.fn(),
+  verifyTOTP: vi.fn(),
+  disableTOTP: vi.fn(),
+  reload: vi.fn(),
 };
 
 // Mock logger to prevent process.env issues
@@ -38,6 +43,11 @@ vi.mock('@clerk/nextjs', () => ({
     isLoaded: true,
     isSignedIn: true,
   }),
+  useReverification: (fn: () => unknown) => fn,
+}));
+
+vi.mock('qrcode.react', () => ({
+  QRCodeSVG: () => <div data-testid="qr-code" />,
 }));
 
 vi.mock('next-intl', () => ({
@@ -88,6 +98,8 @@ vi.mock('next-intl', () => ({
         two_factor_title: '2-Factor Authentication (2FA)',
         two_factor_description: 'Make your account more secure by adding a second form of authentication',
         add_2fa_button: 'Add 2FA',
+        two_factor_enabled_status: 'Enabled',
+        disable_2fa_button: 'Remove 2FA',
       },
       LocationSettings: {
         location_title: 'Location',
@@ -105,6 +117,7 @@ vi.mock('next-intl', () => ({
 describe('ManageProfileDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUser.totpEnabled = false;
   });
 
   it('should render the dialog when open', () => {
@@ -166,12 +179,20 @@ describe('ManageProfileDialog', () => {
     ).toBeDefined();
   });
 
-  it('should render add 2FA button as disabled', () => {
+  it('should render Add 2FA button when TOTP is not enabled', () => {
     render(<ManageProfileDialog open onOpenChange={() => {}} />);
     const add2faButton = page.getByRole('button', { name: /add 2fa/i });
 
     expect(add2faButton).toBeDefined();
-    expect(add2faButton.element().hasAttribute('disabled')).toBe(true);
+    expect(add2faButton.element().hasAttribute('disabled')).toBe(false);
+  });
+
+  it('should render Remove 2FA button and Enabled badge when TOTP is enabled', () => {
+    mockUser.totpEnabled = true;
+    render(<ManageProfileDialog open onOpenChange={() => {}} />);
+
+    expect(page.getByText('Enabled')).toBeDefined();
+    expect(page.getByRole('button', { name: /remove 2fa/i })).toBeDefined();
   });
 
   it('should show password form when change password button is clicked', async () => {

@@ -12,8 +12,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Skeleton } from '@/components/ui/skeleton';
 import { useHasPasswordAuth } from '@/hooks/useHasPasswordAuth';
 import { ChangePasswordForm } from './ChangePasswordForm';
+import { Disable2FADialog } from './Disable2FADialog';
 import { EditProfileForm } from './EditProfileForm';
 import { LocationCard } from './LocationCard';
+import { Setup2FADialog } from './Setup2FADialog';
 
 type ManageProfileDialogProps = {
   open: boolean;
@@ -26,6 +28,8 @@ export function ManageProfileDialog({ open, onOpenChange }: ManageProfileDialogP
   const tSecurity = useTranslations('Security');
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [showSetup2FA, setShowSetup2FA] = useState(false);
+  const [showDisable2FA, setShowDisable2FA] = useState(false);
 
   const { user, isLoaded } = useUser();
   const { hasPasswordAuth, isLoadingAuth } = useHasPasswordAuth();
@@ -39,12 +43,18 @@ export function ManageProfileDialog({ open, onOpenChange }: ManageProfileDialogP
 
   const userInitials = `${firstName[0] ?? ''}${lastName[0] ?? ''}`;
 
+  const totpEnabled = user?.totpEnabled ?? false;
+
   const handlePasswordChangeSuccess = () => {
     setShowPasswordForm(false);
   };
 
   const handleEditProfileSuccess = () => {
     setIsEditingProfile(false);
+  };
+
+  const handle2FASuccess = () => {
+    void user?.reload();
   };
 
   return (
@@ -175,13 +185,46 @@ export function ManageProfileDialog({ open, onOpenChange }: ManageProfileDialogP
           {/* Two-Factor Authentication Section */}
           <Card className="p-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-              <div>
-                <h2 className="text-xl font-semibold text-foreground">{tSecurity('two_factor_title')}</h2>
-                <p className="mt-2 text-sm text-muted-foreground">{tSecurity('two_factor_description')}</p>
+              <div className="flex items-center gap-3">
+                <div>
+                  <h2 className="text-xl font-semibold text-foreground">{tSecurity('two_factor_title')}</h2>
+                  <p className="mt-2 text-sm text-muted-foreground">{tSecurity('two_factor_description')}</p>
+                </div>
+                {totpEnabled && (
+                  <Badge variant="outline" className="shrink-0 border-green-600 text-green-600">
+                    {tSecurity('two_factor_enabled_status')}
+                  </Badge>
+                )}
               </div>
-              <Button disabled>{tSecurity('add_2fa_button')}</Button>
+              {totpEnabled
+                ? (
+                    <Button variant="destructive" onClick={() => setShowDisable2FA(true)}>
+                      {tSecurity('disable_2fa_button')}
+                    </Button>
+                  )
+                : (
+                    <Button onClick={() => setShowSetup2FA(true)}>
+                      {tSecurity('add_2fa_button')}
+                    </Button>
+                  )}
             </div>
           </Card>
+
+          {showSetup2FA && (
+            <Setup2FADialog
+              open={showSetup2FA}
+              onOpenChange={setShowSetup2FA}
+              onSuccess={handle2FASuccess}
+            />
+          )}
+
+          {showDisable2FA && (
+            <Disable2FADialog
+              open={showDisable2FA}
+              onOpenChange={setShowDisable2FA}
+              onSuccess={handle2FASuccess}
+            />
+          )}
         </div>
       </DialogContent>
     </Dialog>

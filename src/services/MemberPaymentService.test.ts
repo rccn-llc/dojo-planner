@@ -393,6 +393,64 @@ describe('MemberPaymentService', () => {
         }),
       );
     });
+
+    it('should pass ACH data through to processPayment for ACH payments', async () => {
+      const mockProvider = makeMockProvider({
+        createPaymentMethod: vi.fn().mockResolvedValue({
+          paymentMethodId: 'test-pm-ach-001',
+          last4: '6789',
+          achToken: 'ach-tok-from-vault',
+        }),
+      });
+
+      const { isPaymentEnabled, getPaymentProvider } = await import('./PaymentProviderService');
+      vi.mocked(isPaymentEnabled).mockReturnValue(true);
+      vi.mocked(getPaymentProvider).mockResolvedValue(mockProvider);
+
+      const { db } = await import('@/libs/DB');
+      setupDbMocks(db, { existingCustomerId: 'test-customer-789' });
+
+      const { processMemberPayment } = await import('./MemberPaymentService');
+      await processMemberPayment(makeBaseParams({
+        paymentMethod: 'ach',
+        billingType: 'one-time',
+        achRoutingNumber: '111111111',
+        achAccountNumber: '111111111',
+        achAccountType: 'Checking',
+      }));
+
+      expect(mockProvider.processPayment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ach: {
+            achToken: 'ach-tok-from-vault',
+            secCode: 'WEB',
+            routingNumber: '111111111',
+            accountType: 'Checking',
+          },
+        }),
+      );
+    });
+
+    it('should not pass ACH data for card payments', async () => {
+      const mockProvider = makeMockProvider();
+
+      const { isPaymentEnabled, getPaymentProvider } = await import('./PaymentProviderService');
+      vi.mocked(isPaymentEnabled).mockReturnValue(true);
+      vi.mocked(getPaymentProvider).mockResolvedValue(mockProvider);
+
+      const { db } = await import('@/libs/DB');
+      setupDbMocks(db, { existingCustomerId: 'test-customer-789' });
+
+      const { processMemberPayment } = await import('./MemberPaymentService');
+      await processMemberPayment(makeBaseParams({
+        paymentMethod: 'card',
+        billingType: 'one-time',
+      }));
+
+      const callArgs = vi.mocked(mockProvider.processPayment).mock.calls[0]![0];
+
+      expect(callArgs.ach).toBeUndefined();
+    });
   });
 
   // ── 6. Autopay (subscription) ────────────────────────────────────

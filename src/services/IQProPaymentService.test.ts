@@ -26,10 +26,12 @@ function createMockClient() {
     },
     transactions: {
       create: vi.fn(),
+      getServiceContext: vi.fn().mockReturnValue({ gatewayContext: { gatewayId: 'test-gateway-001' } }),
     },
     subscriptions: {
       create: vi.fn(),
     },
+    post: vi.fn(),
   };
 }
 
@@ -224,6 +226,7 @@ describe('IQProPaymentProvider', () => {
       expect(result).toEqual({
         paymentMethodId: 'test-pm-ach-456',
         last4: '6789',
+        achToken: 'ach-tok-test-001',
       });
 
       // Verify tokenizeAch was called with correct params
@@ -239,7 +242,7 @@ describe('IQProPaymentProvider', () => {
         'test-customer-123',
         {
           ach: {
-            achToken: 'ach-tok-test-001',
+            token: 'ach-tok-test-001',
             secCode: 'WEB',
             routingNumber: '021000021',
             accountType: 'Checking',
@@ -281,36 +284,23 @@ describe('IQProPaymentProvider', () => {
       );
     });
 
-    it('falls back to raw account number when ACH tokenization fails', async () => {
+    it('propagates error when ACH tokenization fails', async () => {
       const provider = await getProviderWithClient();
       const { tokenizeAch } = await import('@/libs/IQPro');
       vi.mocked(tokenizeAch).mockRejectedValueOnce(new Error('Tokenization unavailable'));
 
-      mockClient.customers.createPaymentMethod.mockResolvedValue({
-        paymentMethodId: 'test-pm-ach-fallback',
-        last4: '6789',
-      });
-
-      const result = await provider.createPaymentMethod({
-        customerId: 'test-customer-123',
-        paymentMethod: 'ach',
-        achAccountHolder: 'John Doe',
-        achRoutingNumber: '021000021',
-        achAccountNumber: '123456789',
-      });
-
-      expect(result).toEqual({
-        paymentMethodId: 'test-pm-ach-fallback',
-        last4: '6789',
-      });
-
-      // Should fall back to raw account number as achToken
-      expect(mockClient.customers.createPaymentMethod).toHaveBeenCalledWith(
-        'test-customer-123',
-        expect.objectContaining({
-          ach: expect.objectContaining({ achToken: '123456789' }),
+      await expect(
+        provider.createPaymentMethod({
+          customerId: 'test-customer-123',
+          paymentMethod: 'ach',
+          achAccountHolder: 'John Doe',
+          achRoutingNumber: '021000021',
+          achAccountNumber: '123456789',
         }),
-      );
+      ).rejects.toThrow('Tokenization unavailable');
+
+      // Should NOT call createPaymentMethod when tokenization fails
+      expect(mockClient.customers.createPaymentMethod).not.toHaveBeenCalled();
     });
 
     it('falls back to maskedAccount last4 for ACH when last4 is not returned', async () => {
@@ -434,6 +424,98 @@ describe('IQProPaymentProvider', () => {
         error: 'Gateway timeout',
       });
     });
+
+    it('bypasses SDK and calls API directly for ACH transactions', async () => {
+      const provider = await getProviderWithClient();
+
+      mockClient.post.mockResolvedValue({
+        data: {
+          transaction: {
+            transactionId: 'test-tx-ach',
+            status: 'Captured',
+          },
+        },
+      });
+
+      const result = await provider.processPayment({
+        customerId: 'test-customer-123',
+        paymentMethodId: 'test-pm-ach-123',
+        amount: 149,
+        currency: 'USD',
+        description: 'ACH Payment',
+        ach: {
+          achToken: 'ach-tok-123',
+          secCode: 'WEB',
+          routingNumber: '111111111',
+          accountType: 'Checking',
+        },
+      });
+
+      // Should NOT use SDK transactions.create for ACH
+      expect(mockClient.transactions.create).not.toHaveBeenCalled();
+
+      // Should call API directly via client.post
+      expect(mockClient.post).toHaveBeenCalledWith(
+        '/api/gateway/test-gateway-001/transaction',
+        expect.objectContaining({
+          type: 'Sale',
+          remit: {
+            baseAmount: 149,
+            totalAmount: 149,
+            currencyCode: 'USD',
+          },
+          paymentMethod: {
+            customer: {
+              customerId: 'test-customer-123',
+              customerPaymentMethodId: 'test-pm-ach-123',
+            },
+          },
+          ach: {
+            achToken: 'ach-tok-123',
+            secCode: 'WEB',
+            routingNumber: '111111111',
+            accountType: 'Checking',
+            checkNumber: null,
+            accountHolderAuth: { dlState: null, dlNumber: null },
+          },
+          caption: 'ACH Payment',
+        }),
+      );
+
+      expect(result).toEqual({
+        success: true,
+        transactionId: 'test-tx-ach',
+        status: 'approved',
+        declineReason: undefined,
+      });
+    });
+
+    it('uses SDK transactions.create for card payments (no direct API call)', async () => {
+      const provider = await getProviderWithClient();
+
+      mockClient.transactions.create.mockResolvedValue({
+        id: 'test-tx-card',
+        status: 'captured',
+      });
+
+      await provider.processPayment({
+        customerId: 'test-customer-123',
+        paymentMethodId: 'test-pm-card-123',
+        amount: 50,
+        currency: 'USD',
+        description: 'Card Payment',
+      });
+
+      // Card payments use SDK
+      expect(mockClient.transactions.create).toHaveBeenCalled();
+
+      // Should NOT call API directly for card payments
+      expect(mockClient.post).not.toHaveBeenCalled();
+
+      const callArgs = mockClient.transactions.create.mock.calls[0]![0] as Record<string, unknown>;
+
+      expect(callArgs.ach).toBeUndefined();
+    });
   });
 
   describe('createSubscription', () => {
@@ -454,11 +536,11 @@ describe('IQProPaymentProvider', () => {
       },
     };
 
-    it('builds correct payload for monthly frequency', async () => {
+    it('builds correct payload for monthly frequency via direct API call', async () => {
       const provider = await getProviderWithClient();
 
-      mockClient.subscriptions.create.mockResolvedValue({
-        subscriptionId: 'test-sub-monthly-123',
+      mockClient.post.mockResolvedValue({
+        data: { subscriptionId: 'test-sub-monthly-123' },
       });
 
       const startDate = new Date(2025, 2, 15); // March 15, 2025
@@ -476,7 +558,14 @@ describe('IQProPaymentProvider', () => {
         subscriptionId: 'test-sub-monthly-123',
       });
 
-      const callArgs = mockClient.subscriptions.create.mock.calls[0]![0];
+      // Should bypass SDK and call API directly
+      expect(mockClient.subscriptions.create).not.toHaveBeenCalled();
+      expect(mockClient.post).toHaveBeenCalledWith(
+        '/api/gateway/test-gateway-001/subscription',
+        expect.any(Object),
+      );
+
+      const callArgs = mockClient.post.mock.calls[0]![1] as Record<string, any>;
 
       // Required top-level fields
       expect(callArgs.prefix).toBe('MBR');
@@ -534,8 +623,8 @@ describe('IQProPaymentProvider', () => {
     it('builds correct payload for annual frequency', async () => {
       const provider = await getProviderWithClient();
 
-      mockClient.subscriptions.create.mockResolvedValue({
-        subscriptionId: 'test-sub-annual-456',
+      mockClient.post.mockResolvedValue({
+        data: { subscriptionId: 'test-sub-annual-456' },
       });
 
       const startDate = new Date(2025, 5, 1); // June 1, 2025
@@ -553,7 +642,7 @@ describe('IQProPaymentProvider', () => {
         subscriptionId: 'test-sub-annual-456',
       });
 
-      const callArgs = mockClient.subscriptions.create.mock.calls[0]![0];
+      const callArgs = mockClient.post.mock.calls[0]![1] as Record<string, any>;
 
       // Annual uses billingPeriodId=6, includes monthsOfYear with start month only
       expect(callArgs.recurrence.billingPeriodId).toBe(6);
@@ -572,8 +661,8 @@ describe('IQProPaymentProvider', () => {
     it('defaults country and state when no address is provided', async () => {
       const provider = await getProviderWithClient();
 
-      mockClient.subscriptions.create.mockResolvedValue({
-        subscriptionId: 'test-sub-no-addr',
+      mockClient.post.mockResolvedValue({
+        data: { subscriptionId: 'test-sub-no-addr' },
       });
 
       const result = await provider.createSubscription({
@@ -588,7 +677,7 @@ describe('IQProPaymentProvider', () => {
 
       expect(result.success).toBe(true);
 
-      const callArgs = mockClient.subscriptions.create.mock.calls[0]![0];
+      const callArgs = mockClient.post.mock.calls[0]![1] as Record<string, any>;
 
       // Billing address defaults country to US and state to N/A
       expect(callArgs.addresses[0]).toEqual({
@@ -617,7 +706,7 @@ describe('IQProPaymentProvider', () => {
     it('returns error when subscription creation fails', async () => {
       const provider = await getProviderWithClient();
 
-      mockClient.subscriptions.create.mockRejectedValue(new Error('Subscription API error'));
+      mockClient.post.mockRejectedValue(new Error('Subscription API error'));
 
       const result = await provider.createSubscription({
         ...baseSubscriptionParams,
