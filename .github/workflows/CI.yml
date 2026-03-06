@@ -138,16 +138,44 @@ jobs:
         with:
           args: npm run storybook:test
 
+  e2e-setup:
+    name: E2E Setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [build]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js environment
+        uses: ./.github/actions/setup-project
+        with:
+          node-version: 22.x
+          restore-nextjs-cache: true
+
+      - name: Run E2E setup
+        uses: docker://mcr.microsoft.com/playwright:v1.58.1-noble
+        with:
+          args: sh -c "HOME=/root npx playwright test --project=setup"
+        env:
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+
+      - name: Upload auth state
+        uses: actions/upload-artifact@v5
+        with:
+          name: e2e-auth-state
+          path: .playwright/
+          retention-days: 1
+
   e2e:
     strategy:
       matrix:
-        node-version: [22.x]
         shard: [1/2, 2/2]
 
     name: E2E (${{ matrix.shard }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [build]
+    needs: [e2e-setup]
 
     steps:
       - uses: actions/checkout@v6
@@ -157,13 +185,19 @@ jobs:
       - name: Set up Node.js environment
         uses: ./.github/actions/setup-project
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 22.x
           restore-nextjs-cache: true
+
+      - name: Download auth state
+        uses: actions/download-artifact@v4
+        with:
+          name: e2e-auth-state
+          path: .playwright/
 
       - name: Run E2E tests
         uses: docker://mcr.microsoft.com/playwright:v1.58.1-noble
         with:
-          args: sh -c "HOME=/root npm run test:e2e -- --shard=${{ matrix.shard }}"
+          args: sh -c "HOME=/root npm run test:e2e -- --project=chromium --shard=${{ matrix.shard }}"
         env:
           CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
 
@@ -176,3 +210,29 @@ jobs:
             test-results/
             playwright-report/
           retention-days: 7
+
+  e2e-teardown:
+    name: E2E Teardown
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [e2e]
+    if: always()
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js environment
+        uses: ./.github/actions/setup-project
+        with:
+          node-version: 22.x
+
+      - name: Download auth state
+        uses: actions/download-artifact@v4
+        with:
+          name: e2e-auth-state
+          path: .playwright/
+
+      - name: Cleanup E2E test user
+        run: npx tsx tests/ci-teardown.ts
+        env:
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}

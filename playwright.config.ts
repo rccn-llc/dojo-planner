@@ -68,7 +68,8 @@ export default defineConfig<ChromaticConfig>({
         // Load authenticated session from setup
         storageState: '.playwright/auth.json',
       },
-      dependencies: ['setup'],
+      // In CI, setup/teardown run as separate jobs so shards don't conflict
+      dependencies: process.env.CI ? [] : ['setup'],
     },
   ],
 });
