@@ -48,11 +48,11 @@ export default defineConfig<ChromaticConfig>({
     // More information: https://playwright.dev/docs/api/class-testoptions#test-options-base-url
     baseURL,
 
-    // Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer
-    trace: process.env.CI ? 'on' : 'retain-on-failure',
+    // Collect trace only on first retry. See https://playwright.dev/docs/trace-viewer
+    trace: 'on-first-retry',
 
-    // Record videos when retrying the failed test.
-    video: process.env.CI ? 'retain-on-failure' : undefined,
+    // Video recording disabled — traces are sufficient for debugging failures.
+    video: 'off',
 
     // Disable automatic screenshots at test completion when using Chromatic test fixture.
     disableAutoSnapshot: true,
@@ -70,17 +70,5 @@ export default defineConfig<ChromaticConfig>({
       },
       dependencies: ['setup'],
     },
-    ...(process.env.CI
-      ? [
-          {
-            name: 'firefox',
-            use: {
-              ...devices['Desktop Firefox'],
-              storageState: '.playwright/auth.json',
-            },
-            dependencies: ['setup'],
-          },
-        ]
-      : []),
   ],
 });

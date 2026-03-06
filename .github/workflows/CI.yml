@@ -162,7 +162,7 @@ jobs:
       - name: Run E2E tests
         uses: docker://mcr.microsoft.com/playwright:v1.58.1-noble
         with:
-          args: sh -c "HOME=/root npm run test:e2e" # Set HOME to /root to avoid Playwright error with Firebox
+          args: npm run test:e2e
         env:
           CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
 
