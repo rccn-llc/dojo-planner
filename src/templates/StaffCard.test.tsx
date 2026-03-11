@@ -283,4 +283,22 @@ describe('StaffCard', () => {
 
     expect(roleBadge).toBeInTheDocument();
   });
+
+  it('formats org:academy_owner role as Academy Owner', () => {
+    // eslint-disable-next-line jsx-a11y/aria-role
+    render(<StaffCard {...defaultProps} role="org:academy_owner" />);
+
+    const roleBadge = page.getByText('Academy Owner');
+
+    expect(roleBadge).toBeInTheDocument();
+  });
+
+  it('formats org:front_desk role as Front Desk', () => {
+    // eslint-disable-next-line jsx-a11y/aria-role
+    render(<StaffCard {...defaultProps} role="org:front_desk" />);
+
+    const roleBadge = page.getByText('Front Desk');
+
+    expect(roleBadge).toBeInTheDocument();
+  });
 });

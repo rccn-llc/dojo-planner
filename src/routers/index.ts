@@ -24,6 +24,7 @@ import { addMembership, changeMembership, create as createMember, getHOHForMembe
 import { list as listMembers } from './Members';
 import { getTokenizationIframeConfig, processPayment, registerPaymentMethod } from './Payment';
 import { chartData as reportChartData, currentValues as reportCurrentValues, insights as reportInsights } from './Reports';
+import { cancelSaasSubscription, changeSaasPlan, getCurrentPlan, getSaasBillingHistory, getSaasTokenizationConfig, subscribeToPlan } from './SaasSubscription';
 import { listAll as listAllTags, listClassTags, listMembershipTags } from './Tags';
 import { get as getTransaction, list as listTransactions } from './Transactions';
 import {
@@ -128,6 +129,14 @@ export const router = {
     categoryRemove,
     imageCreate,
     imageRemove,
+  },
+  saasSubscription: {
+    getCurrentPlan,
+    subscribe: subscribeToPlan,
+    changePlan: changeSaasPlan,
+    cancel: cancelSaasSubscription,
+    getBillingHistory: getSaasBillingHistory,
+    getTokenizationConfig: getSaasTokenizationConfig,
   },
   waivers: {
     listTemplates: listWaiverTemplates,

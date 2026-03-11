@@ -53,6 +53,7 @@ src/
 │   ├── Dashboard.ts       # Membership stats, financial stats, chart data
 │   ├── Reports.ts         # Report values, chart data, dynamic insights
 │   ├── Payment.ts         # Payment processing (one-time + autopay subscriptions) + payment method registration (no charge)
+│   ├── SaasSubscription.ts # Org SaaS billing (getCurrentPlan, subscribe, changePlan, cancel, getBillingHistory, getTokenizationConfig)
 │   └── Waivers.ts         # Waiver templates, signing, versioning, membership associations, merge fields
 │
 ├── services/              # Business logic layer
@@ -73,7 +74,8 @@ src/
 │   ├── EmailService.ts    # Resend email integration with PDF attachment support
 │   ├── PaymentProviderService.ts # Payment provider abstraction (interface + factory)
 │   ├── IQProPaymentService.ts # IQPro implementation of payment provider
-│   └── MemberPaymentService.ts # Member payment orchestration (customer → method → charge/subscription) + registerPaymentMethod (no charge)
+│   ├── MemberPaymentService.ts # Member payment orchestration (customer → method → charge/subscription) + registerPaymentMethod (no charge)
+│   └── SaasSubscriptionService.ts # Org-level SaaS billing via IQPro (subscribe, change plan, cancel, billing history, super admin auto-grant)
 │
 ├── models/
 │   └── Schema.ts          # Drizzle ORM tables (25+ tables)
@@ -92,7 +94,9 @@ src/
 │   └── IQPro.ts           # IQPro payment client singleton + gateway processor lookup
 ├── utils/                 # Helper functions
 │   ├── AppConfig.ts       # Pricing plans, Clerk locales
-│   └── Auth.ts            # Page-level auth helpers
+│   ├── Auth.ts            # Page-level auth helpers
+│   ├── SaasPlans.ts       # SaaS plan configuration (Basic/Growth/Enterprise pricing, features)
+│   └── SuperAdmins.ts     # Super admin username list and helper
 ├── validations/           # Zod schemas
 ├── types/                 # TypeScript types
 │   └── Auth.ts            # Role definitions (ORG_ROLE)
@@ -146,6 +150,8 @@ docs/                      # Documentation
 | `/dashboard/waivers` | `waivers/page.tsx` | Waiver templates list |
 | `/dashboard/user-profile` | `user-profile/[[...user-profile]]/page.tsx` | Clerk UserProfile |
 | `/dashboard/organization-profile` | `organization-profile/[[...organization-profile]]/page.tsx` | Clerk OrgProfile |
+| `/dashboard/subscription` | `subscription/page.tsx` | SaaS subscription management |
+| `/dashboard/subscription-expired` | `subscription-expired/page.tsx` | Subscription expired — re-subscribe prompt |
 | `/dashboard/preferences` | `preferences/page.tsx` | User preferences |
 | `/dashboard/security` | `security/page.tsx` | Security settings |
 
@@ -418,11 +424,34 @@ The IQPro subscription API has strict requirements validated against the sandbox
 **Webhook Events Handled:**
 - `payment.completed` - Update transaction status
 - `payment.failed` - Mark member past_due
-- `subscription.payment_succeeded` - Update next payment date
-- `subscription.payment_failed` - Mark membership past_due
-- `subscription.cancelled` - Update membership status
+- `subscription.payment_succeeded` - Update next payment date (checks org SaaS subscription first, falls back to member membership)
+- `subscription.payment_failed` - Mark membership/org past_due (checks org first, falls back to member)
+- `subscription.cancelled` - Update membership/org status (checks org first, falls back to member)
 
 **Configuration:** All env vars are optional — app starts without IQPro, payment features disabled.
+
+**SaaS Organization Billing (via IQPro):**
+
+Organization-level SaaS subscriptions use IQPro (same SDK as member payments). Access is gated at the org level — the admin subscribes, all staff in that Clerk org get access automatically.
+
+**Plans:** Basic ($49/mo, $29/mo annual), Growth ($125/mo, $99/mo annual), Enterprise (contact us)
+
+**Super admins:** `aguilanegra`, `richardhoppes`, `nhaloski`, `rtoupin` — auto-granted Basic plan for free (no IQPro API call, written directly to DB).
+
+**Key files:**
+- `src/utils/SaasPlans.ts` — Plan config (prices, features, IDs)
+- `src/utils/SuperAdmins.ts` — Super admin username list
+- `src/services/SaasSubscriptionService.ts` — Service layer (subscribe, change, cancel, billing history, super admin auto-grant)
+- `src/routers/SaasSubscription.ts` — ORPC endpoints (all require `ORG_ROLE.ADMIN`)
+- `src/validations/SaasSubscriptionValidation.ts` — Zod schemas
+- `src/hooks/useSubscriptionData.ts` — Client hook for fetching subscription + billing history
+- `src/features/billing/SubscriptionDialog.tsx` — Subscription management dialog (from UserMenu)
+- `src/app/[locale]/(auth)/dashboard/subscription/page.tsx` — Full subscription page
+- `src/app/[locale]/(auth)/dashboard/subscription-expired/page.tsx` — Expired subscription page
+
+**Access enforcement:** Dashboard layout checks org subscription status. If no active subscription (and not super admin), redirects to `/dashboard/subscription-expired`. Subscription and subscription-expired pages are exempt from this check.
+
+**Cancel flow:** Cancels at end of billing period. All org members lose dashboard access. Admins can re-subscribe from the subscription-expired page.
 
 ### Sentry (Error Monitoring)
 
@@ -584,7 +613,7 @@ await deleteUserWithOrganization();
 **Schema:** `src/models/Schema.ts`
 
 **Key Tables:**
-- `organization` - Multi-tenant orgs with Stripe IDs
+- `organization` - Multi-tenant orgs with Stripe IDs + IQPro SaaS subscription fields (iqproCustomerId, iqproSubscriptionId, iqproSubscriptionPlanId, iqproBillingCycle, iqproSubscriptionStatus, iqproCurrentPeriodEnd, iqproPaymentMethodId)
 - `member` - Member records with dateOfBirth, optional `clerkUserId` for kiosk auth, optional `iqproCustomerId`
 - `membership_plan` - Pricing tiers
 - `member_membership` - Member-plan associations with startDate, endDate, firstPaymentDate, nextPaymentDate, optional `iqproSubscriptionId`
@@ -870,6 +899,11 @@ AUDIT_ACTION.MERGE_FIELD_DELETE;
 // Payment operations
 AUDIT_ACTION.PAYMENT_PROCESS;
 AUDIT_ACTION.PAYMENT_METHOD_REGISTER;
+
+// SaaS subscription operations
+AUDIT_ACTION.SAAS_SUBSCRIPTION_CREATE;
+AUDIT_ACTION.SAAS_SUBSCRIPTION_CHANGE;
+AUDIT_ACTION.SAAS_SUBSCRIPTION_CANCEL;
 
 // Family member operations
 AUDIT_ACTION.FAMILY_MEMBER_LINK;

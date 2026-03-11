@@ -14,7 +14,6 @@ import { useHasPasswordAuth } from '@/hooks/useHasPasswordAuth';
 import { ChangePasswordForm } from './ChangePasswordForm';
 import { Disable2FADialog } from './Disable2FADialog';
 import { EditProfileForm } from './EditProfileForm';
-import { LocationCard } from './LocationCard';
 import { Setup2FADialog } from './Setup2FADialog';
 
 type ManageProfileDialogProps = {
@@ -155,9 +154,6 @@ export function ManageProfileDialog({ open, onOpenChange }: ManageProfileDialogP
                   </>
                 )}
           </Card>
-
-          {/* Location Information Card */}
-          <LocationCard isLoading={!isLoaded} />
 
           {/* Change Password Section - Only show for password-based auth users */}
           {!isLoadingAuth && hasPasswordAuth && (

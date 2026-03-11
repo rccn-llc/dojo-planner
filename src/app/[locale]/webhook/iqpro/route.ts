@@ -5,7 +5,7 @@ import { db } from '@/libs/DB';
 import { Env } from '@/libs/Env';
 import { logger } from '@/libs/Logger';
 import { getClientIP, isRateLimitingEnabled, webhookRateLimiter } from '@/libs/RateLimit';
-import { memberMembershipSchema, transactionSchema } from '@/models/Schema';
+import { memberMembershipSchema, organizationSchema, transactionSchema } from '@/models/Schema';
 
 // Inline type to avoid top-level import from the optional @dojo-planner/iqpro-client package
 type WebhookPayload = { type: string; id?: string; data: Record<string, unknown> };
@@ -138,6 +138,37 @@ async function handleSubscriptionPaymentSucceeded(data: Record<string, unknown>)
     return;
   }
 
+  // Check if this is a SaaS org subscription first
+  const org = await db.query.organizationSchema.findFirst({
+    where: eq(organizationSchema.iqproSubscriptionId, subscriptionId),
+    columns: { id: true },
+  });
+
+  if (org) {
+    const now = new Date();
+    // Estimate next period end based on billing cycle
+    const orgRecord = await db.query.organizationSchema.findFirst({
+      where: eq(organizationSchema.id, org.id),
+      columns: { iqproBillingCycle: true },
+    });
+    const isAnnual = orgRecord?.iqproBillingCycle === 'annual';
+    const nextPeriodEnd = isAnnual
+      ? new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000)
+      : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    await db
+      .update(organizationSchema)
+      .set({
+        iqproSubscriptionStatus: 'active',
+        iqproCurrentPeriodEnd: nextPeriodEnd.getTime(),
+      })
+      .where(eq(organizationSchema.id, org.id));
+
+    logger.info('[IQPro Webhook] SaaS subscription payment succeeded', { subscriptionId, orgId: org.id });
+    return;
+  }
+
+  // Fall back to member membership subscription
   const nextPaymentDate = data.nextPaymentDate
     ? new Date(data.nextPaymentDate as string)
     : undefined;
@@ -159,6 +190,23 @@ async function handleSubscriptionPaymentFailed(data: Record<string, unknown>): P
     return;
   }
 
+  // Check if this is a SaaS org subscription first
+  const org = await db.query.organizationSchema.findFirst({
+    where: eq(organizationSchema.iqproSubscriptionId, subscriptionId),
+    columns: { id: true },
+  });
+
+  if (org) {
+    await db
+      .update(organizationSchema)
+      .set({ iqproSubscriptionStatus: 'past_due' })
+      .where(eq(organizationSchema.id, org.id));
+
+    logger.info('[IQPro Webhook] SaaS subscription payment failed', { subscriptionId, orgId: org.id });
+    return;
+  }
+
+  // Fall back to member membership subscription
   await db
     .update(memberMembershipSchema)
     .set({ status: 'past_due' })
@@ -173,6 +221,23 @@ async function handleSubscriptionCancelled(data: Record<string, unknown>): Promi
     return;
   }
 
+  // Check if this is a SaaS org subscription first
+  const org = await db.query.organizationSchema.findFirst({
+    where: eq(organizationSchema.iqproSubscriptionId, subscriptionId),
+    columns: { id: true },
+  });
+
+  if (org) {
+    await db
+      .update(organizationSchema)
+      .set({ iqproSubscriptionStatus: 'cancelled' })
+      .where(eq(organizationSchema.id, org.id));
+
+    logger.info('[IQPro Webhook] SaaS subscription cancelled', { subscriptionId, orgId: org.id });
+    return;
+  }
+
+  // Fall back to member membership subscription
   await db
     .update(memberMembershipSchema)
     .set({ status: 'cancelled' })

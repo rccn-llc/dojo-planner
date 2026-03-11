@@ -31,6 +31,8 @@ vi.mock('next-intl', () => ({
       memberships: 'Memberships',
       programs: 'Programs',
       marketing: 'Marketing',
+      catalog: 'Catalog',
+      waivers: 'Waivers',
       location: 'Location',
       preferences: 'Preferences',
       log_out: 'Log Out',
@@ -263,5 +265,75 @@ describe('AppSidebar - Component Rendering', () => {
     render(<AppSidebar />);
 
     expect(page.getByTestId('sidebar-rail')).toBeDefined();
+  });
+});
+
+describe('AppSidebar - Role-based visibility', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should show all items for admin role', () => {
+    render(<AppSidebar userRole="org:admin" />);
+
+    expect(page.getByText('Reports')).toBeDefined();
+
+    expect(page.getByText('Transactions')).toBeDefined();
+
+    expect(page.getByText('Marketing')).toBeDefined();
+
+    expect(page.getByText('Roles')).toBeDefined();
+
+    expect(page.getByText('Staff')).toBeDefined();
+  });
+
+  it('should show all items for academy owner role', () => {
+    render(<AppSidebar userRole="org:academy_owner" />);
+
+    expect(page.getByText('Reports')).toBeDefined();
+
+    expect(page.getByText('Transactions')).toBeDefined();
+
+    expect(page.getByText('Marketing')).toBeDefined();
+
+    expect(page.getByText('Roles')).toBeDefined();
+
+    expect(page.getByText('Staff')).toBeDefined();
+  });
+
+  it('should hide management items for front desk role', () => {
+    render(<AppSidebar userRole="org:front_desk" />);
+
+    // Front desk should see these
+    expect(page.getByText('Performance')).toBeDefined();
+
+    expect(page.getByText('Programs')).toBeDefined();
+
+    expect(page.getByText('Classes')).toBeDefined();
+
+    expect(page.getByText('Members')).toBeDefined();
+
+    expect(page.getByText('Memberships')).toBeDefined();
+
+    // Front desk should NOT see these
+    expect(page.getByText('Reports').elements().length).toBe(0);
+
+    expect(page.getByText('Transactions').elements().length).toBe(0);
+
+    expect(page.getByText('Marketing').elements().length).toBe(0);
+
+    expect(page.getByText('Catalog').elements().length).toBe(0);
+
+    expect(page.getByText('Waivers').elements().length).toBe(0);
+
+    expect(page.getByText('Roles').elements().length).toBe(0);
+
+    expect(page.getByText('Staff').elements().length).toBe(0);
+  });
+
+  it('should always show log out for any role', () => {
+    render(<AppSidebar userRole="org:front_desk" />);
+
+    expect(page.getByText('Log Out')).toBeDefined();
   });
 });

@@ -115,6 +115,11 @@ export const AUDIT_ACTION = {
 
   // Member conversion operations
   MEMBER_CONVERT: 'member.convert',
+
+  // SaaS subscription operations
+  SAAS_SUBSCRIPTION_CREATE: 'saasSubscription.create',
+  SAAS_SUBSCRIPTION_CHANGE: 'saasSubscription.change',
+  SAAS_SUBSCRIPTION_CANCEL: 'saasSubscription.cancel',
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTION)[keyof typeof AUDIT_ACTION];
@@ -149,6 +154,7 @@ export const AUDIT_ENTITY_TYPE = {
   WAIVER_MERGE_FIELD: 'waiverMergeField',
   FAMILY_MEMBER: 'familyMember',
   PAYMENT_METHOD: 'paymentMethod',
+  ORGANIZATION: 'organization',
 } as const;
 
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPE)[keyof typeof AUDIT_ENTITY_TYPE];

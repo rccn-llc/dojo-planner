@@ -117,7 +117,7 @@ export const getTemplate = os
 export const createTemplate = os
   .input(CreateWaiverTemplateValidation)
   .handler(async ({ input }) => {
-    const context = await guardRole(ORG_ROLE.ADMIN);
+    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
       logger.info(`[Waivers.createTemplate] Creating waiver template for organization: ${context.orgId}`, {
@@ -153,7 +153,7 @@ export const createTemplate = os
 export const updateTemplate = os
   .input(UpdateWaiverTemplateValidation)
   .handler(async ({ input }) => {
-    const context = await guardRole(ORG_ROLE.ADMIN);
+    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
       const { template, versionCreated } = await updateWaiverTemplate(input, context.orgId);
@@ -193,7 +193,7 @@ export const updateTemplate = os
 export const deleteTemplate = os
   .input(DeleteWaiverTemplateValidation)
   .handler(async ({ input }) => {
-    const context = await guardRole(ORG_ROLE.ADMIN);
+    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
       await deleteWaiverTemplate(input.id, context.orgId);
@@ -374,7 +374,7 @@ export const getWaiversForMembership = os
 export const setMembershipWaiverAssociations = os
   .input(SetMembershipWaiversValidation)
   .handler(async ({ input }) => {
-    const context = await guardRole(ORG_ROLE.ADMIN);
+    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
       await setMembershipPlanWaivers(input.membershipPlanId, input.waiverTemplateIds);
@@ -407,7 +407,7 @@ export const setMembershipWaiverAssociations = os
 export const addWaiverToMembership = os
   .input(AddWaiverToMembershipValidation)
   .handler(async ({ input }) => {
-    const context = await guardRole(ORG_ROLE.ADMIN);
+    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
       await addWaiverToMembershipPlan(input.membershipPlanId, input.waiverTemplateId, input.isRequired);
@@ -440,7 +440,7 @@ export const addWaiverToMembership = os
 export const removeWaiverFromMembership = os
   .input(RemoveWaiverFromMembershipValidation)
   .handler(async ({ input }) => {
-    const context = await guardRole(ORG_ROLE.ADMIN);
+    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
       await removeWaiverFromMembershipPlan(input.membershipPlanId, input.waiverTemplateId);
@@ -530,7 +530,7 @@ export const listMergeFields = os.handler(async () => {
 export const createMergeFieldHandler = os
   .input(CreateMergeFieldValidation)
   .handler(async ({ input }) => {
-    const context = await guardRole(ORG_ROLE.ADMIN);
+    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
       const mergeField = await createMergeField(input, context.orgId);
@@ -559,7 +559,7 @@ export const createMergeFieldHandler = os
 export const updateMergeFieldHandler = os
   .input(UpdateMergeFieldValidation)
   .handler(async ({ input }) => {
-    const context = await guardRole(ORG_ROLE.ADMIN);
+    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
       const { id, ...updateData } = input;
@@ -590,7 +590,7 @@ export const updateMergeFieldHandler = os
 export const deleteMergeFieldHandler = os
   .input(DeleteMergeFieldValidation)
   .handler(async ({ input }) => {
-    const context = await guardRole(ORG_ROLE.ADMIN);
+    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
       await deleteMergeField(input.id, context.orgId);

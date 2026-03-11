@@ -85,10 +85,23 @@ export async function RolesPage() {
       isSystemRole: clerkRole.key === ORG_ROLE.ADMIN || clerkRole.key === ORG_ROLE.MEMBER,
     }));
 
-    // Collect all unique permissions for the modal (from all permissions, not just role permissions)
+    // Collect permissions for the modal
+    // Admins see all permissions; non-admins only see permissions their own role has
+    let currentRolePermissions: Set<string> | null = null;
+    if (!isAdmin) {
+      const currentRole = clerkRoles.find(r => r.key === currentUserRole);
+      const permKeys = currentRole?.permissions
+        .map(p => p.key) ?? [];
+      currentRolePermissions = new Set(permKeys);
+    }
+
     const seenPermissionKeys = new Set<string>();
     for (const perm of clerkPermissions) {
       if (!seenPermissionKeys.has(perm.key)) {
+        // If not admin, only include permissions the current user's role has
+        if (currentRolePermissions && !currentRolePermissions.has(perm.key)) {
+          continue;
+        }
         seenPermissionKeys.add(perm.key);
         allAvailablePermissions.push({
           id: perm.id,

@@ -65,16 +65,22 @@ function StatusBadge({
 }
 
 function formatRole(role: string): string {
-  if (role === 'org:admin') {
-    return 'Admin';
-  }
-  if (role === 'front-desk') {
-    return 'Front Desk';
+  const roleMap: Record<string, string> = {
+    'org:admin': 'Admin',
+    'org:academy_owner': 'Academy Owner',
+    'org:front_desk': 'Front Desk',
+    'org:member': 'Member',
+    'org:individual_member': 'Individual Member',
+    'front-desk': 'Front Desk',
+  };
+  if (roleMap[role]) {
+    return roleMap[role];
   }
 
-  // Capitalize first letter and replace hyphens with spaces
+  // Strip org: prefix, then capitalize words split by hyphens or underscores
   return role
-    .split('-')
+    .replace(/^org:/, '')
+    .split(/[_-]/)
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
 }

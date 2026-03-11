@@ -1,149 +1,26 @@
 'use client';
 
-import { ArrowDownAZ, ArrowUpZA, Check, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import type { TokenizationIframeConfig } from '@/libs/IQPro';
+import type { SaasPlanId } from '@/utils/SaasPlans';
+import { useOrganization, useUser } from '@clerk/nextjs';
+import { ArrowDownAZ, ArrowUpZA, Check, ChevronLeft, ChevronRight, Loader2, X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useTheme } from 'next-themes';
+import { useCallback, useState } from 'react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { ButtonGroupItem, ButtonGroupRoot } from '@/components/ui/button-group';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { useSubscriptionData } from '@/hooks/useSubscriptionData';
+import { useTokenExIframe } from '@/hooks/useTokenExIframe';
+import { client } from '@/libs/Orpc';
+import { SaasPlanList } from '@/utils/SaasPlans';
 
-type PlanFeature = {
-  name: string;
-  included: boolean;
-};
+const TOKENEX_CONTAINER_ID = 'saasTokenExIframeDiv';
 
-type PlanButton = {
-  text: string;
-  disabled: boolean;
-};
-
-type Plan = {
-  name: string;
-  id: string;
-  monthlyPrice: string;
-  annualPrice: string;
-  description: string;
-  features: PlanFeature[];
-  defaultButton: PlanButton;
-};
-
-// Mock current subscription - Basic Monthly
-const currentPlan = {
-  planId: 'basic',
-  billingCycle: 'monthly',
-};
-
-const plans: Plan[] = [
-  {
-    name: 'Basic',
-    id: 'basic',
-    monthlyPrice: '$49 / month',
-    annualPrice: '$29 / month',
-    description: 'Just the Dojo Planner CRM without payment processing integration',
-    features: [
-      { name: 'Unlimited students & classes', included: true },
-      { name: 'Digital attendance & student profiles', included: true },
-      { name: 'Belt promotion & curriculum tracking', included: true },
-      { name: 'Class calendar with RSVP', included: true },
-      { name: 'No payment processing integration', included: false },
-      { name: 'No team accounts', included: false },
-    ],
-    defaultButton: {
-      text: 'Upgrade Plan',
-      disabled: false,
-    },
-  },
-  {
-    name: 'Growth',
-    id: 'growth',
-    monthlyPrice: '$125 / month',
-    annualPrice: '$99 / month',
-    description: 'Our premier product with payment processing and CRM all in one',
-    features: [
-      { name: 'Payment processing integration', included: true },
-      { name: 'Lower fees than Stripe', included: true },
-      { name: 'Team accounts (instructors, admins, etc)', included: true },
-      { name: 'Priority support (chat + email)', included: true },
-      { name: 'Automated welcome flows for new students', included: true },
-    ],
-    defaultButton: {
-      text: 'Upgrade Plan',
-      disabled: false,
-    },
-  },
-  {
-    name: 'Enterprise',
-    id: 'enterprise',
-    monthlyPrice: 'Set up a free exploratory call',
-    annualPrice: 'Set up a free exploratory call',
-    description: 'All of the above plus custom branded experiences and more, get in touch!',
-    features: [
-      { name: 'Multi location dashboard', included: true },
-      { name: 'Instructor analytics & performance tracking', included: true },
-      { name: 'Full white labeling', included: true },
-      { name: 'Dedicated onboarding & setup', included: true },
-      { name: 'Premium customer support', included: true },
-    ],
-    defaultButton: {
-      text: 'Contact Us',
-      disabled: false,
-    },
-  },
-];
-
-function getPlanButton(plan: Plan, selectedBillingCycle: string): PlanButton {
-  const isCurrentPlan = plan.id === currentPlan.planId && selectedBillingCycle === currentPlan.billingCycle;
-
-  if (isCurrentPlan) {
-    return {
-      text: 'Current Plan',
-      disabled: true,
-    };
-  }
-
-  return plan.defaultButton;
-}
-
-// Test data - these are mock payment IDs for demonstration purposes
-const billingHistory = [
-  { date: 'April 15, 2025', amount: '$160.00', method: 'Card ending •••1234', paymentId: '71MC01ANQ130' },
-  { date: 'March 15, 2025', amount: '$160.00', method: 'Card ending •••1234', paymentId: '8CJ19CAMGB10' },
-  { date: 'February 15, 2025', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'HCM1829NBAU' },
-  { date: 'January 15, 2025', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'CP120C72N72KA' },
-  { date: 'December 15, 2024', amount: '$160.00', method: 'Card ending •••1234', paymentId: '7621KCD721B92' },
-  { date: 'November 15, 2024', amount: '$160.00', method: 'Card ending •••1234', paymentId: '73VBSV6DKSVD' },
-  { date: 'October 15, 2024', amount: '$160.00', method: 'Card ending •••1234', paymentId: '73VBSV6DKSVD1' },
-  { date: 'September 15, 2024', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'SEP24A1B2C3D' },
-  { date: 'August 15, 2024', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'AUG24E4F5G6H' },
-  { date: 'July 15, 2024', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'JUL24I7J8K9L' },
-  { date: 'June 15, 2024', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'JUN24M0N1O2P' },
-  { date: 'May 15, 2024', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'MAY24Q3R4S5T' },
-  { date: 'April 15, 2024', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'APR24U6V7W8X' },
-  { date: 'March 15, 2024', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'MAR24Y9Z0A1B' },
-  { date: 'February 15, 2024', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'FEB24C2D3E4F' },
-  { date: 'January 15, 2024', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'JAN24G5H6I7J' },
-  { date: 'December 15, 2023', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'DEC23K8L9M0N' },
-  { date: 'November 15, 2023', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'NOV23O1P2Q3R' },
-  { date: 'October 15, 2023', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'OCT23S4T5U6V' },
-  { date: 'September 15, 2023', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'SEP23W7X8Y9Z' },
-  { date: 'August 15, 2023', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'AUG23A0B1C2D' },
-  { date: 'July 15, 2023', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'JUL23E3F4G5H' },
-  { date: 'June 15, 2023', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'JUN23I6J7K8L' },
-  { date: 'May 15, 2023', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'MAY23M9N0O1P' },
-  { date: 'April 15, 2023', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'APR23Q2R3S4T' },
-  { date: 'March 15, 2023', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'MAR23U5V6W7X' },
-  { date: 'February 15, 2023', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'FEB23Y8Z9A0B' },
-  { date: 'January 15, 2023', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'JAN23C1D2E3F' },
-  { date: 'December 15, 2022', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'DEC22G4H5I6J' },
-  { date: 'November 15, 2022', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'NOV22K7L8M9N' },
-  { date: 'October 15, 2022', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'OCT22O0P1Q2R' },
-  { date: 'September 15, 2022', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'SEP22S3T4U5V' },
-  { date: 'August 15, 2022', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'AUG22W6X7Y8Z' },
-  { date: 'July 15, 2022', amount: '$160.00', method: 'Card ending •••1234', paymentId: 'JUL22A9B0C1D' },
-];
-
-type SortDirection = 'asc' | 'desc';
+const planOrder: SaasPlanId[] = ['basic', 'growth'];
 
 type SubscriptionDialogProps = {
   open: boolean;
@@ -152,160 +29,440 @@ type SubscriptionDialogProps = {
 
 export function SubscriptionDialog({ open, onOpenChange }: SubscriptionDialogProps) {
   const t = useTranslations('SubscriptionPage');
-  const [billingCycle, setBillingCycle] = useState('monthly');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const { resolvedTheme } = useTheme();
+  const { user } = useUser();
+  const { organization } = useOrganization();
+  const { currentPlan, billingHistory, loading, error, refetch } = useSubscriptionData();
+
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = useState(1);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [subscribing, setSubscribing] = useState(false);
+  const [selectedPlanId, setSelectedPlanId] = useState<SaasPlanId | null>(null);
+  const [cardExpiry, setCardExpiry] = useState('');
+  const [tokenizationConfig, setTokenizationConfig] = useState<TokenizationIframeConfig | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
   const itemsPerPage = 10;
 
-  const handleSort = () => {
-    setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+  const { isLoaded: iframeLoaded, isValid: iframeValid, tokenize } = useTokenExIframe({
+    containerId: TOKENEX_CONTAINER_ID,
+    config: tokenizationConfig,
+    theme: resolvedTheme === 'dark' ? 'dark' : 'light',
+  });
+
+  const loadTokenizationConfig = useCallback(async () => {
+    if (tokenizationConfig) {
+      return;
+    }
+    try {
+      const config = await client.saasSubscription.getTokenizationConfig({
+        origin: window.location.origin,
+      });
+      setTokenizationConfig(config as TokenizationIframeConfig);
+    } catch {
+      // If tokenization config fails, user will use plain card input
+    }
+  }, [tokenizationConfig]);
+
+  const handleSubscribe = async (planId: SaasPlanId) => {
+    const plan = SaasPlanList[planId];
+    if (!plan || plan.isContactUs) {
+      return;
+    }
+
+    // If no existing subscription, we need payment info
+    if (!currentPlan?.hasActiveSubscription) {
+      setSelectedPlanId(planId);
+      loadTokenizationConfig();
+      return;
+    }
+
+    // Change plan (already subscribed)
+    setSubscribing(true);
+    setActionError(null);
+    try {
+      const result = await client.saasSubscription.changePlan({
+        newPlanId: planId as 'basic' | 'growth',
+        newBillingCycle: billingCycle,
+      });
+      if (!result.success) {
+        setActionError(result.error ?? t('change_plan_error'));
+      } else {
+        await refetch();
+      }
+    } catch {
+      setActionError(t('change_plan_error'));
+    } finally {
+      setSubscribing(false);
+    }
   };
 
-  const sortedBillingHistory = [...billingHistory].sort((a, b) => {
-    const aDate = new Date(a.date).getTime();
-    const bDate = new Date(b.date).getTime();
+  const handleSubmitSubscription = async () => {
+    if (!selectedPlanId || !organization || !user) {
+      return;
+    }
 
+    setSubscribing(true);
+    setActionError(null);
+
+    try {
+      let cardToken: string | undefined;
+      let cardFirstSix: string | undefined;
+      let cardLastFour: string | undefined;
+
+      if (tokenizationConfig) {
+        const result = await tokenize();
+        cardToken = result.token;
+        cardFirstSix = result.firstSix;
+        cardLastFour = result.lastFour;
+      }
+
+      const subscribeResult = await client.saasSubscription.subscribe({
+        orgName: organization.name,
+        adminEmail: user.primaryEmailAddress?.emailAddress ?? '',
+        planId: selectedPlanId as 'basic' | 'growth',
+        billingCycle,
+        cardToken,
+        cardFirstSix,
+        cardLastFour,
+        cardExpiry: cardExpiry || undefined,
+      });
+
+      if (!subscribeResult.success) {
+        setActionError(subscribeResult.error ?? t('subscribe_error'));
+      } else {
+        setSelectedPlanId(null);
+        setCardExpiry('');
+        await refetch();
+      }
+    } catch {
+      setActionError(t('subscribe_error'));
+    } finally {
+      setSubscribing(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    setCancelling(true);
+    setActionError(null);
+    try {
+      const result = await client.saasSubscription.cancel({ endOfPeriod: true });
+      if (!result.success) {
+        setActionError(result.error ?? t('cancel_error'));
+      } else {
+        setCancelDialogOpen(false);
+        await refetch();
+      }
+    } catch {
+      setActionError(t('cancel_error'));
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  const handleSort = () => {
+    setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+  };
+
+  const sortedHistory = [...billingHistory].sort((a, b) => {
+    const aDate = new Date(a.invoiceDate ?? '').getTime();
+    const bDate = new Date(b.invoiceDate ?? '').getTime();
     return sortDirection === 'asc' ? aDate - bDate : bDate - aDate;
   });
 
-  const totalPages = Math.ceil(sortedBillingHistory.length / itemsPerPage);
+  const totalPages = Math.ceil(sortedHistory.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedBillingHistory = sortedBillingHistory.slice(startIndex, startIndex + itemsPerPage);
+  const paginatedHistory = sortedHistory.slice(startIndex, startIndex + itemsPerPage);
 
-  const handlePreviousPage = () => {
-    setCurrentPage(prev => Math.max(1, prev - 1));
+  const getPlanButtonProps = (planId: SaasPlanId) => {
+    const plan = SaasPlanList[planId];
+    if (!plan) {
+      return { text: '', disabled: true };
+    }
+
+    if (plan.isContactUs) {
+      return { text: t('contact_us_button'), disabled: false };
+    }
+
+    const isCurrentPlan = currentPlan?.planId === planId
+      && currentPlan?.billingCycle === billingCycle;
+
+    if (isCurrentPlan) {
+      return { text: t('current_plan_button'), disabled: true };
+    }
+
+    if (!currentPlan?.hasActiveSubscription) {
+      return { text: t('subscribe_button'), disabled: false };
+    }
+
+    const currentIdx = planOrder.indexOf(currentPlan?.planId as SaasPlanId);
+    const targetIdx = planOrder.indexOf(planId);
+
+    if (targetIdx > currentIdx) {
+      return { text: t('upgrade_plan_button'), disabled: false };
+    }
+
+    return { text: t('downgrade_plan_button'), disabled: false };
   };
 
-  const handleNextPage = () => {
-    setCurrentPage(prev => Math.min(totalPages, prev + 1));
+  const formatPrice = (planId: SaasPlanId, cycle: 'monthly' | 'annual') => {
+    const plan = SaasPlanList[planId];
+    if (!plan) {
+      return '';
+    }
+    if (plan.isContactUs) {
+      return t('contact_us_price');
+    }
+    const price = cycle === 'annual' ? plan.annualPricePerMonth : plan.monthlyPrice;
+    return `$${price} ${t('per_month')}`;
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[90vh] w-full max-w-[calc(100vw-2rem)] flex-col overflow-hidden p-0 sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
-        <DialogHeader className="px-4 pt-4 sm:px-6 sm:pt-6">
-          <DialogTitle>{t('title')}</DialogTitle>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="flex max-h-[90vh] w-full max-w-[calc(100vw-2rem)] flex-col overflow-hidden p-0 sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
+          <DialogHeader className="px-4 pt-4 sm:px-6 sm:pt-6">
+            <DialogTitle>{t('title')}</DialogTitle>
+          </DialogHeader>
 
-        <div className="flex-1 space-y-4 overflow-y-auto px-4 pb-4 sm:space-y-6 sm:px-6 sm:pb-6">
-          {/* Billing Cycle Toggle */}
-          <ButtonGroupRoot value={billingCycle} onValueChange={setBillingCycle} className="w-full">
-            <ButtonGroupItem value="monthly" className="flex-1">
-              {t('monthly_button')}
-            </ButtonGroupItem>
-            <ButtonGroupItem value="annual" className="flex-1">
-              {t('annual_button')}
-            </ButtonGroupItem>
-          </ButtonGroupRoot>
-
-          {/* Pricing Cards - Always stack on smaller screens, side by side on larger */}
-          <div className="space-y-4 lg:grid lg:grid-cols-3 lg:gap-4 lg:space-y-0">
-            {plans.map((plan) => {
-              const isCurrentPlan = plan.id === currentPlan.planId && billingCycle === currentPlan.billingCycle;
-              return (
-                <Card key={plan.name} className={`flex flex-col p-4 ${isCurrentPlan ? 'border-green-500 bg-green-50 dark:bg-green-950/30' : ''}`}>
-                  <div className="flex items-start justify-between gap-2 lg:flex-col lg:items-stretch">
-                    <div className="min-w-0 flex-1">
-                      <h3 className="text-lg font-bold text-foreground">{plan.name}</h3>
-                      <p className="mt-1 text-base font-bold text-foreground">{billingCycle === 'monthly' ? plan.monthlyPrice : plan.annualPrice}</p>
-                    </div>
-                    <Button
-                      className="shrink-0 lg:mt-3 lg:w-full"
-                      size="sm"
-                      disabled={getPlanButton(plan, billingCycle).disabled}
-                    >
-                      {getPlanButton(plan, billingCycle).text}
-                    </Button>
-                  </div>
-                  <p className="mt-3 text-xs text-muted-foreground">{plan.description}</p>
-
-                  {/* Features List - Collapsible on mobile, always visible on desktop */}
-                  <div className="mt-3 space-y-1.5">
-                    {plan.features.map(feature => (
-                      <div key={feature.name} className="flex items-start gap-2">
-                        {feature.included
-                          ? <Check className="h-3.5 w-3.5 shrink-0 text-green-600" />
-                          : <X className="h-3.5 w-3.5 shrink-0 text-gray-400" />}
-                        <span className={`text-xs leading-tight ${feature.included ? 'text-foreground' : 'text-muted-foreground line-through'}`}>
-                          {feature.name}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
-
-          {/* Billing History Section */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-semibold text-foreground">{t('billing_history_heading')}</h2>
-              <button
-                type="button"
-                onClick={handleSort}
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-              >
-                {sortDirection === 'asc' ? <ArrowDownAZ className="h-4 w-4" /> : <ArrowUpZA className="h-4 w-4" />}
-              </button>
-            </div>
-
-            {/* Billing History - Card-based for all screen sizes */}
-            <div className="space-y-2">
-              {paginatedBillingHistory.map(item => (
-                <Card key={item.paymentId} className="px-3 py-2">
-                  <div className="flex items-center text-sm">
-                    <span className="w-1/3 font-medium text-foreground">{item.date}</span>
-                    <span className="w-1/3 text-muted-foreground">{item.method}</span>
-                    <span className="w-1/3 text-right font-mono text-muted-foreground">{item.paymentId}</span>
-                  </div>
-                </Card>
-              ))}
-            </div>
-
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between border-t border-border pt-3">
-                <span className="text-sm text-muted-foreground">
-                  Page
-                  {' '}
-                  {currentPage}
-                  {' '}
-                  of
-                  {' '}
-                  {totalPages}
-                </span>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handlePreviousPage}
-                    disabled={currentPage === 1}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    Previous
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleNextPage}
-                    disabled={currentPage === totalPages}
-                  >
-                    Next
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
+          <div className="flex-1 space-y-4 overflow-y-auto px-4 pb-4 sm:space-y-6 sm:px-6 sm:pb-6">
+            {loading && (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-sm text-muted-foreground">{t('loading')}</span>
               </div>
             )}
-          </div>
 
-          {/* Bottom Action Buttons */}
-          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button variant="outline" size="sm" className="w-full sm:w-auto">{t('support_button')}</Button>
-            <Button variant="destructive" size="sm" className="w-full sm:w-auto">{t('cancel_membership_button')}</Button>
+            {error && !loading && (
+              <p className="text-sm text-destructive">{t('error_loading')}</p>
+            )}
+
+            {actionError && (
+              <p className="text-sm text-destructive">{actionError}</p>
+            )}
+
+            {!loading && !error && (
+              <>
+                {/* Billing Cycle Toggle */}
+                <ButtonGroupRoot value={billingCycle} onValueChange={v => setBillingCycle(v as 'monthly' | 'annual')} className="w-full">
+                  <ButtonGroupItem value="monthly" className="flex-1">
+                    {t('monthly_button')}
+                  </ButtonGroupItem>
+                  <ButtonGroupItem value="annual" className="flex-1">
+                    {t('annual_button')}
+                  </ButtonGroupItem>
+                </ButtonGroupRoot>
+
+                {/* Pricing Cards */}
+                <div className="space-y-4 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
+                  {planOrder.map((planId) => {
+                    const plan = SaasPlanList[planId];
+                    if (!plan) {
+                      return null;
+                    }
+                    const isCurrentPlan = currentPlan?.planId === planId && currentPlan?.billingCycle === billingCycle;
+                    const btnProps = getPlanButtonProps(planId);
+                    return (
+                      <Card key={planId} className={`flex flex-col p-4 ${isCurrentPlan ? 'border-green-500 bg-green-50 dark:bg-green-950/30' : ''}`}>
+                        <div className="flex items-start justify-between gap-2 lg:flex-col lg:items-stretch">
+                          <div className="min-w-0 flex-1">
+                            <h3 className="text-lg font-bold text-foreground">{plan.name}</h3>
+                            <p className="mt-1 text-base font-bold text-foreground">{formatPrice(planId, billingCycle)}</p>
+                          </div>
+                          <Button
+                            className="shrink-0 lg:mt-3 lg:w-full"
+                            size="sm"
+                            disabled={btnProps.disabled || subscribing}
+                            onClick={() => plan.isContactUs ? undefined : handleSubscribe(planId)}
+                          >
+                            {subscribing ? <Loader2 className="h-4 w-4 animate-spin" /> : btnProps.text}
+                          </Button>
+                        </div>
+                        <p className="mt-3 text-xs text-muted-foreground">{plan.description}</p>
+
+                        <div className="mt-3 space-y-1.5">
+                          {plan.features.map(feature => (
+                            <div key={feature.name} className="flex items-start gap-2">
+                              {feature.included
+                                ? <Check className="h-3.5 w-3.5 shrink-0 text-green-600" />
+                                : <X className="h-3.5 w-3.5 shrink-0 text-gray-400" />}
+                              <span className={`text-xs leading-tight ${feature.included ? 'text-foreground' : 'text-muted-foreground line-through'}`}>
+                                {feature.name}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </Card>
+                    );
+                  })}
+                </div>
+
+                {/* Payment form for first-time subscription */}
+                {selectedPlanId && !currentPlan?.hasActiveSubscription && (
+                  <Card className="space-y-4 p-4">
+                    <h3 className="text-base font-semibold">{t('payment_section_title')}</h3>
+
+                    {/* TokenEx iframe container */}
+                    <div>
+                      <label className="mb-1 block text-sm font-medium">{t('card_number_label')}</label>
+                      <div
+                        id={TOKENEX_CONTAINER_ID}
+                        className="h-10 rounded-md border border-input bg-background"
+                      />
+                      {!iframeLoaded && tokenizationConfig && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />
+                          {t('loading')}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium">{t('card_expiry_label')}</label>
+                      <Input
+                        placeholder={t('card_expiry_placeholder')}
+                        value={cardExpiry}
+                        onChange={e => setCardExpiry(e.target.value)}
+                        maxLength={5}
+                      />
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedPlanId(null)}
+                      >
+                        {t('cancel_cancel_button')}
+                      </Button>
+                      <Button
+                        size="sm"
+                        disabled={subscribing || (tokenizationConfig ? (!iframeLoaded || !iframeValid) : false)}
+                        onClick={handleSubmitSubscription}
+                      >
+                        {subscribing ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+                        {subscribing ? t('processing') : t('subscribe_button')}
+                      </Button>
+                    </div>
+                  </Card>
+                )}
+
+                {/* Billing History Section */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-base font-semibold text-foreground">{t('billing_history_heading')}</h2>
+                    {billingHistory.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleSort}
+                        className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+                      >
+                        {sortDirection === 'asc' ? <ArrowDownAZ className="h-4 w-4" /> : <ArrowUpZA className="h-4 w-4" />}
+                      </button>
+                    )}
+                  </div>
+
+                  {billingHistory.length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      {currentPlan?.isSuperAdmin ? t('complimentary_plan') : t('no_billing_history')}
+                    </p>
+                  )}
+
+                  {billingHistory.length > 0 && (
+                    <div className="space-y-2">
+                      {paginatedHistory.map(item => (
+                        <Card key={item.invoiceId} className="px-3 py-2">
+                          <div className="flex items-center text-sm">
+                            <span className="w-1/3 font-medium text-foreground">
+                              {item.invoiceDate ? new Date(item.invoiceDate).toLocaleDateString() : '—'}
+                            </span>
+                            <span className="w-1/3 text-muted-foreground">
+                              {item.paymentMethodLast4 ? `Card ending •••${item.paymentMethodLast4}` : '—'}
+                            </span>
+                            <span className="w-1/3 text-right font-mono text-muted-foreground">
+                              {item.invoiceId}
+                            </span>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between border-t border-border pt-3">
+                      <span className="text-sm text-muted-foreground">
+                        {t('page_info', { current: currentPage, total: totalPages })}
+                      </span>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                          disabled={currentPage === 1}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          {t('previous_button')}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                          disabled={currentPage === totalPages}
+                        >
+                          {t('next_button')}
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Bottom Action Buttons */}
+                <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                  {currentPlan?.hasActiveSubscription && !currentPlan.isSuperAdmin && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="w-full sm:w-auto"
+                      onClick={() => setCancelDialogOpen(true)}
+                    >
+                      {t('cancel_membership_button')}
+                    </Button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Confirmation Dialog */}
+      <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('cancel_confirm_title')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('cancel_confirm_message')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cancelling}>
+              {t('cancel_cancel_button')}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleCancel}
+              disabled={cancelling}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              {cancelling ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+              {t('cancel_confirm_button')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

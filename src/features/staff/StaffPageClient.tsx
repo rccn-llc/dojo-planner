@@ -22,9 +22,11 @@ type StaffMember = {
 
 type StaffPageClientProps = {
   staffMembers: StaffMember[];
+  currentUserRole?: string;
+  currentUserId?: string;
 };
 
-export function StaffPageClient({ staffMembers }: StaffPageClientProps) {
+export function StaffPageClient({ staffMembers, currentUserRole, currentUserId }: StaffPageClientProps) {
   const t = useTranslations('Staff');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStaffMember, setEditingStaffMember] = useState<StaffMemberData | null>(null);
@@ -59,6 +61,8 @@ export function StaffPageClient({ staffMembers }: StaffPageClientProps) {
     <>
       <StaffTable
         staffMembers={staffMembers}
+        currentUserRole={currentUserRole}
+        currentUserId={currentUserId}
         onEditStaff={handleEditStaff}
         onRemoveStaff={handleRemoveStaff}
         headerActions={(

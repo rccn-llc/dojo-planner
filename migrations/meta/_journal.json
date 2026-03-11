@@ -85,6 +85,13 @@
       "when": 1739404800000,
       "tag": "0011_iqpro-payment-fields",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1741046400000,
+      "tag": "0012_saas-subscription-fields",
+      "breakpoints": true
     }
   ]
 }

@@ -28,7 +28,7 @@ export const getTokenizationIframeConfig = os
 export const processPayment = os
   .input(ProcessPaymentValidation)
   .handler(async ({ input }) => {
-    const context = await guardRole(ORG_ROLE.ADMIN);
+    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
       logger.info('[Payment] Processing member payment', {
@@ -75,7 +75,7 @@ export const processPayment = os
 export const registerPaymentMethod = os
   .input(RegisterPaymentMethodValidation)
   .handler(async ({ input }) => {
-    const context = await guardRole(ORG_ROLE.ADMIN);
+    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
       logger.info('[Payment] Registering payment method (no charge)', {
