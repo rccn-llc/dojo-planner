@@ -45,10 +45,15 @@ export default async function DashboardLayout(props: ILayoutProps) {
       },
     });
 
-    subscriptionActive
-      = org?.iqproSubscriptionStatus === 'active'
-        || org?.iqproSubscriptionStatus === 'trial'
-        || org?.stripeSubscriptionStatus === 'active';
+    // If org has no DB record yet, don't enforce subscription (fresh Clerk org)
+    if (!org) {
+      subscriptionActive = true;
+    } else {
+      subscriptionActive
+        = org.iqproSubscriptionStatus === 'active'
+          || org.iqproSubscriptionStatus === 'trial'
+          || org.stripeSubscriptionStatus === 'active';
+    }
   }
 
   // Get the persisted sidebar state from the cookie
