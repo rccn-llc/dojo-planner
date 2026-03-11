@@ -104,7 +104,7 @@ export const get = os
 export const create = os
   .input(CreateCatalogItemValidation)
   .handler(async ({ input }) => {
-    const context = await guardRole(ORG_ROLE.ADMIN);
+    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
       logger.info(`[Catalog.create] Creating catalog item for organization: ${context.orgId}`, {
@@ -141,7 +141,7 @@ export const create = os
 export const update = os
   .input(UpdateCatalogItemValidation)
   .handler(async ({ input }) => {
-    const context = await guardRole(ORG_ROLE.ADMIN);
+    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
       const item = await updateCatalogItem(input, context.orgId);
@@ -174,7 +174,7 @@ export const update = os
 export const remove = os
   .input(DeleteCatalogItemValidation)
   .handler(async ({ input }) => {
-    const context = await guardRole(ORG_ROLE.ADMIN);
+    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
       await deleteCatalogItem(input.id, context.orgId);
@@ -211,7 +211,7 @@ export const remove = os
 export const variantCreate = os
   .input(CreateVariantValidation)
   .handler(async ({ input }) => {
-    const context = await guardRole(ORG_ROLE.ADMIN);
+    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
       const variant = await createCatalogVariant(input);
@@ -243,7 +243,7 @@ export const variantCreate = os
 export const variantUpdate = os
   .input(UpdateVariantValidation)
   .handler(async ({ input }) => {
-    const context = await guardRole(ORG_ROLE.ADMIN);
+    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
       const variant = await updateCatalogVariant(input);
@@ -276,7 +276,7 @@ export const variantUpdate = os
 export const variantRemove = os
   .input(DeleteVariantValidation)
   .handler(async ({ input }) => {
-    const context = await guardRole(ORG_ROLE.ADMIN);
+    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
       await deleteCatalogVariant(input.id);
@@ -362,7 +362,7 @@ export const categoryList = os.handler(async () => {
 export const categoryCreate = os
   .input(CreateCategoryValidation)
   .handler(async ({ input }) => {
-    const context = await guardRole(ORG_ROLE.ADMIN);
+    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
       const category = await createCategory(input, context.orgId);
@@ -394,7 +394,7 @@ export const categoryCreate = os
 export const categoryUpdate = os
   .input(UpdateCategoryValidation)
   .handler(async ({ input }) => {
-    const context = await guardRole(ORG_ROLE.ADMIN);
+    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
       const category = await updateCategory(input, context.orgId);
@@ -427,7 +427,7 @@ export const categoryUpdate = os
 export const categoryRemove = os
   .input(DeleteCategoryValidation)
   .handler(async ({ input }) => {
-    const context = await guardRole(ORG_ROLE.ADMIN);
+    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
       await deleteCategory(input.id, context.orgId);
@@ -464,7 +464,7 @@ export const categoryRemove = os
 export const imageCreate = os
   .input(CreateCatalogImageValidation)
   .handler(async ({ input }) => {
-    const context = await guardRole(ORG_ROLE.ADMIN);
+    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
       const image = await createCatalogImage(input);
@@ -496,7 +496,7 @@ export const imageCreate = os
 export const imageRemove = os
   .input(DeleteCatalogImageValidation)
   .handler(async ({ input }) => {
-    const context = await guardRole(ORG_ROLE.ADMIN);
+    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
       await deleteCatalogImage(input.id);

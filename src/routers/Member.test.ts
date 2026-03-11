@@ -49,7 +49,7 @@ vi.mock('@/services/WaiverPdfService.server', () => ({
 const mockContext: AuditContext = {
   userId: 'test-user-123',
   orgId: 'test-org-456',
-  role: ORG_ROLE.ADMIN,
+  role: ORG_ROLE.ACADEMY_OWNER,
 };
 
 const mockFrontDeskContext: AuditContext = {
@@ -86,7 +86,7 @@ describe('Member Router', () => {
       const { searchHOH } = await import('./Member');
       const result = await callHandler(searchHOH, {});
 
-      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ADMIN);
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
       expect(getHeadOfHouseholdMembers).toHaveBeenCalledWith('test-org-456');
       expect(result).toEqual({ members: mockHOHMembers });
     });
@@ -153,7 +153,7 @@ describe('Member Router', () => {
       const { linkFamily } = await import('./Member');
       const result = await callHandler(linkFamily, linkInput);
 
-      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ADMIN);
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
       expect(linkFamilyMember).toHaveBeenCalledWith('hoh-member-123', 'family-member-456', 'child');
       expect(audit).toHaveBeenCalledWith(
         mockContext,
@@ -272,7 +272,7 @@ describe('Member Router', () => {
       const { getHOHPaymentMethods } = await import('./Member');
       const result = await callHandler(getHOHPaymentMethods, { hohMemberId: 'hoh-member-123' });
 
-      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ADMIN);
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
       expect(getMemberPaymentMethods).toHaveBeenCalledWith('hoh-member-123');
       expect(result).toEqual({ paymentMethods: mockPaymentMethods });
     });
@@ -299,7 +299,7 @@ describe('Member Router', () => {
       const { sendConfirmationEmail } = await import('./Member');
       const result = await callHandler(sendConfirmationEmail, baseEmailInput);
 
-      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ADMIN);
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
       expect(sendMemberConfirmationEmail).toHaveBeenCalledWith({
         memberEmail: 'member@test.com',
         memberName: 'John Doe',
@@ -457,7 +457,7 @@ describe('Member Router', () => {
       const { unlinkFamily } = await import('./Member');
       const result = await callHandler(unlinkFamily, unlinkInput);
 
-      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ADMIN);
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
       expect(unlinkFamilyMember).toHaveBeenCalledWith('hoh-member-123', 'family-member-456');
       expect(audit).toHaveBeenCalledWith(
         mockContext,
@@ -593,7 +593,7 @@ describe('Member Router', () => {
         memberType: 'head-of-household',
       });
 
-      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ADMIN);
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
       expect(updateMember).toHaveBeenCalledWith(
         { id: 'member-1', memberType: 'head-of-household' },
         mockContext.orgId,

@@ -142,6 +142,8 @@ describe('StaffTable', () => {
       render(
         <StaffTable
           staffMembers={mockStaffMembers}
+          currentUserRole="org:admin"
+          currentUserId="other_user"
           onEditStaff={mockOnEditStaff}
           onRemoveStaff={mockOnRemoveStaff}
         />,
@@ -167,6 +169,8 @@ describe('StaffTable', () => {
       render(
         <StaffTable
           staffMembers={mockStaffMembers}
+          currentUserRole="org:admin"
+          currentUserId="other_user"
           onEditStaff={mockOnEditStaff}
           onRemoveStaff={mockOnRemoveStaff}
         />,

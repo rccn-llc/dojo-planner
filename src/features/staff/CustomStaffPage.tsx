@@ -38,12 +38,12 @@ export async function CustomStaffPage() {
       organizationId: orgId,
     });
 
-    // Check if current user is an admin
+    // Check if current user is an admin or academy owner
     const userRole = memberships.data.find(
       m => m.publicUserData?.userId === userId,
     )?.role;
 
-    if (userRole !== 'org:admin') {
+    if (userRole !== 'org:admin' && userRole !== 'org:academy_owner') {
       return (
         <div className="rounded-lg border border-border bg-background p-8 text-center">
           <h2 className="text-xl font-semibold text-foreground">{t('access_denied_title')}</h2>
@@ -54,9 +54,9 @@ export async function CustomStaffPage() {
       );
     }
 
-    // Filter and map org:admin members with status
+    // Filter and map org:admin and org:academy_owner members with status
     const staffMembers: ClerkStaffMember[] = memberships.data
-      .filter(membership => membership.role === 'org:admin')
+      .filter(membership => membership.role === 'org:admin' || membership.role === 'org:academy_owner')
       .map((membership) => {
         // Determine status based on whether user has fully set up their account
         const status: 'Active' | 'Invitation sent' | 'Inactive' = membership.publicUserData
@@ -78,7 +78,7 @@ export async function CustomStaffPage() {
 
     // Render the staff table with client-side modal management
     return (
-      <StaffPageClient staffMembers={staffMembers} />
+      <StaffPageClient staffMembers={staffMembers} currentUserRole={userRole} currentUserId={userId} />
     );
   } catch (error) {
     console.warn('CustomStaffPage - Failed to fetch staff members:', error);

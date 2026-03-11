@@ -1601,7 +1601,13 @@ async function main() {
         console.info(`  📝 Creating organization record for ${specificOrgId}...`);
         await db.insert(organizationSchema).values({
           id: specificOrgId,
+          stripeSubscriptionStatus: 'active',
         }).onConflictDoNothing();
+      } else {
+        // Ensure the org has an active subscription for development
+        await db.update(organizationSchema)
+          .set({ stripeSubscriptionStatus: 'active' })
+          .where(eq(organizationSchema.id, specificOrgId));
       }
       organizations = [{ id: specificOrgId }];
     } else {

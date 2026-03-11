@@ -9,9 +9,16 @@ import { AppSidebarNav } from '@/features/dashboard/AppSidebarNav';
 import { OrganizationSelector } from '@/features/dashboard/OrganizationSelector';
 import { Logo } from '@/templates/Logo';
 
-export const AppSidebar = (props: React.ComponentProps<typeof Sidebar>) => {
+type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
+  userRole?: string;
+};
+
+const MANAGEMENT_ROLES = new Set(['org:admin', 'org:academy_owner']);
+
+export const AppSidebar = ({ userRole, ...props }: AppSidebarProps) => {
   const t = useTranslations('DashboardLayout');
   const { signOut } = useClerk();
+  const isManager = !userRole || MANAGEMENT_ROLES.has(userRole);
 
   return (
     <Sidebar {...props}>
@@ -35,21 +42,25 @@ export const AppSidebar = (props: React.ComponentProps<typeof Sidebar>) => {
               title: t('reports'),
               url: '/dashboard/reports',
               icon: BarChart3,
+              hidden: !isManager,
             },
             {
               title: t('transactions'),
               url: '/dashboard/transactions',
               icon: Briefcase,
+              hidden: !isManager,
             },
             {
               title: t('marketing'),
               url: '/dashboard/marketing',
               icon: Megaphone,
+              hidden: !isManager,
             },
             {
               title: t('catalog'),
               url: '/dashboard/catalog',
               icon: Package,
+              hidden: !isManager,
             },
           ]}
         />
@@ -65,6 +76,7 @@ export const AppSidebar = (props: React.ComponentProps<typeof Sidebar>) => {
               title: t('waivers'),
               url: '/dashboard/waivers',
               icon: FileSignature,
+              hidden: !isManager,
             },
             {
               title: t('memberships'),
@@ -85,11 +97,13 @@ export const AppSidebar = (props: React.ComponentProps<typeof Sidebar>) => {
               title: t('roles'),
               url: '/dashboard/roles',
               icon: CircleUser,
+              hidden: !isManager,
             },
             {
               title: t('staff'),
               url: '/dashboard/staff',
               icon: Users2,
+              hidden: !isManager,
             },
             {
               title: t('messaging'),

@@ -68,7 +68,7 @@ function callHandler(handler: unknown, input?: unknown) {
 const mockContext: AuditContext = {
   userId: 'test-user-123',
   orgId: 'test-org-456',
-  role: ORG_ROLE.ADMIN,
+  role: ORG_ROLE.ACADEMY_OWNER,
 };
 
 const mockFrontDeskContext: AuditContext = {
@@ -330,7 +330,7 @@ describe('Waivers Router', () => {
       const { createTemplate } = await import('./Waivers');
       const result = await callHandler(createTemplate, createInput);
 
-      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ADMIN);
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
       expect(createWaiverTemplate).toHaveBeenCalledWith(createInput, 'test-org-456');
       expect(audit).toHaveBeenCalledWith(
         mockContext,
@@ -407,7 +407,7 @@ describe('Waivers Router', () => {
       const { updateTemplate } = await import('./Waivers');
       const result = await callHandler(updateTemplate, updateInput);
 
-      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ADMIN);
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
       expect(updateWaiverTemplate).toHaveBeenCalledWith(updateInput, 'test-org-456');
       expect(audit).toHaveBeenCalledTimes(1);
       expect(audit).toHaveBeenCalledWith(
@@ -511,7 +511,7 @@ describe('Waivers Router', () => {
       const { deleteTemplate } = await import('./Waivers');
       const result = await callHandler(deleteTemplate, deleteInput);
 
-      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ADMIN);
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
       expect(deleteWaiverTemplate).toHaveBeenCalledWith('template-1', 'test-org-456');
       expect(audit).toHaveBeenCalledWith(
         mockContext,
@@ -985,7 +985,7 @@ describe('Waivers Router', () => {
       const { setMembershipWaiverAssociations } = await import('./Waivers');
       const result = await callHandler(setMembershipWaiverAssociations, setInput);
 
-      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ADMIN);
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
       expect(setMembershipPlanWaivers).toHaveBeenCalledWith('plan-1', ['template-1', 'template-2']);
       expect(audit).toHaveBeenCalledWith(
         mockContext,
@@ -1063,7 +1063,7 @@ describe('Waivers Router', () => {
       const { addWaiverToMembership } = await import('./Waivers');
       const result = await callHandler(addWaiverToMembership, addInput);
 
-      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ADMIN);
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
       expect(addWaiverToMembershipPlan).toHaveBeenCalledWith('plan-1', 'template-1', true);
       expect(audit).toHaveBeenCalledWith(
         mockContext,
@@ -1140,7 +1140,7 @@ describe('Waivers Router', () => {
       const { removeWaiverFromMembership } = await import('./Waivers');
       const result = await callHandler(removeWaiverFromMembership, removeInput);
 
-      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ADMIN);
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
       expect(removeWaiverFromMembershipPlan).toHaveBeenCalledWith('plan-1', 'template-1');
       expect(audit).toHaveBeenCalledWith(
         mockContext,
@@ -1329,7 +1329,7 @@ describe('Waivers Router', () => {
       const { createMergeFieldHandler } = await import('./Waivers');
       const result = await callHandler(createMergeFieldHandler, createMergeFieldInput);
 
-      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ADMIN);
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
       expect(createMergeField).toHaveBeenCalledWith(createMergeFieldInput, 'test-org-456');
       expect(audit).toHaveBeenCalledWith(
         mockContext,
@@ -1408,7 +1408,7 @@ describe('Waivers Router', () => {
       const { updateMergeFieldHandler } = await import('./Waivers');
       const result = await callHandler(updateMergeFieldHandler, updateMergeFieldInput);
 
-      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ADMIN);
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
       // The router destructures { id, ...updateData } and passes updateData
       expect(updateMergeField).toHaveBeenCalledWith(
         'merge-field-1',
@@ -1487,7 +1487,7 @@ describe('Waivers Router', () => {
       const { deleteMergeFieldHandler } = await import('./Waivers');
       const result = await callHandler(deleteMergeFieldHandler, deleteMergeFieldInput);
 
-      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ADMIN);
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
       expect(deleteMergeField).toHaveBeenCalledWith('merge-field-1', 'test-org-456');
       expect(audit).toHaveBeenCalledWith(
         mockContext,

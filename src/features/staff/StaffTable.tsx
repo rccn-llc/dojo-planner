@@ -25,6 +25,8 @@ type StaffMember = {
 
 type StaffTableProps = {
   staffMembers: StaffMember[];
+  currentUserRole?: string;
+  currentUserId?: string;
   headerActions?: React.ReactNode;
   onEditStaff?: (staffMember: StaffMemberData) => void;
   onRemoveStaff?: (staffId: string) => void;
@@ -35,6 +37,8 @@ type SortDirection = 'asc' | 'desc';
 
 export function StaffTable({
   staffMembers,
+  currentUserRole,
+  currentUserId,
   headerActions,
   onEditStaff,
   onRemoveStaff,
@@ -146,6 +150,24 @@ export function StaffTable({
     return `${firstName[0]}${lastName[0]}`.toUpperCase();
   };
 
+  const formatRole = (role: string): string => {
+    const roleMap: Record<string, string> = {
+      'org:admin': 'Admin',
+      'org:academy_owner': 'Academy Owner',
+      'org:front_desk': 'Front Desk',
+      'org:member': 'Member',
+      'org:individual_member': 'Individual Member',
+    };
+    if (roleMap[role]) {
+      return roleMap[role];
+    }
+    return role
+      .replace(/^org:/, '')
+      .split(/[_-]/)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
   const getRoleVariant = (role: string): 'default' | 'secondary' | 'destructive' | 'outline' => {
     if (role === 'org:admin') {
       return 'default';
@@ -155,6 +177,16 @@ export function StaffTable({
 
   const getStatusVariant = (): 'default' | 'secondary' | 'destructive' | 'outline' => {
     return 'outline';
+  };
+
+  const canManageStaff = (staff: StaffMember) => {
+    if (staff.id === currentUserId) {
+      return false;
+    }
+    if (currentUserRole === 'org:admin') {
+      return true;
+    }
+    return staff.role !== 'org:admin';
   };
 
   // Determine if we should show "no results" vs "no staff members"
@@ -249,7 +281,7 @@ export function StaffTable({
                           </td>
                           <td className="px-6 py-4">
                             <Badge variant={getRoleVariant(staff.role)}>
-                              {staff.role === 'org:admin' ? 'Admin' : staff.role}
+                              {formatRole(staff.role)}
                             </Badge>
                           </td>
                           <td className="px-6 py-4">
@@ -258,26 +290,28 @@ export function StaffTable({
                             </Badge>
                           </td>
                           <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleEditStaff(staff)}
-                                aria-label={`Edit ${staff.firstName} ${staff.lastName}`}
-                                title={`Edit ${staff.firstName} ${staff.lastName}`}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => handleRemoveStaff(staff.id)}
-                                aria-label={`Remove ${staff.firstName} ${staff.lastName}`}
-                                title={`Remove ${staff.firstName} ${staff.lastName}`}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
+                            {canManageStaff(staff) && (
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleEditStaff(staff)}
+                                  aria-label={`Edit ${staff.firstName} ${staff.lastName}`}
+                                  title={`Edit ${staff.firstName} ${staff.lastName}`}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => handleRemoveStaff(staff.id)}
+                                  aria-label={`Remove ${staff.firstName} ${staff.lastName}`}
+                                  title={`Remove ${staff.firstName} ${staff.lastName}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -307,8 +341,8 @@ export function StaffTable({
                     emailAddress={staff.emailAddress}
                     role={staff.role}
                     status={staff.status}
-                    onEdit={() => handleEditStaff(staff)}
-                    onRemove={handleRemoveStaff}
+                    onEdit={canManageStaff(staff) ? () => handleEditStaff(staff) : undefined}
+                    onRemove={canManageStaff(staff) ? handleRemoveStaff : undefined}
                   />
                 ))
               )}

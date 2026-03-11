@@ -33,6 +33,31 @@ const mockStaffMembers = [
   },
 ];
 
+const mockMixedRoleStaff = [
+  {
+    id: 'user_1',
+    firstName: 'Charlie',
+    lastName: 'Baptista',
+    email: 'charlie@dojo.com',
+    photoUrl: null,
+    emailAddress: 'charlie@dojo.com',
+    role: 'org:admin',
+    status: 'Active' as const,
+    phone: null,
+  },
+  {
+    id: 'user_2',
+    firstName: 'Sarah',
+    lastName: 'Owner',
+    email: 'sarah@dojo.com',
+    photoUrl: null,
+    emailAddress: 'sarah@dojo.com',
+    role: 'org:academy_owner',
+    status: 'Active' as const,
+    phone: null,
+  },
+];
+
 describe('Staff Page', () => {
   const mockOnEditStaff = vi.fn();
   const mockOnRemoveStaff = vi.fn();
@@ -108,6 +133,8 @@ describe('Staff Page', () => {
     render(
       <StaffTable
         staffMembers={mockStaffMembers}
+        currentUserRole="org:admin"
+        currentUserId="other_user"
         onEditStaff={mockOnEditStaff}
         onRemoveStaff={mockOnRemoveStaff}
         headerActions={<div>Actions</div>}
@@ -122,5 +149,91 @@ describe('Staff Page', () => {
     const removeCharlieButton = page.getByRole('button', { name: /Remove Charlie Baptista/i }).first();
 
     await expect.element(removeCharlieButton).toBeVisible();
+  });
+
+  it('admin can edit and remove all staff members', async () => {
+    render(
+      <StaffTable
+        staffMembers={mockMixedRoleStaff}
+        currentUserRole="org:admin"
+        currentUserId="other_user"
+        onEditStaff={mockOnEditStaff}
+        onRemoveStaff={mockOnRemoveStaff}
+        headerActions={<div>Actions</div>}
+      />,
+    );
+
+    const table = page.getByRole('table');
+
+    await expect.element(table.getByRole('button', { name: /Edit Charlie Baptista/i })).toBeVisible();
+
+    await expect.element(table.getByRole('button', { name: /Remove Charlie Baptista/i })).toBeVisible();
+
+    await expect.element(table.getByRole('button', { name: /Edit Sarah Owner/i })).toBeVisible();
+
+    await expect.element(table.getByRole('button', { name: /Remove Sarah Owner/i })).toBeVisible();
+  });
+
+  it('academy owner cannot edit or remove admin staff', async () => {
+    render(
+      <StaffTable
+        staffMembers={mockMixedRoleStaff}
+        currentUserRole="org:academy_owner"
+        currentUserId="other_user"
+        onEditStaff={mockOnEditStaff}
+        onRemoveStaff={mockOnRemoveStaff}
+        headerActions={<div>Actions</div>}
+      />,
+    );
+
+    const table = page.getByRole('table');
+
+    await expect.element(table.getByRole('button', { name: /Edit Charlie Baptista/i })).not.toBeInTheDocument();
+
+    await expect.element(table.getByRole('button', { name: /Remove Charlie Baptista/i })).not.toBeInTheDocument();
+  });
+
+  it('academy owner can edit and remove non-admin staff', async () => {
+    render(
+      <StaffTable
+        staffMembers={mockMixedRoleStaff}
+        currentUserRole="org:academy_owner"
+        currentUserId="other_user"
+        onEditStaff={mockOnEditStaff}
+        onRemoveStaff={mockOnRemoveStaff}
+        headerActions={<div>Actions</div>}
+      />,
+    );
+
+    const table = page.getByRole('table');
+
+    await expect.element(table.getByRole('button', { name: /Edit Sarah Owner/i })).toBeVisible();
+
+    await expect.element(table.getByRole('button', { name: /Remove Sarah Owner/i })).toBeVisible();
+  });
+
+  it('user cannot edit or remove themselves', async () => {
+    render(
+      <StaffTable
+        staffMembers={mockMixedRoleStaff}
+        currentUserRole="org:admin"
+        currentUserId="user_1"
+        onEditStaff={mockOnEditStaff}
+        onRemoveStaff={mockOnRemoveStaff}
+        headerActions={<div>Actions</div>}
+      />,
+    );
+
+    const table = page.getByRole('table');
+
+    // Charlie (user_1) is the current user — no edit/remove buttons
+    await expect.element(table.getByRole('button', { name: /Edit Charlie Baptista/i })).not.toBeInTheDocument();
+
+    await expect.element(table.getByRole('button', { name: /Remove Charlie Baptista/i })).not.toBeInTheDocument();
+
+    // Sarah (user_2) is a different user — edit/remove buttons visible
+    await expect.element(table.getByRole('button', { name: /Edit Sarah Owner/i })).toBeVisible();
+
+    await expect.element(table.getByRole('button', { name: /Remove Sarah Owner/i })).toBeVisible();
   });
 });

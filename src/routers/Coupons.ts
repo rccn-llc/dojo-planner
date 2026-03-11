@@ -4,7 +4,7 @@ import { ORG_ROLE } from '@/types/Auth';
 import { guardRole } from './AuthGuards';
 
 export const list = os.handler(async () => {
-  const { orgId } = await guardRole(ORG_ROLE.ADMIN);
+  const { orgId } = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
   const coupons = await getOrganizationCoupons(orgId);
 

@@ -101,14 +101,6 @@ vi.mock('next-intl', () => ({
         two_factor_enabled_status: 'Enabled',
         disable_2fa_button: 'Remove 2FA',
       },
-      LocationSettings: {
-        location_title: 'Location',
-        address_label: 'Address:',
-        phone_label: 'Phone:',
-        email_label: 'Email:',
-        status_label: 'Status:',
-        active_status: 'Active',
-      },
     };
     return translations[namespace]?.[key] || key;
   },
@@ -223,39 +215,6 @@ describe('ManageProfileDialog', () => {
 
     // The avatar fallback should contain initials JD
     expect(page.getByText('JD')).toBeDefined();
-  });
-
-  it('should render location card section', () => {
-    render(<ManageProfileDialog open onOpenChange={() => {}} />);
-
-    expect(page.getByText('Location')).toBeDefined();
-  });
-
-  it('should display location details', () => {
-    render(<ManageProfileDialog open onOpenChange={() => {}} />);
-
-    // Location card should display mock location data
-    expect(page.getByText('123 Main St. San Francisco. CA')).toBeDefined();
-    expect(page.getByText('(415) 555-0123')).toBeDefined();
-    expect(page.getByText('downtown@example.com')).toBeDefined();
-  });
-
-  it('should render location card between profile and 2FA sections', () => {
-    render(<ManageProfileDialog open onOpenChange={() => {}} />);
-
-    // All three sections should be visible
-    expect(page.getByText('Manage Profile')).toBeDefined();
-    expect(page.getByText('Location')).toBeDefined();
-    expect(page.getByText('2-Factor Authentication (2FA)')).toBeDefined();
-  });
-
-  it('should render edit button for location card', () => {
-    render(<ManageProfileDialog open onOpenChange={() => {}} />);
-
-    // There should be multiple edit buttons (profile and location)
-    const editButtons = page.getByRole('button', { name: /edit/i }).elements();
-
-    expect(editButtons.length).toBeGreaterThanOrEqual(1);
   });
 
   it('should show edit profile form when edit button is clicked', async () => {

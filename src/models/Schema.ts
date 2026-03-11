@@ -30,6 +30,17 @@ export const organizationSchema = pgTable(
       'stripe_subscription_current_period_end',
       { mode: 'number' },
     ),
+    // IQPro SaaS subscription fields
+    iqproCustomerId: text('iqpro_customer_id'),
+    iqproSubscriptionId: text('iqpro_subscription_id'),
+    iqproSubscriptionPlanId: text('iqpro_subscription_plan_id'),
+    iqproBillingCycle: text('iqpro_billing_cycle'),
+    iqproSubscriptionStatus: text('iqpro_subscription_status'),
+    iqproCurrentPeriodEnd: bigint(
+      'iqpro_current_period_end',
+      { mode: 'number' },
+    ),
+    iqproPaymentMethodId: text('iqpro_payment_method_id'),
     updatedAt: timestamp('updated_at', { mode: 'date' })
       .defaultNow()
       .$onUpdate(() => new Date())
@@ -38,6 +49,7 @@ export const organizationSchema = pgTable(
   },
   table => [
     uniqueIndex('stripe_customer_id_idx').on(table.stripeCustomerId),
+    uniqueIndex('iqpro_customer_id_idx').on(table.iqproCustomerId),
   ],
 );
 

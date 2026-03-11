@@ -71,7 +71,7 @@ describe('Payment Router', () => {
       const { processPayment } = await import('./Payment');
       const result = await callHandler(processPayment, baseInput);
 
-      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ADMIN);
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
       expect(processMemberPayment).toHaveBeenCalledWith({
         organizationId: 'test-org-456',
         ...baseInput,
@@ -346,7 +346,7 @@ describe('Payment Router', () => {
       const { registerPaymentMethod } = await import('./Payment');
       const result = await callHandler(registerPaymentMethod, registerInput);
 
-      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ADMIN);
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
       expect(registerService).toHaveBeenCalledWith({
         organizationId: 'test-org-456',
         ...registerInput,
