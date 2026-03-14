@@ -1,8 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { page, userEvent } from 'vitest/browser';
 import { I18nWrapper } from '@/lib/test-utils';
 import ProgramsPage from './page';
+
+// Mock Clerk with ACADEMY_OWNER role so edit/add/delete buttons are visible
+vi.mock('@clerk/nextjs', () => ({
+  useOrganization: () => ({
+    organization: { id: 'test-org-123' },
+    membership: { role: 'org:academy_owner' },
+  }),
+}));
 
 describe('Programs Page', () => {
   describe('Page Layout', () => {

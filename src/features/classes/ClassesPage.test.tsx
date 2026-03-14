@@ -21,9 +21,12 @@ vi.mock('next/navigation', () => ({
   }),
 }));
 
-// Mock Clerk
+// Mock Clerk with ACADEMY_OWNER role so edit/add/manage-tags buttons are visible
 vi.mock('@clerk/nextjs', () => ({
-  useOrganization: () => ({ organization: { id: 'test-org-123' } }),
+  useOrganization: () => ({
+    organization: { id: 'test-org-123' },
+    membership: { role: 'org:academy_owner' },
+  }),
 }));
 
 // Mock classes data that will transform to expected UI values
