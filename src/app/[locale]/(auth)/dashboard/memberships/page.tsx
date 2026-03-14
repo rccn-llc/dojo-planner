@@ -13,9 +13,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { MembershipFilterBar } from '@/features/memberships/MembershipFilterBar';
 import { MembershipTagsManagement } from '@/features/memberships/MembershipTagsManagement';
 import { AddMembershipModal } from '@/features/memberships/wizard/AddMembershipModal';
+import { useHasRole } from '@/hooks/useHasRole';
 import { invalidateMembershipPlansCache, useMembershipPlansCache } from '@/hooks/useMembershipPlansCache';
 import { MembershipCard } from '@/templates/MembershipCard';
 import { StatsCards } from '@/templates/StatsCards';
+import { ORG_ROLE } from '@/types/Auth';
 
 type Membership = {
   id: string;
@@ -85,6 +87,7 @@ function transformPlanToMembership(plan: MembershipPlanData): Membership {
 
 export default function MembershipsPage() {
   const t = useTranslations('MembershipsPage');
+  const canEdit = useHasRole(ORG_ROLE.ACADEMY_OWNER);
   const router = useRouter();
   const { organization } = useOrganization();
   const { plans, loading } = useMembershipPlansCache(organization?.id);
@@ -255,10 +258,12 @@ export default function MembershipsPage() {
       {/* Header */}
       <div className="flex items-center gap-4">
         <h1 className="text-3xl font-bold text-foreground">{t('title')}</h1>
-        <Button variant="outline" onClick={() => setIsTagsSheetOpen(true)}>
-          <Tags className="mr-1 size-4" />
-          {t('manage_tags_button')}
-        </Button>
+        {canEdit && (
+          <Button variant="outline" onClick={() => setIsTagsSheetOpen(true)}>
+            <Tags className="mr-1 size-4" />
+            {t('manage_tags_button')}
+          </Button>
+        )}
       </div>
 
       {/* Filter Bar and Add Button */}
@@ -275,10 +280,12 @@ export default function MembershipsPage() {
           </div>
 
           {/* Add New Membership Button */}
-          <Button onClick={() => setIsAddMembershipModalOpen(true)}>
-            <Plus className="h-4 w-4" />
-            <span className="ml-1 hidden sm:inline">{t('add_new_membership_button')}</span>
-          </Button>
+          {canEdit && (
+            <Button onClick={() => setIsAddMembershipModalOpen(true)}>
+              <Plus className="h-4 w-4" />
+              <span className="ml-1 hidden sm:inline">{t('add_new_membership_button')}</span>
+            </Button>
+          )}
         </div>
       </div>
 

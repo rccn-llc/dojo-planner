@@ -25,7 +25,7 @@ type ClassScheduleCardProps = {
   scheduleExceptions?: ScheduleException[];
   location: string;
   calendarColor: string;
-  onEdit: () => void;
+  onEdit?: () => void;
   onEditInstance?: (instance: ScheduleInstance, date: string, existingException?: ScheduleException) => void;
 };
 
@@ -393,11 +393,13 @@ export function ClassScheduleCard({
           </div>
         </div>
 
-        <div className="mt-6 flex justify-end">
-          <Button variant="outline" size="icon" onClick={onEdit} data-testid="edit-schedule-button">
-            <Edit className="h-4 w-4" />
-          </Button>
-        </div>
+        {onEdit && (
+          <div className="mt-6 flex justify-end">
+            <Button variant="outline" size="icon" onClick={onEdit} data-testid="edit-schedule-button">
+              <Edit className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
       </Card>
     </TooltipProvider>
   );

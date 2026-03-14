@@ -27,8 +27,10 @@ import { MembershipBasicsCard } from '@/features/memberships/details/MembershipB
 import { MembershipContractTermsCard } from '@/features/memberships/details/MembershipContractTermsCard';
 import { MembershipPaymentDetailsCard } from '@/features/memberships/details/MembershipPaymentDetailsCard';
 import { MembershipStatsCard } from '@/features/memberships/details/MembershipStatsCard';
+import { useHasRole } from '@/hooks/useHasRole';
 import { useMembershipPlansCache } from '@/hooks/useMembershipPlansCache';
 import { client } from '@/libs/Orpc';
+import { ORG_ROLE } from '@/types/Auth';
 
 // Membership data type matching the wizard data structure
 export type MembershipDetailData = {
@@ -133,6 +135,7 @@ type PageParams = {
 export default function MembershipDetailPage({ params }: { params: Promise<PageParams> }) {
   const resolvedParams = use(params);
   const t = useTranslations('MembershipDetailPage');
+  const canEdit = useHasRole(ORG_ROLE.ACADEMY_OWNER);
   const router = useRouter();
   const { organization } = useOrganization();
   const { plans, loading } = useMembershipPlansCache(organization?.id);
@@ -289,7 +292,7 @@ export default function MembershipDetailPage({ params }: { params: Promise<PageP
           status={membershipData.status}
           membershipType={membershipData.membershipType}
           description={membershipData.description}
-          onEdit={() => setIsEditBasicsOpen(true)}
+          onEdit={canEdit ? () => setIsEditBasicsOpen(true) : undefined}
         />
 
         {/* Associated Program/Waiver Card */}
@@ -298,7 +301,7 @@ export default function MembershipDetailPage({ params }: { params: Promise<PageP
           associatedProgramName={membershipData.associatedProgramName}
           associatedWaiverId={membershipData.associatedWaiverId}
           associatedWaiverName={membershipData.associatedWaiverName}
-          onEdit={() => setIsEditAssociatedProgramOpen(true)}
+          onEdit={canEdit ? () => setIsEditAssociatedProgramOpen(true) : undefined}
         />
 
         {/* Payment Details Card */}
@@ -309,7 +312,7 @@ export default function MembershipDetailPage({ params }: { params: Promise<PageP
           paymentFrequency={membershipData.paymentFrequency}
           proRateFirstPayment={membershipData.proRateFirstPayment}
           isTrial={isTrial}
-          onEdit={() => setIsEditPaymentOpen(true)}
+          onEdit={canEdit ? () => setIsEditPaymentOpen(true) : undefined}
         />
 
         {/* Contract Terms Card */}
@@ -318,7 +321,7 @@ export default function MembershipDetailPage({ params }: { params: Promise<PageP
           autoRenewal={membershipData.autoRenewal}
           cancellationFee={membershipData.cancellationFee}
           holdLimitPerYear={membershipData.holdLimitPerYear}
-          onEdit={() => setIsEditContractOpen(true)}
+          onEdit={canEdit ? () => setIsEditContractOpen(true) : undefined}
         />
       </div>
 
@@ -376,8 +379,8 @@ export default function MembershipDetailPage({ params }: { params: Promise<PageP
         }}
       />
 
-      {/* Delete Button - only shown if inactive and no members */}
-      {canDelete && (
+      {/* Delete Button - only shown if inactive, no members, and user can edit */}
+      {canEdit && canDelete && (
         <div className="flex justify-end">
           <Button
             variant="destructive"

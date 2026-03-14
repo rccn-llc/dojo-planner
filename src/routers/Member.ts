@@ -16,7 +16,7 @@ import { guardAuth, guardRole } from './AuthGuards';
 export const create = os
   .input(MemberValidation)
   .handler(async ({ input }) => {
-    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
+    const context = await guardRole(ORG_ROLE.FRONT_DESK);
 
     try {
       // Create the member record in the database with a generated UUID
@@ -303,7 +303,7 @@ const ChangeMembershipValidation = z.object({
 export const addMembership = os
   .input(AddMembershipValidation)
   .handler(async ({ input }) => {
-    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
+    const context = await guardRole(ORG_ROLE.FRONT_DESK);
 
     try {
       const result = await addMemberMembership(input.memberId, input.membershipPlanId);
@@ -374,7 +374,7 @@ export const changeMembership = os
 
 export const listMembershipPlans = os
   .handler(async () => {
-    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
+    const context = await guardRole(ORG_ROLE.FRONT_DESK);
 
     try {
       const plans = await getMembershipPlans(context.orgId);
@@ -388,7 +388,7 @@ export const listMembershipPlans = os
 
 export const listAllMembershipPlans = os
   .handler(async () => {
-    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
+    const context = await guardRole(ORG_ROLE.FRONT_DESK);
 
     try {
       const plans = await getAllMembershipPlans(context.orgId);
@@ -421,7 +421,7 @@ export const listMemberTransactions = os
 export const searchHOH = os
   .input(SearchHOHValidation)
   .handler(async ({ input }) => {
-    const { orgId } = await guardRole(ORG_ROLE.ACADEMY_OWNER);
+    const { orgId } = await guardRole(ORG_ROLE.FRONT_DESK);
     const hohMembers = await getHeadOfHouseholdMembers(orgId);
 
     if (input.query && input.query.trim()) {
@@ -439,7 +439,7 @@ export const searchHOH = os
 export const linkFamily = os
   .input(LinkFamilyMemberValidation)
   .handler(async ({ input }) => {
-    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
+    const context = await guardRole(ORG_ROLE.FRONT_DESK);
 
     try {
       await linkFamilyMember(input.hohMemberId, input.memberId, input.relationship);
@@ -478,7 +478,7 @@ export const listFamily = os
 export const getHOHPaymentMethods = os
   .input(GetHOHPaymentMethodsValidation)
   .handler(async ({ input }) => {
-    await guardRole(ORG_ROLE.ACADEMY_OWNER);
+    await guardRole(ORG_ROLE.FRONT_DESK);
     const paymentMethods = await getMemberPaymentMethods(input.hohMemberId);
     return { paymentMethods };
   });
@@ -525,7 +525,7 @@ export const getHOHForMember = os
 export const sendConfirmationEmail = os
   .input(SendConfirmationEmailValidation)
   .handler(async ({ input }) => {
-    await guardRole(ORG_ROLE.ACADEMY_OWNER);
+    await guardRole(ORG_ROLE.FRONT_DESK);
 
     try {
       // Generate waiver PDF server-side if data provided
