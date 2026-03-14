@@ -20,6 +20,8 @@ import { EditClassScheduleModal } from '@/features/classes/details/EditClassSche
 import { EditClassSettingsModal } from '@/features/classes/details/EditClassSettingsModal';
 import { EditScheduleInstanceModal } from '@/features/classes/details/EditScheduleInstanceModal';
 import { useClassesCache } from '@/hooks/useClassesCache';
+import { useHasRole } from '@/hooks/useHasRole';
+import { ORG_ROLE } from '@/types/Auth';
 
 export type ClassLevel = 'Beginner' | 'Intermediate' | 'Advanced' | 'All Levels';
 export type ClassType = 'Adults' | 'Kids' | 'Women' | 'Open' | 'Competition';
@@ -161,6 +163,7 @@ type InstanceEditState = {
 export default function ClassDetailPage({ params }: { params: Promise<PageParams> }) {
   const resolvedParams = use(params);
   const t = useTranslations('ClassDetailPage');
+  const canEdit = useHasRole(ORG_ROLE.ACADEMY_OWNER);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { organization } = useOrganization();
@@ -322,7 +325,7 @@ export default function ClassDetailPage({ params }: { params: Promise<PageParams
             level={classData.level}
             type={classData.type}
             style={classData.style}
-            onEdit={() => setIsEditBasicsOpen(true)}
+            onEdit={canEdit ? () => setIsEditBasicsOpen(true) : undefined}
           />
 
           {/* Settings Card */}
@@ -330,7 +333,7 @@ export default function ClassDetailPage({ params }: { params: Promise<PageParams
             maximumCapacity={classData.maximumCapacity}
             minimumAge={classData.minimumAge}
             allowWalkIns={classData.allowWalkIns}
-            onEdit={() => setIsEditSettingsOpen(true)}
+            onEdit={canEdit ? () => setIsEditSettingsOpen(true) : undefined}
           />
         </div>
 
@@ -340,8 +343,8 @@ export default function ClassDetailPage({ params }: { params: Promise<PageParams
           scheduleExceptions={classData.scheduleExceptions}
           location={classData.location}
           calendarColor={classData.calendarColor}
-          onEdit={() => setIsEditScheduleOpen(true)}
-          onEditInstance={handleEditInstance}
+          onEdit={canEdit ? () => setIsEditScheduleOpen(true) : undefined}
+          onEditInstance={canEdit ? handleEditInstance : undefined}
         />
       </div>
 
@@ -401,15 +404,17 @@ export default function ClassDetailPage({ params }: { params: Promise<PageParams
       )}
 
       {/* Delete Button */}
-      <div className="flex justify-end">
-        <Button
-          variant="destructive"
-          onClick={() => setIsDeleteDialogOpen(true)}
-        >
-          <Trash2 className="mr-2 h-4 w-4" />
-          {t('delete_button')}
-        </Button>
-      </div>
+      {canEdit && (
+        <div className="flex justify-end">
+          <Button
+            variant="destructive"
+            onClick={() => setIsDeleteDialogOpen(true)}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            {t('delete_button')}
+          </Button>
+        </div>
+      )}
 
       {/* Delete Confirmation Dialog */}
       <DeleteClassAlertDialog

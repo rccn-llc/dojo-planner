@@ -28,7 +28,7 @@ vi.mock('@/libs/IQPro', () => ({
 const mockContext: AuditContext = {
   userId: 'test-user-123',
   orgId: 'test-org-456',
-  role: 'org:admin',
+  role: ORG_ROLE.FRONT_DESK,
 };
 
 const baseInput = {
@@ -71,7 +71,7 @@ describe('Payment Router', () => {
       const { processPayment } = await import('./Payment');
       const result = await callHandler(processPayment, baseInput);
 
-      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
       expect(processMemberPayment).toHaveBeenCalledWith({
         organizationId: 'test-org-456',
         ...baseInput,
@@ -346,7 +346,7 @@ describe('Payment Router', () => {
       const { registerPaymentMethod } = await import('./Payment');
       const result = await callHandler(registerPaymentMethod, registerInput);
 
-      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
       expect(registerService).toHaveBeenCalledWith({
         organizationId: 'test-org-456',
         ...registerInput,

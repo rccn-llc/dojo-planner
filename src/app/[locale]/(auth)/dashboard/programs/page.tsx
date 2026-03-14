@@ -10,8 +10,10 @@ import { Button } from '@/components/ui/button';
 import { AddEditProgramModal } from '@/features/programs/AddEditProgramModal';
 import { DeleteProgramAlertDialog } from '@/features/programs/DeleteProgramAlertDialog';
 import { ProgramFilterBar } from '@/features/programs/ProgramFilterBar';
+import { useHasRole } from '@/hooks/useHasRole';
 import { ProgramCard } from '@/templates/ProgramCard';
 import { StatsCards } from '@/templates/StatsCards';
+import { ORG_ROLE } from '@/types/Auth';
 
 type Program = {
   id: string;
@@ -67,6 +69,7 @@ const initialMockPrograms: Program[] = [
 
 export default function ProgramsPage() {
   const t = useTranslations('ProgramsPage');
+  const canEdit = useHasRole(ORG_ROLE.ACADEMY_OWNER);
   const [filters, setFilters] = useState<ProgramFilters>({
     search: '',
     status: 'all',
@@ -193,10 +196,12 @@ export default function ProgramsPage() {
           />
         </div>
 
-        <Button onClick={handleAddProgram}>
-          <Plus className="h-4 w-4" />
-          <span className="ml-1 hidden sm:inline">{t('add_new_program_button')}</span>
-        </Button>
+        {canEdit && (
+          <Button onClick={handleAddProgram}>
+            <Plus className="h-4 w-4" />
+            <span className="ml-1 hidden sm:inline">{t('add_new_program_button')}</span>
+          </Button>
+        )}
       </div>
 
       {/* Programs Grid */}
@@ -216,9 +221,9 @@ export default function ProgramsPage() {
                   classCount: program.classCount,
                   classNames: program.classNames,
                   status: program.status,
-                  onEdit: handleEditProgram,
-                  // Only pass onDelete if the program has no classes
-                  onDelete: program.classCount === 0 ? handleDeleteProgram : undefined,
+                  onEdit: canEdit ? handleEditProgram : undefined,
+                  // Only pass onDelete if the program has no classes and user can edit
+                  onDelete: canEdit && program.classCount === 0 ? handleDeleteProgram : undefined,
                 };
 
                 return <ProgramCard key={program.id} {...cardProps} />;

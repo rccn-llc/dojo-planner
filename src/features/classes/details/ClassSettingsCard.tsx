@@ -11,7 +11,7 @@ type ClassSettingsCardProps = {
   maximumCapacity: number | null;
   minimumAge: number | null;
   allowWalkIns: AllowWalkIns;
-  onEdit: () => void;
+  onEdit?: () => void;
 };
 
 export function ClassSettingsCard({
@@ -52,11 +52,13 @@ export function ClassSettingsCard({
         </div>
       </div>
 
-      <div className="mt-6 flex justify-end">
-        <Button variant="outline" size="icon" onClick={onEdit}>
-          <Edit className="h-4 w-4" />
-        </Button>
-      </div>
+      {onEdit && (
+        <div className="mt-6 flex justify-end">
+          <Button variant="outline" size="icon" onClick={onEdit}>
+            <Edit className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
     </Card>
   );
 }

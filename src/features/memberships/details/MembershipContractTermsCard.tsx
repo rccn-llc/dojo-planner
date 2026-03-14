@@ -11,7 +11,7 @@ type MembershipContractTermsCardProps = {
   autoRenewal: AutoRenewalOption;
   cancellationFee: number | null;
   holdLimitPerYear: number | null;
-  onEdit: () => void;
+  onEdit?: () => void;
 };
 
 export function MembershipContractTermsCard({
@@ -75,11 +75,13 @@ export function MembershipContractTermsCard({
         </div>
       </div>
 
-      <div className="mt-6 flex justify-end">
-        <Button variant="outline" size="icon" onClick={onEdit}>
-          <Edit className="h-4 w-4" />
-        </Button>
-      </div>
+      {onEdit && (
+        <div className="mt-6 flex justify-end">
+          <Button variant="outline" size="icon" onClick={onEdit}>
+            <Edit className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
     </Card>
   );
 }

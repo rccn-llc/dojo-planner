@@ -13,9 +13,11 @@ import { ButtonGroupItem, ButtonGroupRoot } from '@/components/ui/button-group';
 import { Skeleton } from '@/components/ui/skeleton';
 import { invalidateClassesCache, useClassesCache } from '@/hooks/useClassesCache';
 import { invalidateEventsCache, useEventsCache } from '@/hooks/useEventsCache';
+import { useHasRole } from '@/hooks/useHasRole';
 import { ClassCard } from '@/templates/ClassCard';
 import { EventCard } from '@/templates/EventCard';
 import { StatsCards } from '@/templates/StatsCards';
+import { ORG_ROLE } from '@/types/Auth';
 import { transformClassesToCardProps, transformEventsToCardProps } from './classDataTransformers';
 import { ClassFilterBar } from './ClassFilterBar';
 import { ClassTagsManagement } from './ClassTagsManagement';
@@ -28,6 +30,7 @@ type ViewType = (typeof VALID_VIEWS)[number];
 
 export function ClassesPage() {
   const t = useTranslations('ClassesPage');
+  const canEdit = useHasRole(ORG_ROLE.ACADEMY_OWNER);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { organization } = useOrganization();
@@ -169,10 +172,12 @@ export function ClassesPage() {
       {/* Header */}
       <div className="flex items-center gap-4">
         <h1 className="text-3xl font-bold text-foreground">{t('title')}</h1>
-        <Button variant="outline" onClick={() => setIsTagsSheetOpen(true)}>
-          <Tags className="mr-1 size-4" />
-          {t('manage_tags_button')}
-        </Button>
+        {canEdit && (
+          <Button variant="outline" onClick={() => setIsTagsSheetOpen(true)}>
+            <Tags className="mr-1 size-4" />
+            {t('manage_tags_button')}
+          </Button>
+        )}
       </div>
 
       {/* Controls - Shown for all views */}
@@ -205,10 +210,12 @@ export function ClassesPage() {
             </ButtonGroupRoot>
 
             {/* Add New Class Button */}
-            <Button onClick={() => setIsAddClassModalOpen(true)}>
-              <Plus className="h-4 w-4" />
-              <span className="ml-1 hidden sm:inline">{t('add_new_class_button')}</span>
-            </Button>
+            {canEdit && (
+              <Button onClick={() => setIsAddClassModalOpen(true)}>
+                <Plus className="h-4 w-4" />
+                <span className="ml-1 hidden sm:inline">{t('add_new_class_button')}</span>
+              </Button>
+            )}
           </div>
         </div>
       </div>

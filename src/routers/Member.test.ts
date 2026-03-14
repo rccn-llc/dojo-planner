@@ -46,7 +46,7 @@ vi.mock('@/services/WaiverPdfService.server', () => ({
   generateWaiverPdfBuffer: vi.fn(),
 }));
 
-const mockContext: AuditContext = {
+const mockAcademyOwnerContext: AuditContext = {
   userId: 'test-user-123',
   orgId: 'test-org-456',
   role: ORG_ROLE.ACADEMY_OWNER,
@@ -80,13 +80,13 @@ describe('Member Router', () => {
       const { guardRole } = await import('./AuthGuards');
       const { getHeadOfHouseholdMembers } = await import('@/services/MembersService');
 
-      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
       vi.mocked(getHeadOfHouseholdMembers).mockResolvedValue(mockHOHMembers);
 
       const { searchHOH } = await import('./Member');
       const result = await callHandler(searchHOH, {});
 
-      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
       expect(getHeadOfHouseholdMembers).toHaveBeenCalledWith('test-org-456');
       expect(result).toEqual({ members: mockHOHMembers });
     });
@@ -95,7 +95,7 @@ describe('Member Router', () => {
       const { guardRole } = await import('./AuthGuards');
       const { getHeadOfHouseholdMembers } = await import('@/services/MembersService');
 
-      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
       vi.mocked(getHeadOfHouseholdMembers).mockResolvedValue(mockHOHMembers);
 
       const { searchHOH } = await import('./Member');
@@ -110,7 +110,7 @@ describe('Member Router', () => {
       const { guardRole } = await import('./AuthGuards');
       const { getHeadOfHouseholdMembers } = await import('@/services/MembersService');
 
-      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
       vi.mocked(getHeadOfHouseholdMembers).mockResolvedValue(mockHOHMembers);
 
       const { searchHOH } = await import('./Member');
@@ -125,7 +125,7 @@ describe('Member Router', () => {
       const { guardRole } = await import('./AuthGuards');
       const { getHeadOfHouseholdMembers } = await import('@/services/MembersService');
 
-      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
       vi.mocked(getHeadOfHouseholdMembers).mockResolvedValue(mockHOHMembers);
 
       const { searchHOH } = await import('./Member');
@@ -147,16 +147,16 @@ describe('Member Router', () => {
       const { linkFamilyMember } = await import('@/services/MembersService');
       const { audit } = await import('@/services/AuditService');
 
-      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
       vi.mocked(linkFamilyMember).mockResolvedValue(undefined as never);
 
       const { linkFamily } = await import('./Member');
       const result = await callHandler(linkFamily, linkInput);
 
-      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
       expect(linkFamilyMember).toHaveBeenCalledWith('hoh-member-123', 'family-member-456', 'child');
       expect(audit).toHaveBeenCalledWith(
-        mockContext,
+        mockFrontDeskContext,
         AUDIT_ACTION.FAMILY_MEMBER_LINK,
         AUDIT_ENTITY_TYPE.FAMILY_MEMBER,
         {
@@ -172,7 +172,7 @@ describe('Member Router', () => {
       const { linkFamilyMember } = await import('@/services/MembersService');
       const { audit } = await import('@/services/AuditService');
 
-      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
       vi.mocked(linkFamilyMember).mockRejectedValue(new Error('Database constraint violation'));
 
       const { linkFamily } = await import('./Member');
@@ -182,7 +182,7 @@ describe('Member Router', () => {
       );
 
       expect(audit).toHaveBeenCalledWith(
-        mockContext,
+        mockFrontDeskContext,
         AUDIT_ACTION.FAMILY_MEMBER_LINK,
         AUDIT_ENTITY_TYPE.FAMILY_MEMBER,
         {
@@ -199,7 +199,7 @@ describe('Member Router', () => {
 
       const orpcError = new ORPCError('Member not found', { status: 404 });
 
-      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
       vi.mocked(linkFamilyMember).mockRejectedValue(orpcError);
 
       const { linkFamily } = await import('./Member');
@@ -212,7 +212,7 @@ describe('Member Router', () => {
       const { linkFamilyMember } = await import('@/services/MembersService');
       const { audit } = await import('@/services/AuditService');
 
-      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
       vi.mocked(linkFamilyMember).mockRejectedValue('string error');
 
       const { linkFamily } = await import('./Member');
@@ -222,7 +222,7 @@ describe('Member Router', () => {
       );
 
       expect(audit).toHaveBeenCalledWith(
-        mockContext,
+        mockFrontDeskContext,
         AUDIT_ACTION.FAMILY_MEMBER_LINK,
         AUDIT_ENTITY_TYPE.FAMILY_MEMBER,
         {
@@ -266,13 +266,13 @@ describe('Member Router', () => {
         { id: 'pm-2', type: 'bank_transfer', lastFour: '6789', brand: null },
       ];
 
-      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
       vi.mocked(getMemberPaymentMethods).mockResolvedValue(mockPaymentMethods as never);
 
       const { getHOHPaymentMethods } = await import('./Member');
       const result = await callHandler(getHOHPaymentMethods, { hohMemberId: 'hoh-member-123' });
 
-      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
       expect(getMemberPaymentMethods).toHaveBeenCalledWith('hoh-member-123');
       expect(result).toEqual({ paymentMethods: mockPaymentMethods });
     });
@@ -293,13 +293,13 @@ describe('Member Router', () => {
       const { guardRole } = await import('./AuthGuards');
       const { sendMemberConfirmationEmail } = await import('@/services/EmailService');
 
-      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
       vi.mocked(sendMemberConfirmationEmail).mockResolvedValue(true);
 
       const { sendConfirmationEmail } = await import('./Member');
       const result = await callHandler(sendConfirmationEmail, baseEmailInput);
 
-      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
       expect(sendMemberConfirmationEmail).toHaveBeenCalledWith({
         memberEmail: 'member@test.com',
         memberName: 'John Doe',
@@ -323,7 +323,7 @@ describe('Member Router', () => {
       const mockBuffer = Buffer.from('mock-pdf-content');
       const mockFilename = 'waiver_Doe_John_2025-01-15.pdf';
 
-      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
       vi.mocked(generateWaiverPdfBuffer).mockReturnValue(mockBuffer);
       vi.mocked(generatePdfFilename).mockReturnValue(mockFilename);
       vi.mocked(sendMemberConfirmationEmail).mockResolvedValue(true);
@@ -387,7 +387,7 @@ describe('Member Router', () => {
       const { sendMemberConfirmationEmail } = await import('@/services/EmailService');
       const { logger } = await import('@/libs/Logger');
 
-      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
       vi.mocked(sendMemberConfirmationEmail).mockRejectedValue(new Error('SMTP connection failed'));
 
       const { sendConfirmationEmail } = await import('./Member');
@@ -404,7 +404,7 @@ describe('Member Router', () => {
       const { sendMemberConfirmationEmail } = await import('@/services/EmailService');
       const { logger } = await import('@/libs/Logger');
 
-      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
       vi.mocked(sendMemberConfirmationEmail).mockRejectedValue('string error');
 
       const { sendConfirmationEmail } = await import('./Member');
@@ -420,7 +420,7 @@ describe('Member Router', () => {
       const { guardRole } = await import('./AuthGuards');
       const { sendMemberConfirmationEmail } = await import('@/services/EmailService');
 
-      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
       vi.mocked(sendMemberConfirmationEmail).mockResolvedValue(true);
 
       const { sendConfirmationEmail } = await import('./Member');
@@ -451,7 +451,7 @@ describe('Member Router', () => {
       const { unlinkFamilyMember } = await import('@/services/MembersService');
       const { audit } = await import('@/services/AuditService');
 
-      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(guardRole).mockResolvedValue(mockAcademyOwnerContext);
       vi.mocked(unlinkFamilyMember).mockResolvedValue(undefined as never);
 
       const { unlinkFamily } = await import('./Member');
@@ -460,7 +460,7 @@ describe('Member Router', () => {
       expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
       expect(unlinkFamilyMember).toHaveBeenCalledWith('hoh-member-123', 'family-member-456');
       expect(audit).toHaveBeenCalledWith(
-        mockContext,
+        mockAcademyOwnerContext,
         AUDIT_ACTION.FAMILY_MEMBER_UNLINK,
         AUDIT_ENTITY_TYPE.FAMILY_MEMBER,
         {
@@ -476,7 +476,7 @@ describe('Member Router', () => {
       const { unlinkFamilyMember } = await import('@/services/MembersService');
       const { audit } = await import('@/services/AuditService');
 
-      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(guardRole).mockResolvedValue(mockAcademyOwnerContext);
       vi.mocked(unlinkFamilyMember).mockRejectedValue(new Error('Database constraint violation'));
 
       const { unlinkFamily } = await import('./Member');
@@ -486,7 +486,7 @@ describe('Member Router', () => {
       );
 
       expect(audit).toHaveBeenCalledWith(
-        mockContext,
+        mockAcademyOwnerContext,
         AUDIT_ACTION.FAMILY_MEMBER_UNLINK,
         AUDIT_ENTITY_TYPE.FAMILY_MEMBER,
         {
@@ -503,7 +503,7 @@ describe('Member Router', () => {
 
       const orpcError = new ORPCError('Member not found', { status: 404 });
 
-      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(guardRole).mockResolvedValue(mockAcademyOwnerContext);
       vi.mocked(unlinkFamilyMember).mockRejectedValue(orpcError);
 
       const { unlinkFamily } = await import('./Member');
@@ -516,7 +516,7 @@ describe('Member Router', () => {
       const { unlinkFamilyMember } = await import('@/services/MembersService');
       const { audit } = await import('@/services/AuditService');
 
-      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(guardRole).mockResolvedValue(mockAcademyOwnerContext);
       vi.mocked(unlinkFamilyMember).mockRejectedValue('string error');
 
       const { unlinkFamily } = await import('./Member');
@@ -526,7 +526,7 @@ describe('Member Router', () => {
       );
 
       expect(audit).toHaveBeenCalledWith(
-        mockContext,
+        mockAcademyOwnerContext,
         AUDIT_ACTION.FAMILY_MEMBER_UNLINK,
         AUDIT_ENTITY_TYPE.FAMILY_MEMBER,
         {
@@ -584,7 +584,7 @@ describe('Member Router', () => {
       const { updateMember } = await import('@/services/MembersService');
       const { audit } = await import('@/services/AuditService');
 
-      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(guardRole).mockResolvedValue(mockAcademyOwnerContext);
       vi.mocked(updateMember).mockResolvedValue([{ id: 'member-1' }] as any);
 
       const { updateMemberType } = await import('./Member');
@@ -596,10 +596,10 @@ describe('Member Router', () => {
       expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
       expect(updateMember).toHaveBeenCalledWith(
         { id: 'member-1', memberType: 'head-of-household' },
-        mockContext.orgId,
+        mockAcademyOwnerContext.orgId,
       );
       expect(audit).toHaveBeenCalledWith(
-        mockContext,
+        mockAcademyOwnerContext,
         AUDIT_ACTION.MEMBER_UPDATE,
         AUDIT_ENTITY_TYPE.MEMBER,
         { entityId: 'member-1', status: 'success' },
@@ -611,7 +611,7 @@ describe('Member Router', () => {
       const { guardRole } = await import('./AuthGuards');
       const { updateMember } = await import('@/services/MembersService');
 
-      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(guardRole).mockResolvedValue(mockAcademyOwnerContext);
       vi.mocked(updateMember).mockResolvedValue([] as any);
 
       const { updateMemberType } = await import('./Member');
@@ -626,7 +626,7 @@ describe('Member Router', () => {
       const { updateMember } = await import('@/services/MembersService');
       const { audit } = await import('@/services/AuditService');
 
-      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(guardRole).mockResolvedValue(mockAcademyOwnerContext);
       vi.mocked(updateMember).mockRejectedValue(new Error('DB error'));
 
       const { updateMemberType } = await import('./Member');
@@ -636,7 +636,7 @@ describe('Member Router', () => {
       ).rejects.toThrow('DB error');
 
       expect(audit).toHaveBeenCalledWith(
-        mockContext,
+        mockAcademyOwnerContext,
         AUDIT_ACTION.MEMBER_UPDATE,
         AUDIT_ENTITY_TYPE.MEMBER,
         { entityId: 'member-1', status: 'failure', error: 'DB error' },
