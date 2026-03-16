@@ -1,0 +1,65 @@
+name: Feature Request
+description: Suggest a new feature or improvement for Dojo Planner
+title: '[Feature] '
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Got an idea to make Dojo Planner better? We'd love to hear it. Please describe your request as clearly as possible.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected Area
+      description: Which part of the application does this feature relate to?
+      options:
+        - Members
+        - Classes & Schedules
+        - Programs
+        - Memberships & Plans
+        - Billing & Payments
+        - Waivers
+        - Staff & Roles
+        - Dashboard & Reports
+        - Catalog
+        - Marketing & Coupons
+        - Authentication & Onboarding
+        - Settings
+        - New Area
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or Motivation
+      description: What problem does this solve? What pain point or gap prompted this request?
+      placeholder: "As a front desk staff member, I have to manually check each member's expiry date one by one because there's no bulk view..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the feature or change you'd like to see. Be as specific as possible.
+      placeholder: "Add a 'Expiring Soon' filter on the Members list that shows members whose membership expires within the next 30 days..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Have you considered any alternative solutions or workarounds?
+      placeholder: 'Currently exporting to CSV and filtering in Excel, but this is time-consuming.'
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context / Mockups
+      description: |
+        Any extra context, examples from other apps, or mockup screenshots that illustrate your idea.
+        Drag and drop images here if you have a visual design in mind.
+      placeholder: 'Drag mockup images here, or describe how a similar app handles this...'
