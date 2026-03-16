@@ -674,6 +674,93 @@ npm run db:studio    # Open Drizzle Studio
 1. Create a new migration that reverses the changes
 2. Or restore from database backup
 
+### Neon Database Branching
+
+**Provider:** Neon Postgres (serverless)
+
+**Branch Topology:**
+```
+main (production) → preview (persistent branch for Vercel preview deployments)
+```
+
+**How it works:**
+- Production deployments use the `main` Neon branch
+- Preview deployments use the `preview` Neon branch (a copy-on-write clone of production)
+- Each branch has its own `DATABASE_URL`, configured in Vercel env vars scoped by environment
+- Local development uses PGLite (not Neon)
+
+**Migrations on preview:** Run automatically on first request via `runMigrations()` in the root layout. No manual action needed — any new migrations in a PR branch are applied when the preview deployment starts.
+
+**Resetting the preview branch:**
+1. Delete the `preview` branch in Neon Console
+2. Re-create it from `main` (gets a fresh snapshot of production data + schema)
+3. Update the Vercel `DATABASE_URL` for Preview if the connection string changed
+4. Re-seed if needed (see seed script section below)
+
+**Connection strings:** Always use the **pooled** connection string (hostname contains `-pooler`) for Vercel deployments. The app uses `max: 1` in the pg Pool, so connection pooling is important for serverless.
+
+**Auto-suspend:** Neon branches auto-suspend after ~5 minutes of inactivity. First request after suspension has ~500ms cold start — acceptable for preview environments.
+
+**Setup Guide (one-time):**
+
+**Step 1 — Create the Neon preview branch:**
+1. Go to [Neon Console](https://console.neon.tech) and open the dojo-planner project
+2. Click **Branches** in the left sidebar
+3. Click **Create Branch**
+4. Set **Name** to `preview`, **Parent branch** to `main`, **Include data** to Yes
+5. Click **Create Branch**
+6. Once created, go to the branch's **Connection Details**
+7. Toggle the connection type to **Pooled** (the hostname should contain `-pooler`)
+8. Copy the full connection string — it looks like:
+   ```
+   postgresql://neondb_owner:<password>@ep-xxx-xxx-pooler.<region>.aws.neon.tech/neondb?sslmode=require
+   ```
+
+**Step 2 — Configure Vercel environment variables:**
+1. Go to [Vercel Dashboard](https://vercel.com) → dojo-planner project → **Settings** → **Environment Variables**
+2. Find the existing `DATABASE_URL` variable
+3. Click the three-dot menu → **Edit**
+4. Under **Environments**, uncheck **Preview** and **Development** — leave only **Production** checked
+5. Save
+6. Click **Add New** to create a second `DATABASE_URL`:
+   - **Key:** `DATABASE_URL`
+   - **Value:** The pooled connection string from Step 1
+   - **Environments:** Check **Preview** only (not Production, not Development)
+7. Save
+8. Verify: you should now see two `DATABASE_URL` entries — one for Production, one for Preview
+
+**Step 3 — Seed the preview branch:**
+1. Create a `.env.preview` file in the project root (already gitignored):
+   ```bash
+   # .env.preview
+   DATABASE_URL=postgresql://neondb_owner:<password>@ep-xxx-xxx-pooler.<region>.aws.neon.tech/neondb?sslmode=require
+   ```
+2. Find your Clerk Organization ID:
+   - Go to [Clerk Dashboard](https://dashboard.clerk.com) → Organizations
+   - Click on the organization you want to use for preview testing
+   - Copy the Organization ID (starts with `org_`)
+3. Run the seed script from your local terminal:
+   ```bash
+   source .env.preview && npx tsx src/scripts/seed.ts --orgId=org_xxxxx
+   ```
+4. To reset and re-seed later:
+   ```bash
+   source .env.preview && npx tsx src/scripts/seed.ts --orgId=org_xxxxx --reset
+   ```
+
+**Step 4 — Verify the preview environment:**
+1. Push a branch to GitHub or open a PR to trigger a Vercel preview deployment
+2. Wait for the deployment to complete (check Vercel dashboard or GitHub PR checks)
+3. Visit the preview URL (shown in the Vercel dashboard or as a PR comment)
+4. Sign in and verify you see seeded data (not production data)
+5. **Data isolation check:** Create or modify a record in the preview app, then verify it does NOT appear in production:
+   - Open [Neon Console](https://console.neon.tech) → switch to the `main` branch → SQL Editor
+   - Query the relevant table to confirm the record is absent
+6. If anything is wrong, check:
+   - Vercel build logs for migration errors
+   - That the Preview `DATABASE_URL` env var is set correctly (Vercel → Settings → Environment Variables)
+   - That other env vars (Clerk, IQPro, Stripe) for Preview point to test/staging instances, not production
+
 ### Database Seed Script
 
 The seed script (`src/scripts/seed.ts`) populates the database with sample data for development and testing. It seeds programs, classes, events, coupons, membership plans, tags, sample members, payment methods, and transactions.
@@ -731,6 +818,23 @@ DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/postgres" npx tsx sr
 
 **Note:** The seed script creates the organization record in the local database if it doesn't exist. Staff/instructor assignments require creating users in the Clerk dashboard first.
 
+**Seeding the preview branch (Neon):**
+
+The seed script can target the Neon preview branch directly from your local machine:
+```bash
+DATABASE_URL="postgresql://...preview-branch-pooled-connection-string..." npx tsx src/scripts/seed.ts --orgId=org_xxxxx
+```
+
+For convenience, store the connection string in `.env.preview` (gitignored):
+```bash
+# .env.preview
+DATABASE_URL=postgresql://...preview-branch-pooled-connection-string...
+```
+Then:
+```bash
+source .env.preview && npx tsx src/scripts/seed.ts --orgId=org_xxxxx
+```
+
 ## Environment Variables
 
 **Validation:** `src/libs/Env.ts` (t3-oss/env-nextjs)
@@ -738,11 +842,18 @@ DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/postgres" npx tsx sr
 **Required Server:**
 ```bash
 CLERK_SECRET_KEY
-DATABASE_URL
+DATABASE_URL              # Scoped per Vercel environment (see below)
 STRIPE_SECRET_KEY
 STRIPE_WEBHOOK_SECRET
 BILLING_PLAN_ENV          # dev | test | prod
 ```
+
+**DATABASE_URL per environment (Vercel):**
+| Environment | Target |
+|-------------|--------|
+| Production | Neon `main` branch (production data) |
+| Preview | Neon `preview` branch (test data, seeded separately) |
+| Local dev | PGLite (`postgresql://postgres:postgres@127.0.0.1:5432/postgres`) |
 
 **Required Client:**
 ```bash
