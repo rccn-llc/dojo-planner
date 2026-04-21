@@ -13,7 +13,6 @@
   "ignoreDependencies": [
     "@swc/helpers",
     "@semantic-release/npm",
-    "@dojo-planner/iqpro-client",
     "conventional-changelog-conventionalcommits",
     "tw-animate-css"
   ],

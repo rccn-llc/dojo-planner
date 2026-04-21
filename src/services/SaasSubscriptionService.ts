@@ -8,40 +8,18 @@
 import type { SaasPlanId } from '@/utils/SaasPlans';
 import { eq } from 'drizzle-orm';
 import { db } from '@/libs/DB';
-import { getGatewayProcessors, getIQProClient } from '@/libs/IQPro';
+import { Env } from '@/libs/Env';
+import { getGatewayProcessors, iqproGet, iqproPost, iqproPut, isIQProConfigured } from '@/libs/IQPro';
 import { logger } from '@/libs/Logger';
 import { organizationSchema } from '@/models/Schema';
 import { getPlanTotalPrice, getSaasPlan } from '@/utils/SaasPlans';
 import { isExemptOrg, isSuperAdmin } from '@/utils/SuperAdmins';
 
-type IQProClientShape = {
-  customers: {
-    create: (params: Record<string, unknown>, idempotencyKey?: string) => Promise<{ customerId: string }>;
-    createPaymentMethod: (customerId: string, params: Record<string, unknown>) => Promise<{
-      paymentMethodId?: string;
-      customerPaymentMethodId?: string;
-      customerPaymentId?: string;
-      last4?: string;
-      card?: { maskedCard?: string };
-    }>;
-  };
-  subscriptions: {
-    get: (id: string) => Promise<Record<string, unknown>>;
-    update: (id: string, data: Record<string, unknown>) => Promise<Record<string, unknown>>;
-    cancel: (id: string, data: Record<string, unknown>) => Promise<Record<string, unknown>>;
-  };
-  transactions: {
-    getServiceContext: () => { gatewayContext?: { gatewayId: string } };
-  };
-  post: <T = Record<string, unknown>>(path: string, body?: unknown) => Promise<T>;
-};
-
-async function requireClient(): Promise<IQProClientShape> {
-  const client = await getIQProClient();
-  if (!client) {
-    throw new Error('IQPro client is not configured');
+function requireGatewayId(): string {
+  if (!isIQProConfigured()) {
+    throw new Error('IQPro is not configured');
   }
-  return client as IQProClientShape;
+  return Env.IQPRO_GATEWAY_ID!;
 }
 
 // ===== Types =====
@@ -138,7 +116,7 @@ export async function getCurrentSubscription(
 // ===== Subscribe to a plan =====
 
 export async function subscribe(params: SubscribeParams): Promise<{ success: boolean; error?: string }> {
-  const client = await requireClient();
+  const gatewayId = requireGatewayId();
   const processors = await getGatewayProcessors();
 
   try {
@@ -151,17 +129,21 @@ export async function subscribe(params: SubscribeParams): Promise<{ success: boo
     let customerId = existing?.iqproCustomerId ?? null;
 
     if (!customerId) {
-      const customer = await client.customers.create({
-        name: params.orgName,
-        referenceId: params.orgId,
-        addresses: [{
-          email: params.adminEmail,
-          isBilling: true,
-          country: 'US',
-          state: 'N/A',
-        }],
-      });
-      customerId = customer.customerId;
+      const customerRes = await iqproPost<{ data?: Record<string, unknown> }>(
+        `/api/gateway/${gatewayId}/customer`,
+        {
+          name: params.orgName,
+          referenceId: params.orgId,
+          addresses: [{
+            email: params.adminEmail,
+            isBilling: true,
+            country: 'US',
+            state: 'N/A',
+          }],
+        },
+      );
+      const customerData = (customerRes.data ?? customerRes) as Record<string, unknown>;
+      customerId = customerData.customerId as string;
 
       await db
         .update(organizationSchema)
@@ -176,16 +158,19 @@ export async function subscribe(params: SubscribeParams): Promise<{ success: boo
     const last4 = params.cardLastFour ?? params.cardNumber?.slice(-4) ?? '0000';
     const maskedCard = `${first6}******${last4}`;
 
-    const pm = await client.customers.createPaymentMethod(customerId, {
-      card: {
-        token: params.cardToken ?? params.cardNumber,
-        expirationDate: params.cardExpiry,
-        maskedCard,
+    const pmRes = await iqproPost<{ data?: Record<string, unknown> }>(
+      `/api/gateway/${gatewayId}/customer/${customerId}/payment`,
+      {
+        card: {
+          token: params.cardToken ?? params.cardNumber,
+          expirationDate: params.cardExpiry,
+          maskedCard,
+        },
+        isDefault: true,
       },
-      isDefault: true,
-    });
-
-    const paymentMethodId = pm.customerPaymentMethodId ?? pm.paymentMethodId ?? pm.customerPaymentId ?? '';
+    );
+    const pm = (pmRes.data ?? pmRes) as Record<string, unknown>;
+    const paymentMethodId = (pm.customerPaymentMethodId ?? pm.paymentMethodId ?? pm.customerPaymentId ?? '') as string;
 
     await db
       .update(organizationSchema)
@@ -212,11 +197,6 @@ export async function subscribe(params: SubscribeParams): Promise<{ success: boo
     };
     if (params.billingCycle === 'annual') {
       schedule.monthsOfYear = [now.getMonth() + 1];
-    }
-
-    const gatewayContext = client.transactions.getServiceContext().gatewayContext;
-    if (!gatewayContext) {
-      throw new Error('Gateway context is required');
     }
 
     const subscriptionPayload = {
@@ -267,8 +247,8 @@ export async function subscribe(params: SubscribeParams): Promise<{ success: boo
       }],
     };
 
-    const response = await client.post<Record<string, unknown>>(
-      `/api/gateway/${gatewayContext.gatewayId}/subscription`,
+    const response = await iqproPost<Record<string, unknown>>(
+      `/api/gateway/${gatewayId}/subscription`,
       subscriptionPayload,
     );
 
@@ -310,7 +290,7 @@ export async function changePlan(
   newPlanId: SaasPlanId,
   newBillingCycle: 'monthly' | 'annual',
 ): Promise<{ success: boolean; error?: string }> {
-  const client = await requireClient();
+  const gatewayId = requireGatewayId();
 
   try {
     const org = await db.query.organizationSchema.findFirst({
@@ -329,17 +309,20 @@ export async function changePlan(
 
     const amount = getPlanTotalPrice(newPlanId, newBillingCycle);
 
-    await client.subscriptions.update(org.iqproSubscriptionId, {
-      name: `Dojo Planner ${plan.name} Plan`,
-      lineItems: [{
-        name: `${plan.name} Plan`,
-        description: `${newBillingCycle} SaaS subscription`,
-        quantity: 1,
-        unitPrice: amount,
-        discount: 0,
-        unitOfMeasureId: newBillingCycle === 'annual' ? 4 : 3,
-      }],
-    });
+    await iqproPut(
+      `/api/gateway/${gatewayId}/subscription/${org.iqproSubscriptionId}`,
+      {
+        name: `Dojo Planner ${plan.name} Plan`,
+        lineItems: [{
+          name: `${plan.name} Plan`,
+          description: `${newBillingCycle} SaaS subscription`,
+          quantity: 1,
+          unitPrice: amount,
+          discount: 0,
+          unitOfMeasureId: newBillingCycle === 'annual' ? 4 : 3,
+        }],
+      },
+    );
 
     await db
       .update(organizationSchema)
@@ -374,13 +357,16 @@ export async function cancelSubscription(
 
     // If there's an IQPro subscription, cancel it
     if (org?.iqproSubscriptionId) {
-      const client = await requireClient();
-      await client.subscriptions.cancel(org.iqproSubscriptionId, {
-        cancel: {
-          now: !endOfPeriod,
-          endOfBillingPeriod: endOfPeriod,
+      const gatewayId = requireGatewayId();
+      await iqproPost(
+        `/api/gateway/${gatewayId}/subscription/${org.iqproSubscriptionId}/cancel`,
+        {
+          cancel: {
+            now: !endOfPeriod,
+            endOfBillingPeriod: endOfPeriod,
+          },
         },
-      });
+      );
     }
 
     await db
@@ -412,8 +398,10 @@ export async function getBillingHistory(orgId: string): Promise<BillingHistoryIt
   }
 
   try {
-    const client = await requireClient();
-    const subscription = await client.subscriptions.get(org.iqproSubscriptionId);
+    const gatewayId = requireGatewayId();
+    const subscription = await iqproGet<Record<string, unknown>>(
+      `/api/gateway/${gatewayId}/subscription/${org.iqproSubscriptionId}`,
+    );
 
     const data = (subscription as Record<string, unknown>).data ?? subscription;
     const sub = data as Record<string, unknown>;

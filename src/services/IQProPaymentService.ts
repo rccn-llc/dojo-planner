@@ -1,15 +1,21 @@
 /**
  * IQPro implementation of the payment provider interface.
  *
- * Handles all communication with the IQ Pro+ API for:
- * - Customer creation
- * - Payment method registration (card / ACH)
- * - One-time transaction processing
- * - Recurring subscription creation
+ * All calls go directly through the IQPro REST API (no SDK) via the helpers
+ * in `src/libs/IQPro.ts`. Handles:
+ * - Customer creation (returns both the customerId and the billing-address ID)
+ * - Payment method registration (card via TokenEx token, ACH via vault token)
+ * - One-time transaction processing (full `remit` block with tax + adjustments)
+ * - Recurring subscription creation (with an immediate initial Sale handled by
+ *   the orchestrator, not here)
+ *
+ * Ported from the kiosk app's canonical payloads in
+ * `dojo-planner-kiosk/src/app/api/payment/{process,membership}/route.ts`.
  */
 
 import type {
   CreateCustomerParams,
+  CreateCustomerResult,
   CreatePaymentMethodParams,
   CreatePaymentMethodResult,
   CreateSubscriptionParams,
@@ -19,42 +25,9 @@ import type {
   SubscriptionResult,
 } from './PaymentProviderService';
 
-import { getGatewayProcessors, getIQProClient, tokenizeAch } from '@/libs/IQPro';
+import { Env } from '@/libs/Env';
+import { getGatewayProcessors, iqproGet, iqproPost, tokenizeAch } from '@/libs/IQPro';
 import { logger } from '@/libs/Logger';
-
-// Minimal shape of the IQPro client used by this service.
-// The actual client is loaded dynamically to avoid bundler errors
-// when the optional @dojo-planner/iqpro-client package is absent.
-type IQProClientShape = {
-  customers: {
-    create: (params: Record<string, unknown>, idempotencyKey?: string) => Promise<{ customerId: string }>;
-    createPaymentMethod: (customerId: string, params: Record<string, unknown>) => Promise<{
-      paymentMethodId?: string;
-      customerPaymentMethodId?: string;
-      customerPaymentId?: string;
-      last4?: string;
-      card?: { maskedCard?: string };
-      ach?: { maskedAccount?: string };
-    }>;
-  };
-  transactions: {
-    create: (params: Record<string, unknown>) => Promise<{ id: string; status?: string; processorResponseMessage?: string; amount?: number }>;
-    getServiceContext: () => { gatewayContext?: { gatewayId: string } };
-  };
-  subscriptions: {
-    create: (params: Record<string, unknown>) => Promise<{ subscriptionId?: string }>;
-  };
-  // Raw HTTP method for direct API calls (bypassing SDK service layer)
-  post: <T = Record<string, unknown>>(path: string, body?: unknown) => Promise<T>;
-};
-
-async function requireClient(): Promise<IQProClientShape> {
-  const client = await getIQProClient();
-  if (!client) {
-    throw new Error('IQPro client is not configured');
-  }
-  return client as IQProClientShape;
-}
 
 /** Strip a phone string to digits only, max 10 characters (IQPro limit). */
 function sanitizePhone(phone?: string): string | undefined {
@@ -67,40 +40,67 @@ function sanitizePhone(phone?: string): string | undefined {
   return trimmed.slice(0, 10) || undefined;
 }
 
+/** Normalize country names — IQPro expects ISO-2 codes. */
+function normalizeCountry(country?: string): string {
+  if (!country || country === 'United States') {
+    return 'US';
+  }
+  return country;
+}
+
 export class IQProPaymentProvider implements IPaymentProvider {
-  async createCustomer(params: CreateCustomerParams): Promise<string> {
-    const client = await requireClient();
+  async createCustomer(params: CreateCustomerParams): Promise<CreateCustomerResult> {
+    const gatewayId = Env.IQPRO_GATEWAY_ID!;
 
     logger.info('[IQPro] Creating customer', { memberId: params.memberId });
 
-    const customer = await client.customers.create({
-      name: `${params.firstName} ${params.lastName}`,
-      referenceId: params.memberId,
-      ...(params.address && {
-        addresses: [
-          {
-            addressLine1: params.address.street,
-            addressLine2: params.address.apartment,
-            city: params.address.city,
-            state: params.address.state,
-            postalCode: params.address.zipCode,
-            country: params.address.country,
-            firstName: params.firstName,
-            lastName: params.lastName,
-            email: params.email,
-            ...(sanitizePhone(params.phone) && { phone: sanitizePhone(params.phone) }),
-            isBilling: true,
-          },
-        ],
-      }),
-    });
+    const customerRes = await iqproPost<{ data?: Record<string, unknown> }>(
+      `/api/gateway/${gatewayId}/customer`,
+      {
+        name: `${params.firstName} ${params.lastName}`,
+        referenceId: params.memberId,
+        ...(params.address && {
+          addresses: [
+            {
+              addressLine1: params.address.street,
+              ...(params.address.apartment && { addressLine2: params.address.apartment }),
+              city: params.address.city,
+              state: params.address.state,
+              postalCode: params.address.zipCode,
+              country: normalizeCountry(params.address.country),
+              firstName: params.firstName,
+              lastName: params.lastName,
+              email: params.email,
+              ...(sanitizePhone(params.phone) && { phone: sanitizePhone(params.phone) }),
+              isBilling: true,
+            },
+          ],
+        }),
+      },
+    );
 
-    logger.info('[IQPro] Customer created', { customerId: customer.customerId });
-    return customer.customerId;
+    const customerData = (customerRes.data ?? customerRes) as Record<string, unknown>;
+    const customerId = customerData.customerId as string;
+
+    // Resolve the billing-address ID by fetching the customer detail. The ACH
+    // processor uses this to look up the cardholder name from the vault.
+    let billingAddressId: string | undefined;
+    if (params.address) {
+      const detailRes = await iqproGet<{ data?: Record<string, unknown> }>(
+        `/api/gateway/${gatewayId}/customer/${customerId}`,
+      );
+      const detailData = (detailRes.data ?? detailRes) as Record<string, unknown>;
+      const addresses = (detailData.addresses ?? []) as Array<Record<string, unknown>>;
+      const billing = addresses.find(a => a.isBilling) ?? addresses[0];
+      billingAddressId = (billing?.customerAddressId ?? billing?.id) as string | undefined;
+    }
+
+    logger.info('[IQPro] Customer created', { customerId, billingAddressId });
+    return { customerId, billingAddressId };
   }
 
   async createPaymentMethod(params: CreatePaymentMethodParams): Promise<CreatePaymentMethodResult> {
-    const client = await requireClient();
+    const gatewayId = Env.IQPRO_GATEWAY_ID!;
 
     logger.info('[IQPro] Creating payment method', {
       customerId: params.customerId,
@@ -108,55 +108,55 @@ export class IQProPaymentProvider implements IPaymentProvider {
     });
 
     if (params.paymentMethod === 'card') {
-      // IQPro InsertCard schema expects expirationDate as "MM/YY"
-      const expirationDate = (params.cardExpiry ?? '').trim(); // already "MM/YY"
+      // IQPro rejects raw card numbers ("Raw card number may not be submitted.
+      // Submit a tokenized card number instead.") so cardToken from TokenEx is
+      // required. Verified against the sandbox: the createPaymentMethod
+      // endpoint validates this server-side.
+      if (!params.cardToken) {
+        throw new Error('cardToken is required — IQPro rejects raw card numbers. Run the TokenEx iframe flow first.');
+      }
+      if (!params.cardFirstSix || !params.cardLastFour) {
+        throw new Error('cardFirstSix and cardLastFour are required to build the IQPro maskedCard field.');
+      }
 
-      // maskedCard is required by the API. Format: BIN(6) + ******(6) + last4 = 16 chars (max 19)
-      // e.g. "424242******4242". Falls back to "000000******0000" if no card details available.
-      const first6 = params.cardFirstSix ?? params.cardNumber?.slice(0, 6) ?? '000000';
-      const last4 = params.cardLastFour ?? params.cardNumber?.slice(-4) ?? '0000';
-      const maskedCard = `${first6}******${last4}`;
+      // IQPro InsertCard schema expects expirationDate as "MM/YY" and a
+      // maskedCard of the form BIN(6) + ****** + last4 = 16 chars.
+      const expirationDate = (params.cardExpiry ?? '').trim();
+      const maskedCard = `${params.cardFirstSix}******${params.cardLastFour}`;
 
-      let cardPayload: Record<string, unknown>;
-
-      if (params.cardToken) {
-        // PCI-compliant tokenized path — token from TokenEx iframe
-        // InsertCard schema: { token, expirationDate, maskedCard, cardType? }
-        cardPayload = {
+      const pmRes = await iqproPost<{ data?: Record<string, unknown> }>(
+        `/api/gateway/${gatewayId}/customer/${params.customerId}/payment`,
+        {
           card: {
             token: params.cardToken,
             expirationDate,
             maskedCard,
           },
           isDefault: true,
-        };
-      } else {
-        // Fallback: raw card number (local dev / testing only)
-        cardPayload = {
-          card: {
-            token: params.cardNumber,
-            expirationDate,
-            maskedCard,
-          },
-          isDefault: true,
-        };
-      }
+        },
+      );
 
-      logger.info('[IQPro] Card payment method payload', {
-        path: params.cardToken ? 'tokenized' : 'raw',
-      });
+      const pmData = (pmRes.data ?? pmRes) as Record<string, unknown>;
+      const pmId = (pmData.customerPaymentMethodId
+        ?? pmData.paymentMethodId
+        ?? pmData.customerPaymentId
+        ?? '') as string;
 
-      const pm = await client.customers.createPaymentMethod(params.customerId, cardPayload);
+      const cardData = pmData.card as { maskedCard?: string } | undefined;
+      const returnedLast4
+        = (pmData.last4 as string | undefined)
+          ?? cardData?.maskedCard?.slice(-4)
+          ?? params.cardLastFour;
 
-      const pmId = pm.customerPaymentMethodId ?? pm.paymentMethodId ?? pm.customerPaymentId ?? '';
       logger.info('[IQPro] Card payment method created', { paymentMethodId: pmId });
+
       return {
         paymentMethodId: pmId,
-        last4: pm.last4 ?? pm.card?.maskedCard?.slice(-4) ?? params.cardLastFour ?? params.cardNumber?.slice(-4),
+        last4: returnedLast4,
       };
     }
 
-    // ACH — tokenize account number via Vault API, then create payment method
+    // ACH — tokenize account number via Vault API, then create payment method.
     const accountType = params.achAccountType ?? 'Checking';
 
     const tokenResult = await tokenizeAch({
@@ -165,135 +165,203 @@ export class IQProPaymentProvider implements IPaymentProvider {
       secCode: 'WEB',
       achAccountType: accountType,
     });
-    const achToken = tokenResult.achToken;
 
-    const pm = await client.customers.createPaymentMethod(params.customerId, {
-      ach: {
-        token: achToken,
-        secCode: 'WEB',
-        routingNumber: params.achRoutingNumber,
-        accountType,
-        checkNumber: null,
-        accountHolderAuth: {
-          dlState: null,
-          dlNumber: null,
+    const pmRes = await iqproPost<{ data?: Record<string, unknown> }>(
+      `/api/gateway/${gatewayId}/customer/${params.customerId}/payment`,
+      {
+        ach: {
+          token: tokenResult.achToken,
+          secCode: 'WEB',
+          routingNumber: params.achRoutingNumber,
+          accountType,
+          checkNumber: null,
+          accountHolderAuth: {
+            dlState: null,
+            dlNumber: null,
+          },
         },
+        isDefault: true,
       },
-      isDefault: true,
-    });
+    );
 
-    const pmId = pm.customerPaymentMethodId ?? pm.paymentMethodId ?? pm.customerPaymentId ?? '';
+    const pmData = (pmRes.data ?? pmRes) as Record<string, unknown>;
+    const pmId = (pmData.customerPaymentMethodId
+      ?? pmData.paymentMethodId
+      ?? pmData.customerPaymentId
+      ?? '') as string;
+
+    const achData = pmData.ach as { maskedAccount?: string } | undefined;
+    const returnedLast4
+      = (pmData.last4 as string | undefined)
+        ?? achData?.maskedAccount?.slice(-4)
+        ?? params.achAccountNumber?.slice(-4);
+
     logger.info('[IQPro] ACH payment method created', { paymentMethodId: pmId });
+
     return {
       paymentMethodId: pmId,
-      last4: pm.last4 ?? pm.ach?.maskedAccount?.slice(-4) ?? params.achAccountNumber?.slice(-4),
-      achToken,
+      last4: returnedLast4,
+      achToken: tokenResult.achToken,
     };
   }
 
   async processPayment(params: ProcessPaymentParams): Promise<PaymentResult> {
-    const client = await requireClient();
+    const gatewayId = Env.IQPRO_GATEWAY_ID!;
 
     logger.info('[IQPro] Processing payment', {
       customerId: params.customerId,
       amount: params.amount,
       method: params.ach ? 'ach' : 'card',
+      hasFeeBreakdown: !!params.feeBreakdown,
     });
 
     try {
-      let tx: { id: string; status?: string; processorResponseMessage?: string };
-
-      if (params.ach) {
-        // ACH transactions: bypass SDK and call API directly per ach.docx
-        // The SDK's transactions.create() strips the ach object from the payload,
-        // but the API requires it for ACH processing.
-        const gatewayContext = client.transactions.getServiceContext().gatewayContext;
-        if (!gatewayContext) {
-          throw new Error('Gateway context is required for transaction processing');
+      // Build the payment adjustments list from the fee breakdown (surcharge /
+      // service fees / convenience fees). Only non-zero values are included —
+      // IQPro validates these.
+      const paymentAdjustments: Array<Record<string, unknown>> = [];
+      if (params.feeBreakdown) {
+        if (params.feeBreakdown.surchargeAmount > 0) {
+          paymentAdjustments.push({ type: 'Surcharge', percentage: null, flatAmount: params.feeBreakdown.surchargeAmount });
         }
-
-        const apiPayload = {
-          type: 'Sale',
-          remit: {
-            baseAmount: params.amount,
-            totalAmount: params.amount,
-            currencyCode: params.currency,
-          },
-          paymentMethod: {
-            customer: {
-              customerId: params.customerId,
-              customerPaymentMethodId: params.paymentMethodId,
-            },
-          },
-          ach: {
-            achToken: params.ach.achToken,
-            secCode: params.ach.secCode,
-            routingNumber: params.ach.routingNumber,
-            accountType: params.ach.accountType,
-            checkNumber: null,
-            accountHolderAuth: {
-              dlState: null,
-              dlNumber: null,
-            },
-          },
-          ...(params.description && { caption: params.description.substring(0, 19) }),
-        };
-
-        const response = await client.post<Record<string, unknown>>(
-          `/api/gateway/${gatewayContext.gatewayId}/transaction`,
-          apiPayload,
-        );
-
-        // Extract transaction data from API response wrapper
-        const data = (response as Record<string, unknown>).data ?? response;
-        const txData = (data as Record<string, unknown>).transaction ?? data;
-        const raw = txData as Record<string, unknown>;
-
-        tx = {
-          id: (raw.transactionId ?? raw.id ?? '') as string,
-          status: (raw.status ?? '') as string,
-          processorResponseMessage: raw.processorResponseMessage as string | undefined,
-        };
-      } else {
-        // Card transactions: use SDK which handles field mapping
-        const amountCents = Math.round(params.amount * 100);
-
-        tx = await client.transactions.create({
-          customerId: params.customerId,
-          amount: amountCents,
-          currency: params.currency,
-          description: params.description,
-          Remit: {
-            totalAmount: amountCents,
-          },
-          paymentMethod: {
-            customer: {
-              customerId: params.customerId,
-              customerPaymentMethodId: params.paymentMethodId,
-            },
-          },
-          metadata: params.metadata,
-        });
+        if (params.feeBreakdown.serviceFeesAmount > 0) {
+          paymentAdjustments.push({ type: 'ServiceFees', percentage: null, flatAmount: params.feeBreakdown.serviceFeesAmount });
+        }
+        if (params.feeBreakdown.convenienceFeesAmount > 0) {
+          paymentAdjustments.push({ type: 'ConvenienceFees', percentage: null, flatAmount: params.feeBreakdown.convenienceFeesAmount });
+        }
       }
 
-      const statusStr = typeof tx.status === 'string'
-        ? tx.status.toLowerCase()
-        : '';
+      // Remit block — dollars, not cents. When a fee breakdown is present we
+      // use its canonical baseAmount/taxAmount; otherwise fall back to the
+      // raw amount (this path is only hit when the orchestrator didn't
+      // calculate fees, e.g. for subscription-driven internal calls).
+      const remit: Record<string, unknown> = params.feeBreakdown
+        ? {
+            baseAmount: params.feeBreakdown.baseAmount,
+            taxAmount: params.feeBreakdown.taxAmount,
+            // IQPro rejects isTaxExempt=false with zero tax.
+            isTaxExempt: params.feeBreakdown.taxAmount <= 0,
+            currencyCode: params.currency,
+            addTaxToTotal: true,
+            ...(paymentAdjustments.length > 0 && { paymentAdjustments }),
+          }
+        : {
+            baseAmount: params.amount,
+            taxAmount: 0,
+            isTaxExempt: true,
+            currencyCode: params.currency,
+            addTaxToTotal: true,
+          };
+
+      // paymentMethod reference — IQPro rejects a transaction that sends
+      // both `customer` and `card`/`ach` blocks ("Only one payment method
+      // is allowed"). Since the card/ACH is already vaulted, the customer
+      // reference alone is enough.
+      const paymentMethodBlock: Record<string, unknown> = {
+        customer: {
+          customerId: params.customerId,
+          customerPaymentMethodId: params.paymentMethodId,
+          ...(params.customerBillingAddressId && { customerBillingAddressId: params.customerBillingAddressId }),
+        },
+      };
+
+      // Billing address block. When the orchestrator didn't supply one, fall
+      // back to a minimal record that still satisfies IQPro's required fields.
+      const addressBlock = params.billingAddress
+        ? [
+            {
+              isPhysical: true,
+              isBilling: true,
+              isShipping: false,
+              firstName: params.billingAddress.firstName,
+              lastName: params.billingAddress.lastName,
+              email: params.billingAddress.email,
+              phone: sanitizePhone(params.billingAddress.phone) ?? null,
+              addressLine1: params.billingAddress.addressLine1 ?? null,
+              addressLine2: params.billingAddress.addressLine2 ?? null,
+              city: params.billingAddress.city ?? null,
+              state: params.billingAddress.state,
+              postalCode: params.billingAddress.postalCode ?? null,
+              country: normalizeCountry(params.billingAddress.country),
+            },
+          ]
+        : undefined;
+
+      // Line items. Default to a single "payment" line when the caller didn't
+      // provide one, so the transaction still reconciles.
+      const lineItem = params.lineItem ?? {
+        name: params.description,
+        description: params.description,
+        unitPrice: params.amount,
+        discount: 0,
+      };
+      const lineItems = [
+        {
+          name: lineItem.name,
+          description: lineItem.description,
+          quantity: 1,
+          unitPrice: lineItem.unitPrice,
+          discount: lineItem.discount,
+          freightAmount: 0,
+          unitOfMeasureId: 1,
+          localTaxPercent: 0,
+          nationalTaxPercent: 0,
+        },
+      ];
+
+      const txPayload: Record<string, unknown> = {
+        type: 'Sale',
+        remit,
+        paymentMethod: paymentMethodBlock,
+        ...(addressBlock && { address: addressBlock }),
+        lineItems,
+        ...(params.description && { caption: params.description.substring(0, 19) }),
+      };
+
+      const txRes = await iqproPost<{ data?: Record<string, unknown> }>(
+        `/api/gateway/${gatewayId}/transaction`,
+        txPayload,
+      );
+
+      const txRaw = (txRes.data ?? txRes) as Record<string, unknown>;
+      const txData = (txRaw.transaction ?? txRaw) as Record<string, unknown>;
+
+      const responseText = (txData.processorResponseText ?? txData.processorResponseMessage) as string | undefined;
+
+      // Sandbox tolerance: Basys's sandbox ACH processor rejects the standard
+      // test routing/account numbers with a certification-error message.
+      // Treat that as a successful pendingsettlement so ACH dev flows work.
+      const isSandbox = Env.IQPRO_BASE_URL?.includes('sandbox') ?? false;
+      const isCertError = responseText?.includes('not a valid transaction for certification') ?? false;
+
+      const transactionId = (txData.transactionId ?? txData.id ?? '') as string;
+      const rawStatus = ((txData.status ?? '') as string).toLowerCase();
+      const effectiveStatus = isSandbox && isCertError ? 'pendingsettlement' : rawStatus;
 
       const mapped: PaymentResult['status']
-        = statusStr === 'captured' || statusStr === 'settled' || statusStr === 'authorized' || statusStr === 'pendingsettlement'
+        = effectiveStatus === 'captured'
+          || effectiveStatus === 'settled'
+          || effectiveStatus === 'authorized'
+          || effectiveStatus === 'pendingsettlement'
           ? 'approved'
-          : statusStr === 'declined' || statusStr === 'failed'
+          : effectiveStatus === 'declined' || effectiveStatus === 'failed'
             ? 'declined'
             : 'processing';
 
-      logger.info('[IQPro] Payment processed', { transactionId: tx.id, status: statusStr });
+      logger.info('[IQPro] Payment processed', {
+        transactionId,
+        rawStatus,
+        effectiveStatus,
+        mapped,
+        sandboxCertTolerated: isSandbox && isCertError,
+      });
 
       return {
         success: mapped === 'approved',
-        transactionId: tx.id,
+        transactionId,
         status: mapped,
-        declineReason: tx.processorResponseMessage,
+        declineReason: mapped === 'declined' ? responseText : undefined,
       };
     } catch (error) {
       logger.error('[IQPro] Payment failed', { error });
@@ -306,7 +374,7 @@ export class IQProPaymentProvider implements IPaymentProvider {
   }
 
   async createSubscription(params: CreateSubscriptionParams): Promise<SubscriptionResult> {
-    const client = await requireClient();
+    const gatewayId = Env.IQPRO_GATEWAY_ID!;
     const processors = await getGatewayProcessors();
 
     logger.info('[IQPro] Creating subscription', {
@@ -334,7 +402,7 @@ export class IQProPaymentProvider implements IPaymentProvider {
       }
 
       // Billing address — API requires country, state, email at minimum
-      const country = params.address?.country ?? 'US';
+      const country = normalizeCountry(params.address?.country);
       const state = params.address?.state ?? 'N/A';
       const billingAddress: Record<string, unknown> = {
         isBilling: true,
@@ -365,15 +433,7 @@ export class IQProPaymentProvider implements IPaymentProvider {
         country,
       };
 
-      // Bypass SDK's subscriptions.create() because its transformDates() crashes
-      // when the API response doesn't include a recurrence object. Use client.post()
-      // directly to avoid the SDK's response parsing.
-      const gatewayContext = client.transactions.getServiceContext().gatewayContext;
-      if (!gatewayContext) {
-        throw new Error('Gateway context is required for subscription creation');
-      }
-
-      const subscriptionPayload = {
+      const subscriptionPayload: Record<string, unknown> = {
         customerId: params.customerId,
         subscriptionStatusId: 1, // Active
         name: params.description,
@@ -400,29 +460,27 @@ export class IQProPaymentProvider implements IPaymentProvider {
             name: params.description,
             description: `${params.frequency} membership payment`,
             quantity: 1,
-            unitPrice: params.amount, // API expects dollars (double), not cents
+            unitPrice: params.amount, // Dollars, not cents
             discount: 0,
-            unitOfMeasureId: params.frequency === 'annual' ? 4 : 3, // YEAR=4 or MONTH=3
+            unitOfMeasureId: params.frequency === 'annual' ? 4 : 3, // YEAR=4, MONTH=3
           },
         ],
+        ...(params.paymentAdjustments && params.paymentAdjustments.length > 0 && {
+          paymentAdjustments: params.paymentAdjustments,
+        }),
       };
 
-      const response = await client.post<Record<string, unknown>>(
-        `/api/gateway/${gatewayContext.gatewayId}/subscription`,
+      const res = await iqproPost<{ data?: Record<string, unknown> }>(
+        `/api/gateway/${gatewayId}/subscription`,
         subscriptionPayload,
       );
 
-      // Extract subscription ID from API response
-      const data = (response as Record<string, unknown>).data ?? response;
-      const subData = data as Record<string, unknown>;
+      const subData = (res.data ?? res) as Record<string, unknown>;
       const subscriptionId = (subData.subscriptionId ?? subData.id ?? '') as string;
 
       logger.info('[IQPro] Subscription created', { subscriptionId });
 
-      return {
-        success: true,
-        subscriptionId,
-      };
+      return { success: true, subscriptionId };
     } catch (error) {
       logger.error('[IQPro] Subscription creation failed', { error });
       return {
