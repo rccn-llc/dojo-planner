@@ -17,13 +17,24 @@ vi.mock('@/libs/DB', () => ({
   },
 }));
 
-// Mock IQPro client
+// Mock IQPro REST helpers
 vi.mock('@/libs/IQPro', () => ({
-  getIQProClient: vi.fn(),
+  iqproPost: vi.fn(),
+  iqproGet: vi.fn(),
+  iqproPut: vi.fn(),
+  isIQProConfigured: vi.fn().mockReturnValue(true),
   getGatewayProcessors: vi.fn().mockResolvedValue({
     cardProcessorId: 'test-card-processor-001',
     achProcessorId: 'test-ach-processor-001',
   }),
+}));
+
+// Mock Env so requireGatewayId can read IQPRO_GATEWAY_ID
+vi.mock('@/libs/Env', () => ({
+  Env: {
+    IQPRO_GATEWAY_ID: 'test-gateway-001',
+    IQPRO_BASE_URL: 'https://sandbox.api.basyspro.com',
+  },
 }));
 
 // Mock logger
@@ -43,40 +54,27 @@ vi.mock('drizzle-orm', () => ({
 // Helper to mock findFirst with partial org data (avoids full schema type requirement)
 const mockFindFirst = () => vi.mocked(db.query.organizationSchema.findFirst) as ReturnType<typeof vi.fn>;
 
-function createMockClient() {
-  return {
-    customers: {
-      create: vi.fn(),
-      createPaymentMethod: vi.fn(),
-    },
-    subscriptions: {
-      get: vi.fn(),
-      update: vi.fn(),
-      cancel: vi.fn(),
-    },
-    transactions: {
-      getServiceContext: vi.fn().mockReturnValue({
-        gatewayContext: { gatewayId: 'test-gateway-001' },
-      }),
-    },
-    post: vi.fn(),
-  };
-}
-
 describe('SaasSubscriptionService', () => {
-  let mockClient: ReturnType<typeof createMockClient>;
-
   beforeEach(() => {
-    vi.resetModules();
-    mockClient = createMockClient();
+    vi.clearAllMocks();
   });
 
-  async function setupModule(client: ReturnType<typeof createMockClient> | null = mockClient) {
-    const { getIQProClient } = await import('@/libs/IQPro');
-    vi.mocked(getIQProClient).mockReturnValue(client as any);
+  async function setupModule(opts: { iqproConfigured?: boolean } = {}) {
+    const iqpro = await import('@/libs/IQPro');
+    if (opts.iqproConfigured === false) {
+      vi.mocked(iqpro.isIQProConfigured).mockReturnValue(false);
+    } else {
+      vi.mocked(iqpro.isIQProConfigured).mockReturnValue(true);
+    }
     const { db } = await import('@/libs/DB');
     const service = await import('./SaasSubscriptionService');
-    return { service, db };
+    return {
+      service,
+      db,
+      iqproPost: vi.mocked(iqpro.iqproPost),
+      iqproGet: vi.mocked(iqpro.iqproGet),
+      iqproPut: vi.mocked(iqpro.iqproPut),
+    };
   }
 
   // ===== getCurrentSubscription =====
@@ -255,32 +253,26 @@ describe('SaasSubscriptionService', () => {
     };
 
     it('creates customer, payment method, and subscription successfully', async () => {
-      const { service, db } = await setupModule();
+      const { service, db, iqproPost } = await setupModule();
 
-      // No existing customer
-      mockFindFirst().mockResolvedValue({
-        iqproCustomerId: null,
-      });
+      mockFindFirst().mockResolvedValue({ iqproCustomerId: null });
 
-      mockClient.customers.create.mockResolvedValue({
-        customerId: 'iqpro-cust-001',
-      });
-
-      mockClient.customers.createPaymentMethod.mockResolvedValue({
-        customerPaymentMethodId: 'iqpro-pm-001',
-        last4: '4242',
-      });
-
-      mockClient.post.mockResolvedValue({
-        data: { subscriptionId: 'iqpro-sub-001' },
-      });
+      iqproPost
+        // 1. customer create
+        .mockResolvedValueOnce({ data: { customerId: 'iqpro-cust-001' } })
+        // 2. payment method create
+        .mockResolvedValueOnce({ data: { customerPaymentMethodId: 'iqpro-pm-001', last4: '4242' } })
+        // 3. subscription create
+        .mockResolvedValueOnce({ data: { subscriptionId: 'iqpro-sub-001' } });
 
       const result = await service.subscribe(baseParams);
 
       expect(result).toEqual({ success: true });
 
       // Customer created
-      expect(mockClient.customers.create).toHaveBeenCalledWith(
+      expect(iqproPost).toHaveBeenNthCalledWith(
+        1,
+        '/api/gateway/test-gateway-001/customer',
         expect.objectContaining({
           name: 'Test Dojo',
           referenceId: 'test-org-123',
@@ -288,8 +280,9 @@ describe('SaasSubscriptionService', () => {
       );
 
       // Payment method created with maskedCard
-      expect(mockClient.customers.createPaymentMethod).toHaveBeenCalledWith(
-        'iqpro-cust-001',
+      expect(iqproPost).toHaveBeenNthCalledWith(
+        2,
+        '/api/gateway/test-gateway-001/customer/iqpro-cust-001/payment',
         expect.objectContaining({
           card: {
             token: 'tok_test_abc123',
@@ -300,8 +293,9 @@ describe('SaasSubscriptionService', () => {
         }),
       );
 
-      // Subscription created via API
-      expect(mockClient.post).toHaveBeenCalledWith(
+      // Subscription created
+      expect(iqproPost).toHaveBeenNthCalledWith(
+        3,
         '/api/gateway/test-gateway-001/subscription',
         expect.objectContaining({
           customerId: 'iqpro-cust-001',
@@ -316,100 +310,72 @@ describe('SaasSubscriptionService', () => {
         }),
       );
 
-      // DB updated with subscription info
       expect(db.update).toHaveBeenCalled();
     });
 
     it('reuses existing IQPro customer if already present', async () => {
-      const { service } = await setupModule();
+      const { service, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({
-        iqproCustomerId: 'existing-cust-001',
-      });
+      mockFindFirst().mockResolvedValue({ iqproCustomerId: 'existing-cust-001' });
 
-      mockClient.customers.createPaymentMethod.mockResolvedValue({
-        customerPaymentMethodId: 'iqpro-pm-002',
-      });
-
-      mockClient.post.mockResolvedValue({
-        data: { subscriptionId: 'iqpro-sub-002' },
-      });
+      iqproPost
+        // No customer call — straight to payment method
+        .mockResolvedValueOnce({ data: { customerPaymentMethodId: 'iqpro-pm-002' } })
+        .mockResolvedValueOnce({ data: { subscriptionId: 'iqpro-sub-002' } });
 
       const result = await service.subscribe(baseParams);
 
       expect(result.success).toBe(true);
-      // Should NOT create a new customer
-      expect(mockClient.customers.create).not.toHaveBeenCalled();
-      // Should use existing customer ID for payment method
-      expect(mockClient.customers.createPaymentMethod).toHaveBeenCalledWith(
-        'existing-cust-001',
+      // Two calls: payment method + subscription. No customer create.
+      expect(iqproPost).toHaveBeenCalledTimes(2);
+      expect(iqproPost).toHaveBeenNthCalledWith(
+        1,
+        '/api/gateway/test-gateway-001/customer/existing-cust-001/payment',
         expect.any(Object),
       );
     });
 
     it('returns error for unknown plan ID', async () => {
-      const { service } = await setupModule();
+      const { service, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({
-        iqproCustomerId: 'existing-cust-001',
-      });
+      mockFindFirst().mockResolvedValue({ iqproCustomerId: 'existing-cust-001' });
 
-      mockClient.customers.createPaymentMethod.mockResolvedValue({
-        customerPaymentMethodId: 'iqpro-pm-003',
-      });
+      iqproPost.mockResolvedValueOnce({ data: { customerPaymentMethodId: 'iqpro-pm-003' } });
 
-      const result = await service.subscribe({
-        ...baseParams,
-        planId: 'enterprise' as any,
-      });
+      const result = await service.subscribe({ ...baseParams, planId: 'enterprise' as any });
 
       expect(result).toEqual({ success: false, error: 'Invalid plan' });
     });
 
     it('builds annual subscription with correct billingPeriodId and schedule', async () => {
-      const { service } = await setupModule();
+      const { service, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({
-        iqproCustomerId: 'existing-cust-001',
-      });
+      mockFindFirst().mockResolvedValue({ iqproCustomerId: 'existing-cust-001' });
 
-      mockClient.customers.createPaymentMethod.mockResolvedValue({
-        customerPaymentMethodId: 'iqpro-pm-004',
-      });
+      iqproPost
+        .mockResolvedValueOnce({ data: { customerPaymentMethodId: 'iqpro-pm-004' } })
+        .mockResolvedValueOnce({ data: { subscriptionId: 'iqpro-sub-annual' } });
 
-      mockClient.post.mockResolvedValue({
-        data: { subscriptionId: 'iqpro-sub-annual' },
-      });
-
-      const result = await service.subscribe({
-        ...baseParams,
-        billingCycle: 'annual',
-      });
+      const result = await service.subscribe({ ...baseParams, billingCycle: 'annual' });
 
       expect(result.success).toBe(true);
 
-      const callArgs = mockClient.post.mock.calls[0]![1] as Record<string, any>;
+      const subPayload = iqproPost.mock.calls[1]![1] as Record<string, any>;
 
-      expect(callArgs.recurrence.billingPeriodId).toBe(6);
-      expect(callArgs.recurrence.schedule.monthsOfYear).toBeDefined();
-      expect(callArgs.lineItems[0].unitOfMeasureId).toBe(4);
-      expect(callArgs.lineItems[0].unitPrice).toBe(348); // annual total for basic
+      expect(subPayload.recurrence.billingPeriodId).toBe(6);
+      expect(subPayload.recurrence.schedule.monthsOfYear).toBeDefined();
+      expect(subPayload.lineItems[0].unitOfMeasureId).toBe(4);
+      expect(subPayload.lineItems[0].unitPrice).toBe(348); // annual total for basic
     });
 
     it('falls back to cardNumber for maskedCard when token data not provided', async () => {
-      const { service } = await setupModule();
+      const { service, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({
-        iqproCustomerId: 'existing-cust-001',
-      });
+      mockFindFirst().mockResolvedValue({ iqproCustomerId: 'existing-cust-001' });
 
-      mockClient.customers.createPaymentMethod.mockResolvedValue({
-        customerPaymentMethodId: 'iqpro-pm-005',
-      });
-
-      mockClient.post.mockResolvedValue({
-        data: { subscriptionId: 'iqpro-sub-003' },
-      });
+      iqproPost
+        .mockResolvedValueOnce({ data: { customerPaymentMethodId: 'iqpro-pm-005' } })
+        .mockResolvedValueOnce({ data: { subscriptionId: 'iqpro-sub-003' } });
 
       await service.subscribe({
         ...baseParams,
@@ -419,78 +385,45 @@ describe('SaasSubscriptionService', () => {
         cardNumber: '4111111111111111',
       });
 
-      expect(mockClient.customers.createPaymentMethod).toHaveBeenCalledWith(
-        'existing-cust-001',
-        expect.objectContaining({
-          card: expect.objectContaining({
-            token: '4111111111111111',
-            maskedCard: '411111******1111',
-          }),
-        }),
-      );
+      const pmPayload = iqproPost.mock.calls[0]![1] as Record<string, any>;
+
+      expect(pmPayload.card.token).toBe('4111111111111111');
+      expect(pmPayload.card.maskedCard).toBe('411111******1111');
     });
 
-    it('returns error when client.post throws', async () => {
-      const { service } = await setupModule();
+    it('returns error when subscription POST throws', async () => {
+      const { service, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({
-        iqproCustomerId: 'existing-cust-001',
-      });
+      mockFindFirst().mockResolvedValue({ iqproCustomerId: 'existing-cust-001' });
 
-      mockClient.customers.createPaymentMethod.mockResolvedValue({
-        customerPaymentMethodId: 'iqpro-pm-006',
-      });
-
-      mockClient.post.mockRejectedValue(new Error('Gateway timeout'));
+      iqproPost
+        .mockResolvedValueOnce({ data: { customerPaymentMethodId: 'iqpro-pm-006' } })
+        .mockRejectedValueOnce(new Error('Gateway timeout'));
 
       const result = await service.subscribe(baseParams);
 
       expect(result).toEqual({ success: false, error: 'Gateway timeout' });
     });
 
-    it('throws when IQPro client is not configured', async () => {
-      const { service } = await setupModule(null);
+    it('throws when IQPro is not configured', async () => {
+      const { service } = await setupModule({ iqproConfigured: false });
 
-      await expect(service.subscribe(baseParams)).rejects.toThrow('IQPro client is not configured');
+      await expect(service.subscribe(baseParams)).rejects.toThrow('IQPro is not configured');
     });
 
     it('extracts subscriptionId from response.data or response directly', async () => {
-      const { service } = await setupModule();
+      const { service, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({
-        iqproCustomerId: 'existing-cust-001',
-      });
+      mockFindFirst().mockResolvedValue({ iqproCustomerId: 'existing-cust-001' });
 
-      mockClient.customers.createPaymentMethod.mockResolvedValue({
-        customerPaymentMethodId: 'iqpro-pm-007',
-      });
-
-      // Response without nested data
-      mockClient.post.mockResolvedValue({
-        subscriptionId: 'iqpro-sub-direct',
-      });
+      iqproPost
+        .mockResolvedValueOnce({ data: { customerPaymentMethodId: 'iqpro-pm-007' } })
+        // Response without nested data wrapper
+        .mockResolvedValueOnce({ subscriptionId: 'iqpro-sub-direct' });
 
       const result = await service.subscribe(baseParams);
 
       expect(result.success).toBe(true);
-    });
-
-    it('throws when gateway context is missing', async () => {
-      const { service } = await setupModule();
-
-      mockFindFirst().mockResolvedValue({
-        iqproCustomerId: 'existing-cust-001',
-      });
-
-      mockClient.customers.createPaymentMethod.mockResolvedValue({
-        customerPaymentMethodId: 'iqpro-pm-008',
-      });
-
-      mockClient.transactions.getServiceContext.mockReturnValue({});
-
-      const result = await service.subscribe(baseParams);
-
-      expect(result).toEqual({ success: false, error: 'Gateway context is required' });
     });
   });
 
@@ -498,20 +431,17 @@ describe('SaasSubscriptionService', () => {
 
   describe('changePlan', () => {
     it('updates subscription and DB with new plan details', async () => {
-      const { service, db } = await setupModule();
+      const { service, db, iqproPut } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({
-        iqproSubscriptionId: 'iqpro-sub-001',
-      });
-
-      mockClient.subscriptions.update.mockResolvedValue({});
+      mockFindFirst().mockResolvedValue({ iqproSubscriptionId: 'iqpro-sub-001' });
+      iqproPut.mockResolvedValueOnce({});
 
       const result = await service.changePlan('test-org-123', 'growth', 'monthly');
 
       expect(result).toEqual({ success: true });
 
-      expect(mockClient.subscriptions.update).toHaveBeenCalledWith(
-        'iqpro-sub-001',
+      expect(iqproPut).toHaveBeenCalledWith(
+        '/api/gateway/test-gateway-001/subscription/iqpro-sub-001',
         expect.objectContaining({
           name: 'Dojo Planner Growth Plan',
           lineItems: expect.arrayContaining([
@@ -529,16 +459,14 @@ describe('SaasSubscriptionService', () => {
     });
 
     it('returns error when no active subscription exists', async () => {
-      const { service } = await setupModule();
+      const { service, iqproPut } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({
-        iqproSubscriptionId: null,
-      });
+      mockFindFirst().mockResolvedValue({ iqproSubscriptionId: null });
 
       const result = await service.changePlan('test-org-123', 'growth', 'monthly');
 
       expect(result).toEqual({ success: false, error: 'No active subscription to change' });
-      expect(mockClient.subscriptions.update).not.toHaveBeenCalled();
+      expect(iqproPut).not.toHaveBeenCalled();
     });
 
     it('returns error when org not found', async () => {
@@ -554,9 +482,7 @@ describe('SaasSubscriptionService', () => {
     it('returns error for unknown plan ID', async () => {
       const { service } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({
-        iqproSubscriptionId: 'iqpro-sub-001',
-      });
+      mockFindFirst().mockResolvedValue({ iqproSubscriptionId: 'iqpro-sub-001' });
 
       const result = await service.changePlan('test-org-123', 'enterprise' as any, 'monthly');
 
@@ -564,32 +490,26 @@ describe('SaasSubscriptionService', () => {
     });
 
     it('handles annual billing cycle correctly', async () => {
-      const { service } = await setupModule();
+      const { service, iqproPut } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({
-        iqproSubscriptionId: 'iqpro-sub-001',
-      });
-
-      mockClient.subscriptions.update.mockResolvedValue({});
+      mockFindFirst().mockResolvedValue({ iqproSubscriptionId: 'iqpro-sub-001' });
+      iqproPut.mockResolvedValueOnce({});
 
       const result = await service.changePlan('test-org-123', 'growth', 'annual');
 
       expect(result.success).toBe(true);
 
-      const callArgs = mockClient.subscriptions.update.mock.calls[0]![1] as Record<string, any>;
+      const callArgs = iqproPut.mock.calls[0]![1] as Record<string, any>;
 
       expect(callArgs.lineItems[0].unitPrice).toBe(1188); // annual total for growth
       expect(callArgs.lineItems[0].unitOfMeasureId).toBe(4);
     });
 
     it('returns error when IQPro update fails', async () => {
-      const { service } = await setupModule();
+      const { service, iqproPut } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({
-        iqproSubscriptionId: 'iqpro-sub-001',
-      });
-
-      mockClient.subscriptions.update.mockRejectedValue(new Error('Update failed'));
+      mockFindFirst().mockResolvedValue({ iqproSubscriptionId: 'iqpro-sub-001' });
+      iqproPut.mockRejectedValue(new Error('Update failed'));
 
       const result = await service.changePlan('test-org-123', 'growth', 'monthly');
 
@@ -601,20 +521,17 @@ describe('SaasSubscriptionService', () => {
 
   describe('cancelSubscription', () => {
     it('cancels IQPro subscription and updates DB status', async () => {
-      const { service, db } = await setupModule();
+      const { service, db, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({
-        iqproSubscriptionId: 'iqpro-sub-001',
-      });
-
-      mockClient.subscriptions.cancel.mockResolvedValue({});
+      mockFindFirst().mockResolvedValue({ iqproSubscriptionId: 'iqpro-sub-001' });
+      iqproPost.mockResolvedValueOnce({});
 
       const result = await service.cancelSubscription('test-org-123', false);
 
       expect(result).toEqual({ success: true });
 
-      expect(mockClient.subscriptions.cancel).toHaveBeenCalledWith(
-        'iqpro-sub-001',
+      expect(iqproPost).toHaveBeenCalledWith(
+        '/api/gateway/test-gateway-001/subscription/iqpro-sub-001/cancel',
         { cancel: { now: true, endOfBillingPeriod: false } },
       );
 
@@ -622,50 +539,39 @@ describe('SaasSubscriptionService', () => {
     });
 
     it('cancels at end of billing period when endOfPeriod is true', async () => {
-      const { service } = await setupModule();
+      const { service, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({
-        iqproSubscriptionId: 'iqpro-sub-001',
-      });
-
-      mockClient.subscriptions.cancel.mockResolvedValue({});
+      mockFindFirst().mockResolvedValue({ iqproSubscriptionId: 'iqpro-sub-001' });
+      iqproPost.mockResolvedValueOnce({});
 
       const result = await service.cancelSubscription('test-org-123', true);
 
       expect(result).toEqual({ success: true });
 
-      expect(mockClient.subscriptions.cancel).toHaveBeenCalledWith(
-        'iqpro-sub-001',
+      expect(iqproPost).toHaveBeenCalledWith(
+        '/api/gateway/test-gateway-001/subscription/iqpro-sub-001/cancel',
         { cancel: { now: false, endOfBillingPeriod: true } },
       );
     });
 
     it('updates DB without calling IQPro when no subscription ID exists', async () => {
-      const { service, db } = await setupModule();
+      const { service, db, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({
-        iqproSubscriptionId: null,
-      });
+      mockFindFirst().mockResolvedValue({ iqproSubscriptionId: null });
 
       const result = await service.cancelSubscription('test-org-123', false);
 
       expect(result).toEqual({ success: true });
 
-      // Should NOT call IQPro cancel
-      expect(mockClient.subscriptions.cancel).not.toHaveBeenCalled();
-
-      // Should still update DB to cancelled
+      expect(iqproPost).not.toHaveBeenCalled();
       expect(db.update).toHaveBeenCalled();
     });
 
     it('returns error when IQPro cancel fails', async () => {
-      const { service } = await setupModule();
+      const { service, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({
-        iqproSubscriptionId: 'iqpro-sub-001',
-      });
-
-      mockClient.subscriptions.cancel.mockRejectedValue(new Error('Cancel API error'));
+      mockFindFirst().mockResolvedValue({ iqproSubscriptionId: 'iqpro-sub-001' });
+      iqproPost.mockRejectedValue(new Error('Cancel API error'));
 
       const result = await service.cancelSubscription('test-org-123', false);
 
@@ -677,66 +583,34 @@ describe('SaasSubscriptionService', () => {
 
   describe('getBillingHistory', () => {
     it('returns formatted invoices from IQPro subscription', async () => {
-      const { service } = await setupModule();
+      const { service, iqproGet } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({
-        iqproSubscriptionId: 'iqpro-sub-001',
-      });
+      mockFindFirst().mockResolvedValue({ iqproSubscriptionId: 'iqpro-sub-001' });
 
-      mockClient.subscriptions.get.mockResolvedValue({
+      iqproGet.mockResolvedValueOnce({
         data: {
           invoices: [
-            {
-              invoiceId: 'inv-001',
-              status: { name: 'Paid' },
-              amountCaptured: 49,
-              invoiceDate: '2025-01-15',
-              dueDate: '2025-01-15',
-            },
-            {
-              invoiceId: 'inv-002',
-              status: { name: 'Pending' },
-              amountCaptured: 49,
-              invoiceDate: '2025-02-15',
-              dueDate: '2025-02-15',
-            },
+            { invoiceId: 'inv-001', status: { name: 'Paid' }, amountCaptured: 49, invoiceDate: '2025-01-15', dueDate: '2025-01-15' },
+            { invoiceId: 'inv-002', status: { name: 'Pending' }, amountCaptured: 49, invoiceDate: '2025-02-15', dueDate: '2025-02-15' },
           ],
-          paymentMethod: {
-            customerPaymentMethod: {
-              card: { maskedCard: '424242******4242' },
-            },
-          },
+          paymentMethod: { customerPaymentMethod: { card: { maskedCard: '424242******4242' } } },
         },
       });
 
       const result = await service.getBillingHistory('test-org-123');
 
       expect(result).toEqual([
-        {
-          invoiceId: 'inv-001',
-          status: 'Paid',
-          amount: 49,
-          invoiceDate: '2025-01-15',
-          dueDate: '2025-01-15',
-          paymentMethodLast4: '4242',
-        },
-        {
-          invoiceId: 'inv-002',
-          status: 'Pending',
-          amount: 49,
-          invoiceDate: '2025-02-15',
-          dueDate: '2025-02-15',
-          paymentMethodLast4: '4242',
-        },
+        { invoiceId: 'inv-001', status: 'Paid', amount: 49, invoiceDate: '2025-01-15', dueDate: '2025-01-15', paymentMethodLast4: '4242' },
+        { invoiceId: 'inv-002', status: 'Pending', amount: 49, invoiceDate: '2025-02-15', dueDate: '2025-02-15', paymentMethodLast4: '4242' },
       ]);
+
+      expect(iqproGet).toHaveBeenCalledWith('/api/gateway/test-gateway-001/subscription/iqpro-sub-001');
     });
 
     it('returns empty array when no subscription exists', async () => {
       const { service } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({
-        iqproSubscriptionId: null,
-      });
+      mockFindFirst().mockResolvedValue({ iqproSubscriptionId: null });
 
       const result = await service.getBillingHistory('test-org-123');
 
@@ -754,13 +628,10 @@ describe('SaasSubscriptionService', () => {
     });
 
     it('returns empty array when IQPro API call fails', async () => {
-      const { service } = await setupModule();
+      const { service, iqproGet } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({
-        iqproSubscriptionId: 'iqpro-sub-001',
-      });
-
-      mockClient.subscriptions.get.mockRejectedValue(new Error('API error'));
+      mockFindFirst().mockResolvedValue({ iqproSubscriptionId: 'iqpro-sub-001' });
+      iqproGet.mockRejectedValueOnce(new Error('API error'));
 
       const result = await service.getBillingHistory('test-org-123');
 
@@ -768,58 +639,31 @@ describe('SaasSubscriptionService', () => {
     });
 
     it('handles invoices without status or payment method gracefully', async () => {
-      const { service } = await setupModule();
+      const { service, iqproGet } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({
-        iqproSubscriptionId: 'iqpro-sub-001',
-      });
-
-      mockClient.subscriptions.get.mockResolvedValue({
-        invoices: [
-          {
-            invoiceId: 'inv-003',
-            amountCaptured: 99,
-          },
-        ],
+      mockFindFirst().mockResolvedValue({ iqproSubscriptionId: 'iqpro-sub-001' });
+      iqproGet.mockResolvedValueOnce({
+        invoices: [{ invoiceId: 'inv-003', amountCaptured: 99 }],
       });
 
       const result = await service.getBillingHistory('test-org-123');
 
       expect(result).toEqual([
-        {
-          invoiceId: 'inv-003',
-          status: null,
-          amount: 99,
-          invoiceDate: null,
-          dueDate: null,
-          paymentMethodLast4: null,
-        },
+        { invoiceId: 'inv-003', status: null, amount: 99, invoiceDate: null, dueDate: null, paymentMethodLast4: null },
       ]);
     });
 
     it('handles response with data wrapper vs direct response', async () => {
-      const { service } = await setupModule();
+      const { service, iqproGet } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({
-        iqproSubscriptionId: 'iqpro-sub-001',
-      });
+      mockFindFirst().mockResolvedValue({ iqproSubscriptionId: 'iqpro-sub-001' });
 
       // Response without data wrapper
-      mockClient.subscriptions.get.mockResolvedValue({
+      iqproGet.mockResolvedValueOnce({
         invoices: [
-          {
-            invoiceId: 'inv-direct',
-            status: { name: 'Paid' },
-            amountCaptured: 125,
-            invoiceDate: '2025-03-01',
-            dueDate: '2025-03-01',
-          },
+          { invoiceId: 'inv-direct', status: { name: 'Paid' }, amountCaptured: 125, invoiceDate: '2025-03-01', dueDate: '2025-03-01' },
         ],
-        paymentMethod: {
-          customerPaymentMethod: {
-            card: { maskedCard: '555555******4444' },
-          },
-        },
+        paymentMethod: { customerPaymentMethod: { card: { maskedCard: '555555******4444' } } },
       });
 
       const result = await service.getBillingHistory('test-org-123');

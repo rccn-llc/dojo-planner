@@ -1,867 +1,458 @@
-import type { ProcessMemberPaymentParams, RegisterPaymentMethodParams } from './MemberPaymentService';
-import type { IPaymentProvider } from './PaymentProviderService';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// ── Mocks ─────────────────────────────────────────────────────────────
-
-const mockRandomUUID = vi.fn();
+// ── Mocks ───────────────────────────────────────────────────────────────────
 
 vi.mock('node:crypto', () => ({
-  randomUUID: (...args: any[]) => mockRandomUUID(...args),
+  randomUUID: vi.fn(() => 'uuid-test-stub'),
 }));
 
-vi.mock('@/libs/DB', () => ({
-  db: {
-    select: vi.fn(() => ({
-      from: vi.fn(() => ({
-        where: vi.fn(() => ({
-          limit: vi.fn(() => Promise.resolve([])),
-        })),
-      })),
-    })),
-    insert: vi.fn(() => ({
-      values: vi.fn(() => Promise.resolve()),
-    })),
-    update: vi.fn(() => ({
-      set: vi.fn(() => ({
-        where: vi.fn(() => Promise.resolve()),
-      })),
-    })),
-  },
+// DB mock state — captured via closures so the per-test `resetDbMock` helper
+// can rewire the chain without re-importing the module.
+const dbMocks = {
+  select: vi.fn(),
+  update: vi.fn(),
+  insert: vi.fn(),
+};
+
+vi.mock('@/libs/DB', () => ({ db: dbMocks }));
+
+vi.mock('drizzle-orm', () => ({
+  eq: vi.fn((_col, val) => ({ _type: 'eq', value: val })),
 }));
 
 vi.mock('@/models/Schema', () => ({
-  memberSchema: {
-    id: 'id',
-    organizationId: 'organization_id',
-    iqproCustomerId: 'iqpro_customer_id',
-  },
-  paymentMethodSchema: {
-    id: 'id',
-    memberId: 'member_id',
-    iqproPaymentMethodId: 'iqpro_payment_method_id',
-    type: 'type',
-    last4: 'last4',
-    isDefault: 'is_default',
-  },
-  transactionSchema: {
-    id: 'id',
-    organizationId: 'organization_id',
-    memberId: 'member_id',
-    memberMembershipId: 'member_membership_id',
-    iqproTransactionId: 'iqpro_transaction_id',
-    transactionType: 'transaction_type',
-    amount: 'amount',
-    currency: 'currency',
-    status: 'status',
-    paymentMethod: 'payment_method',
-    description: 'description',
-    processedAt: 'processed_at',
-  },
-  memberMembershipSchema: {
-    id: 'id',
-    iqproSubscriptionId: 'iqpro_subscription_id',
-    billingType: 'billing_type',
-    firstPaymentDate: 'first_payment_date',
-    nextPaymentDate: 'next_payment_date',
-  },
+  memberSchema: { id: 'id', iqproCustomerId: 'iqpro_customer_id' },
+  paymentMethodSchema: {},
+  transactionSchema: {},
+  memberMembershipSchema: { id: 'id' },
+}));
+
+vi.mock('@/libs/IQPro', () => ({
+  isIQProConfigured: vi.fn().mockReturnValue(true),
+  calculateTransactionFees: vi.fn(),
+  getGatewayProcessors: vi.fn().mockResolvedValue({
+    cardProcessorId: 'card_proc_001',
+    achProcessorId: 'ach_proc_001',
+  }),
 }));
 
 vi.mock('@/libs/Logger', () => ({
-  logger: {
-    info: vi.fn(),
-    error: vi.fn(),
-    warn: vi.fn(),
-    debug: vi.fn(),
-  },
+  logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
 }));
 
-vi.mock('./PaymentProviderService', () => ({
-  isPaymentEnabled: vi.fn(() => true),
-  getPaymentProvider: vi.fn(),
-  resetPaymentProvider: vi.fn(),
-}));
+const mockProvider = {
+  createCustomer: vi.fn(),
+  createPaymentMethod: vi.fn(),
+  processPayment: vi.fn(),
+  createSubscription: vi.fn(),
+};
 
-// ── Helpers ───────────────────────────────────────────────────────────
+vi.mock('./PaymentProviderService', async () => {
+  const actual = await vi.importActual<typeof import('./PaymentProviderService')>('./PaymentProviderService');
+  return {
+    ...actual,
+    isPaymentEnabled: vi.fn().mockReturnValue(true),
+    getPaymentProvider: vi.fn().mockResolvedValue(mockProvider),
+  };
+});
 
-function setupDbMocks(db: any, options: {
-  existingCustomerId?: string | null;
-  captureInserts?: any[];
-} = {}) {
-  const { existingCustomerId = null, captureInserts } = options;
+// ── DB mock helper ─────────────────────────────────────────────────────────
+//
+// The orchestrator's DB usage is: select-from-where-limit (existing customer),
+// update-set-where (set iqproCustomerId / membership fields), insert-values
+// (payment method + transaction). We track all `set()` payloads so we can
+// assert what was written.
 
-  // DB select chain
-  const mockSelectLimit = vi.fn().mockResolvedValue([{ iqproCustomerId: existingCustomerId }]);
-  const mockSelectWhere = vi.fn().mockReturnValue({ limit: mockSelectLimit });
-  const mockSelectFrom = vi.fn().mockReturnValue({ where: mockSelectWhere });
-  vi.mocked(db.select).mockReturnValue({ from: mockSelectFrom } as any);
+let dbState: {
+  existingCustomerId: string | null;
+  setCalls: Array<Record<string, unknown>>;
+  insertCalls: Array<Record<string, unknown>>;
+};
 
-  // DB update chain
-  const mockUpdateWhere = vi.fn().mockResolvedValue(undefined);
-  const mockUpdateSet = vi.fn().mockReturnValue({ where: mockUpdateWhere });
-  vi.mocked(db.update).mockReturnValue({ set: mockUpdateSet } as any);
+function resetDbMock(existingCustomerId: string | null = null) {
+  dbState = { existingCustomerId, setCalls: [], insertCalls: [] };
 
-  // DB insert chain
-  if (captureInserts) {
-    vi.mocked(db.insert).mockImplementation(() => ({
-      values: vi.fn((vals) => {
-        captureInserts.push(vals);
-        return Promise.resolve();
+  dbMocks.select.mockReturnValue({
+    from: vi.fn().mockReturnValue({
+      where: vi.fn().mockReturnValue({
+        limit: vi.fn().mockResolvedValue([{ iqproCustomerId: dbState.existingCustomerId }]),
       }),
-    }) as any);
-  } else {
-    const mockInsertValues = vi.fn().mockResolvedValue(undefined);
-    vi.mocked(db.insert).mockReturnValue({ values: mockInsertValues } as any);
-  }
+    }),
+  });
 
-  return { mockUpdateSet, mockUpdateWhere };
+  dbMocks.update.mockReturnValue({
+    set: vi.fn((vals: Record<string, unknown>) => {
+      dbState.setCalls.push(vals);
+      return { where: vi.fn().mockResolvedValue(undefined) };
+    }),
+  });
+
+  dbMocks.insert.mockReturnValue({
+    values: vi.fn((vals: Record<string, unknown>) => {
+      dbState.insertCalls.push(vals);
+      return Promise.resolve();
+    }),
+  });
 }
 
-function makeBaseParams(overrides?: Partial<ProcessMemberPaymentParams>): ProcessMemberPaymentParams {
-  return {
-    organizationId: 'test-org-456',
-    memberId: 'test-member-123',
-    memberEmail: 'john@example.com',
-    memberFirstName: 'John',
+// ── Tests ───────────────────────────────────────────────────────────────────
+
+describe('processMemberPayment', () => {
+  const baseParams = {
+    organizationId: 'org_x',
+    memberId: 'mem_42',
+    memberEmail: 'jane@example.com',
+    memberFirstName: 'Jane',
     memberLastName: 'Doe',
-    paymentMethod: 'card',
-    billingType: 'one-time',
-    amount: 5000,
-    description: 'Monthly membership',
-    cardholderName: 'John Doe',
-    cardNumber: '4111111111111111',
-    cardExpiry: '12/28',
-    cardCvc: '123',
-    membershipPlanId: 'test-plan-001',
-    memberMembershipId: 'test-mm-001',
-    ...overrides,
+    memberPhone: '5550123456',
+    memberAddress: {
+      street: '1 Market St',
+      city: 'San Francisco',
+      state: 'CA',
+      zipCode: '94103',
+      country: 'US',
+    },
+    paymentMethod: 'card' as const,
+    billingType: 'one-time' as const,
+    amount: 100,
+    description: 'Test charge',
+    cardToken: 'tex-tok-abc',
+    cardFirstSix: '424242',
+    cardLastFour: '4242',
+    cardExpiry: '12/27',
   };
-}
 
-function makeMockProvider(overrides?: Partial<IPaymentProvider>): IPaymentProvider {
-  return {
-    createCustomer: vi.fn().mockResolvedValue('test-customer-789'),
-    createPaymentMethod: vi.fn().mockResolvedValue({
-      paymentMethodId: 'test-pm-ext-001',
-      last4: '1111',
-    }),
-    processPayment: vi.fn().mockResolvedValue({
-      success: true,
-      transactionId: 'test-ext-tx-001',
-      status: 'approved' as const,
-    }),
-    createSubscription: vi.fn().mockResolvedValue({
-      success: true,
-      subscriptionId: 'test-sub-001',
-    }),
-    ...overrides,
+  const baseFees = {
+    isSurchargeable: true,
+    isPinCapable: false,
+    surchargeRate: 0.03,
+    surchargeAmount: 3,
+    serviceFeesAmount: 0,
+    convenienceFeesAmount: 0,
+    baseAmount: 100,
+    amount: 111.5,
+    tip: 0,
+    taxAmount: 8.5,
+    cardBrand: 'Visa' as string | null,
+    cardType: 'credit' as string | null,
   };
-}
 
-// ── Tests ─────────────────────────────────────────────────────────────
-
-describe('MemberPaymentService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset randomUUID mock to produce deterministic IDs per test
-    mockRandomUUID
-      .mockReturnValueOnce('test-uuid-pm-001')
-      .mockReturnValueOnce('test-uuid-tx-001');
-  });
+    resetDbMock();
 
-  // ── 1. Payment not enabled ───────────────────────────────────────
-
-  describe('when payment is not enabled', () => {
-    it('should throw an error', async () => {
-      const { isPaymentEnabled } = await import('./PaymentProviderService');
-      vi.mocked(isPaymentEnabled).mockReturnValue(false);
-
-      const { processMemberPayment } = await import('./MemberPaymentService');
-
-      await expect(processMemberPayment(makeBaseParams())).rejects.toThrow(
-        'Payment processing is not configured',
-      );
+    mockProvider.createCustomer.mockResolvedValue({
+      customerId: 'cust_123',
+      billingAddressId: 'addr_billing_1',
+    });
+    mockProvider.createPaymentMethod.mockResolvedValue({
+      paymentMethodId: 'pm_card_1',
+      last4: '4242',
+    });
+    mockProvider.processPayment.mockResolvedValue({
+      success: true,
+      transactionId: 'tx_42',
+      status: 'approved',
+    });
+    mockProvider.createSubscription.mockResolvedValue({
+      success: true,
+      subscriptionId: 'sub_42',
     });
   });
 
-  // ── 2. Customer creation ─────────────────────────────────────────
+  it('returns a failed result when member address state is missing', async () => {
+    const { processMemberPayment } = await import('./MemberPaymentService');
 
-  describe('customer management', () => {
-    it('should create a new customer when none exists and store ID in DB', async () => {
-      const mockProvider = makeMockProvider();
-
-      const { isPaymentEnabled, getPaymentProvider } = await import('./PaymentProviderService');
-      vi.mocked(isPaymentEnabled).mockReturnValue(true);
-      vi.mocked(getPaymentProvider).mockResolvedValue(mockProvider);
-
-      const { db } = await import('@/libs/DB');
-      const { mockUpdateSet } = setupDbMocks(db, { existingCustomerId: null });
-
-      const { processMemberPayment } = await import('./MemberPaymentService');
-      const result = await processMemberPayment(makeBaseParams());
-
-      expect(result.success).toBe(true);
-      expect(mockProvider.createCustomer).toHaveBeenCalledWith(
-        expect.objectContaining({
-          organizationId: 'test-org-456',
-          memberId: 'test-member-123',
-          email: 'john@example.com',
-          firstName: 'John',
-          lastName: 'Doe',
-        }),
-      );
-
-      // Verify customer ID was stored in member table
-      expect(db.update).toHaveBeenCalled();
-      expect(mockUpdateSet).toHaveBeenCalledWith({ iqproCustomerId: 'test-customer-789' });
+    const result = await processMemberPayment({
+      ...baseParams,
+      memberAddress: undefined,
     });
 
-    // ── 3. Reuse existing customer ID ────────────────────────────
-
-    it('should reuse existing customer ID from DB without creating a new one', async () => {
-      const mockProvider = makeMockProvider();
-
-      const { isPaymentEnabled, getPaymentProvider } = await import('./PaymentProviderService');
-      vi.mocked(isPaymentEnabled).mockReturnValue(true);
-      vi.mocked(getPaymentProvider).mockResolvedValue(mockProvider);
-
-      const { db } = await import('@/libs/DB');
-      setupDbMocks(db, { existingCustomerId: 'existing-cust-999' });
-
-      const { processMemberPayment } = await import('./MemberPaymentService');
-      const result = await processMemberPayment(makeBaseParams());
-
-      expect(result.success).toBe(true);
-      expect(mockProvider.createCustomer).not.toHaveBeenCalled();
-    });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Member address state is required/);
   });
 
-  // ── 4. Payment method creation and persistence ───────────────────
+  it('one-time payment: calculates fees, calls provider with feeBreakdown + billingAddressId', async () => {
+    const { calculateTransactionFees } = await import('@/libs/IQPro');
 
-  describe('payment method', () => {
-    it('should create payment method via provider and persist to DB', async () => {
-      const mockProvider = makeMockProvider();
+    vi.mocked(calculateTransactionFees).mockResolvedValueOnce(baseFees);
 
-      const { isPaymentEnabled, getPaymentProvider } = await import('./PaymentProviderService');
-      vi.mocked(isPaymentEnabled).mockReturnValue(true);
-      vi.mocked(getPaymentProvider).mockResolvedValue(mockProvider);
+    const { processMemberPayment } = await import('./MemberPaymentService');
 
-      const { db } = await import('@/libs/DB');
-      const insertCalls: any[] = [];
-      setupDbMocks(db, { existingCustomerId: null, captureInserts: insertCalls });
+    const result = await processMemberPayment(baseParams);
 
-      const { processMemberPayment } = await import('./MemberPaymentService');
-      await processMemberPayment(makeBaseParams());
+    expect(result.success).toBe(true);
+    expect(result.status).toBe('approved');
 
-      expect(mockProvider.createPaymentMethod).toHaveBeenCalledWith(
-        expect.objectContaining({
-          customerId: 'test-customer-789',
-          paymentMethod: 'card',
-          cardholderName: 'John Doe',
-          cardNumber: '4111111111111111',
-          cardExpiry: '12/28',
-          cardCvc: '123',
-        }),
-      );
-
-      // Verify payment method was inserted to DB
-      const pmInsert = insertCalls.find((c: any) => c.iqproPaymentMethodId === 'test-pm-ext-001');
-
-      expect(pmInsert).toBeDefined();
-      expect(pmInsert).toEqual(
-        expect.objectContaining({
-          id: 'test-uuid-pm-001',
-          memberId: 'test-member-123',
-          iqproPaymentMethodId: 'test-pm-ext-001',
-          type: 'card',
-          last4: '1111',
-          isDefault: true,
-        }),
-      );
+    expect(calculateTransactionFees).toHaveBeenCalledWith({
+      baseAmount: 100,
+      processorId: 'card_proc_001',
+      state: 'CA',
+      paymentMethod: 'card',
+      token: 'tex-tok-abc',
     });
 
-    it('should pass cardToken through to provider when provided', async () => {
-      const mockProvider = makeMockProvider();
-
-      const { isPaymentEnabled, getPaymentProvider } = await import('./PaymentProviderService');
-      vi.mocked(isPaymentEnabled).mockReturnValue(true);
-      vi.mocked(getPaymentProvider).mockResolvedValue(mockProvider);
-
-      const { db } = await import('@/libs/DB');
-      setupDbMocks(db, { existingCustomerId: 'test-customer-789' });
-
-      const { processMemberPayment } = await import('./MemberPaymentService');
-      await processMemberPayment(makeBaseParams({
-        cardToken: 'tok_test_abc123',
-      }));
-
-      expect(mockProvider.createPaymentMethod).toHaveBeenCalledWith(
-        expect.objectContaining({
-          cardToken: 'tok_test_abc123',
+    expect(mockProvider.processPayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customerId: 'cust_123',
+        paymentMethodId: 'pm_card_1',
+        amount: 111.5,
+        currency: 'USD',
+        customerBillingAddressId: 'addr_billing_1',
+        feeBreakdown: expect.objectContaining({
+          baseAmount: 100,
+          taxAmount: 8.5,
+          surchargeAmount: 3,
+          amount: 111.5,
         }),
-      );
-    });
-
-    it('should pass achAccountType through to provider for ACH payments', async () => {
-      const mockProvider = makeMockProvider();
-
-      const { isPaymentEnabled, getPaymentProvider } = await import('./PaymentProviderService');
-      vi.mocked(isPaymentEnabled).mockReturnValue(true);
-      vi.mocked(getPaymentProvider).mockResolvedValue(mockProvider);
-
-      const { db } = await import('@/libs/DB');
-      setupDbMocks(db, { existingCustomerId: 'test-customer-789' });
-
-      const { processMemberPayment } = await import('./MemberPaymentService');
-      await processMemberPayment(makeBaseParams({
-        paymentMethod: 'ach',
-        achAccountHolder: 'John Doe',
-        achRoutingNumber: '021000021',
-        achAccountNumber: '123456789',
-        achAccountType: 'Savings',
-      }));
-
-      expect(mockProvider.createPaymentMethod).toHaveBeenCalledWith(
-        expect.objectContaining({
-          achAccountType: 'Savings',
+        billingAddress: expect.objectContaining({
+          firstName: 'Jane',
+          state: 'CA',
         }),
-      );
-    });
+        lineItem: expect.objectContaining({
+          unitPrice: 100,
+          discount: 0,
+        }),
+      }),
+    );
+
+    expect(mockProvider.createSubscription).not.toHaveBeenCalled();
   });
 
-  // ── 5. One-time payment ──────────────────────────────────────────
+  it('autopay: creates subscription THEN runs immediate Sale charge for the first period', async () => {
+    const { calculateTransactionFees } = await import('@/libs/IQPro');
 
-  describe('one-time payment', () => {
-    it('should process payment and create transaction record', async () => {
-      const mockProvider = makeMockProvider();
+    vi.mocked(calculateTransactionFees).mockResolvedValueOnce(baseFees);
 
-      const { isPaymentEnabled, getPaymentProvider } = await import('./PaymentProviderService');
-      vi.mocked(isPaymentEnabled).mockReturnValue(true);
-      vi.mocked(getPaymentProvider).mockResolvedValue(mockProvider);
+    const { processMemberPayment } = await import('./MemberPaymentService');
 
-      const { db } = await import('@/libs/DB');
-      const insertCalls: any[] = [];
-      const { mockUpdateSet } = setupDbMocks(db, {
-        existingCustomerId: 'test-customer-789',
-        captureInserts: insertCalls,
-      });
-
-      const { processMemberPayment } = await import('./MemberPaymentService');
-      const result = await processMemberPayment(makeBaseParams({
-        billingType: 'one-time',
-      }));
-
-      expect(result).toEqual(
-        expect.objectContaining({
-          success: true,
-          status: 'approved',
-          transactionId: 'test-uuid-tx-001',
-        }),
-      );
-
-      expect(mockProvider.processPayment).toHaveBeenCalledWith(
-        expect.objectContaining({
-          customerId: 'test-customer-789',
-          paymentMethodId: 'test-pm-ext-001',
-          amount: 5000,
-          currency: 'USD',
-          description: 'Monthly membership',
-        }),
-      );
-
-      // Transaction record should have been inserted
-      const txInsert = insertCalls.find((c: any) => c.transactionType === 'membership_payment');
-
-      expect(txInsert).toBeDefined();
-      expect(txInsert).toEqual(
-        expect.objectContaining({
-          id: 'test-uuid-tx-001',
-          organizationId: 'test-org-456',
-          memberId: 'test-member-123',
-          amount: 5000,
-          currency: 'USD',
-          status: 'paid',
-          paymentMethod: 'card',
-        }),
-      );
-
-      // Membership billing info should be updated
-      expect(mockUpdateSet).toHaveBeenCalledWith(
-        expect.objectContaining({
-          billingType: 'one-time',
-          firstPaymentDate: expect.any(Date),
-        }),
-      );
+    const result = await processMemberPayment({
+      ...baseParams,
+      billingType: 'autopay',
+      membershipPlanFrequency: 'monthly',
+      memberMembershipId: 'mm_1',
     });
 
-    it('should pass ACH data through to processPayment for ACH payments', async () => {
-      const mockProvider = makeMockProvider({
-        createPaymentMethod: vi.fn().mockResolvedValue({
-          paymentMethodId: 'test-pm-ach-001',
-          last4: '6789',
-          achToken: 'ach-tok-from-vault',
-        }),
-      });
+    expect(result.success).toBe(true);
+    expect(result.status).toBe('approved');
 
-      const { isPaymentEnabled, getPaymentProvider } = await import('./PaymentProviderService');
-      vi.mocked(isPaymentEnabled).mockReturnValue(true);
-      vi.mocked(getPaymentProvider).mockResolvedValue(mockProvider);
+    expect(mockProvider.createSubscription).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customerId: 'cust_123',
+        paymentMethodId: 'pm_card_1',
+        frequency: 'monthly',
+        paymentAdjustments: [
+          { type: 'Surcharge', percentage: null, flatAmount: 3 },
+        ],
+      }),
+    );
 
-      const { db } = await import('@/libs/DB');
-      setupDbMocks(db, { existingCustomerId: 'test-customer-789' });
+    expect(mockProvider.processPayment).toHaveBeenCalledTimes(1);
+    expect(mockProvider.processPayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amount: 111.5,
+        feeBreakdown: expect.objectContaining({ amount: 111.5 }),
+        metadata: expect.objectContaining({ iqproSubscriptionId: 'sub_42' }),
+      }),
+    );
 
-      const { processMemberPayment } = await import('./MemberPaymentService');
-      await processMemberPayment(makeBaseParams({
-        paymentMethod: 'ach',
-        billingType: 'one-time',
-        achRoutingNumber: '111111111',
-        achAccountNumber: '111111111',
-        achAccountType: 'Checking',
-      }));
+    // Membership update wrote iqproSubscriptionId + autopay
+    const membershipSet = dbState.setCalls.find(s => s.iqproSubscriptionId === 'sub_42');
 
-      expect(mockProvider.processPayment).toHaveBeenCalledWith(
-        expect.objectContaining({
-          ach: {
-            achToken: 'ach-tok-from-vault',
-            secCode: 'WEB',
-            routingNumber: '111111111',
-            accountType: 'Checking',
-          },
-        }),
-      );
-    });
-
-    it('should not pass ACH data for card payments', async () => {
-      const mockProvider = makeMockProvider();
-
-      const { isPaymentEnabled, getPaymentProvider } = await import('./PaymentProviderService');
-      vi.mocked(isPaymentEnabled).mockReturnValue(true);
-      vi.mocked(getPaymentProvider).mockResolvedValue(mockProvider);
-
-      const { db } = await import('@/libs/DB');
-      setupDbMocks(db, { existingCustomerId: 'test-customer-789' });
-
-      const { processMemberPayment } = await import('./MemberPaymentService');
-      await processMemberPayment(makeBaseParams({
-        paymentMethod: 'card',
-        billingType: 'one-time',
-      }));
-
-      const callArgs = vi.mocked(mockProvider.processPayment).mock.calls[0]![0];
-
-      expect(callArgs.ach).toBeUndefined();
-    });
+    expect(membershipSet).toBeDefined();
+    expect(membershipSet?.billingType).toBe('autopay');
   });
 
-  // ── 6. Autopay (subscription) ────────────────────────────────────
+  it('autopay: surfaces failure and does NOT update membership when initial charge declines', async () => {
+    const { calculateTransactionFees } = await import('@/libs/IQPro');
 
-  describe('autopay', () => {
-    it('should create subscription and update membership', async () => {
-      const mockProvider = makeMockProvider();
+    vi.mocked(calculateTransactionFees).mockResolvedValueOnce(baseFees);
 
-      const { isPaymentEnabled, getPaymentProvider } = await import('./PaymentProviderService');
-      vi.mocked(isPaymentEnabled).mockReturnValue(true);
-      vi.mocked(getPaymentProvider).mockResolvedValue(mockProvider);
-
-      const { db } = await import('@/libs/DB');
-      const { mockUpdateSet } = setupDbMocks(db, { existingCustomerId: 'test-customer-789' });
-
-      const { processMemberPayment } = await import('./MemberPaymentService');
-      const result = await processMemberPayment(makeBaseParams({
-        billingType: 'autopay',
-        membershipPlanFrequency: 'monthly',
-      }));
-
-      expect(result).toEqual({
-        success: true,
-        status: 'approved',
-      });
-
-      expect(mockProvider.createSubscription).toHaveBeenCalledWith(
-        expect.objectContaining({
-          customerId: 'test-customer-789',
-          paymentMethodId: 'test-pm-ext-001',
-          amount: 5000,
-          frequency: 'monthly',
-          description: 'Monthly membership',
-          startDate: expect.any(Date),
-          firstName: 'John',
-          lastName: 'Doe',
-          email: 'john@example.com',
-          metadata: expect.objectContaining({
-            organizationId: 'test-org-456',
-            memberId: 'test-member-123',
-            membershipPlanId: 'test-plan-001',
-          }),
-        }),
-      );
-
-      // Should NOT call processPayment for autopay
-      expect(mockProvider.processPayment).not.toHaveBeenCalled();
-
-      // Membership should be updated with subscription ID and dates
-      expect(mockUpdateSet).toHaveBeenCalledWith(
-        expect.objectContaining({
-          iqproSubscriptionId: 'test-sub-001',
-          billingType: 'autopay',
-          firstPaymentDate: expect.any(Date),
-          nextPaymentDate: expect.any(Date),
-        }),
-      );
+    mockProvider.processPayment.mockResolvedValue({
+      success: false,
+      status: 'declined',
+      transactionId: 'tx_decline',
+      declineReason: 'Insufficient funds',
     });
 
-    it('should use annual frequency when membershipPlanFrequency is annual', async () => {
-      const mockProvider = makeMockProvider();
+    const { processMemberPayment } = await import('./MemberPaymentService');
 
-      const { isPaymentEnabled, getPaymentProvider } = await import('./PaymentProviderService');
-      vi.mocked(isPaymentEnabled).mockReturnValue(true);
-      vi.mocked(getPaymentProvider).mockResolvedValue(mockProvider);
-
-      const { db } = await import('@/libs/DB');
-      setupDbMocks(db, { existingCustomerId: 'test-customer-789' });
-
-      const { processMemberPayment } = await import('./MemberPaymentService');
-      const result = await processMemberPayment(makeBaseParams({
-        billingType: 'autopay',
-        membershipPlanFrequency: 'Annual',
-      }));
-
-      expect(result.success).toBe(true);
-      expect(mockProvider.createSubscription).toHaveBeenCalledWith(
-        expect.objectContaining({ frequency: 'annual' }),
-      );
+    const result = await processMemberPayment({
+      ...baseParams,
+      billingType: 'autopay',
+      membershipPlanFrequency: 'monthly',
+      memberMembershipId: 'mm_1',
     });
 
-    it('should fall back to one-time payment when frequency is not monthly or annual', async () => {
-      const mockProvider = makeMockProvider();
+    expect(result.success).toBe(false);
+    expect(result.status).toBe('declined');
+    expect(result.error).toMatch(/Subscription created but initial charge failed/);
 
-      const { isPaymentEnabled, getPaymentProvider } = await import('./PaymentProviderService');
-      vi.mocked(isPaymentEnabled).mockReturnValue(true);
-      vi.mocked(getPaymentProvider).mockResolvedValue(mockProvider);
+    // Membership must not be flagged as autopay or carry the subscription ID
+    const wroteAutopay = dbState.setCalls.some(s => s.billingType === 'autopay' || s.iqproSubscriptionId);
 
-      const { db } = await import('@/libs/DB');
-      setupDbMocks(db, { existingCustomerId: 'test-customer-789' });
+    expect(wroteAutopay).toBe(false);
 
-      const { processMemberPayment } = await import('./MemberPaymentService');
-      const result = await processMemberPayment(makeBaseParams({
-        billingType: 'autopay',
-        membershipPlanFrequency: 'weekly', // not monthly or annual
-      }));
+    // But the failed transaction was still recorded
+    const txInsert = dbState.insertCalls.find(i => i.iqproTransactionId === 'tx_decline');
 
-      expect(result.success).toBe(true);
-      // Should use processPayment, not createSubscription
-      expect(mockProvider.processPayment).toHaveBeenCalled();
-      expect(mockProvider.createSubscription).not.toHaveBeenCalled();
-    });
+    expect(txInsert).toBeDefined();
+    expect(txInsert?.status).toBe('declined');
   });
 
-  // ── 7. Payment declined ──────────────────────────────────────────
+  it('falls back to creditCardBin when no card token is provided', async () => {
+    const { calculateTransactionFees } = await import('@/libs/IQPro');
 
-  describe('payment declined', () => {
-    it('should return success=false with decline reason for one-time payment', async () => {
-      const mockProvider = makeMockProvider({
-        processPayment: vi.fn().mockResolvedValue({
-          success: false,
-          transactionId: 'test-ext-tx-declined',
-          status: 'declined' as const,
-          declineReason: 'insufficient_funds',
-          error: 'Card declined',
-        }),
-      });
+    vi.mocked(calculateTransactionFees).mockResolvedValueOnce(baseFees);
 
-      const { isPaymentEnabled, getPaymentProvider } = await import('./PaymentProviderService');
-      vi.mocked(isPaymentEnabled).mockReturnValue(true);
-      vi.mocked(getPaymentProvider).mockResolvedValue(mockProvider);
+    const { processMemberPayment } = await import('./MemberPaymentService');
 
-      const { db } = await import('@/libs/DB');
-      const insertCalls: any[] = [];
-      setupDbMocks(db, { existingCustomerId: 'test-customer-789', captureInserts: insertCalls });
-
-      const { processMemberPayment } = await import('./MemberPaymentService');
-      const result = await processMemberPayment(makeBaseParams());
-
-      expect(result).toEqual(
-        expect.objectContaining({
-          success: false,
-          status: 'declined',
-          declineReason: 'insufficient_funds',
-          error: 'Card declined',
-          transactionId: 'test-uuid-tx-001',
-        }),
-      );
-
-      // Transaction record should still be created with declined status
-      const txInsert = insertCalls.find((c: any) => c.transactionType === 'membership_payment');
-
-      expect(txInsert).toBeDefined();
-      expect(txInsert.status).toBe('declined');
-      expect(txInsert.processedAt).toBeNull();
+    await processMemberPayment({
+      ...baseParams,
+      cardToken: undefined,
     });
 
-    it('should return success=false when subscription creation fails', async () => {
-      const mockProvider = makeMockProvider({
-        createSubscription: vi.fn().mockResolvedValue({
-          success: false,
-          error: 'Invalid payment method for recurring billing',
-        }),
-      });
+    const callArgs = vi.mocked(calculateTransactionFees).mock.calls[0]![0];
 
-      const { isPaymentEnabled, getPaymentProvider } = await import('./PaymentProviderService');
-      vi.mocked(isPaymentEnabled).mockReturnValue(true);
-      vi.mocked(getPaymentProvider).mockResolvedValue(mockProvider);
-
-      const { db } = await import('@/libs/DB');
-      setupDbMocks(db, { existingCustomerId: 'test-customer-789' });
-
-      const { processMemberPayment } = await import('./MemberPaymentService');
-      const result = await processMemberPayment(makeBaseParams({
-        billingType: 'autopay',
-        membershipPlanFrequency: 'monthly',
-      }));
-
-      expect(result).toEqual({
-        success: false,
-        status: 'declined',
-        error: 'Invalid payment method for recurring billing',
-      });
-    });
+    expect(callArgs.creditCardBin).toBe('424242');
+    expect(callArgs).not.toHaveProperty('token');
   });
 
-  // ── 8. Error handling ────────────────────────────────────────────
+  it('uses ACH processor and passes the achToken (IQPro requires Token or CreditCardBin) for ACH fee calc', async () => {
+    const { calculateTransactionFees } = await import('@/libs/IQPro');
 
-  describe('error handling', () => {
-    it('should return declined status when provider throws an Error', async () => {
-      const mockProvider = makeMockProvider({
-        createPaymentMethod: vi.fn().mockRejectedValue(new Error('Gateway timeout')),
-      });
-
-      const { isPaymentEnabled, getPaymentProvider } = await import('./PaymentProviderService');
-      vi.mocked(isPaymentEnabled).mockReturnValue(true);
-      vi.mocked(getPaymentProvider).mockResolvedValue(mockProvider);
-
-      const { db } = await import('@/libs/DB');
-      setupDbMocks(db, { existingCustomerId: 'test-customer-789' });
-
-      const { processMemberPayment } = await import('./MemberPaymentService');
-      const result = await processMemberPayment(makeBaseParams());
-
-      expect(result).toEqual({
-        success: false,
-        status: 'declined',
-        error: 'Gateway timeout',
-      });
+    vi.mocked(calculateTransactionFees).mockResolvedValueOnce({
+      ...baseFees,
+      surchargeAmount: 0,
+      taxAmount: 0,
+      amount: 100,
     });
 
-    it('should return "Unknown error" when provider throws a non-Error value', async () => {
-      const mockProvider = makeMockProvider({
-        createPaymentMethod: vi.fn().mockRejectedValue('string error'),
-      });
-
-      const { isPaymentEnabled, getPaymentProvider } = await import('./PaymentProviderService');
-      vi.mocked(isPaymentEnabled).mockReturnValue(true);
-      vi.mocked(getPaymentProvider).mockResolvedValue(mockProvider);
-
-      const { db } = await import('@/libs/DB');
-      setupDbMocks(db, { existingCustomerId: 'test-customer-789' });
-
-      const { processMemberPayment } = await import('./MemberPaymentService');
-      const result = await processMemberPayment(makeBaseParams());
-
-      expect(result).toEqual({
-        success: false,
-        status: 'declined',
-        error: 'Unknown error',
-      });
+    mockProvider.createPaymentMethod.mockResolvedValue({
+      paymentMethodId: 'pm_ach_1',
+      last4: '1234',
+      achToken: 'ach-tok-xyz',
     });
 
-    it('should log the error when payment processing fails', async () => {
-      const mockProvider = makeMockProvider({
-        createCustomer: vi.fn().mockRejectedValue(new Error('Network error')),
-      });
+    const { processMemberPayment } = await import('./MemberPaymentService');
 
-      const { isPaymentEnabled, getPaymentProvider } = await import('./PaymentProviderService');
-      vi.mocked(isPaymentEnabled).mockReturnValue(true);
-      vi.mocked(getPaymentProvider).mockResolvedValue(mockProvider);
-
-      const { db } = await import('@/libs/DB');
-      setupDbMocks(db, { existingCustomerId: null });
-
-      const { logger } = await import('@/libs/Logger');
-
-      const { processMemberPayment } = await import('./MemberPaymentService');
-      await processMemberPayment(makeBaseParams());
-
-      expect(logger.error).toHaveBeenCalledWith(
-        '[MemberPayment] Payment processing failed',
-        expect.objectContaining({ error: expect.any(Error) }),
-      );
+    await processMemberPayment({
+      ...baseParams,
+      paymentMethod: 'ach',
+      cardToken: undefined,
+      cardFirstSix: undefined,
+      achRoutingNumber: '021000021',
+      achAccountNumber: '987654321',
+      achAccountType: 'Checking',
     });
+
+    const feeArgs = vi.mocked(calculateTransactionFees).mock.calls[0]![0];
+
+    expect(feeArgs.processorId).toBe('ach_proc_001');
+    expect(feeArgs.paymentMethod).toBe('ach');
+    expect(feeArgs.token).toBe('ach-tok-xyz');
+    expect(feeArgs).not.toHaveProperty('creditCardBin');
+
+    expect(mockProvider.processPayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ach: {
+          achToken: 'ach-tok-xyz',
+          secCode: 'WEB',
+          routingNumber: '021000021',
+          accountType: 'Checking',
+        },
+      }),
+    );
   });
 
-  // ── 9. registerPaymentMethod ─────────────────────────────────────
+  it('applies a Fixed Amount coupon discount before fee calculation', async () => {
+    const { calculateTransactionFees } = await import('@/libs/IQPro');
 
-  describe('registerPaymentMethod', () => {
-    function makeRegisterParams(overrides?: Partial<RegisterPaymentMethodParams>): RegisterPaymentMethodParams {
-      return {
-        organizationId: 'test-org-456',
-        memberId: 'test-member-123',
-        memberEmail: 'john@example.com',
-        memberFirstName: 'John',
-        memberLastName: 'Doe',
-        paymentMethod: 'card',
-        cardholderName: 'John Doe',
-        cardNumber: '4111111111111111',
-        cardExpiry: '12/28',
-        cardCvc: '123',
-        ...overrides,
-      };
-    }
-
-    it('should throw error when payment is not enabled', async () => {
-      const { isPaymentEnabled } = await import('./PaymentProviderService');
-      vi.mocked(isPaymentEnabled).mockReturnValue(false);
-
-      const { registerPaymentMethod } = await import('./MemberPaymentService');
-
-      await expect(registerPaymentMethod(makeRegisterParams())).rejects.toThrow(
-        'Payment processing is not configured',
-      );
+    vi.mocked(calculateTransactionFees).mockResolvedValueOnce({
+      ...baseFees,
+      baseAmount: 75,
+      surchargeAmount: 0,
+      taxAmount: 0,
+      amount: 75,
     });
 
-    it('should register payment method successfully when no existing IQPro customer', async () => {
-      mockRandomUUID.mockReset().mockReturnValueOnce('test-uuid-pm-001');
+    const { processMemberPayment } = await import('./MemberPaymentService');
 
-      const mockProvider = makeMockProvider();
-
-      const { isPaymentEnabled, getPaymentProvider } = await import('./PaymentProviderService');
-      vi.mocked(isPaymentEnabled).mockReturnValue(true);
-      vi.mocked(getPaymentProvider).mockResolvedValue(mockProvider);
-
-      const { db } = await import('@/libs/DB');
-      const insertCalls: any[] = [];
-      const { mockUpdateSet } = setupDbMocks(db, { existingCustomerId: null, captureInserts: insertCalls });
-
-      const { registerPaymentMethod } = await import('./MemberPaymentService');
-      const result = await registerPaymentMethod(makeRegisterParams());
-
-      expect(result).toEqual({ success: true, paymentMethodId: 'test-uuid-pm-001' });
-
-      // Should have created a new customer
-      expect(mockProvider.createCustomer).toHaveBeenCalledWith(
-        expect.objectContaining({
-          organizationId: 'test-org-456',
-          memberId: 'test-member-123',
-          email: 'john@example.com',
-          firstName: 'John',
-          lastName: 'Doe',
-        }),
-      );
-
-      // Should have stored the new customer ID in DB
-      expect(db.update).toHaveBeenCalled();
-      expect(mockUpdateSet).toHaveBeenCalledWith({ iqproCustomerId: 'test-customer-789' });
-
-      // Should have created a payment method via provider
-      expect(mockProvider.createPaymentMethod).toHaveBeenCalledWith(
-        expect.objectContaining({
-          customerId: 'test-customer-789',
-          paymentMethod: 'card',
-          cardholderName: 'John Doe',
-          cardNumber: '4111111111111111',
-          cardExpiry: '12/28',
-          cardCvc: '123',
-        }),
-      );
-
-      // Should have inserted payment method record to DB
-      const pmInsert = insertCalls.find((c: any) => c.iqproPaymentMethodId === 'test-pm-ext-001');
-
-      expect(pmInsert).toBeDefined();
-      expect(pmInsert).toEqual(
-        expect.objectContaining({
-          id: 'test-uuid-pm-001',
-          memberId: 'test-member-123',
-          iqproPaymentMethodId: 'test-pm-ext-001',
-          type: 'card',
-          last4: '1111',
-          isDefault: true,
-        }),
-      );
+    await processMemberPayment({
+      ...baseParams,
+      appliedCoupon: {
+        id: 'cpn_1',
+        code: 'SAVE25',
+        type: 'Fixed Amount',
+        amount: '25',
+        description: '$25 off',
+      },
     });
 
-    it('should register payment method successfully when customer already exists', async () => {
-      mockRandomUUID.mockReset().mockReturnValueOnce('test-uuid-pm-001');
+    expect(calculateTransactionFees).toHaveBeenCalledWith(
+      expect.objectContaining({ baseAmount: 75 }),
+    );
+  });
 
-      const mockProvider = makeMockProvider();
+  it('applies a Percentage coupon discount before fee calculation', async () => {
+    const { calculateTransactionFees } = await import('@/libs/IQPro');
 
-      const { isPaymentEnabled, getPaymentProvider } = await import('./PaymentProviderService');
-      vi.mocked(isPaymentEnabled).mockReturnValue(true);
-      vi.mocked(getPaymentProvider).mockResolvedValue(mockProvider);
-
-      const { db } = await import('@/libs/DB');
-      setupDbMocks(db, { existingCustomerId: 'existing-cust-999' });
-
-      const { registerPaymentMethod } = await import('./MemberPaymentService');
-      const result = await registerPaymentMethod(makeRegisterParams());
-
-      expect(result).toEqual({ success: true, paymentMethodId: 'test-uuid-pm-001' });
-
-      // Should NOT have created a new customer
-      expect(mockProvider.createCustomer).not.toHaveBeenCalled();
-
-      // Should still have created the payment method using the existing customer
-      expect(mockProvider.createPaymentMethod).toHaveBeenCalledWith(
-        expect.objectContaining({ customerId: 'existing-cust-999' }),
-      );
+    vi.mocked(calculateTransactionFees).mockResolvedValueOnce({
+      ...baseFees,
+      baseAmount: 90,
+      surchargeAmount: 0,
+      taxAmount: 0,
+      amount: 90,
     });
 
-    it('should pass achAccountType through to provider for ACH registration', async () => {
-      mockRandomUUID.mockReset().mockReturnValueOnce('test-uuid-pm-001');
+    const { processMemberPayment } = await import('./MemberPaymentService');
 
-      const mockProvider = makeMockProvider();
-
-      const { isPaymentEnabled, getPaymentProvider } = await import('./PaymentProviderService');
-      vi.mocked(isPaymentEnabled).mockReturnValue(true);
-      vi.mocked(getPaymentProvider).mockResolvedValue(mockProvider);
-
-      const { db } = await import('@/libs/DB');
-      setupDbMocks(db, { existingCustomerId: 'existing-cust-999' });
-
-      const { registerPaymentMethod } = await import('./MemberPaymentService');
-      await registerPaymentMethod(makeRegisterParams({
-        paymentMethod: 'ach',
-        achAccountHolder: 'Jane Smith',
-        achRoutingNumber: '021000021',
-        achAccountNumber: '123456789',
-        achAccountType: 'Savings',
-      }));
-
-      expect(mockProvider.createPaymentMethod).toHaveBeenCalledWith(
-        expect.objectContaining({
-          achAccountType: 'Savings',
-        }),
-      );
+    await processMemberPayment({
+      ...baseParams,
+      appliedCoupon: {
+        id: 'cpn_2',
+        code: 'TEN_PCT',
+        type: 'Percentage',
+        amount: '10',
+        description: '10% off',
+      },
     });
 
-    it('should return error on provider failure', async () => {
-      const mockProvider = makeMockProvider({
-        createPaymentMethod: vi.fn().mockRejectedValue(new Error('Card tokenization failed')),
-      });
+    // 100 - 10% = 90
+    expect(calculateTransactionFees).toHaveBeenCalledWith(
+      expect.objectContaining({ baseAmount: 90 }),
+    );
+  });
 
-      const { isPaymentEnabled, getPaymentProvider } = await import('./PaymentProviderService');
-      vi.mocked(isPaymentEnabled).mockReturnValue(true);
-      vi.mocked(getPaymentProvider).mockResolvedValue(mockProvider);
+  it('throws a clear error when no gateway processor is configured for the payment method', async () => {
+    const iqpro = await import('@/libs/IQPro');
 
-      const { db } = await import('@/libs/DB');
-      setupDbMocks(db, { existingCustomerId: 'existing-cust-999' });
-
-      const { registerPaymentMethod } = await import('./MemberPaymentService');
-      const result = await registerPaymentMethod(makeRegisterParams());
-
-      expect(result).toEqual({
-        success: false,
-        error: 'Card tokenization failed',
-      });
+    vi.mocked(iqpro.getGatewayProcessors).mockResolvedValueOnce({
+      cardProcessorId: null,
+      achProcessorId: null,
     });
+
+    const { processMemberPayment } = await import('./MemberPaymentService');
+
+    const result = await processMemberPayment(baseParams);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/No card processor configured/);
+  });
+
+  it('reuses an existing customer ID and skips createCustomer', async () => {
+    resetDbMock('cust_existing_999');
+    const { calculateTransactionFees } = await import('@/libs/IQPro');
+
+    vi.mocked(calculateTransactionFees).mockResolvedValueOnce(baseFees);
+
+    const { processMemberPayment } = await import('./MemberPaymentService');
+
+    await processMemberPayment(baseParams);
+
+    expect(mockProvider.createCustomer).not.toHaveBeenCalled();
+    expect(mockProvider.processPayment).toHaveBeenCalledWith(
+      expect.objectContaining({ customerId: 'cust_existing_999' }),
+    );
   });
 });

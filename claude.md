@@ -363,15 +363,16 @@ npm run stripe:setup-price # Create test prices
 
 ### IQPro (Member Payments)
 
-**Package:** `@dojo-planner/iqpro-client` (GitHub)
+**Transport:** Direct REST API via `fetch` — **no SDK dependency at runtime**. Every IQPro call logs the full request body and full response body (or error body) via the structured `logger` so vague IQPro 4xx errors can be diagnosed from Better Stack without re-running.
 
-**Purpose:** Processes member-level payments (one-time charges and recurring autopay subscriptions). Organization-level SaaS billing continues through Stripe.
+**Purpose:** Processes member-level payments (one-time charges and recurring autopay subscriptions) and organization-level SaaS subscriptions. Stripe remains as a legacy fallback for org-level billing only.
 
 **Key Files:**
-- `src/libs/IQPro.ts` - Client singleton, OAuth token management, tokenization config endpoint, ACH tokenization (`tokenizeAch`), gateway processor lookup (`getGatewayProcessors`)
-- `src/services/PaymentProviderService.ts` - Provider-agnostic interface + factory
-- `src/services/IQProPaymentService.ts` - IQPro implementation (InsertCard schema with token + maskedCard BIN format; ACH tokenization via `tokenizeAch` before InsertAch)
-- `src/services/MemberPaymentService.ts` - Payment orchestration (customer → method → charge/subscription → DB)
+- `src/libs/IQPro.ts` - REST helpers (`iqproPost`, `iqproGet`, `iqproPut`), OAuth token management, tokenization config endpoint, ACH tokenization (`tokenizeAch`), gateway processor lookup (`getGatewayProcessors`), server-authoritative fee calculation (`calculateTransactionFees`)
+- `src/services/PaymentProviderService.ts` - Provider-agnostic interface + factory; defines `FeeBreakdown`, `TransactionLineItem`, `TransactionBillingAddress` types
+- `src/services/IQProPaymentService.ts` - IQPro implementation (REST). `createCustomer` returns `{ customerId, billingAddressId }` (the billing-address ID is fetched via `iqproGet` and forwarded into transaction payloads as `paymentMethod.customer.customerBillingAddressId` so the ACH processor can resolve the cardholder name). Card uses InsertCard schema with token + maskedCard BIN format; ACH uses `tokenizeAch` then InsertAch. `processPayment` builds the canonical `Sale` payload with `remit` (tax + paymentAdjustments), `address[]`, and `lineItems[]`. Sandbox certification errors on ACH (`"not a valid transaction for certification"`) are tolerated as `pendingsettlement → approved` so dev flows work.
+- `src/services/MemberPaymentService.ts` - Payment orchestration (customer → method → calculate fees → charge/subscription → DB). Tax state for fee calculation comes from `params.memberAddress.state`. For autopay: subscription is created **and** an immediate Sale charge runs for the first period (IQPro subscriptions don't auto-charge on creation). If the initial charge fails after subscription creation, the failure is surfaced and `iqproSubscriptionId` is NOT persisted on the membership — the IQPro subscription will exist but the local membership stays unactivated.
+- `src/services/SaasSubscriptionService.ts` - Org SaaS subscriptions via REST. Uses `iqproPost`/`iqproGet`/`iqproPut` for customer create, payment method, subscription create/get/update, and cancel.
 - `src/routers/Payment.ts` - ORPC `payment.process` + `payment.getTokenizationConfig` endpoints
 - `src/validations/PaymentValidation.ts` - Zod input schema
 - `src/app/[locale]/webhook/iqpro/route.ts` - Webhook handler
