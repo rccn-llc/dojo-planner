@@ -1,6 +1,6 @@
 {
   "name": "dojo-planner",
-  "version": "1.36.2",
+  "version": "1.36.3",
   "author": "RCCN LLC",
   "engines": {
     "node": ">=20"
