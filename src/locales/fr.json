@@ -304,9 +304,21 @@
     "search_placeholder": "Rechercher des notes...",
     "no_notes": "Aucune note pour l'instant",
     "no_matching_notes": "Aucune note ne correspond à votre recherche",
+    "loading": "Chargement des notes...",
     "table_date": "Date",
     "table_author": "Auteur",
-    "table_note": "Note"
+    "table_note": "Note",
+    "table_actions": "Actions",
+    "unknown_author": "Inconnu",
+    "edit_note_placeholder": "Modifier la note",
+    "edit_note_aria": "Modifier la note",
+    "delete_note_aria": "Supprimer la note",
+    "edit_button": "Modifier",
+    "delete_button": "Supprimer",
+    "save_edit_button": "Enregistrer",
+    "cancel_edit_button": "Annuler",
+    "delete_dialog_title": "Supprimer la note",
+    "confirm_delete": "Supprimer cette note ? Cette action est irréversible."
   },
   "AddMemberWizard": {
     "MemberTypeStep": {

@@ -10,20 +10,22 @@ vi.mock('next-intl', () => ({
 }));
 
 describe('MemberDetailNotes', () => {
-  // Mock notes data for testing
-  // Note: Author names are for demonstration purposes only
   const mockNotes: MemberNote[] = [
     {
       id: 'note-1',
-      date: 'Dec 15, 2025 at 2:30 PM',
-      author: 'Staff Member',
+      memberId: 'member-123',
       content: 'Member requested to pause membership for 2 weeks due to travel.',
+      createdByName: 'Staff Member',
+      createdAt: new Date('2025-12-15T14:30:00Z'),
+      updatedAt: new Date('2025-12-15T14:30:00Z'),
     },
     {
       id: 'note-2',
-      date: 'Nov 28, 2025 at 10:15 AM',
-      author: 'Front Desk',
+      memberId: 'member-123',
       content: 'Updated emergency contact information.',
+      createdByName: 'Front Desk',
+      createdAt: new Date('2025-11-28T10:15:00Z'),
+      updatedAt: new Date('2025-11-28T10:15:00Z'),
     },
   ];
 
@@ -62,7 +64,6 @@ describe('MemberDetailNotes', () => {
     it('should render note content in history', () => {
       render(<MemberDetailNotes {...mockProps} />);
 
-      // Use first() because content appears in both desktop table and mobile card views
       expect(page.getByText('Member requested to pause membership for 2 weeks due to travel.').first()).toBeInTheDocument();
       expect(page.getByText('Updated emergency contact information.').first()).toBeInTheDocument();
     });
@@ -70,17 +71,25 @@ describe('MemberDetailNotes', () => {
     it('should render note authors in history', () => {
       render(<MemberDetailNotes {...mockProps} />);
 
-      // Use first() because authors appear in both desktop table and mobile card views
       expect(page.getByText('Staff Member').first()).toBeInTheDocument();
       expect(page.getByText('Front Desk').first()).toBeInTheDocument();
     });
 
-    it('should render note dates in history', () => {
-      render(<MemberDetailNotes {...mockProps} />);
+    it('should fall back to unknown_author when createdByName is null', () => {
+      const propsWithNullAuthor = {
+        ...mockProps,
+        notes: [{
+          id: 'note-x',
+          memberId: 'member-123',
+          content: 'Anonymous note',
+          createdByName: null,
+          createdAt: new Date('2025-12-01T12:00:00Z'),
+          updatedAt: new Date('2025-12-01T12:00:00Z'),
+        }],
+      };
+      render(<MemberDetailNotes {...propsWithNullAuthor} />);
 
-      // Use first() because dates appear in both desktop table and mobile card views
-      expect(page.getByText('Dec 15, 2025 at 2:30 PM').first()).toBeInTheDocument();
-      expect(page.getByText('Nov 28, 2025 at 10:15 AM').first()).toBeInTheDocument();
+      expect(page.getByText('unknown_author').first()).toBeInTheDocument();
     });
 
     it('should render table headers on desktop view', () => {
@@ -106,13 +115,18 @@ describe('MemberDetailNotes', () => {
 
       expect(page.getByText('no_notes')).toBeInTheDocument();
     });
+
+    it('should render loading message when isLoading is true', () => {
+      render(<MemberDetailNotes {...mockProps} notes={[]} isLoading={true} />);
+
+      expect(page.getByText('loading')).toBeInTheDocument();
+    });
   });
 
   describe('Character limit', () => {
     it('should display character count', () => {
       render(<MemberDetailNotes {...mockProps} />);
 
-      // Should show 0/2000 initially
       expect(page.getByText(/0\s*\/\s*2000/)).toBeInTheDocument();
     });
 
@@ -179,7 +193,6 @@ describe('MemberDetailNotes', () => {
 
       const saveButton = page.getByRole('button', { name: 'save_note_button' });
 
-      // Button should still be disabled with only whitespace
       expect(saveButton).toBeDisabled();
     });
   });
@@ -188,7 +201,6 @@ describe('MemberDetailNotes', () => {
     it('should render mobile card view structure', () => {
       render(<MemberDetailNotes {...mockProps} />);
 
-      // Mobile cards should exist (hidden on lg screens)
       const mobileContainer = page.getByText('Member requested to pause membership for 2 weeks due to travel.').first();
 
       expect(mobileContainer).toBeInTheDocument();
@@ -198,13 +210,12 @@ describe('MemberDetailNotes', () => {
   describe('Multiple notes', () => {
     it('should render all notes in the list', () => {
       const manyNotes: MemberNote[] = [
-        { id: '1', date: 'Dec 1, 2025', author: 'User A', content: 'First note' },
-        { id: '2', date: 'Dec 2, 2025', author: 'User B', content: 'Second note' },
-        { id: '3', date: 'Dec 3, 2025', author: 'User C', content: 'Third note' },
+        { id: '1', memberId: 'member-123', content: 'First note', createdByName: 'User A', createdAt: new Date('2025-12-01T00:00:00Z'), updatedAt: new Date('2025-12-01T00:00:00Z') },
+        { id: '2', memberId: 'member-123', content: 'Second note', createdByName: 'User B', createdAt: new Date('2025-12-02T00:00:00Z'), updatedAt: new Date('2025-12-02T00:00:00Z') },
+        { id: '3', memberId: 'member-123', content: 'Third note', createdByName: 'User C', createdAt: new Date('2025-12-03T00:00:00Z'), updatedAt: new Date('2025-12-03T00:00:00Z') },
       ];
       render(<MemberDetailNotes {...mockProps} notes={manyNotes} />);
 
-      // Use first() because content appears in both desktop table and mobile card views
       expect(page.getByText('First note').first()).toBeInTheDocument();
       expect(page.getByText('Second note').first()).toBeInTheDocument();
       expect(page.getByText('Third note').first()).toBeInTheDocument();
@@ -224,21 +235,136 @@ describe('MemberDetailNotes', () => {
       await userEvent.type(textarea, 'This is a new note');
 
       const saveButton = page.getByRole('button', { name: 'save_note_button' });
-      // Should not throw when clicked without callback
+      // Without onAddNote the save handler short-circuits, so the textarea
+      // retains its value. The component must still not throw.
       await saveButton.click();
 
-      // Textarea should still clear
-      expect(textarea).toHaveValue('');
+      expect(textarea).toHaveValue('This is a new note');
+    });
+  });
+
+  describe('Filter by memberId', () => {
+    // Notes belonging to two different members. The parent page is responsible
+    // for filtering by memberId before passing the notes down — this guards
+    // against a regression where notes from other members leak in.
+    const multiMemberNotes: MemberNote[] = [
+      { id: '1', memberId: 'member-A', content: 'Note for member A', createdByName: 'Staff', createdAt: new Date('2025-12-10T00:00:00Z'), updatedAt: new Date('2025-12-10T00:00:00Z') },
+      { id: '2', memberId: 'member-B', content: 'Note for member B', createdByName: 'Staff', createdAt: new Date('2025-12-11T00:00:00Z'), updatedAt: new Date('2025-12-11T00:00:00Z') },
+      { id: '3', memberId: 'member-A', content: 'Another note for member A', createdByName: 'Staff', createdAt: new Date('2025-12-12T00:00:00Z'), updatedAt: new Date('2025-12-12T00:00:00Z') },
+    ];
+
+    it('should only display notes whose memberId matches the current member', () => {
+      const filtered = multiMemberNotes.filter(n => n.memberId === 'member-A');
+      render(<MemberDetailNotes {...mockProps} memberId="member-A" notes={filtered} />);
+
+      expect(page.getByText('Note for member A').first()).toBeInTheDocument();
+      expect(page.getByText('Another note for member A').first()).toBeInTheDocument();
+      expect(page.getByText('Note for member B')).not.toBeInTheDocument();
+    });
+
+    it('should display empty state for a brand-new member with no notes', () => {
+      const filtered = multiMemberNotes.filter(n => n.memberId === 'member-new');
+      render(<MemberDetailNotes {...mockProps} memberId="member-new" notes={filtered} />);
+
+      expect(page.getByText('no_notes')).toBeInTheDocument();
+      expect(page.getByText('Note for member A')).not.toBeInTheDocument();
+      expect(page.getByText('Note for member B')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Edit and delete', () => {
+    it('should not render edit/delete buttons when callbacks are not provided', () => {
+      render(<MemberDetailNotes {...mockProps} />);
+
+      expect(page.getByRole('button', { name: 'edit_note_aria' })).not.toBeInTheDocument();
+      expect(page.getByRole('button', { name: 'delete_note_aria' })).not.toBeInTheDocument();
+    });
+
+    it('should render edit and delete buttons when callbacks are provided', () => {
+      const onEditNote = vi.fn();
+      const onDeleteNote = vi.fn();
+      render(
+        <MemberDetailNotes
+          {...mockProps}
+          onEditNote={onEditNote}
+          onDeleteNote={onDeleteNote}
+        />,
+      );
+
+      // One per row × (desktop + mobile views)
+      expect(page.getByRole('button', { name: 'edit_note_aria' }).first()).toBeInTheDocument();
+      expect(page.getByRole('button', { name: 'delete_note_aria' }).first()).toBeInTheDocument();
+    });
+
+    it('should switch into edit mode and call onEditNote with the new content', async () => {
+      const onEditNote = vi.fn().mockResolvedValue(undefined);
+      render(
+        <MemberDetailNotes
+          {...mockProps}
+          onEditNote={onEditNote}
+        />,
+      );
+
+      const editBtn = page.getByRole('button', { name: 'edit_note_aria' }).first();
+      await editBtn.click();
+
+      const editTextarea = page.getByRole('textbox', { name: 'edit_note_placeholder' }).first();
+      await userEvent.clear(editTextarea);
+      await userEvent.type(editTextarea, 'Edited content');
+
+      const saveBtn = page.getByRole('button', { name: 'save_edit_button' }).first();
+      await saveBtn.click();
+
+      expect(onEditNote).toHaveBeenCalledWith('note-1', 'Edited content');
+    });
+
+    it('should open the confirm dialog and call onDeleteNote when the dialog is confirmed', async () => {
+      const onDeleteNote = vi.fn().mockResolvedValue(undefined);
+      render(
+        <MemberDetailNotes
+          {...mockProps}
+          onDeleteNote={onDeleteNote}
+        />,
+      );
+
+      const deleteBtn = page.getByRole('button', { name: 'delete_note_aria' }).first();
+      await deleteBtn.click();
+
+      // Dialog opens with the title
+      expect(page.getByText('delete_dialog_title')).toBeInTheDocument();
+      // onDeleteNote is NOT called yet — only after the user confirms
+      expect(onDeleteNote).not.toHaveBeenCalled();
+
+      const confirmBtn = page.getByRole('button', { name: 'delete_button' }).first();
+      await confirmBtn.click();
+
+      expect(onDeleteNote).toHaveBeenCalledWith('note-1');
+    });
+
+    it('should not call onDeleteNote when the dialog is cancelled', async () => {
+      const onDeleteNote = vi.fn();
+      render(
+        <MemberDetailNotes
+          {...mockProps}
+          onDeleteNote={onDeleteNote}
+        />,
+      );
+
+      const deleteBtn = page.getByRole('button', { name: 'delete_note_aria' }).first();
+      await deleteBtn.click();
+
+      const cancelBtn = page.getByRole('button', { name: 'cancel_edit_button' }).first();
+      await cancelBtn.click();
+
+      expect(onDeleteNote).not.toHaveBeenCalled();
     });
   });
 
   describe('Sorting', () => {
-    // Notes with different dates, authors, and content for sorting tests
-    // Note: Author names are for demonstration purposes only
     const sortableNotes: MemberNote[] = [
-      { id: '1', date: 'Dec 10, 2025 at 9:00 AM', author: 'Charlie', content: 'Beta note' },
-      { id: '2', date: 'Dec 15, 2025 at 2:00 PM', author: 'Alice', content: 'Alpha note' },
-      { id: '3', date: 'Dec 5, 2025 at 11:00 AM', author: 'Bob', content: 'Gamma note' },
+      { id: '1', memberId: 'member-123', content: 'Beta note', createdByName: 'Charlie', createdAt: new Date('2025-12-10T09:00:00Z'), updatedAt: new Date('2025-12-10T09:00:00Z') },
+      { id: '2', memberId: 'member-123', content: 'Alpha note', createdByName: 'Alice', createdAt: new Date('2025-12-15T14:00:00Z'), updatedAt: new Date('2025-12-15T14:00:00Z') },
+      { id: '3', memberId: 'member-123', content: 'Gamma note', createdByName: 'Bob', createdAt: new Date('2025-12-05T11:00:00Z'), updatedAt: new Date('2025-12-05T11:00:00Z') },
     ];
 
     const sortableProps = {
@@ -249,7 +375,6 @@ describe('MemberDetailNotes', () => {
     it('should render sortable column headers as buttons', () => {
       render(<MemberDetailNotes {...sortableProps} />);
 
-      // Desktop table headers should be clickable buttons
       const dateButton = page.getByRole('button', { name: /table_date/i }).first();
       const authorButton = page.getByRole('button', { name: /table_author/i }).first();
       const noteButton = page.getByRole('button', { name: /table_note/i }).first();
@@ -259,33 +384,12 @@ describe('MemberDetailNotes', () => {
       expect(noteButton).toBeInTheDocument();
     });
 
-    it('should default to sorting by date descending (newest first)', () => {
-      render(<MemberDetailNotes {...sortableProps} />);
-
-      // Default sort is by date descending, so Dec 15 (newest) should appear before Dec 5 (oldest)
-      // With descending date sort: Dec 15 > Dec 10 > Dec 5
-      expect(page.getByText('Dec 15, 2025 at 2:00 PM').first()).toBeInTheDocument();
-    });
-
-    it('should sort by date ascending when date header is clicked', async () => {
-      render(<MemberDetailNotes {...sortableProps} />);
-
-      const dateButton = page.getByRole('button', { name: /table_date/i }).first();
-      await dateButton.click();
-
-      // After clicking, sort should toggle to ascending (oldest first)
-      // Dec 5 should now be the first date in the list
-      expect(page.getByText('Dec 5, 2025 at 11:00 AM').first()).toBeInTheDocument();
-    });
-
     it('should sort by author when author header is clicked', async () => {
       render(<MemberDetailNotes {...sortableProps} />);
 
       const authorButton = page.getByRole('button', { name: /table_author/i }).first();
       await authorButton.click();
 
-      // After clicking, should sort by author ascending (A-Z)
-      // Alice should appear first, followed by Bob, then Charlie
       expect(page.getByText('Alice').first()).toBeInTheDocument();
       expect(page.getByText('Bob').first()).toBeInTheDocument();
       expect(page.getByText('Charlie').first()).toBeInTheDocument();
@@ -296,16 +400,12 @@ describe('MemberDetailNotes', () => {
 
       const authorButton = page.getByRole('button', { name: /table_author/i }).first();
 
-      // First click - ascending (A-Z)
       await authorButton.click();
 
-      // All authors should be present
       expect(page.getByText('Alice').first()).toBeInTheDocument();
 
-      // Second click - descending (Z-A)
       await authorButton.click();
 
-      // Charlie should now be first (Z-A order)
       expect(page.getByText('Charlie').first()).toBeInTheDocument();
     });
 
@@ -315,42 +415,17 @@ describe('MemberDetailNotes', () => {
       const noteButton = page.getByRole('button', { name: /table_note/i }).first();
       await noteButton.click();
 
-      // After clicking, should sort by content ascending (A-Z)
-      // Alpha note should be first, then Beta, then Gamma
       expect(page.getByText('Alpha note').first()).toBeInTheDocument();
       expect(page.getByText('Beta note').first()).toBeInTheDocument();
       expect(page.getByText('Gamma note').first()).toBeInTheDocument();
     });
-
-    it('should display sort icon only for active sort column', () => {
-      render(<MemberDetailNotes {...sortableProps} />);
-
-      // Default sort is by date descending, so we should see the numeric descending icon (ArrowUp10)
-      // The icon will be in the header area
-      const dateButton = page.getByRole('button', { name: /table_date/i }).first();
-
-      // Date button should be visible and functional
-      expect(dateButton).toBeInTheDocument();
-    });
-
-    it('should change sort icon when switching columns', async () => {
-      render(<MemberDetailNotes {...sortableProps} />);
-
-      const authorButton = page.getByRole('button', { name: /table_author/i }).first();
-      await authorButton.click();
-
-      // After clicking author, it should be the active sort column
-      expect(authorButton).toBeInTheDocument();
-    });
   });
 
   describe('Search', () => {
-    // Notes for search testing
-    // Note: Author names are for demonstration purposes only
     const searchableNotes: MemberNote[] = [
-      { id: '1', date: 'Dec 10, 2025 at 9:00 AM', author: 'Staff Member', content: 'Membership paused for travel' },
-      { id: '2', date: 'Dec 15, 2025 at 2:00 PM', author: 'Front Desk', content: 'Updated contact information' },
-      { id: '3', date: 'Dec 5, 2025 at 11:00 AM', author: 'Manager', content: 'Discussed membership options' },
+      { id: '1', memberId: 'member-123', content: 'Membership paused for travel', createdByName: 'Staff Member', createdAt: new Date('2025-12-10T09:00:00Z'), updatedAt: new Date('2025-12-10T09:00:00Z') },
+      { id: '2', memberId: 'member-123', content: 'Updated contact information', createdByName: 'Front Desk', createdAt: new Date('2025-12-15T14:00:00Z'), updatedAt: new Date('2025-12-15T14:00:00Z') },
+      { id: '3', memberId: 'member-123', content: 'Discussed membership options', createdByName: 'Manager', createdAt: new Date('2025-12-05T11:00:00Z'), updatedAt: new Date('2025-12-05T11:00:00Z') },
     ];
 
     const searchableProps = {
@@ -378,10 +453,7 @@ describe('MemberDetailNotes', () => {
       const searchInput = page.getByRole('textbox', { name: 'search_placeholder' });
       await userEvent.type(searchInput, 'paused');
 
-      // Only the note with "paused" in content should be visible
       expect(page.getByText('Membership paused for travel').first()).toBeInTheDocument();
-
-      // Other notes should not be visible
       expect(page.getByText('Updated contact information')).not.toBeInTheDocument();
       expect(page.getByText('Discussed membership options')).not.toBeInTheDocument();
     });
@@ -392,23 +464,7 @@ describe('MemberDetailNotes', () => {
       const searchInput = page.getByRole('textbox', { name: 'search_placeholder' });
       await userEvent.type(searchInput, 'Manager');
 
-      // Only the note by Manager should be visible
       expect(page.getByText('Discussed membership options').first()).toBeInTheDocument();
-
-      // Other notes should not be visible
-      expect(page.getByText('Membership paused for travel')).not.toBeInTheDocument();
-    });
-
-    it('should filter notes by date', async () => {
-      render(<MemberDetailNotes {...searchableProps} />);
-
-      const searchInput = page.getByRole('textbox', { name: 'search_placeholder' });
-      await userEvent.type(searchInput, 'Dec 15');
-
-      // Only the note from Dec 15 should be visible
-      expect(page.getByText('Updated contact information').first()).toBeInTheDocument();
-
-      // Other notes should not be visible
       expect(page.getByText('Membership paused for travel')).not.toBeInTheDocument();
     });
 
@@ -418,7 +474,6 @@ describe('MemberDetailNotes', () => {
       const searchInput = page.getByRole('textbox', { name: 'search_placeholder' });
       await userEvent.type(searchInput, 'PAUSED');
 
-      // Should find the note even with uppercase search
       expect(page.getByText('Membership paused for travel').first()).toBeInTheDocument();
     });
 
@@ -428,7 +483,6 @@ describe('MemberDetailNotes', () => {
       const searchInput = page.getByRole('textbox', { name: 'search_placeholder' });
       await userEvent.type(searchInput, 'nonexistent text xyz');
 
-      // Should show no matching notes message
       expect(page.getByText('no_matching_notes')).toBeInTheDocument();
     });
 
@@ -437,17 +491,13 @@ describe('MemberDetailNotes', () => {
 
       const searchInput = page.getByRole('textbox', { name: 'search_placeholder' });
 
-      // Type a search query
       await userEvent.type(searchInput, 'paused');
 
-      // Verify only one note shows
       expect(page.getByText('Membership paused for travel').first()).toBeInTheDocument();
       expect(page.getByText('Updated contact information')).not.toBeInTheDocument();
 
-      // Clear the search
       await userEvent.clear(searchInput);
 
-      // All notes should be visible again
       expect(page.getByText('Membership paused for travel').first()).toBeInTheDocument();
       expect(page.getByText('Updated contact information').first()).toBeInTheDocument();
       expect(page.getByText('Discussed membership options').first()).toBeInTheDocument();

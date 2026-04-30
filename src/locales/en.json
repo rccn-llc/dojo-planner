@@ -304,9 +304,21 @@
     "search_placeholder": "Search notes...",
     "no_notes": "No notes yet",
     "no_matching_notes": "No notes match your search",
+    "loading": "Loading notes...",
     "table_date": "Date",
     "table_author": "Author",
-    "table_note": "Note"
+    "table_note": "Note",
+    "table_actions": "Actions",
+    "unknown_author": "Unknown",
+    "edit_note_placeholder": "Edit note",
+    "edit_note_aria": "Edit note",
+    "delete_note_aria": "Delete note",
+    "edit_button": "Edit",
+    "delete_button": "Delete",
+    "save_edit_button": "Save",
+    "cancel_edit_button": "Cancel",
+    "delete_dialog_title": "Delete note",
+    "confirm_delete": "Delete this note? This cannot be undone."
   },
   "AddMemberWizard": {
     "MemberTypeStep": {
