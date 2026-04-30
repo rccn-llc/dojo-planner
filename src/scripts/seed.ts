@@ -1348,6 +1348,42 @@ async function seedOrganization(organizationId: string) {
       .where(eq(memberSchema.id, memberId));
   }
 
+  // 14b. Seed Notes (1-3 per member, dated within their tenure)
+  console.info('  📝 Seeding notes...');
+  const noteTemplates = [
+    'Welcome call completed. Member is excited to start training.',
+    'Member requested schedule of upcoming seminars. Sent via email.',
+    'Updated emergency contact information at member request.',
+    'Discussed progression timeline with member. Ready for intermediate class next month.',
+    'Member paused membership for two weeks due to travel. Resumed on return.',
+    'Reviewed billing details with member; no changes needed.',
+  ];
+  const noteAuthors = [
+    { id: 'seed-author-frontdesk', name: 'Front Desk' },
+    { id: 'seed-author-instructor', name: 'Lead Instructor' },
+    { id: 'seed-author-owner', name: 'Academy Owner' },
+  ];
+  for (let i = 0; i < memberIds.length; i++) {
+    const memberId = memberIds[i]!;
+    const joinDate = memberJoinDates[i] ?? new Date();
+    const noteCount = (i % 3) + 1; // 1, 2, or 3 notes per member
+    for (let n = 0; n < noteCount; n++) {
+      const template = noteTemplates[(i + n) % noteTemplates.length]!;
+      const author = noteAuthors[(i + n) % noteAuthors.length]!;
+      const createdAt = new Date(joinDate.getTime() + (n + 1) * 14 * 24 * 60 * 60 * 1000); // +14 days each
+      await db.insert(noteSchema).values({
+        id: randomUUID(),
+        memberId,
+        content: template,
+        status: 'active',
+        createdByUserId: author.id,
+        createdByName: author.name,
+        createdAt,
+        updatedAt: createdAt,
+      }).onConflictDoNothing();
+    }
+  }
+
   // 15. Seed Transactions
   console.info('  💰 Seeding transactions...');
   let transactionCount = 0;

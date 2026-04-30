@@ -120,6 +120,11 @@ export const AUDIT_ACTION = {
   SAAS_SUBSCRIPTION_CREATE: 'saasSubscription.create',
   SAAS_SUBSCRIPTION_CHANGE: 'saasSubscription.change',
   SAAS_SUBSCRIPTION_CANCEL: 'saasSubscription.cancel',
+
+  // Note operations
+  NOTE_CREATE: 'note.create',
+  NOTE_UPDATE: 'note.update',
+  NOTE_DELETE: 'note.delete',
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTION)[keyof typeof AUDIT_ACTION];
@@ -155,6 +160,7 @@ export const AUDIT_ENTITY_TYPE = {
   FAMILY_MEMBER: 'familyMember',
   PAYMENT_METHOD: 'paymentMethod',
   ORGANIZATION: 'organization',
+  NOTE: 'note',
 } as const;
 
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPE)[keyof typeof AUDIT_ENTITY_TYPE];

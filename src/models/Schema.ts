@@ -386,6 +386,8 @@ export const noteSchema = pgTable('note', {
   memberId: text('member_id').references(() => memberSchema.id).notNull(),
   content: text('content').notNull(),
   status: text('status').notNull().default('active'), // active, archived
+  createdByUserId: text('created_by_user_id'),
+  createdByName: text('created_by_name'),
   createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { mode: 'date' })
     .defaultNow()

@@ -189,35 +189,6 @@ const MOCK_PUNCHCARD_INFO: PunchcardInfo = {
   classesRemaining: 6,
 };
 
-// Mock notes data for demonstration
-// Note: Author names are for demonstration purposes only
-const MOCK_NOTES: MemberNote[] = [
-  {
-    id: 'note-1',
-    date: 'Dec 15, 2025 at 2:30 PM',
-    author: 'Staff Member',
-    content: 'Member requested to pause membership for 2 weeks due to travel. Approved and scheduled for Jan 5-19, 2026.',
-  },
-  {
-    id: 'note-2',
-    date: 'Nov 28, 2025 at 10:15 AM',
-    author: 'Front Desk',
-    content: 'Updated emergency contact information. New contact: spouse at the same address.',
-  },
-  {
-    id: 'note-3',
-    date: 'Oct 10, 2025 at 4:45 PM',
-    author: 'Instructor',
-    content: 'Great progress in fundamentals class. Ready to move up to intermediate level next month.',
-  },
-  {
-    id: 'note-4',
-    date: 'Sep 15, 2025 at 11:00 AM',
-    author: 'Admin',
-    content: 'Welcome call completed. Member is interested in competition training starting next year.',
-  },
-];
-
 // Build MemberData from API member data - use Member type from cache
 
 function getMembershipBadgeText(membershipType?: string, planName?: string | null): string {
@@ -570,6 +541,10 @@ export default function EditMemberPage() {
   // State for family members (only for HOH members)
   const [familyMembersData, setFamilyMembersData] = useState<FamilyMember[]>([]);
 
+  // State for notes
+  const [notes, setNotes] = useState<MemberNote[]>([]);
+  const [isLoadingNotes, setIsLoadingNotes] = useState(true);
+
   // State for add family members modal
   const [isAddFamilyModalOpen, setIsAddFamilyModalOpen] = useState(false);
 
@@ -786,6 +761,51 @@ export default function EditMemberPage() {
     await fetchFamilyMembers();
     await invalidateMembersCache();
   }, [fetchFamilyMembers]);
+
+  // Fetch notes for this member
+  const fetchNotes = useCallback(async () => {
+    if (!memberId) {
+      return;
+    }
+    setIsLoadingNotes(true);
+    try {
+      const result = await client.notes.list({ memberId });
+      setNotes(result.notes.map(n => ({
+        id: n.id,
+        memberId: n.memberId,
+        content: n.content,
+        createdByName: n.createdByName,
+        createdAt: new Date(n.createdAt),
+        updatedAt: new Date(n.updatedAt),
+      })));
+    } catch (err) {
+      console.warn('[Edit Member] Failed to fetch notes:', err);
+      setNotes([]);
+    } finally {
+      setIsLoadingNotes(false);
+    }
+  }, [memberId]);
+  useEffect(() => {
+    fetchNotes();
+  }, [fetchNotes]);
+
+  const handleAddNote = useCallback(async (content: string) => {
+    if (!memberId) {
+      return;
+    }
+    await client.notes.create({ memberId, content });
+    await fetchNotes();
+  }, [memberId, fetchNotes]);
+
+  const handleEditNote = useCallback(async (noteId: string, content: string) => {
+    await client.notes.update({ id: noteId, content });
+    await fetchNotes();
+  }, [fetchNotes]);
+
+  const handleDeleteNote = useCallback(async (noteId: string) => {
+    await client.notes.remove({ id: noteId });
+    await fetchNotes();
+  }, [fetchNotes]);
 
   // Fetch HOH data for family members (to support conversion)
   const isFamilyMember = currentMember?.memberType === 'family-member';
@@ -1485,8 +1505,11 @@ export default function EditMemberPage() {
         <MemberDetailNotes
           memberId={memberId}
           memberName={state.currentData.memberName}
-          notes={MOCK_NOTES}
-          onAddNote={content => console.info('New note added:', content)}
+          notes={notes}
+          isLoading={isLoadingNotes}
+          onAddNote={handleAddNote}
+          onEditNote={handleEditNote}
+          onDeleteNote={handleDeleteNote}
         />
       )}
 
