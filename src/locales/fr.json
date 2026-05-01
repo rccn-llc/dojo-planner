@@ -875,6 +875,12 @@
     "cancel_button": "Annuler",
     "delete_button": "Supprimer"
   },
+  "DeleteWaiverAlertDialog": {
+    "title": "Êtes-vous absolument sûr ?",
+    "description": "Cette action est irréversible. La décharge « {waiverName} » sera définitivement supprimée et retirée des plans d'adhésion auxquels elle était associée. Les décharges déjà signées ne sont pas affectées.",
+    "cancel_button": "Annuler",
+    "delete_button": "Supprimer"
+  },
   "LocationSettings": {
     "title": "Paramètres de localisation",
     "location_title": "Localisation",
@@ -1146,6 +1152,7 @@
   },
   "WaiverDetailPage": {
     "error_loading": "Échec du chargement de la décharge",
+    "error_deleting": "Échec de la suppression de la décharge. Veuillez réessayer.",
     "waiver_not_found": "Décharge non trouvée",
     "back_to_waivers": "Retour aux décharges",
     "status_active": "Actif",
