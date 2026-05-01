@@ -30,11 +30,14 @@ import {
   classSchema,
   classTagSchema,
   couponSchema,
+  couponUsageSchema,
   eventBillingSchema,
+  eventInstructorSchema,
   eventRegistrationSchema,
   eventSchema,
   eventSessionSchema,
   eventTagSchema,
+  familyMemberSchema,
   memberMembershipSchema,
   memberSchema,
   membershipPlanSchema,
@@ -847,16 +850,38 @@ async function clearSeededData(organizationId: string) {
   await db.delete(transactionSchema).where(eq(transactionSchema.organizationId, organizationId));
   await db.delete(paymentMethodSchema).where(sql`${paymentMethodSchema.memberId} IN (SELECT id FROM member WHERE organization_id = ${organizationId})`);
 
-  // Clear class and event dependencies
+  // Clear class and event dependencies, ordered by foreign-key depth so each
+  // delete only happens after everything that references it has been removed.
+
+  // 1) Tables that reference other "child" tables first.
+  // event_registration references event_billing, event_session, and event.
+  await db.delete(eventRegistrationSchema).where(sql`${eventRegistrationSchema.eventId} IN (SELECT id FROM event WHERE organization_id = ${organizationId})`);
+
+  // attendance references class_schedule_instance and event_session, but those
+  // schemas don't cascade — clear it before its FK targets.
   await db.delete(attendanceSchema).where(eq(attendanceSchema.organizationId, organizationId));
+
+  // class_enrollment references member + class.
   await db.delete(classEnrollmentSchema).where(sql`${classEnrollmentSchema.classId} IN (SELECT id FROM class WHERE organization_id = ${organizationId})`);
+
+  // class_schedule_exception references class_schedule_instance.
   await db.delete(classScheduleExceptionSchema).where(sql`${classScheduleExceptionSchema.classScheduleInstanceId} IN (SELECT csi.id FROM class_schedule_instance csi JOIN class c ON csi.class_id = c.id WHERE c.organization_id = ${organizationId})`);
+
+  // 2) Now safe to clear the schedule instances and event sessions/billings.
   await db.delete(classScheduleInstanceSchema).where(sql`${classScheduleInstanceSchema.classId} IN (SELECT id FROM class WHERE organization_id = ${organizationId})`);
   await db.delete(classInstructorSchema).where(sql`${classInstructorSchema.classId} IN (SELECT id FROM class WHERE organization_id = ${organizationId})`);
   await db.delete(classTagSchema).where(sql`${classTagSchema.classId} IN (SELECT id FROM class WHERE organization_id = ${organizationId})`);
   await db.delete(eventSessionSchema).where(sql`${eventSessionSchema.eventId} IN (SELECT id FROM event WHERE organization_id = ${organizationId})`);
   await db.delete(eventBillingSchema).where(sql`${eventBillingSchema.eventId} IN (SELECT id FROM event WHERE organization_id = ${organizationId})`);
+  await db.delete(eventInstructorSchema).where(sql`${eventInstructorSchema.eventId} IN (SELECT id FROM event WHERE organization_id = ${organizationId})`);
   await db.delete(eventTagSchema).where(sql`${eventTagSchema.eventId} IN (SELECT id FROM event WHERE organization_id = ${organizationId})`);
+
+  // 3) Member-side: coupon_usage and family_member reference member; clear
+  // them before clearing members.
+  await db.delete(couponUsageSchema).where(sql`${couponUsageSchema.memberId} IN (SELECT id FROM member WHERE organization_id = ${organizationId})`);
+  await db.delete(familyMemberSchema).where(sql`${familyMemberSchema.memberId} IN (SELECT id FROM member WHERE organization_id = ${organizationId})`);
+
+  // 4) Membership plans, tags, and members.
   await db.delete(membershipTagSchema).where(sql`${membershipTagSchema.membershipPlanId} IN (SELECT id FROM membership_plan WHERE organization_id = ${organizationId})`);
   await db.delete(memberMembershipSchema).where(sql`${memberMembershipSchema.memberId} IN (SELECT id FROM member WHERE organization_id = ${organizationId})`);
   await db.delete(addressSchema).where(sql`${addressSchema.memberId} IN (SELECT id FROM member WHERE organization_id = ${organizationId})`);
@@ -1619,7 +1644,63 @@ async function seedOrganization(organizationId: string) {
     });
   }
 
-  console.info(`  ✅ Seeded ${programsData.length} programs, ${allTags.length} tags, ${classesData.length} classes, ${eventsData.length} events, ${couponsData.length} coupons, ${membershipPlansData.length} membership plans, ${membersData.length} members, ${catalogCategoriesData.length} catalog categories, ${catalogItemsData.length} catalog items, ${waiverTemplatesData.length} waiver templates, ${signedWaiverCount} signed waivers, ${mergeFieldsData.length} merge fields, ${paymentMethodsData.length} payment methods, ${transactionCount} transactions`);
+  // 16. Seed Attendance Records
+  // Spreads recent attendance across active/trial members, drawing from the
+  // class schedule instances created above. Past_due / cancelled members get
+  // no attendance (matches the signed-waiver seeding rule).
+  console.info('  📋 Seeding attendance records...');
+  let attendanceCount = 0;
+
+  // Re-query the class schedule instances for this org since the IDs created
+  // earlier in this function were captured in a per-class local array.
+  const orgScheduleInstances = await db
+    .select({
+      id: classScheduleInstanceSchema.id,
+      classId: classScheduleInstanceSchema.classId,
+      dayOfWeek: classScheduleInstanceSchema.dayOfWeek,
+    })
+    .from(classScheduleInstanceSchema)
+    .innerJoin(classSchema, eq(classScheduleInstanceSchema.classId, classSchema.id))
+    .where(eq(classSchema.organizationId, organizationId));
+
+  if (orgScheduleInstances.length > 0) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (let i = 0; i < memberIds.length; i++) {
+      const member = membersData[i]!;
+      const memberId = memberIds[i]!;
+      if (member.status !== 'active' && member.status !== 'trial') {
+        continue;
+      }
+
+      // 3 to 8 attendance rows per active member, deterministically based on index.
+      const rowCount = 3 + (i % 6);
+      for (let n = 0; n < rowCount; n++) {
+        const instance = orgScheduleInstances[(i * 7 + n) % orgScheduleInstances.length]!;
+        // Pick a date in the recent past (1..60 days ago) on the schedule's day-of-week.
+        const daysBack = ((i + n) % 60) + 1;
+        const attendanceDate = new Date(today);
+        attendanceDate.setDate(attendanceDate.getDate() - daysBack);
+        // Nudge to the schedule instance's day-of-week so the row makes sense.
+        const dayDelta = (attendanceDate.getDay() - instance.dayOfWeek + 7) % 7;
+        attendanceDate.setDate(attendanceDate.getDate() - dayDelta);
+
+        await db.insert(attendanceSchema).values({
+          id: randomUUID(),
+          organizationId,
+          memberId,
+          classScheduleInstanceId: instance.id,
+          attendanceDate,
+          checkInTime: attendanceDate,
+          checkInMethod: n % 4 === 0 ? 'kiosk' : 'manual',
+        }).onConflictDoNothing();
+        attendanceCount++;
+      }
+    }
+  }
+
+  console.info(`  ✅ Seeded ${programsData.length} programs, ${allTags.length} tags, ${classesData.length} classes, ${eventsData.length} events, ${couponsData.length} coupons, ${membershipPlansData.length} membership plans, ${membersData.length} members, ${catalogCategoriesData.length} catalog categories, ${catalogItemsData.length} catalog items, ${waiverTemplatesData.length} waiver templates, ${signedWaiverCount} signed waivers, ${mergeFieldsData.length} merge fields, ${paymentMethodsData.length} payment methods, ${transactionCount} transactions, ${attendanceCount} attendance records`);
 }
 
 async function main() {

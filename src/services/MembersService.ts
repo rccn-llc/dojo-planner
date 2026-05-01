@@ -334,6 +334,7 @@ type UpdateMemberContactInfoInput = {
   id: string;
   email: string;
   phone?: string | null;
+  dateOfBirth?: Date;
   address?: {
     street: string;
     apartment?: string;
@@ -345,21 +346,27 @@ type UpdateMemberContactInfoInput = {
 };
 
 /**
- * Update a member's contact information (email, phone, address)
+ * Update a member's contact information (email, phone, dateOfBirth, address)
  * @param input - Contact info data to update
  * @param organizationId - The organization ID
  * @returns The updated member record
  */
 export async function updateMemberContactInfo(input: UpdateMemberContactInfoInput, organizationId: string) {
-  const { id, email, phone, address } = input;
+  const { id, email, phone, dateOfBirth, address } = input;
 
-  // Update member email and phone
+  // Build the partial set so a missing dateOfBirth doesn't overwrite the
+  // existing column with undefined.
+  const memberUpdates: Record<string, unknown> = {
+    email,
+    phone: phone ?? null,
+  };
+  if (dateOfBirth !== undefined) {
+    memberUpdates.dateOfBirth = dateOfBirth;
+  }
+
   const memberResult = await db
     .update(memberSchema)
-    .set({
-      email,
-      phone: phone ?? null,
-    })
+    .set(memberUpdates)
     .where(and(eq(memberSchema.id, id), eq(memberSchema.organizationId, organizationId)))
     .returning();
 
@@ -650,11 +657,19 @@ export type FamilyMemberData = {
   photoUrl: string | null;
   status: string | null;
   relationship: string;
+  /** Currently-active membership plan name, or null if the family member has none. */
+  planName: string | null;
+  /** Plan price as a number, or null when there's no active membership. */
+  planPrice: number | null;
+  /** Plan billing frequency (e.g. 'monthly', 'annual'), or null. */
+  planFrequency: string | null;
 };
 
 /**
  * Get family members linked to a Head of Household.
- * Joins family_member with member to return full member details.
+ * Joins family_member with member, then left-joins the family member's
+ * currently-active membership and its plan so the row can render plan name +
+ * price without a follow-up query per member.
  */
 export async function getFamilyMembers(hohMemberId: string): Promise<FamilyMemberData[]> {
   return db
@@ -666,9 +681,17 @@ export async function getFamilyMembers(hohMemberId: string): Promise<FamilyMembe
       photoUrl: memberSchema.photoUrl,
       status: memberSchema.status,
       relationship: familyMemberSchema.relationship,
+      planName: membershipPlanSchema.name,
+      planPrice: membershipPlanSchema.price,
+      planFrequency: membershipPlanSchema.frequency,
     })
     .from(familyMemberSchema)
     .innerJoin(memberSchema, eq(familyMemberSchema.relatedMemberId, memberSchema.id))
+    .leftJoin(memberMembershipSchema, and(
+      eq(memberMembershipSchema.memberId, memberSchema.id),
+      eq(memberMembershipSchema.status, 'active'),
+    ))
+    .leftJoin(membershipPlanSchema, eq(memberMembershipSchema.membershipPlanId, membershipPlanSchema.id))
     .where(eq(familyMemberSchema.memberId, hohMemberId));
 }
 

@@ -1,3 +1,4 @@
+import { list as listAttendance } from './Attendance';
 import {
   categoryCreate,
   categoryList,
@@ -84,6 +85,9 @@ export const router = {
   },
   events: {
     list: listEvents,
+  },
+  attendance: {
+    list: listAttendance,
   },
   tags: {
     listAll: listAllTags,

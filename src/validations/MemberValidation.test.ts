@@ -257,6 +257,49 @@ describe('MemberValidation', () => {
 
       expect(result.success).toBe(true);
     });
+
+    it('accepts a Date dateOfBirth', () => {
+      const result = UpdateMemberContactInfoValidation.safeParse({
+        id: 'member-123',
+        email: 'john.doe@example.com',
+        dateOfBirth: new Date('1990-01-15'),
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('coerces a string dateOfBirth into a Date', () => {
+      const result = UpdateMemberContactInfoValidation.safeParse({
+        id: 'member-123',
+        email: 'john.doe@example.com',
+        dateOfBirth: '1990-01-15',
+      });
+
+      expect(result.success).toBe(true);
+
+      if (result.success) {
+        expect(result.data.dateOfBirth).toBeInstanceOf(Date);
+      }
+    });
+
+    it('accepts a missing dateOfBirth (optional)', () => {
+      const result = UpdateMemberContactInfoValidation.safeParse({
+        id: 'member-123',
+        email: 'john.doe@example.com',
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects an unparseable dateOfBirth string', () => {
+      const result = UpdateMemberContactInfoValidation.safeParse({
+        id: 'member-123',
+        email: 'john.doe@example.com',
+        dateOfBirth: 'not-a-date',
+      });
+
+      expect(result.success).toBe(false);
+    });
   });
 
   describe('MemberPaymentMethodsValidation schema', () => {

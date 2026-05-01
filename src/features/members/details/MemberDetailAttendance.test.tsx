@@ -417,4 +417,31 @@ describe('MemberDetailAttendance', () => {
       expect(page.getByText('Class C').first()).toBeInTheDocument();
     });
   });
+
+  describe('Loading state', () => {
+    it('shows the loading message instead of the empty state when isLoading is true', () => {
+      render(
+        <MemberDetailAttendance
+          {...mockProps}
+          attendanceRecords={[]}
+          isLoading
+        />,
+      );
+
+      expect(page.getByText('loading')).toBeInTheDocument();
+      expect(page.getByText('no_attendance').elements().length).toBe(0);
+    });
+
+    it('falls back to the empty state when not loading and there are no records', () => {
+      render(
+        <MemberDetailAttendance
+          {...mockProps}
+          attendanceRecords={[]}
+          isLoading={false}
+        />,
+      );
+
+      expect(page.getByText('no_attendance')).toBeInTheDocument();
+    });
+  });
 });

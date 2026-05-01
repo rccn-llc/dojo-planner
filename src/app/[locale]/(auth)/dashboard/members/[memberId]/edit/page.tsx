@@ -8,6 +8,7 @@ import type { MemberPaymentMethodData } from '@/services/MembersService';
 import type { SignedWaiverWithTemplateName } from '@/services/WaiversService';
 import { useOrganization } from '@clerk/nextjs';
 import { ArrowRightLeft, Download, Pencil, Plus, Trash2 } from 'lucide-react';
+import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -66,9 +67,13 @@ type FamilyMember = {
   name: string;
   relationship: string;
   photoUrl?: string;
-  membershipType: string;
+  /** Currently-active membership plan name, or null if none. */
+  planName: string | null;
+  /** Plan price in cents, or null if no active membership. */
+  planPrice: number | null;
+  /** Plan billing frequency (e.g. 'monthly'), or null. */
+  planFrequency: string | null;
   status: 'active' | 'on-hold' | 'cancelled';
-  amount: number;
 };
 
 type MembershipDetailsData = {
@@ -107,81 +112,6 @@ type MemberData = {
   familyMembers: FamilyMember[];
   membershipDetails: MembershipDetailsData;
 };
-
-// Mock attendance data for demonstration
-// Note: Class names and instructor names are for demonstration purposes only
-const MOCK_ATTENDANCE: AttendanceRecord[] = [
-  {
-    id: 'att-1',
-    className: 'BJJ Fundamentals I',
-    date: 'Jan 10, 2026',
-    time: '6:00 PM - 7:00 PM',
-    instructor: 'Coach Alex',
-  },
-  {
-    id: 'att-2',
-    className: 'BJJ Fundamentals II',
-    date: 'Jan 9, 2026',
-    time: '6:00 PM - 7:30 PM',
-    instructor: 'Professor Ivan',
-  },
-  {
-    id: 'att-3',
-    className: 'BJJ Fundamentals I',
-    date: 'Jan 8, 2026',
-    time: '6:00 PM - 7:00 PM',
-    instructor: 'Professor Jessica',
-  },
-  {
-    id: 'att-4',
-    className: 'Open Mat',
-    date: 'Jan 5, 2026',
-    time: '10:00 AM - 12:00 PM',
-    instructor: 'N/A',
-  },
-  {
-    id: 'att-5',
-    className: 'BJJ Intermediate',
-    date: 'Jan 6, 2026',
-    time: '7:00 PM - 8:00 PM',
-    instructor: 'Professor Joao',
-  },
-  {
-    id: 'att-6',
-    className: 'BJJ Fundamentals I',
-    date: 'Jan 3, 2026',
-    time: '6:00 PM - 7:00 PM',
-    instructor: 'Coach Alex',
-  },
-  {
-    id: 'att-7',
-    className: 'BJJ Fundamentals II',
-    date: 'Jan 2, 2026',
-    time: '6:00 PM - 7:30 PM',
-    instructor: 'Professor Ivan',
-  },
-  {
-    id: 'att-8',
-    className: 'BJJ Fundamentals I',
-    date: 'Dec 30, 2025',
-    time: '6:00 PM - 7:00 PM',
-    instructor: 'Coach Alex',
-  },
-  {
-    id: 'att-9',
-    className: 'Open Mat',
-    date: 'Dec 29, 2025',
-    time: '10:00 AM - 12:00 PM',
-    instructor: 'N/A',
-  },
-  {
-    id: 'att-10',
-    className: 'BJJ Intermediate',
-    date: 'Dec 27, 2025',
-    time: '7:00 PM - 8:00 PM',
-    instructor: 'Professor Joao',
-  },
-];
 
 // Mock punchcard info for demonstration (used when member has punchcard membership)
 const MOCK_PUNCHCARD_INFO: PunchcardInfo = {
@@ -549,6 +479,10 @@ export default function EditMemberPage() {
   const [notes, setNotes] = useState<MemberNote[]>([]);
   const [isLoadingNotes, setIsLoadingNotes] = useState(true);
 
+  // State for attendance
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+  const [isLoadingAttendance, setIsLoadingAttendance] = useState(true);
+
   // State for add family members modal
   const [isAddFamilyModalOpen, setIsAddFamilyModalOpen] = useState(false);
 
@@ -740,14 +674,15 @@ export default function EditMemberPage() {
     }
     try {
       const result = await client.member.listFamilyMembers({ memberId });
-      const mapped: FamilyMember[] = result.familyMembers.map((fm: { id: string; firstName: string; lastName: string; photoUrl: string | null; status: string | null; relationship: string }) => ({
+      const mapped: FamilyMember[] = result.familyMembers.map(fm => ({
         id: fm.id,
         name: `${fm.firstName} ${fm.lastName}`,
         relationship: fm.relationship,
         photoUrl: fm.photoUrl || undefined,
-        membershipType: 'Family Member',
+        planName: fm.planName ?? null,
+        planPrice: fm.planPrice ?? null,
+        planFrequency: fm.planFrequency ?? null,
         status: (fm.status === 'on-hold' ? 'on-hold' : fm.status === 'cancelled' ? 'cancelled' : 'active') as 'active' | 'on-hold' | 'cancelled',
-        amount: 0,
       }));
       setFamilyMembersData(mapped);
     } catch (err) {
@@ -792,6 +727,26 @@ export default function EditMemberPage() {
   useEffect(() => {
     fetchNotes();
   }, [fetchNotes]);
+
+  // Fetch attendance for this member
+  const fetchAttendance = useCallback(async () => {
+    if (!memberId) {
+      return;
+    }
+    setIsLoadingAttendance(true);
+    try {
+      const result = await client.attendance.list({ memberId });
+      setAttendance(result.records);
+    } catch (err) {
+      console.warn('[Edit Member] Failed to fetch attendance:', err);
+      setAttendance([]);
+    } finally {
+      setIsLoadingAttendance(false);
+    }
+  }, [memberId]);
+  useEffect(() => {
+    fetchAttendance();
+  }, [fetchAttendance]);
 
   const handleAddNote = useCallback(async (content: string) => {
     if (!memberId) {
@@ -1032,6 +987,17 @@ export default function EditMemberPage() {
               <Badge variant="destructive">{state.currentData.amountOverdue}</Badge>
             )}
           </div>
+          {isFamilyMember && currentHOH && (
+            <p className="text-sm text-muted-foreground">
+              {'Linked to '}
+              <Link
+                href={`/dashboard/members/${currentHOH.id}`}
+                className="font-medium text-foreground underline-offset-4 hover:underline"
+              >
+                {currentHOH.name}
+              </Link>
+            </p>
+          )}
         </div>
       </div>
 
@@ -1126,6 +1092,7 @@ export default function EditMemberPage() {
               memberId={memberId}
               initialEmail={state.currentData.contactInfo.email || ''}
               initialPhone={state.currentData.contactInfo.phone || ''}
+              initialDateOfBirth={currentMember?.dateOfBirth ? new Date(currentMember.dateOfBirth) : undefined}
               initialAddress={
                 state.currentData.contactInfo.street
                   ? {
@@ -1482,14 +1449,18 @@ export default function EditMemberPage() {
                       </div>
                       <div className="space-y-3 border-t border-border pt-4">
                         <div>
-                          <p className="text-xs font-semibold text-muted-foreground">{member.membershipType}</p>
+                          <p className="text-xs font-semibold text-muted-foreground">
+                            {member.planName ?? 'No active membership'}
+                          </p>
                           <Badge variant={getStatusColor(member.status)} className="mt-2">
                             {getStatusLabel(member.status)}
                           </Badge>
                         </div>
                         <p className="text-2xl font-bold text-primary">
-                          $
-                          {member.amount}
+                          {formatCurrency(member.planPrice ?? 0)}
+                          {member.planFrequency
+                            ? <span className="ml-1 text-sm font-normal text-muted-foreground">{`/ ${member.planFrequency}`}</span>
+                            : null}
                         </p>
                       </div>
                     </Card>
@@ -1524,7 +1495,8 @@ export default function EditMemberPage() {
         <MemberDetailAttendance
           memberId={memberId}
           memberName={state.currentData.memberName}
-          attendanceRecords={MOCK_ATTENDANCE}
+          attendanceRecords={attendance}
+          isLoading={isLoadingAttendance}
           punchcardInfo={currentMembership?.membershipPlan?.category === 'punchcard' ? MOCK_PUNCHCARD_INFO : null}
         />
       )}

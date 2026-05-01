@@ -37,6 +37,7 @@ type EditContactInfoModalProps = {
   memberId: string;
   initialEmail: string;
   initialPhone: string;
+  initialDateOfBirth?: Date;
   initialAddress?: Address;
 };
 
@@ -46,12 +47,25 @@ const isValidEmail = (email: string): boolean => {
   return EMAIL_REGEX.test(email);
 };
 
+function dateToInputValue(date: Date | undefined): string {
+  if (!date) {
+    return '';
+  }
+  // Anchor on local timezone so a date picked in the UI persists as the same
+  // calendar day rather than shifting based on UTC offset.
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export function EditContactInfoModal({
   isOpen,
   onClose,
   memberId,
   initialEmail,
   initialPhone,
+  initialDateOfBirth,
   initialAddress,
 }: EditContactInfoModalProps) {
   const t = useTranslations('EditContactInfoModal');
@@ -59,6 +73,7 @@ export function EditContactInfoModal({
 
   const [email, setEmail] = useState(initialEmail);
   const [phone, setPhone] = useState(initialPhone);
+  const [dateOfBirth, setDateOfBirth] = useState<string>(() => dateToInputValue(initialDateOfBirth));
   const [address, setAddress] = useState<Address>({
     street: initialAddress?.street || '',
     apartment: initialAddress?.apartment || '',
@@ -108,6 +123,7 @@ export function EditContactInfoModal({
         id: memberId,
         email,
         phone: phone || null,
+        ...(dateOfBirth.trim() ? { dateOfBirth: new Date(dateOfBirth) } : {}),
         address: addressPayload,
       });
 
@@ -126,6 +142,7 @@ export function EditContactInfoModal({
   const handleCancel = () => {
     setEmail(initialEmail);
     setPhone(initialPhone);
+    setDateOfBirth(dateToInputValue(initialDateOfBirth));
     setAddress({
       street: initialAddress?.street || '',
       apartment: initialAddress?.apartment || '',
@@ -182,6 +199,19 @@ export function EditContactInfoModal({
               {isPhoneInvalid && (
                 <p className="text-xs text-destructive">{t('phone_error')}</p>
               )}
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="edit-contact-dob" className="text-sm font-medium text-foreground">
+                {t('date_of_birth_label')}
+              </label>
+              <Input
+                id="edit-contact-dob"
+                type="date"
+                placeholder={t('date_of_birth_placeholder')}
+                value={dateOfBirth}
+                onChange={e => setDateOfBirth(e.target.value)}
+              />
             </div>
 
             <div className="border-t border-border pt-4">

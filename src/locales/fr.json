@@ -1585,6 +1585,8 @@
     "phone_label": "Numéro de téléphone",
     "phone_placeholder": "(555) 123-4567",
     "phone_error": "Veuillez entrer un numéro de téléphone",
+    "date_of_birth_label": "Date de naissance",
+    "date_of_birth_placeholder": "AAAA-MM-JJ",
     "address_label": "Adresse",
     "street_label": "Adresse de la rue",
     "street_placeholder": "123 rue Principale",
@@ -2002,6 +2004,7 @@
   "MemberDetailAttendance": {
     "title": "Historique de présence",
     "search_placeholder": "Rechercher présence...",
+    "loading": "Chargement des présences...",
     "no_attendance": "Aucun enregistrement de présence",
     "no_matching_attendance": "Aucun enregistrement de présence ne correspond à votre recherche",
     "table_class": "Cours",
