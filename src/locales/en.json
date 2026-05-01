@@ -1581,6 +1581,8 @@
     "phone_label": "Phone Number",
     "phone_placeholder": "(555) 123-4567",
     "phone_error": "Please enter a phone number",
+    "date_of_birth_label": "Date of Birth",
+    "date_of_birth_placeholder": "YYYY-MM-DD",
     "address_label": "Address",
     "street_label": "Street Address",
     "street_placeholder": "123 Main St",
@@ -1997,6 +1999,7 @@
   "MemberDetailAttendance": {
     "title": "Attendance History",
     "search_placeholder": "Search attendance...",
+    "loading": "Loading attendance...",
     "no_attendance": "No attendance records yet",
     "no_matching_attendance": "No attendance records match your search",
     "table_class": "Class",

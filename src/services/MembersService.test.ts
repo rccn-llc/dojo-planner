@@ -69,6 +69,17 @@ vi.mock('@/models/Schema', () => ({
     relatedMemberId: 'related_member_id',
     relationship: 'relationship',
   },
+  memberMembershipSchema: {
+    memberId: 'member_id',
+    membershipPlanId: 'membership_plan_id',
+    status: 'status',
+  },
+  membershipPlanSchema: {
+    id: 'id',
+    name: 'name',
+    price: 'price',
+    frequency: 'frequency',
+  },
 }));
 
 vi.mock('@/services/TransactionsService', () => ({}));
@@ -144,6 +155,53 @@ describe('MembersService', () => {
       const result = await updateMemberContactInfo(input, 'org-123');
 
       expect(result).toHaveLength(1);
+    });
+
+    it('writes dateOfBirth into the member set payload when provided', async () => {
+      const { db } = await import('@/libs/DB');
+      const setSpy = vi.fn(() => ({
+        where: vi.fn(() => ({
+          returning: vi.fn(() => Promise.resolve([{ id: 'member-123', email: 'updated@example.com' }])),
+        })),
+      }));
+      vi.mocked(db.update).mockReturnValueOnce({ set: setSpy } as any);
+
+      const { updateMemberContactInfo } = await import('./MembersService');
+      const dob = new Date('1990-01-15');
+      await updateMemberContactInfo({
+        id: 'member-123',
+        email: 'updated@example.com',
+        phone: '(555) 999-8888',
+        dateOfBirth: dob,
+      }, 'org-123');
+
+      expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({
+        email: 'updated@example.com',
+        phone: '(555) 999-8888',
+        dateOfBirth: dob,
+      }));
+    });
+
+    it('does not include dateOfBirth in the set payload when omitted', async () => {
+      const { db } = await import('@/libs/DB');
+      const setSpy = vi.fn((..._args: unknown[]) => ({
+        where: vi.fn(() => ({
+          returning: vi.fn(() => Promise.resolve([{ id: 'member-123', email: 'updated@example.com' }])),
+        })),
+      }));
+      vi.mocked(db.update).mockReturnValueOnce({ set: setSpy } as any);
+
+      const { updateMemberContactInfo } = await import('./MembersService');
+      await updateMemberContactInfo({
+        id: 'member-123',
+        email: 'updated@example.com',
+        phone: '(555) 999-8888',
+      }, 'org-123');
+
+      const payload = setSpy.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+
+      expect(payload).toBeDefined();
+      expect(payload).not.toHaveProperty('dateOfBirth');
     });
   });
 
@@ -384,31 +442,70 @@ describe('MembersService', () => {
   });
 
   describe('getFamilyMembers', () => {
-    it('should return family members for an HOH', async () => {
+    // Helper that mirrors the new query chain:
+    //   from.innerJoin.leftJoin.leftJoin.where
+    function mockChain(rows: unknown[]) {
+      const mockWhere = vi.fn(() => Promise.resolve(rows));
+      const mockLeftJoin2 = vi.fn(() => ({ where: mockWhere }));
+      const mockLeftJoin1 = vi.fn(() => ({ leftJoin: mockLeftJoin2 }));
+      const mockInnerJoin = vi.fn(() => ({ leftJoin: mockLeftJoin1 }));
+      const mockFrom = vi.fn(() => ({ innerJoin: mockInnerJoin }));
+      return { from: mockFrom };
+    }
+
+    it('should return family members for an HOH with plan info', async () => {
       const { db } = await import('@/libs/DB');
       const mockFamilyMembers = [
-        { id: 'fm-1', firstName: 'Alice', lastName: 'Doe', email: 'alice@test.com', photoUrl: null, status: 'active', relationship: 'family-member' },
+        {
+          id: 'fm-1',
+          firstName: 'Alice',
+          lastName: 'Doe',
+          email: 'alice@test.com',
+          photoUrl: null,
+          status: 'active',
+          relationship: 'family-member',
+          planName: 'Adult BJJ Monthly',
+          planPrice: 12000,
+          planFrequency: 'monthly',
+        },
       ];
-
-      const mockWhere = vi.fn(() => Promise.resolve(mockFamilyMembers));
-      const mockInnerJoin = vi.fn(() => ({ where: mockWhere }));
-      const mockFrom = vi.fn(() => ({ innerJoin: mockInnerJoin }));
-      vi.mocked(db.select).mockReturnValue({ from: mockFrom } as never);
+      vi.mocked(db.select).mockReturnValue(mockChain(mockFamilyMembers) as never);
 
       const { getFamilyMembers } = await import('./MembersService');
       const result = await getFamilyMembers('hoh-123');
 
       expect(result).toEqual(mockFamilyMembers);
-      expect(db.select).toHaveBeenCalled();
+    });
+
+    it('should return null plan fields when a family member has no active membership', async () => {
+      const { db } = await import('@/libs/DB');
+      const mockFamilyMembers = [
+        {
+          id: 'fm-1',
+          firstName: 'Bob',
+          lastName: 'Doe',
+          email: 'bob@test.com',
+          photoUrl: null,
+          status: 'active',
+          relationship: 'family-member',
+          planName: null,
+          planPrice: null,
+          planFrequency: null,
+        },
+      ];
+      vi.mocked(db.select).mockReturnValue(mockChain(mockFamilyMembers) as never);
+
+      const { getFamilyMembers } = await import('./MembersService');
+      const result = await getFamilyMembers('hoh-123');
+
+      expect(result[0]?.planName).toBeNull();
+      expect(result[0]?.planPrice).toBeNull();
+      expect(result[0]?.planFrequency).toBeNull();
     });
 
     it('should return empty array when HOH has no family members', async () => {
       const { db } = await import('@/libs/DB');
-
-      const mockWhere = vi.fn(() => Promise.resolve([]));
-      const mockInnerJoin = vi.fn(() => ({ where: mockWhere }));
-      const mockFrom = vi.fn(() => ({ innerJoin: mockInnerJoin }));
-      vi.mocked(db.select).mockReturnValue({ from: mockFrom } as never);
+      vi.mocked(db.select).mockReturnValue(mockChain([]) as never);
 
       const { getFamilyMembers } = await import('./MembersService');
       const result = await getFamilyMembers('hoh-no-family');

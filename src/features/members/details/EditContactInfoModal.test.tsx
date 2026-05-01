@@ -138,6 +138,75 @@ describe('EditContactInfoModal', () => {
     });
   });
 
+  describe('Date of Birth', () => {
+    it('renders the DOB input prefilled with the initial value (YYYY-MM-DD)', () => {
+      const props = {
+        ...mockProps,
+        initialDateOfBirth: new Date(1990, 0, 15),
+      };
+      render(<I18nWrapper><EditContactInfoModal {...props} /></I18nWrapper>);
+
+      const dobInput = document.querySelector('#edit-contact-dob') as HTMLInputElement;
+
+      expect(dobInput).not.toBeNull();
+      expect(dobInput.value).toBe('1990-01-15');
+    });
+
+    it('renders the DOB input empty when no initial value is provided', () => {
+      const props = {
+        ...mockProps,
+        initialDateOfBirth: undefined,
+      };
+      render(<I18nWrapper><EditContactInfoModal {...props} /></I18nWrapper>);
+
+      const dobInput = document.querySelector('#edit-contact-dob') as HTMLInputElement;
+
+      expect(dobInput).not.toBeNull();
+      expect(dobInput.value).toBe('');
+    });
+
+    it('sends dateOfBirth in the updateContactInfo payload when set', async () => {
+      const orpc = await import('@/libs/Orpc');
+      const updateContactInfo = vi.mocked(orpc.client.member.updateContactInfo);
+      updateContactInfo.mockClear();
+      updateContactInfo.mockResolvedValue({});
+
+      const props = {
+        ...mockProps,
+        initialDateOfBirth: new Date(1990, 0, 15),
+      };
+      render(<I18nWrapper><EditContactInfoModal {...props} /></I18nWrapper>);
+
+      const submitButton = page.getByRole('button', { name: 'Save Changes' });
+      await userEvent.click(submitButton);
+
+      expect(updateContactInfo).toHaveBeenCalledWith(expect.objectContaining({
+        dateOfBirth: expect.any(Date),
+      }));
+    });
+
+    it('omits dateOfBirth from the payload when the input is left blank', async () => {
+      const orpc = await import('@/libs/Orpc');
+      const updateContactInfo = vi.mocked(orpc.client.member.updateContactInfo);
+      updateContactInfo.mockClear();
+      updateContactInfo.mockResolvedValue({});
+
+      const props = {
+        ...mockProps,
+        initialDateOfBirth: undefined,
+      };
+      render(<I18nWrapper><EditContactInfoModal {...props} /></I18nWrapper>);
+
+      const submitButton = page.getByRole('button', { name: 'Save Changes' });
+      await userEvent.click(submitButton);
+
+      const payload = updateContactInfo.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+
+      expect(payload).toBeDefined();
+      expect(payload).not.toHaveProperty('dateOfBirth');
+    });
+  });
+
   describe('Modal visibility', () => {
     it('should not render when isOpen is false', () => {
       const closedProps = {

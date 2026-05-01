@@ -25,6 +25,7 @@ type MemberDetailAttendanceProps = {
   memberName: string;
   attendanceRecords: AttendanceRecord[];
   punchcardInfo: PunchcardInfo | null;
+  isLoading?: boolean;
 };
 
 type SortField = 'className' | 'date' | 'time' | 'instructor';
@@ -33,6 +34,7 @@ type SortDirection = 'asc' | 'desc';
 export function MemberDetailAttendance({
   attendanceRecords,
   punchcardInfo,
+  isLoading = false,
 }: MemberDetailAttendanceProps) {
   const t = useTranslations('MemberDetailAttendance');
   const [sortField, setSortField] = useState<SortField>('date');
@@ -169,138 +171,144 @@ export function MemberDetailAttendance({
             </div>
           </div>
         )}
-        {attendanceRecords.length === 0
+        {isLoading
           ? (
               <div className="flex items-center justify-center py-12">
-                <p className="text-muted-foreground">{t('no_attendance')}</p>
+                <p className="text-muted-foreground">{t('loading')}</p>
               </div>
             )
-          : filteredAndSortedRecords.length === 0
+          : attendanceRecords.length === 0
             ? (
                 <div className="flex items-center justify-center py-12">
-                  <p className="text-muted-foreground">{t('no_matching_attendance')}</p>
+                  <p className="text-muted-foreground">{t('no_attendance')}</p>
                 </div>
               )
-            : (
-                <>
-                  {/* Desktop Table View */}
-                  <div className="hidden overflow-x-auto lg:block">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-border bg-secondary">
-                          <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
-                            <button
-                              type="button"
-                              onClick={() => handleSort('className')}
-                              className="flex cursor-pointer items-center gap-2 hover:text-foreground/80"
-                            >
-                              {t('table_class')}
-                              {renderSortIcon('className')}
-                            </button>
-                          </th>
-                          <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
-                            <button
-                              type="button"
-                              onClick={() => handleSort('date')}
-                              className="flex cursor-pointer items-center gap-2 hover:text-foreground/80"
-                            >
-                              {t('table_date')}
-                              {renderSortIcon('date')}
-                            </button>
-                          </th>
-                          <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
-                            <button
-                              type="button"
-                              onClick={() => handleSort('time')}
-                              className="flex cursor-pointer items-center gap-2 hover:text-foreground/80"
-                            >
-                              {t('table_time')}
-                              {renderSortIcon('time')}
-                            </button>
-                          </th>
-                          <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
-                            <button
-                              type="button"
-                              onClick={() => handleSort('instructor')}
-                              className="flex cursor-pointer items-center gap-2 hover:text-foreground/80"
-                            >
-                              {t('table_instructor')}
-                              {renderSortIcon('instructor')}
-                            </button>
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredAndSortedRecords.map(record => (
-                          <tr key={record.id} className="border-b border-border hover:bg-secondary/30">
-                            <td className="px-6 py-4 text-sm font-medium text-foreground">
-                              {record.className}
-                            </td>
-                            <td className="px-6 py-4 text-sm text-muted-foreground">
-                              {record.date}
-                            </td>
-                            <td className="px-6 py-4 text-sm text-muted-foreground">
-                              {record.time}
-                            </td>
-                            <td className="px-6 py-4 text-sm text-foreground">
-                              {record.instructor}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+            : filteredAndSortedRecords.length === 0
+              ? (
+                  <div className="flex items-center justify-center py-12">
+                    <p className="text-muted-foreground">{t('no_matching_attendance')}</p>
                   </div>
+                )
+              : (
+                  <>
+                    {/* Desktop Table View */}
+                    <div className="hidden overflow-x-auto lg:block">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-border bg-secondary">
+                            <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
+                              <button
+                                type="button"
+                                onClick={() => handleSort('className')}
+                                className="flex cursor-pointer items-center gap-2 hover:text-foreground/80"
+                              >
+                                {t('table_class')}
+                                {renderSortIcon('className')}
+                              </button>
+                            </th>
+                            <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
+                              <button
+                                type="button"
+                                onClick={() => handleSort('date')}
+                                className="flex cursor-pointer items-center gap-2 hover:text-foreground/80"
+                              >
+                                {t('table_date')}
+                                {renderSortIcon('date')}
+                              </button>
+                            </th>
+                            <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
+                              <button
+                                type="button"
+                                onClick={() => handleSort('time')}
+                                className="flex cursor-pointer items-center gap-2 hover:text-foreground/80"
+                              >
+                                {t('table_time')}
+                                {renderSortIcon('time')}
+                              </button>
+                            </th>
+                            <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
+                              <button
+                                type="button"
+                                onClick={() => handleSort('instructor')}
+                                className="flex cursor-pointer items-center gap-2 hover:text-foreground/80"
+                              >
+                                {t('table_instructor')}
+                                {renderSortIcon('instructor')}
+                              </button>
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredAndSortedRecords.map(record => (
+                            <tr key={record.id} className="border-b border-border hover:bg-secondary/30">
+                              <td className="px-6 py-4 text-sm font-medium text-foreground">
+                                {record.className}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-muted-foreground">
+                                {record.date}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-muted-foreground">
+                                {record.time}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-foreground">
+                                {record.instructor}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
 
-                  {/* Mobile Card View */}
-                  <div className="space-y-4 p-4 lg:hidden">
-                    {filteredAndSortedRecords.map(record => (
-                      <Card key={record.id} className="p-4">
-                        <div className="space-y-3">
-                          {/* Class Name Header */}
-                          <div className="border-b border-border pb-3">
-                            <div className="text-xs font-semibold text-muted-foreground">
-                              {t('table_class')}
+                    {/* Mobile Card View */}
+                    <div className="space-y-4 p-4 lg:hidden">
+                      {filteredAndSortedRecords.map(record => (
+                        <Card key={record.id} className="p-4">
+                          <div className="space-y-3">
+                            {/* Class Name Header */}
+                            <div className="border-b border-border pb-3">
+                              <div className="text-xs font-semibold text-muted-foreground">
+                                {t('table_class')}
+                              </div>
+                              <div className="mt-1 text-sm font-medium text-foreground">
+                                {record.className}
+                              </div>
                             </div>
-                            <div className="mt-1 text-sm font-medium text-foreground">
-                              {record.className}
-                            </div>
-                          </div>
 
-                          {/* Date and Time */}
-                          <div className="flex items-start justify-between">
+                            {/* Date and Time */}
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <div className="text-xs font-semibold text-muted-foreground">
+                                  {t('table_date')}
+                                </div>
+                                <div className="mt-1 text-sm text-foreground">
+                                  {record.date}
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-xs font-semibold text-muted-foreground">
+                                  {t('table_time')}
+                                </div>
+                                <div className="mt-1 text-sm text-foreground">
+                                  {record.time}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Instructor */}
                             <div>
                               <div className="text-xs font-semibold text-muted-foreground">
-                                {t('table_date')}
+                                {t('table_instructor')}
                               </div>
                               <div className="mt-1 text-sm text-foreground">
-                                {record.date}
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-xs font-semibold text-muted-foreground">
-                                {t('table_time')}
-                              </div>
-                              <div className="mt-1 text-sm text-foreground">
-                                {record.time}
+                                {record.instructor}
                               </div>
                             </div>
                           </div>
-
-                          {/* Instructor */}
-                          <div>
-                            <div className="text-xs font-semibold text-muted-foreground">
-                              {t('table_instructor')}
-                            </div>
-                            <div className="mt-1 text-sm text-foreground">
-                              {record.instructor}
-                            </div>
-                          </div>
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-                </>
-              )}
+                        </Card>
+                      ))}
+                    </div>
+                  </>
+                )}
       </div>
     </div>
   );
