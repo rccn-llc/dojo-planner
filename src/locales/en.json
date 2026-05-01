@@ -872,6 +872,12 @@
     "cancel_button": "Cancel",
     "delete_button": "Delete"
   },
+  "DeleteWaiverAlertDialog": {
+    "title": "Are you absolutely sure?",
+    "description": "This action cannot be undone. This will permanently delete the waiver \"{waiverName}\" and remove it from any membership plans it was associated with. Existing signed waivers remain unaffected.",
+    "cancel_button": "Cancel",
+    "delete_button": "Delete"
+  },
   "LocationSettings": {
     "title": "Location Settings",
     "location_title": "Location",
@@ -1142,6 +1148,7 @@
   },
   "WaiverDetailPage": {
     "error_loading": "Failed to load waiver",
+    "error_deleting": "Failed to delete waiver. Please try again.",
     "waiver_not_found": "Waiver not found",
     "back_to_waivers": "Back to Waivers",
     "status_active": "Active",

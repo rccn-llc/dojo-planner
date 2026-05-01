@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { DeleteWaiverAlertDialog } from '@/features/waivers/details/DeleteWaiverAlertDialog';
 import { EditWaiverBasicsModal } from '@/features/waivers/details/EditWaiverBasicsModal';
 import { EditWaiverContentModal } from '@/features/waivers/details/EditWaiverContentModal';
 import { EditWaiverMembershipsModal } from '@/features/waivers/details/EditWaiverMembershipsModal';
@@ -39,6 +40,8 @@ export default function WaiverDetailPage() {
   const [isEditContentOpen, setIsEditContentOpen] = useState(false);
   const [isEditMembershipsOpen, setIsEditMembershipsOpen] = useState(false);
   const [viewingVersion, setViewingVersion] = useState<WaiverTemplate | null>(null);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchWaiver = useCallback(async () => {
     try {
@@ -69,8 +72,30 @@ export default function WaiverDetailPage() {
   }, [router]);
 
   const handleDelete = useCallback(() => {
-    // TODO: Open delete confirmation dialog
+    setIsDeleteOpen(true);
   }, []);
+
+  const handleCancelDelete = useCallback(() => {
+    setIsDeleteOpen(false);
+  }, []);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (isDeleting) {
+      return;
+    }
+    setIsDeleting(true);
+    try {
+      await client.waivers.deleteTemplate({ id: waiverId });
+      setIsDeleteOpen(false);
+      router.push('/dashboard/waivers');
+    } catch (err) {
+      console.error('Failed to delete waiver:', err);
+      setError(t('error_deleting'));
+      setIsDeleteOpen(false);
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [isDeleting, waiverId, router, t]);
 
   // Resolve placeholders for preview using dynamic merge fields
   // Returns React nodes with highlighted merge field values
@@ -373,6 +398,12 @@ export default function WaiverDetailPage() {
         onClose={() => setViewingVersion(null)}
         template={viewingVersion}
         mergeFields={mergeFields}
+      />
+      <DeleteWaiverAlertDialog
+        isOpen={isDeleteOpen}
+        waiverName={waiver?.name ?? ''}
+        onCloseAction={handleCancelDelete}
+        onConfirmAction={handleConfirmDelete}
       />
     </div>
   );

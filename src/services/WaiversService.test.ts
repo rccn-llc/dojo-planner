@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Mock database and schemas
-vi.mock('@/libs/DB', () => ({
-  db: {
+// Mock database and schemas. `db.transaction(cb)` invokes the callback with
+// the same `db` object as `tx` so existing tests keep asserting against
+// `db.update` / `db.insert` / `db.select` regardless of whether the code
+// under test runs inside a transaction.
+vi.mock('@/libs/DB', () => {
+  const db: Record<string, unknown> = {
     select: vi.fn(() => ({
       from: vi.fn(() => ({
         where: vi.fn(() => Promise.resolve([])),
@@ -23,8 +26,10 @@ vi.mock('@/libs/DB', () => ({
     delete: vi.fn(() => ({
       where: vi.fn(() => Promise.resolve()),
     })),
-  },
-}));
+  };
+  db.transaction = vi.fn(async (cb: (tx: typeof db) => Promise<unknown>) => cb(db));
+  return { db };
+});
 
 vi.mock('@/models/Schema', () => ({
   waiverTemplateSchema: { id: 'id', organizationId: 'organizationId', parentId: 'parentId', isDefault: 'isDefault', content: 'content' },
@@ -467,6 +472,117 @@ describe('WaiversService', () => {
       expect(result.template.isDefault).toBe(true);
       // update called at least twice: once to unset others, once to update template
       expect(db.update).toHaveBeenCalledTimes(2);
+    });
+
+    it('should update the slug when the name changes (regression: previously dead code)', async () => {
+      const { db } = await import('@/libs/DB');
+
+      const updatedTemplate = {
+        ...mockTemplate,
+        name: 'Renamed Waiver',
+        slug: 'renamed-waiver',
+      };
+
+      let selectCallCount = 0;
+      vi.mocked(db.select).mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockImplementation(() => {
+            selectCallCount++;
+            if (selectCallCount === 1) {
+              return Promise.resolve([mockTemplate]);
+            }
+            return Promise.resolve([]);
+          }),
+        }),
+      } as any);
+
+      const setSpy = vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnValue({
+          returning: vi.fn().mockResolvedValue([updatedTemplate]),
+        }),
+      });
+      vi.mocked(db.update).mockReturnValue({ set: setSpy } as any);
+
+      const { updateWaiverTemplate } = await import('./WaiversService');
+      const result = await updateWaiverTemplate(
+        { id: 'template-1', name: 'Renamed Waiver' },
+        'test-org-123',
+      );
+
+      expect(result.template.slug).toBe('renamed-waiver');
+      // The set() payload must include slug derived from the new name.
+      expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({
+        slug: 'renamed-waiver',
+        name: 'Renamed Waiver',
+      }));
+    });
+
+    it('should NOT update the slug when only non-name fields change', async () => {
+      const { db } = await import('@/libs/DB');
+
+      const updatedTemplate = { ...mockTemplate, isActive: false };
+
+      let selectCallCount = 0;
+      vi.mocked(db.select).mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockImplementation(() => {
+            selectCallCount++;
+            if (selectCallCount === 1) {
+              return Promise.resolve([mockTemplate]);
+            }
+            return Promise.resolve([]);
+          }),
+        }),
+      } as any);
+
+      const setSpy = vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnValue({
+          returning: vi.fn().mockResolvedValue([updatedTemplate]),
+        }),
+      });
+      vi.mocked(db.update).mockReturnValue({ set: setSpy } as any);
+
+      const { updateWaiverTemplate } = await import('./WaiversService');
+      await updateWaiverTemplate(
+        { id: 'template-1', isActive: false },
+        'test-org-123',
+      );
+
+      const setPayload = setSpy.mock.calls[0]?.[0] as Record<string, unknown>;
+
+      expect(setPayload).not.toHaveProperty('slug');
+    });
+
+    it('should run inside a transaction (regression: prevents archive-vs-root unique-key collision)', async () => {
+      const { db } = await import('@/libs/DB');
+
+      let selectCallCount = 0;
+      vi.mocked(db.select).mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockImplementation(() => {
+            selectCallCount++;
+            if (selectCallCount === 1) {
+              return Promise.resolve([mockTemplate]);
+            }
+            return Promise.resolve([]);
+          }),
+        }),
+      } as any);
+
+      vi.mocked(db.update).mockReturnValue({
+        set: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            returning: vi.fn().mockResolvedValue([{ ...mockTemplate, name: 'X' }]),
+          }),
+        }),
+      } as any);
+
+      const { updateWaiverTemplate } = await import('./WaiversService');
+      await updateWaiverTemplate({ id: 'template-1', name: 'X' }, 'test-org-123');
+
+      // The mocked `db.transaction` is invoked with a callback that runs the
+      // update — the test passes if the call count is non-zero.
+      expect(db.transaction).toHaveBeenCalled();
     });
   });
 

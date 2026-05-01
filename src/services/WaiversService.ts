@@ -344,75 +344,82 @@ export async function updateWaiverTemplate(
   const currentTemplate = existing[0]!;
   const contentChanged = updateData.content !== undefined && updateData.content !== currentTemplate.content;
 
-  // If this is set as default, unset other default templates
-  if (updateData.isDefault) {
-    await db
-      .update(waiverTemplateSchema)
-      .set({ isDefault: false })
-      .where(and(
-        eq(waiverTemplateSchema.organizationId, organizationId),
-        eq(waiverTemplateSchema.isDefault, true),
-      ));
-  }
-
-  // If content changed, archive the current version before updating
-  if (contentChanged) {
-    await db.insert(waiverTemplateSchema).values({
-      id: randomUUID(),
-      organizationId: currentTemplate.organizationId,
-      name: currentTemplate.name,
-      slug: currentTemplate.slug,
-      version: currentTemplate.version,
-      content: currentTemplate.content,
-      description: currentTemplate.description,
-      isActive: currentTemplate.isActive,
-      isDefault: currentTemplate.isDefault,
-      requiresGuardian: currentTemplate.requiresGuardian,
-      guardianAgeThreshold: currentTemplate.guardianAgeThreshold,
-      sortOrder: currentTemplate.sortOrder,
-      parentId: currentTemplate.id,
-    });
-  }
-
-  // Prepare update data
+  // Build the partial set passed to the root update.
   const dataToUpdate: Record<string, unknown> = { ...updateData };
   if (contentChanged) {
     dataToUpdate.version = currentTemplate.version + 1;
   }
-
-  // Update slug if name changes
-  if (updateData.name && !input.name) {
+  // Re-derive the slug when the name changes so the URL slug stays in sync.
+  if (updateData.name !== undefined && updateData.name !== currentTemplate.name) {
     dataToUpdate.slug = generateSlug(updateData.name);
   }
 
-  const result = await db
-    .update(waiverTemplateSchema)
-    .set(dataToUpdate)
-    .where(and(eq(waiverTemplateSchema.id, id), eq(waiverTemplateSchema.organizationId, organizationId)))
-    .returning();
+  // Run the entire update inside a transaction so:
+  //   1) the unset-other-defaults, archive-insert, and root-update are atomic, and
+  //   2) the root version bump happens BEFORE the archive insert. The archive
+  //      copies the row at its OLD version; if we inserted it before bumping the
+  //      root, both rows would briefly share (organization_id, slug, version) and
+  //      hit the unique index violation.
+  const updatedRow = await db.transaction(async (tx) => {
+    if (updateData.isDefault) {
+      await tx
+        .update(waiverTemplateSchema)
+        .set({ isDefault: false })
+        .where(and(
+          eq(waiverTemplateSchema.organizationId, organizationId),
+          eq(waiverTemplateSchema.isDefault, true),
+        ));
+    }
 
-  const template = result[0];
-  if (!template) {
-    throw new Error('Failed to update waiver template');
-  }
+    const updateResult = await tx
+      .update(waiverTemplateSchema)
+      .set(dataToUpdate)
+      .where(and(eq(waiverTemplateSchema.id, id), eq(waiverTemplateSchema.organizationId, organizationId)))
+      .returning();
+
+    const updated = updateResult[0];
+    if (!updated) {
+      throw new Error('Failed to update waiver template');
+    }
+
+    if (contentChanged) {
+      await tx.insert(waiverTemplateSchema).values({
+        id: randomUUID(),
+        organizationId: currentTemplate.organizationId,
+        name: currentTemplate.name,
+        slug: currentTemplate.slug,
+        version: currentTemplate.version,
+        content: currentTemplate.content,
+        description: currentTemplate.description,
+        isActive: currentTemplate.isActive,
+        isDefault: currentTemplate.isDefault,
+        requiresGuardian: currentTemplate.requiresGuardian,
+        guardianAgeThreshold: currentTemplate.guardianAgeThreshold,
+        sortOrder: currentTemplate.sortOrder,
+        parentId: currentTemplate.id,
+      });
+    }
+
+    return updated;
+  });
 
   return {
     template: {
-      id: template.id,
-      organizationId: template.organizationId,
-      name: template.name,
-      slug: template.slug,
-      version: template.version,
-      content: template.content,
-      description: template.description,
-      isActive: template.isActive ?? true,
-      isDefault: template.isDefault ?? false,
-      requiresGuardian: template.requiresGuardian ?? true,
-      guardianAgeThreshold: template.guardianAgeThreshold ?? 16,
-      sortOrder: template.sortOrder ?? 0,
-      parentId: template.parentId,
-      createdAt: template.createdAt,
-      updatedAt: template.updatedAt,
+      id: updatedRow.id,
+      organizationId: updatedRow.organizationId,
+      name: updatedRow.name,
+      slug: updatedRow.slug,
+      version: updatedRow.version,
+      content: updatedRow.content,
+      description: updatedRow.description,
+      isActive: updatedRow.isActive ?? true,
+      isDefault: updatedRow.isDefault ?? false,
+      requiresGuardian: updatedRow.requiresGuardian ?? true,
+      guardianAgeThreshold: updatedRow.guardianAgeThreshold ?? 16,
+      sortOrder: updatedRow.sortOrder ?? 0,
+      parentId: updatedRow.parentId,
+      createdAt: updatedRow.createdAt,
+      updatedAt: updatedRow.updatedAt,
     },
     versionCreated: contentChanged,
   };
