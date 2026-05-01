@@ -26,7 +26,7 @@ import { create as createNoteHandler, list as listNotes, remove as removeNoteHan
 import { getTokenizationIframeConfig, processPayment, registerPaymentMethod } from './Payment';
 import { chartData as reportChartData, currentValues as reportCurrentValues, insights as reportInsights } from './Reports';
 import { cancelSaasSubscription, changeSaasPlan, getCurrentPlan, getSaasBillingHistory, getSaasTokenizationConfig, subscribeToPlan } from './SaasSubscription';
-import { listAll as listAllTags, listClassTags, listMembershipTags } from './Tags';
+import { create as createTagHandler, listAll as listAllTags, listClassTags, listMembershipTags, remove as removeTagHandler, update as updateTagHandler } from './Tags';
 import { get as getTransaction, list as listTransactions } from './Transactions';
 import {
   addWaiverToMembership,
@@ -88,6 +88,9 @@ export const router = {
     listAll: listAllTags,
     listClassTags,
     listMembershipTags,
+    create: createTagHandler,
+    update: updateTagHandler,
+    remove: removeTagHandler,
   },
   transactions: {
     list: listTransactions,

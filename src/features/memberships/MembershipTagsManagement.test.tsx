@@ -25,6 +25,17 @@ vi.mock('@/hooks/useTagsCache', () => ({
     error: null,
     revalidate: vi.fn(),
   }),
+  invalidateTagsCache: vi.fn(),
+}));
+
+vi.mock('@/libs/Orpc', () => ({
+  client: {
+    tags: {
+      create: vi.fn().mockResolvedValue({ tag: { id: 'new', name: '', slug: '', color: null, entityType: 'membership', usageCount: 0 } }),
+      update: vi.fn().mockResolvedValue({ tag: { id: 'tag-1', name: '', slug: '', color: null, entityType: 'membership', usageCount: 0 } }),
+      remove: vi.fn().mockResolvedValue({ success: true, unlinkedFromCount: 0 }),
+    },
+  },
 }));
 
 describe('MembershipTagsManagement', () => {
@@ -428,6 +439,49 @@ describe('MembershipTagsManagement', () => {
 
       // Header row + 3 tag rows (Active, Trial, Inactive)
       expect(rows.length).toBe(mockMembershipTags.length + 1);
+    });
+  });
+
+  describe('CRUD wiring', () => {
+    it('opens the Add Tag modal when Add New Tag is clicked', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <I18nWrapper>
+          <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
+        </I18nWrapper>,
+      );
+
+      await userEvent.click(page.getByRole('button', { name: /Add New Tag/i }));
+
+      expect(page.getByRole('heading', { name: 'Add Tag' })).toBeInTheDocument();
+    });
+
+    it('opens the Edit Tag modal pre-filled when an Edit button is clicked', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <I18nWrapper>
+          <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
+        </I18nWrapper>,
+      );
+
+      const editButtons = page.getByRole('button', { name: 'Edit' }).elements();
+      await userEvent.click(editButtons[0]!);
+
+      expect(page.getByRole('heading', { name: 'Edit Tag' })).toBeInTheDocument();
+    });
+
+    it('opens the delete confirm dialog when a Delete button is clicked', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <I18nWrapper>
+          <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
+        </I18nWrapper>,
+      );
+
+      const deleteButtons = page.getByRole('button', { name: 'Delete' }).elements();
+      await userEvent.click(deleteButtons[0]!);
+
+      expect(page.getByRole('heading', { name: 'Are you absolutely sure?' })).toBeInTheDocument();
     });
   });
 });
