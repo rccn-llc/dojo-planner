@@ -1599,6 +1599,24 @@
     "saving_button": "Saving...",
     "submit_error": "Failed to update contact information. Please try again."
   },
+  "EditMemberPhotoModal": {
+    "title": "Edit Photo",
+    "subtitle": "Upload a new photo for {memberName} or remove the existing one.",
+    "no_photo": "No photo uploaded",
+    "choose_file_button": "Choose photo",
+    "change_button": "Change photo",
+    "remove_button": "Remove",
+    "cancel_button": "Cancel",
+    "save_button": "Save",
+    "saving_button": "Saving...",
+    "save_error": "Failed to update photo. Please try again.",
+    "invalid_file_type": "Invalid file type. Please upload a JPG, PNG, or GIF image.",
+    "original_size": "Original size:",
+    "compressed_size": "Compressed size:",
+    "confirm_remove_title": "Remove photo?",
+    "confirm_remove_description": "This will remove the photo for {memberName}. You can upload a new one later.",
+    "confirm_remove_action": "Remove photo"
+  },
   "ChangeMembershipModal": {
     "add_title": "Add Membership",
     "change_title": "Change Membership",

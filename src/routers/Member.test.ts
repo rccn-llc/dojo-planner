@@ -30,6 +30,7 @@ vi.mock('@/services/MembersService', () => ({
   updateMember: vi.fn(),
   updateMemberStatus: vi.fn(),
   updateMemberContactInfo: vi.fn(),
+  updateMemberPhoto: vi.fn(),
   addMemberMembership: vi.fn(),
   changeMemberMembership: vi.fn(),
   getMembershipPlans: vi.fn(),
@@ -640,6 +641,100 @@ describe('Member Router', () => {
         AUDIT_ACTION.MEMBER_UPDATE,
         AUDIT_ENTITY_TYPE.MEMBER,
         { entityId: 'member-1', status: 'failure', error: 'DB error' },
+      );
+    });
+  });
+
+  describe('updatePhoto', () => {
+    const validPhoto = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD';
+
+    it('updates the photo, requires ACADEMY_OWNER, and emits a success audit with after-set sentinel', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { updateMemberPhoto } = await import('@/services/MembersService');
+      const { audit } = await import('@/services/AuditService');
+
+      vi.mocked(guardRole).mockResolvedValue(mockAcademyOwnerContext);
+      vi.mocked(updateMemberPhoto).mockResolvedValue([{ id: 'member-1' }]);
+
+      const { updatePhoto } = await import('./Member');
+      const result = await callHandler(updatePhoto, { id: 'member-1', photoUrl: validPhoto });
+
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
+      expect(updateMemberPhoto).toHaveBeenCalledWith({ id: 'member-1', photoUrl: validPhoto }, 'test-org-456');
+      expect(audit).toHaveBeenCalledWith(
+        mockAcademyOwnerContext,
+        AUDIT_ACTION.MEMBER_UPDATE_CONTACT,
+        AUDIT_ENTITY_TYPE.MEMBER,
+        expect.objectContaining({
+          entityId: 'member-1',
+          status: 'success',
+          changes: { photoUrl: { before: '<photo>', after: '<photo>' } },
+        }),
+      );
+      expect(result).toEqual({});
+    });
+
+    it('clears the photo and emits a success audit with after=null', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { updateMemberPhoto } = await import('@/services/MembersService');
+      const { audit } = await import('@/services/AuditService');
+
+      vi.mocked(guardRole).mockResolvedValue(mockAcademyOwnerContext);
+      vi.mocked(updateMemberPhoto).mockResolvedValue([{ id: 'member-1' }]);
+
+      const { updatePhoto } = await import('./Member');
+      await callHandler(updatePhoto, { id: 'member-1', photoUrl: null });
+
+      expect(updateMemberPhoto).toHaveBeenCalledWith({ id: 'member-1', photoUrl: null }, 'test-org-456');
+      expect(audit).toHaveBeenCalledWith(
+        mockAcademyOwnerContext,
+        AUDIT_ACTION.MEMBER_UPDATE_CONTACT,
+        AUDIT_ENTITY_TYPE.MEMBER,
+        expect.objectContaining({
+          entityId: 'member-1',
+          status: 'success',
+          changes: { photoUrl: { before: '<photo>', after: null } },
+        }),
+      );
+    });
+
+    it('throws 404 when the member is not in the org', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { updateMemberPhoto } = await import('@/services/MembersService');
+
+      vi.mocked(guardRole).mockResolvedValue(mockAcademyOwnerContext);
+      vi.mocked(updateMemberPhoto).mockResolvedValue([]);
+
+      const { updatePhoto } = await import('./Member');
+
+      await expect(
+        callHandler(updatePhoto, { id: 'member-other-org', photoUrl: validPhoto }),
+      ).rejects.toThrow(ORPCError);
+    });
+
+    it('emits a failure audit when the service throws', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { updateMemberPhoto } = await import('@/services/MembersService');
+      const { audit } = await import('@/services/AuditService');
+
+      vi.mocked(guardRole).mockResolvedValue(mockAcademyOwnerContext);
+      vi.mocked(updateMemberPhoto).mockRejectedValue(new Error('DB error'));
+
+      const { updatePhoto } = await import('./Member');
+
+      await expect(
+        callHandler(updatePhoto, { id: 'member-1', photoUrl: validPhoto }),
+      ).rejects.toThrow('DB error');
+
+      expect(audit).toHaveBeenCalledWith(
+        mockAcademyOwnerContext,
+        AUDIT_ACTION.MEMBER_UPDATE_CONTACT,
+        AUDIT_ENTITY_TYPE.MEMBER,
+        expect.objectContaining({
+          entityId: 'member-1',
+          status: 'failure',
+          error: 'DB error',
+        }),
       );
     });
   });

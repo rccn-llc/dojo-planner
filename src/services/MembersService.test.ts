@@ -174,6 +174,58 @@ describe('MembersService', () => {
     });
   });
 
+  describe('updateMemberPhoto', () => {
+    it('writes the photoUrl and returns the updated id when the member is in the org', async () => {
+      const { db } = await import('@/libs/DB');
+      const setSpy = vi.fn(() => ({
+        where: vi.fn(() => ({
+          returning: vi.fn(() => Promise.resolve([{ id: 'member-123' }])),
+        })),
+      }));
+      vi.mocked(db.update).mockReturnValueOnce({ set: setSpy } as any);
+
+      const { updateMemberPhoto } = await import('./MembersService');
+      const result = await updateMemberPhoto({
+        id: 'member-123',
+        photoUrl: 'data:image/jpeg;base64,/9j/AA',
+      }, 'org-123');
+
+      expect(setSpy).toHaveBeenCalledWith({ photoUrl: 'data:image/jpeg;base64,/9j/AA' });
+      expect(result).toEqual([{ id: 'member-123' }]);
+    });
+
+    it('clears the photoUrl when null is passed', async () => {
+      const { db } = await import('@/libs/DB');
+      const setSpy = vi.fn(() => ({
+        where: vi.fn(() => ({
+          returning: vi.fn(() => Promise.resolve([{ id: 'member-123' }])),
+        })),
+      }));
+      vi.mocked(db.update).mockReturnValueOnce({ set: setSpy } as any);
+
+      const { updateMemberPhoto } = await import('./MembersService');
+      await updateMemberPhoto({ id: 'member-123', photoUrl: null }, 'org-123');
+
+      expect(setSpy).toHaveBeenCalledWith({ photoUrl: null });
+    });
+
+    it('returns an empty array when the member is not in the org (cross-tenant guard)', async () => {
+      const { db } = await import('@/libs/DB');
+      vi.mocked(db.update).mockReturnValueOnce({
+        set: vi.fn(() => ({
+          where: vi.fn(() => ({
+            returning: vi.fn(() => Promise.resolve([])),
+          })),
+        })),
+      } as any);
+
+      const { updateMemberPhoto } = await import('./MembersService');
+      const result = await updateMemberPhoto({ id: 'member-other-org', photoUrl: null }, 'org-123');
+
+      expect(result).toEqual([]);
+    });
+  });
+
   describe('getMemberPaymentMethods', () => {
     it('should return payment methods for a member', async () => {
       const { db } = await import('@/libs/DB');
