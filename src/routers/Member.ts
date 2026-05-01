@@ -5,12 +5,12 @@ import { z } from 'zod';
 import { logger } from '@/libs/Logger';
 import { audit } from '@/services/AuditService';
 import { sendMemberConfirmationEmail } from '@/services/EmailService';
-import { addMemberMembership, changeMemberMembership, createMember, getAllMembershipPlans, getFamilyMembers, getHeadOfHouseholdMembers, getHOHForFamilyMember, getMemberPaymentMethods, getMembershipPlans, getMemberTransactions, linkFamilyMember, unlinkFamilyMember, updateMember, updateMemberContactInfo, updateMemberStatus } from '@/services/MembersService';
+import { addMemberMembership, changeMemberMembership, createMember, getAllMembershipPlans, getFamilyMembers, getHeadOfHouseholdMembers, getHOHForFamilyMember, getMemberPaymentMethods, getMembershipPlans, getMemberTransactions, linkFamilyMember, unlinkFamilyMember, updateMember, updateMemberContactInfo, updateMemberPhoto, updateMemberStatus } from '@/services/MembersService';
 import { generatePdfFilename } from '@/services/WaiverPdfService';
 import { generateWaiverPdfBuffer } from '@/services/WaiverPdfService.server';
 import { AUDIT_ACTION, AUDIT_ENTITY_TYPE } from '@/types/Audit';
 import { ORG_ROLE } from '@/types/Auth';
-import { DeleteMemberValidation, EditMemberValidation, GetHOHForMemberValidation, GetHOHPaymentMethodsValidation, LinkFamilyMemberValidation, ListFamilyMembersValidation, MemberPaymentMethodsValidation, MemberTransactionsValidation, MemberValidation, SearchHOHValidation, SendConfirmationEmailValidation, UnlinkFamilyMemberValidation, UpdateMemberContactInfoValidation, UpdateMemberTypeValidation } from '@/validations/MemberValidation';
+import { DeleteMemberValidation, EditMemberValidation, GetHOHForMemberValidation, GetHOHPaymentMethodsValidation, LinkFamilyMemberValidation, ListFamilyMembersValidation, MemberPaymentMethodsValidation, MemberTransactionsValidation, MemberValidation, SearchHOHValidation, SendConfirmationEmailValidation, UnlinkFamilyMemberValidation, UpdateMemberContactInfoValidation, UpdateMemberPhotoValidation, UpdateMemberTypeValidation } from '@/validations/MemberValidation';
 import { guardAuth, guardRole } from './AuthGuards';
 
 export const create = os
@@ -282,6 +282,52 @@ export const updateContactInfo = os
       await audit(context, AUDIT_ACTION.MEMBER_UPDATE_CONTACT, AUDIT_ENTITY_TYPE.MEMBER, {
         entityId: input.id,
         status: 'failure',
+        error: errorMessage,
+      });
+
+      throw error;
+    }
+  });
+
+export const updatePhoto = os
+  .input(UpdateMemberPhotoValidation)
+  .handler(async ({ input }) => {
+    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
+    const photoCleared = input.photoUrl === null;
+    // Don't store the actual base64 in audit logs — they're large and we only
+    // need to know set vs clear for compliance. Use a sentinel.
+    const photoChange = {
+      photoUrl: {
+        before: '<photo>',
+        after: photoCleared ? null : '<photo>',
+      },
+    };
+
+    try {
+      const result = await updateMemberPhoto(input, context.orgId);
+
+      if (result.length === 0) {
+        throw new ORPCError('Member not found', { status: 404 });
+      }
+
+      logger.info(`Member photo updated: ${input.id}`, { photoCleared });
+
+      // Reuse MEMBER_UPDATE_CONTACT — photos are contact info; the changes
+      // field captures whether the photo was set or cleared.
+      await audit(context, AUDIT_ACTION.MEMBER_UPDATE_CONTACT, AUDIT_ENTITY_TYPE.MEMBER, {
+        entityId: input.id,
+        status: 'success',
+        changes: photoChange,
+      });
+
+      return {};
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+      await audit(context, AUDIT_ACTION.MEMBER_UPDATE_CONTACT, AUDIT_ENTITY_TYPE.MEMBER, {
+        entityId: input.id,
+        status: 'failure',
+        changes: photoChange,
         error: errorMessage,
       });
 

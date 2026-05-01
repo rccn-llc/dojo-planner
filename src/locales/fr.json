@@ -1603,6 +1603,24 @@
     "saving_button": "Enregistrement...",
     "submit_error": "Échec de la mise à jour des informations de contact. Veuillez réessayer."
   },
+  "EditMemberPhotoModal": {
+    "title": "Modifier la photo",
+    "subtitle": "Téléversez une nouvelle photo pour {memberName} ou supprimez l'existante.",
+    "no_photo": "Aucune photo téléversée",
+    "choose_file_button": "Choisir une photo",
+    "change_button": "Changer la photo",
+    "remove_button": "Supprimer",
+    "cancel_button": "Annuler",
+    "save_button": "Enregistrer",
+    "saving_button": "Enregistrement...",
+    "save_error": "Échec de la mise à jour de la photo. Veuillez réessayer.",
+    "invalid_file_type": "Type de fichier invalide. Veuillez téléverser une image JPG, PNG ou GIF.",
+    "original_size": "Taille d'origine :",
+    "compressed_size": "Taille compressée :",
+    "confirm_remove_title": "Supprimer la photo ?",
+    "confirm_remove_description": "Cela supprimera la photo de {memberName}. Vous pourrez en téléverser une nouvelle plus tard.",
+    "confirm_remove_action": "Supprimer la photo"
+  },
   "ChangeMembershipModal": {
     "add_title": "Ajouter une adhésion",
     "change_title": "Changer d'adhésion",

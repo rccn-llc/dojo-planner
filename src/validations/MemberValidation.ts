@@ -46,6 +46,17 @@ export const UpdateMemberContactInfoValidation = z.object({
   }).optional(),
 });
 
+export const UpdateMemberPhotoValidation = z.object({
+  id: z.string().min(1),
+  // null clears the photo. When set, must be a base64 data URL of a supported
+  // image type, capped at ~300KB so the request payload stays manageable.
+  photoUrl: z
+    .string()
+    .max(300_000, 'Photo data URL must be 300KB or less')
+    .regex(/^data:image\/(jpeg|png|gif);base64,/, 'photoUrl must be a data URL for an image (jpeg, png, gif)')
+    .nullable(),
+});
+
 export const MemberPaymentMethodsValidation = z.object({
   memberId: z.string().min(1),
 });

@@ -13,6 +13,7 @@ import {
   SendConfirmationEmailValidation,
   UnlinkFamilyMemberValidation,
   UpdateMemberContactInfoValidation,
+  UpdateMemberPhotoValidation,
   UpdateMemberTypeValidation,
 } from './MemberValidation';
 
@@ -638,6 +639,95 @@ describe('MemberValidation', () => {
       });
 
       expect(result.success).toBe(false);
+    });
+  });
+
+  describe('UpdateMemberPhotoValidation schema', () => {
+    const tinyJpegDataUrl = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD';
+
+    it('accepts a valid jpeg data URL', () => {
+      const result = UpdateMemberPhotoValidation.safeParse({
+        id: 'member-123',
+        photoUrl: tinyJpegDataUrl,
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts a valid png data URL', () => {
+      const result = UpdateMemberPhotoValidation.safeParse({
+        id: 'member-123',
+        photoUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA',
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts null (clears the photo)', () => {
+      const result = UpdateMemberPhotoValidation.safeParse({
+        id: 'member-123',
+        photoUrl: null,
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects an empty id', () => {
+      const result = UpdateMemberPhotoValidation.safeParse({
+        id: '',
+        photoUrl: tinyJpegDataUrl,
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects a non-image data URL prefix (pdf)', () => {
+      const result = UpdateMemberPhotoValidation.safeParse({
+        id: 'member-123',
+        photoUrl: 'data:application/pdf;base64,JVBERi0xLjcK',
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects a webp image (only jpeg/png/gif allowed)', () => {
+      const result = UpdateMemberPhotoValidation.safeParse({
+        id: 'member-123',
+        photoUrl: 'data:image/webp;base64,UklGRiYAAABXRUJQVlA4',
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects a non-data-URL string', () => {
+      const result = UpdateMemberPhotoValidation.safeParse({
+        id: 'member-123',
+        photoUrl: 'https://example.com/photo.jpg',
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects a photoUrl exceeding 300KB', () => {
+      const oversized = `data:image/jpeg;base64,${'A'.repeat(300_000)}`;
+      const result = UpdateMemberPhotoValidation.safeParse({
+        id: 'member-123',
+        photoUrl: oversized,
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts a photoUrl exactly at the 300KB cap', () => {
+      const prefix = 'data:image/jpeg;base64,';
+      const padding = 'A'.repeat(300_000 - prefix.length);
+      const atCap = `${prefix}${padding}`;
+      const result = UpdateMemberPhotoValidation.safeParse({
+        id: 'member-123',
+        photoUrl: atCap,
+      });
+
+      expect(result.success).toBe(true);
     });
   });
 });

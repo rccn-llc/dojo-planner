@@ -7,7 +7,7 @@ import type { Member } from '@/hooks/useMembersCache';
 import type { MemberPaymentMethodData } from '@/services/MembersService';
 import type { SignedWaiverWithTemplateName } from '@/services/WaiversService';
 import { useOrganization } from '@clerk/nextjs';
-import { ArrowRightLeft, Download, Plus, Trash2 } from 'lucide-react';
+import { ArrowRightLeft, Download, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -21,6 +21,7 @@ import { transformCouponsToUi } from '@/features/marketing';
 import { ConvertMemberModal } from '@/features/members/conversion/ConvertMemberModal';
 import { ChangeMembershipModal } from '@/features/members/details/ChangeMembershipModal';
 import { EditContactInfoModal } from '@/features/members/details/EditContactInfoModal';
+import { EditMemberPhotoModal } from '@/features/members/details/EditMemberPhotoModal';
 import { MemberDetailAttendance } from '@/features/members/details/MemberDetailAttendance';
 import { MemberDetailNotes } from '@/features/members/details/MemberDetailNotes';
 import { AddFamilyMembersModal } from '@/features/members/wizard/AddFamilyMembersModal';
@@ -522,6 +523,9 @@ export default function EditMemberPage() {
   // State for edit contact info modal
   const [isEditContactModalOpen, setIsEditContactModalOpen] = useState(false);
 
+  // State for edit photo modal
+  const [isEditPhotoModalOpen, setIsEditPhotoModalOpen] = useState(false);
+
   // State for change membership modal
   const [isChangeMembershipModalOpen, setIsChangeMembershipModalOpen] = useState(false);
   const [membershipModalMode, setMembershipModalMode] = useState<'add' | 'change'>('add');
@@ -948,10 +952,20 @@ export default function EditMemberPage() {
 
       {/* Member Header */}
       <div className="flex items-center gap-4">
-        <Avatar className="h-16 w-16">
-          {state.currentData.photoUrl && <AvatarImage src={state.currentData.photoUrl} alt={state.currentData.memberName} />}
-          <AvatarFallback>{getInitials(state.currentData.memberName)}</AvatarFallback>
-        </Avatar>
+        <div className="relative h-16 w-16 shrink-0">
+          <Avatar className="h-16 w-16">
+            {state.currentData.photoUrl && <AvatarImage src={state.currentData.photoUrl} alt={state.currentData.memberName} />}
+            <AvatarFallback>{getInitials(state.currentData.memberName)}</AvatarFallback>
+          </Avatar>
+          <button
+            type="button"
+            onClick={() => setIsEditPhotoModalOpen(true)}
+            aria-label="Edit photo"
+            className="absolute -right-1 -bottom-1 cursor-pointer rounded-full border border-border bg-background p-1 shadow-sm hover:bg-accent"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+        </div>
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-foreground">{state.currentData.memberName}</h1>
@@ -1124,6 +1138,20 @@ export default function EditMemberPage() {
                     }
                   : undefined
               }
+            />
+
+            {/* Edit Photo Modal — keyed on open state so internal state resets per-open */}
+            <EditMemberPhotoModal
+              key={isEditPhotoModalOpen ? 'open' : 'closed'}
+              isOpen={isEditPhotoModalOpen}
+              memberId={memberId}
+              memberName={state.currentData.memberName}
+              currentPhotoUrl={state.currentData.photoUrl ?? null}
+              onCloseAction={() => setIsEditPhotoModalOpen(false)}
+              onSavedAction={() => {
+                // The modal already calls invalidateMembersCache(); useMembersCache
+                // re-runs and the avatar refreshes without a full page reload.
+              }}
             />
 
             {/* Membership Details - Comprehensive */}

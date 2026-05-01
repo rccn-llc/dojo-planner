@@ -295,6 +295,24 @@ export function updateMember(member: UpdateMemberInput, organizationId: string) 
 }
 
 /**
+ * Update a member's photo (or clear it). photoUrl=null clears the column;
+ * a base64 data URL string overwrites it.
+ *
+ * Returns an array containing `{ id }` of the updated member, or an empty
+ * array when the member is not in the org (used by the router to map to 404).
+ */
+export function updateMemberPhoto(
+  input: { id: string; photoUrl: string | null },
+  organizationId: string,
+): Promise<{ id: string }[]> {
+  return db
+    .update(memberSchema)
+    .set({ photoUrl: input.photoUrl })
+    .where(and(eq(memberSchema.id, input.id), eq(memberSchema.organizationId, organizationId)))
+    .returning({ id: memberSchema.id });
+}
+
+/**
  * Update a member's status
  * @param memberId - The member ID to update
  * @param organizationId - The organization ID
