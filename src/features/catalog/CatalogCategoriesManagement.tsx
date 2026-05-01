@@ -13,6 +13,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
+import { DeleteCatalogCategoryAlertDialog } from './DeleteCatalogCategoryAlertDialog';
 
 type CatalogCategoriesManagementProps = {
   open: boolean;
@@ -43,6 +44,7 @@ export function CatalogCategoriesManagement({
   const [searchQuery, setSearchQuery] = useState('');
   const [editingCategory, setEditingCategory] = useState<EditingCategory | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deleteCandidateId, setDeleteCandidateId] = useState<string | null>(null);
 
   const filteredCategories = useMemo(() => {
     if (!searchQuery.trim()) {
@@ -99,14 +101,30 @@ export function CatalogCategoriesManagement({
     }
   }, [editingCategory, onCreateAction, onUpdateAction]);
 
-  const handleDelete = useCallback(async (id: string) => {
+  const handleRequestDelete = useCallback((id: string) => {
+    setDeleteCandidateId(id);
+  }, []);
+
+  const handleCancelDelete = useCallback(() => {
+    setDeleteCandidateId(null);
+  }, []);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteCandidateId) {
+      return;
+    }
     setIsSubmitting(true);
     try {
-      await onDeleteAction(id);
+      await onDeleteAction(deleteCandidateId);
+      setDeleteCandidateId(null);
     } finally {
       setIsSubmitting(false);
     }
-  }, [onDeleteAction]);
+  }, [deleteCandidateId, onDeleteAction]);
+
+  const candidateCategory = deleteCandidateId
+    ? categories.find(c => c.id === deleteCandidateId) ?? null
+    : null;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -218,7 +236,7 @@ export function CatalogCategoriesManagement({
                                   onStartEdit={() => handleStartEdit(category)}
                                   onCancelEdit={handleCancelEdit}
                                   onSave={handleSave}
-                                  onDelete={() => handleDelete(category.id)}
+                                  onDelete={() => handleRequestDelete(category.id)}
                                   isSubmitting={isSubmitting}
                                   isAnotherEditing={!!editingCategory && editingCategory.id !== category.id}
                                 />
@@ -231,6 +249,12 @@ export function CatalogCategoriesManagement({
               </div>
             )}
       </SheetContent>
+      <DeleteCatalogCategoryAlertDialog
+        isOpen={candidateCategory !== null}
+        categoryName={candidateCategory?.name ?? ''}
+        onCloseAction={handleCancelDelete}
+        onConfirmAction={handleConfirmDelete}
+      />
     </Sheet>
   );
 }

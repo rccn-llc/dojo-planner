@@ -850,6 +850,31 @@
     "save_changes_button": "Enregistrer les modifications",
     "saving_button": "Enregistrement..."
   },
+  "AddEditTagModal": {
+    "add_title": "Ajouter une étiquette",
+    "edit_title": "Modifier l'étiquette",
+    "name_label": "Nom",
+    "name_placeholder": "Nom de l'étiquette",
+    "color_label": "Couleur",
+    "color_hex_label": "Couleur hexadécimale",
+    "save_button": "Enregistrer",
+    "saving_button": "Enregistrement...",
+    "cancel_button": "Annuler",
+    "error_required": "Veuillez saisir un nom.",
+    "error_color": "La couleur doit être une valeur hexadécimale comme #4f46e5."
+  },
+  "DeleteCatalogCategoryAlertDialog": {
+    "title": "Êtes-vous absolument sûr ?",
+    "description": "Cette action est irréversible. La catégorie « {categoryName} » sera définitivement supprimée et retirée de tous les articles auxquels elle était associée.",
+    "cancel_button": "Annuler",
+    "delete_button": "Supprimer"
+  },
+  "DeleteTagAlertDialog": {
+    "title": "Êtes-vous absolument sûr ?",
+    "description": "Cette action est irréversible. L'étiquette « {tagName} » sera définitivement supprimée et retirée de tous les éléments auxquels elle était associée.",
+    "cancel_button": "Annuler",
+    "delete_button": "Supprimer"
+  },
   "LocationSettings": {
     "title": "Paramètres de localisation",
     "location_title": "Localisation",

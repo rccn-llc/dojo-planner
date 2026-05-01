@@ -4,7 +4,7 @@ import type { Tag } from '@/hooks/useTagsCache';
 import { useOrganization } from '@clerk/nextjs';
 import { Plus, Search } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -14,18 +14,28 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useTagsCache } from '@/hooks/useTagsCache';
+import { AddEditTagModal } from '@/features/tags/AddEditTagModal';
+import { DeleteTagAlertDialog } from '@/features/tags/DeleteTagAlertDialog';
+import { invalidateTagsCache, useTagsCache } from '@/hooks/useTagsCache';
+import { client } from '@/libs/Orpc';
 
 type ClassTagsManagementProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 };
 
+type ModalState
+  = | { kind: 'closed' }
+    | { kind: 'create' }
+    | { kind: 'edit'; tag: Tag };
+
 export function ClassTagsManagement({ open, onOpenChange }: ClassTagsManagementProps) {
   const t = useTranslations('ClassTagsManagement');
   const { organization } = useOrganization();
   const { classTags, loading } = useTagsCache(organization?.id);
   const [searchQuery, setSearchQuery] = useState('');
+  const [modalState, setModalState] = useState<ModalState>({ kind: 'closed' });
+  const [deleteCandidate, setDeleteCandidate] = useState<Tag | null>(null);
 
   const filteredTags = useMemo(() => {
     if (!searchQuery.trim()) {
@@ -42,6 +52,39 @@ export function ClassTagsManagement({ open, onOpenChange }: ClassTagsManagementP
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value);
   };
+
+  const closeModal = useCallback(() => setModalState({ kind: 'closed' }), []);
+
+  const handleSubmitTag = useCallback(async (payload: { name: string; color: string | null }) => {
+    try {
+      if (modalState.kind === 'create') {
+        await client.tags.create({ entityType: 'class', name: payload.name, color: payload.color });
+      } else if (modalState.kind === 'edit') {
+        await client.tags.update({ id: modalState.tag.id, name: payload.name, color: payload.color });
+      } else {
+        return undefined;
+      }
+      await invalidateTagsCache();
+      return undefined;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to save tag.';
+      return message;
+    }
+  }, [modalState]);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteCandidate) {
+      return;
+    }
+    try {
+      await client.tags.remove({ id: deleteCandidate.id });
+      await invalidateTagsCache();
+    } finally {
+      setDeleteCandidate(null);
+    }
+  }, [deleteCandidate]);
+
+  const editingTag = modalState.kind === 'edit' ? modalState.tag : undefined;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -72,7 +115,7 @@ export function ClassTagsManagement({ open, onOpenChange }: ClassTagsManagementP
                       aria-label={t('search_placeholder')}
                     />
                   </div>
-                  <Button>
+                  <Button onClick={() => setModalState({ kind: 'create' })}>
                     <Plus className="mr-1 size-4" />
                     {t('add_new_tag_button')}
                   </Button>
@@ -100,7 +143,12 @@ export function ClassTagsManagement({ open, onOpenChange }: ClassTagsManagementP
                             )
                           : (
                               filteredTags.map(tag => (
-                                <ClassTagRow key={tag.id} tag={tag} />
+                                <ClassTagRow
+                                  key={tag.id}
+                                  tag={tag}
+                                  onEdit={() => setModalState({ kind: 'edit', tag })}
+                                  onDelete={() => setDeleteCandidate(tag)}
+                                />
                               ))
                             )}
                       </tbody>
@@ -110,15 +158,34 @@ export function ClassTagsManagement({ open, onOpenChange }: ClassTagsManagementP
               </div>
             )}
       </SheetContent>
+
+      <AddEditTagModal
+        key={modalState.kind === 'edit' ? `edit-${modalState.tag.id}` : modalState.kind}
+        isOpen={modalState.kind !== 'closed'}
+        mode={modalState.kind === 'edit' ? 'edit' : 'create'}
+        initialName={editingTag?.name ?? ''}
+        initialColor={editingTag?.color ?? null}
+        onCloseAction={closeModal}
+        onSubmitAction={handleSubmitTag}
+      />
+
+      <DeleteTagAlertDialog
+        isOpen={deleteCandidate !== null}
+        tagName={deleteCandidate?.name ?? ''}
+        onCloseAction={() => setDeleteCandidate(null)}
+        onConfirmAction={handleConfirmDelete}
+      />
     </Sheet>
   );
 }
 
 type ClassTagRowProps = {
   tag: Tag;
+  onEdit: () => void;
+  onDelete: () => void;
 };
 
-function ClassTagRow({ tag }: ClassTagRowProps) {
+function ClassTagRow({ tag, onEdit, onDelete }: ClassTagRowProps) {
   const t = useTranslations('ClassTagsManagement');
 
   return (
@@ -145,10 +212,10 @@ function ClassTagRow({ tag }: ClassTagRowProps) {
       </td>
       <td className="px-6 py-4">
         <div className="flex items-center justify-end gap-2">
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={onEdit}>
             {t('edit_button')}
           </Button>
-          <Button variant="destructive" size="sm">
+          <Button variant="destructive" size="sm" onClick={onDelete}>
             {t('delete_button')}
           </Button>
         </div>

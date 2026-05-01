@@ -847,6 +847,31 @@
     "save_changes_button": "Save Changes",
     "saving_button": "Saving..."
   },
+  "AddEditTagModal": {
+    "add_title": "Add Tag",
+    "edit_title": "Edit Tag",
+    "name_label": "Name",
+    "name_placeholder": "Tag name",
+    "color_label": "Color",
+    "color_hex_label": "Hex color",
+    "save_button": "Save",
+    "saving_button": "Saving...",
+    "cancel_button": "Cancel",
+    "error_required": "Please enter a name.",
+    "error_color": "Color must be a hex value like #4f46e5."
+  },
+  "DeleteCatalogCategoryAlertDialog": {
+    "title": "Are you absolutely sure?",
+    "description": "This action cannot be undone. This will permanently delete the category \"{categoryName}\" and remove it from any items it was assigned to.",
+    "cancel_button": "Cancel",
+    "delete_button": "Delete"
+  },
+  "DeleteTagAlertDialog": {
+    "title": "Are you absolutely sure?",
+    "description": "This action cannot be undone. This will permanently delete the tag \"{tagName}\" and remove it from any items it was assigned to.",
+    "cancel_button": "Cancel",
+    "delete_button": "Delete"
+  },
   "LocationSettings": {
     "title": "Location Settings",
     "location_title": "Location",

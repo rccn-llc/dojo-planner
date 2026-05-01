@@ -84,6 +84,7 @@ vi.mock('@/hooks/useTagsCache', () => ({
     error: null,
     revalidate: vi.fn(),
   }),
+  invalidateTagsCache: vi.fn(),
 }));
 
 describe('Classes Page', () => {
