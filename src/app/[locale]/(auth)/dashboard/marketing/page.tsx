@@ -8,8 +8,9 @@ import { useCallback, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Pagination } from '@/components/ui/pagination/Pagination';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AddEditCouponModal, CouponCard, CouponFilterBar, DeleteCouponAlertDialog, transformCouponsToUi } from '@/features/marketing';
-import { useCouponsCache } from '@/hooks/useCouponsCache';
+import { AddEditCouponModal, CouponCard, CouponFilterBar, DeleteCouponAlertDialog, transformCouponsToUi, transformUiCouponFormToDb } from '@/features/marketing';
+import { invalidateCouponsCache, useCouponsCache } from '@/hooks/useCouponsCache';
+import { client } from '@/libs/Orpc';
 import { StatsCards } from '@/templates/StatsCards';
 
 function getStatusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
@@ -281,22 +282,37 @@ export default function MarketingPage() {
     }
   }, [coupons]);
 
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   const handleCloseDeleteDialog = useCallback(() => {
     setDeletingCoupon(null);
+    setDeleteError(null);
   }, []);
 
-  const handleConfirmDelete = useCallback(() => {
-    if (deletingCoupon) {
-      // Mock delete - in real app, this would call an API
-      console.info('[Marketing] Delete coupon:', deletingCoupon.id);
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deletingCoupon) {
+      return;
+    }
+    setDeleteError(null);
+    try {
+      await client.coupons.remove({ id: deletingCoupon.id });
+      await invalidateCouponsCache();
       setDeletingCoupon(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete coupon.';
+      setDeleteError(message);
     }
   }, [deletingCoupon]);
 
-  const handleSaveCoupon = (couponData: CouponFormData, isEdit: boolean) => {
-    // Mock save - in real app, this would call an API
-    console.info('[Marketing] Save coupon:', { couponData, isEdit });
-  };
+  const handleSaveCoupon = useCallback(async (couponData: CouponFormData, isEdit: boolean): Promise<void> => {
+    const payload = transformUiCouponFormToDb(couponData);
+    if (isEdit && editingCoupon?.id) {
+      await client.coupons.update({ id: editingCoupon.id, ...payload });
+    } else {
+      await client.coupons.create(payload);
+    }
+    await invalidateCouponsCache();
+  }, [editingCoupon]);
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
@@ -560,6 +576,7 @@ export default function MarketingPage() {
         couponCode={deletingCoupon?.code ?? ''}
         onCloseAction={handleCloseDeleteDialog}
         onConfirmAction={handleConfirmDelete}
+        errorMessage={deleteError}
       />
     </div>
   );

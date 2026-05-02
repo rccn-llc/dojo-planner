@@ -11,6 +11,10 @@ export const GetTransactionValidation = z.object({
   id: z.string().uuid(),
 });
 
+export const RefundTransactionValidation = z.object({
+  transactionId: z.string().uuid(),
+});
+
 export const ReportTypeValidation = z.object({
   reportType: z.enum([
     'accounts-autopay-suspended',

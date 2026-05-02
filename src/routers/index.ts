@@ -18,7 +18,7 @@ import {
   variantUpdate,
 } from './Catalog';
 import { tags as classTags, list as listClasses } from './Classes';
-import { listActive as listActiveCoupons, list as listCoupons } from './Coupons';
+import { create as createCoupon, listActive as listActiveCoupons, list as listCoupons, remove as removeCoupon, update as updateCoupon } from './Coupons';
 import { earningsChart, financialStats, memberAverageChart, membershipStats } from './Dashboard';
 import { list as listEvents } from './Events';
 import { addMembership, changeMembership, create as createMember, getHOHForMember, getHOHPaymentMethods, linkFamily, listAllMembershipPlans, listFamily, listMembershipPlans, listMemberTransactions, listPaymentMethods, remove as removeMember, restore as restoreMember, searchHOH, sendConfirmationEmail, unlinkFamily, updateLastAccessed, update as updateMember, updateContactInfo as updateMemberContactInfo, updatePhoto as updateMemberPhoto, updateMemberType } from './Member';
@@ -28,7 +28,7 @@ import { getTokenizationIframeConfig, processPayment, registerPaymentMethod } fr
 import { chartData as reportChartData, currentValues as reportCurrentValues, insights as reportInsights } from './Reports';
 import { cancelSaasSubscription, changeSaasPlan, getCurrentPlan, getSaasBillingHistory, getSaasTokenizationConfig, subscribeToPlan } from './SaasSubscription';
 import { create as createTagHandler, listAll as listAllTags, listClassTags, listMembershipTags, remove as removeTagHandler, update as updateTagHandler } from './Tags';
-import { get as getTransaction, list as listTransactions } from './Transactions';
+import { get as getTransaction, list as listTransactions, refund as refundTransaction } from './Transactions';
 import {
   addWaiverToMembership,
   createMergeFieldHandler,
@@ -100,6 +100,7 @@ export const router = {
   transactions: {
     list: listTransactions,
     get: getTransaction,
+    refund: refundTransaction,
   },
   payment: {
     process: processPayment,
@@ -120,6 +121,9 @@ export const router = {
   coupons: {
     list: listCoupons,
     listActive: listActiveCoupons,
+    create: createCoupon,
+    update: updateCoupon,
+    remove: removeCoupon,
   },
   notes: {
     list: listNotes,

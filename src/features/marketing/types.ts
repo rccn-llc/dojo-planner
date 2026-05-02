@@ -13,6 +13,7 @@ export type Coupon = {
   startDateTime: string;
   endDateTime: string;
   status: CouponStatus;
+  perUserLimit?: number;
 };
 
 export type CouponFormData = {
@@ -22,6 +23,7 @@ export type CouponFormData = {
   amount: string;
   applyTo: CouponApplyTo;
   usageLimit: string;
+  perUserLimit: string;
   startDate: string;
   startTime: string;
   endDate: string;

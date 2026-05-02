@@ -15,6 +15,7 @@ export type Coupon = {
   applicableTo: string;
   usageLimit: number | null;
   usageCount: number;
+  perUserLimit: number;
   status: string;
   validFrom: Date;
   validUntil: Date | null;

@@ -20,7 +20,7 @@ import type {
 import type { AppliedCoupon, BillingType, PaymentMethod } from '@/hooks/useAddMemberWizard';
 import { randomUUID } from 'node:crypto';
 
-import { eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/libs/DB';
 import {
   calculateTransactionFees,
@@ -28,7 +28,7 @@ import {
   isIQProConfigured,
 } from '@/libs/IQPro';
 import { logger } from '@/libs/Logger';
-import { memberMembershipSchema, memberSchema, paymentMethodSchema, transactionSchema } from '@/models/Schema';
+import { couponSchema, couponUsageSchema, memberMembershipSchema, memberSchema, paymentMethodSchema, transactionSchema } from '@/models/Schema';
 
 import { getPaymentProvider, isPaymentEnabled } from './PaymentProviderService';
 
@@ -133,6 +133,26 @@ export async function processMemberPayment(
 ): Promise<ProcessMemberPaymentResult> {
   if (!isPaymentEnabled()) {
     throw new Error('Payment processing is not configured. Set IQPRO_* environment variables.');
+  }
+
+  // Per-user redemption limit — refuse before charging if this member has
+  // already redeemed the coupon up to its perUserLimit. We re-fetch the coupon
+  // from the DB rather than trusting the client's `appliedCoupon` payload.
+  if (params.appliedCoupon?.id) {
+    const limitCheck = await checkPerUserCouponLimit(params.appliedCoupon.id, params.memberId);
+    if (!limitCheck.ok) {
+      logger.warn('[MemberPayment] Per-user coupon limit reached', {
+        couponId: params.appliedCoupon.id,
+        memberId: params.memberId,
+        priorUsages: limitCheck.priorUsages,
+        perUserLimit: limitCheck.perUserLimit,
+      });
+      return {
+        success: false,
+        status: 'declined',
+        error: 'You have already used this coupon the maximum number of times.',
+      };
+    }
   }
 
   const provider = await getPaymentProvider();
@@ -559,6 +579,17 @@ async function handleAutopay(args: AutopayParams): Promise<ProcessMemberPaymentR
       .where(eq(memberMembershipSchema.id, params.memberMembershipId));
   }
 
+  // Record coupon redemption AFTER the charge has approved. Failures here are
+  // logged but never thrown — payment already succeeded.
+  await recordCouponRedemption({
+    appliedCoupon: params.appliedCoupon,
+    memberId: params.memberId,
+    transactionId: txId,
+    couponDiscount: feeBreakdown.amount > 0
+      ? computeCouponDiscount(params.amount, params.appliedCoupon)
+      : 0,
+  });
+
   logger.info('[MemberPayment] Autopay subscription + initial charge complete', {
     subscriptionId: subResult.subscriptionId,
     transactionId: txId,
@@ -630,6 +661,18 @@ async function handleOneTimePayment(args: OneTimeParams): Promise<ProcessMemberP
       .where(eq(memberMembershipSchema.id, params.memberMembershipId));
   }
 
+  // Record coupon redemption only on approved transactions. Declined or
+  // pending payments must not consume usage — if the user retries and the
+  // second attempt approves, that one redeems instead.
+  if (payResult.success) {
+    await recordCouponRedemption({
+      appliedCoupon: params.appliedCoupon,
+      memberId: params.memberId,
+      transactionId: txId,
+      couponDiscount: computeCouponDiscount(params.amount, params.appliedCoupon),
+    });
+  }
+
   logger.info('[MemberPayment] One-time payment processed', { txId, status: payResult.status });
 
   return {
@@ -638,6 +681,192 @@ async function handleOneTimePayment(args: OneTimeParams): Promise<ProcessMemberP
     declineReason: payResult.declineReason,
     transactionId: txId,
     error: payResult.error,
+  };
+}
+
+// ===== Coupon redemption tracking =====
+
+type CouponLimitCheck
+  = | { ok: true }
+    | { ok: false; priorUsages: number; perUserLimit: number };
+
+/**
+ * Re-fetches the coupon from the DB (don't trust client) and counts prior
+ * usages by this member. Returns ok:false when the per-user limit is reached.
+ */
+async function checkPerUserCouponLimit(
+  couponId: string,
+  memberId: string,
+): Promise<CouponLimitCheck> {
+  const rows = await db
+    .select({ perUserLimit: couponSchema.perUserLimit })
+    .from(couponSchema)
+    .where(eq(couponSchema.id, couponId))
+    .limit(1);
+  const perUserLimit = rows[0]?.perUserLimit ?? 1;
+
+  const usageCounts = await db
+    .select({ count: sql<number>`cast(count(*) as integer)` })
+    .from(couponUsageSchema)
+    .where(and(
+      eq(couponUsageSchema.couponId, couponId),
+      eq(couponUsageSchema.memberId, memberId),
+    ));
+  const priorUsages = usageCounts[0]?.count ?? 0;
+
+  if (priorUsages >= perUserLimit) {
+    return { ok: false, priorUsages, perUserLimit };
+  }
+  return { ok: true };
+}
+
+/**
+ * Insert a coupon_usage row + increment couponSchema.usageCount. Both writes
+ * are best-effort: if either fails, log but don't throw — payment has already
+ * succeeded and we don't want to roll it back over a tracking write.
+ *
+ * The usageCount increment is done SQL-side to avoid a read-then-write race
+ * under concurrent redemptions.
+ */
+async function recordCouponRedemption(args: {
+  appliedCoupon?: AppliedCoupon | null;
+  memberId: string;
+  transactionId: string;
+  couponDiscount: number;
+}): Promise<void> {
+  if (!args.appliedCoupon?.id) {
+    return;
+  }
+  try {
+    await db.insert(couponUsageSchema).values({
+      id: randomUUID(),
+      couponId: args.appliedCoupon.id,
+      memberId: args.memberId,
+      transactionId: args.transactionId,
+      discountApplied: args.couponDiscount,
+    });
+    await db
+      .update(couponSchema)
+      .set({ usageCount: sql`COALESCE(${couponSchema.usageCount}, 0) + 1` })
+      .where(eq(couponSchema.id, args.appliedCoupon.id));
+    logger.info('[MemberPayment] Coupon redemption recorded', {
+      couponId: args.appliedCoupon.id,
+      memberId: args.memberId,
+      transactionId: args.transactionId,
+      discountApplied: args.couponDiscount,
+    });
+  } catch (error) {
+    logger.error('[MemberPayment] Failed to record coupon redemption (non-fatal)', {
+      error,
+      couponId: args.appliedCoupon.id,
+      transactionId: args.transactionId,
+    });
+  }
+}
+
+// ===== Refund =====
+
+export type RefundTransactionResult = {
+  refundTransactionId: string;
+  originalTransactionId: string;
+  decrementedCoupons: number;
+};
+
+export class TransactionNotFoundError extends Error {
+  constructor(id: string) {
+    super(`Transaction ${id} not found.`);
+    this.name = 'TransactionNotFoundError';
+  }
+}
+
+export class TransactionAlreadyRefundedError extends Error {
+  constructor(id: string) {
+    super(`Transaction ${id} is already refunded.`);
+    this.name = 'TransactionAlreadyRefundedError';
+  }
+}
+
+/**
+ * Bookkeeping refund: inserts a refund transaction row, flips the original to
+ * status='refunded', and reverses any coupon redemption tied to the original
+ * transaction (deletes coupon_usage row + decrements couponSchema.usageCount).
+ *
+ * NOTE: this does NOT call IQPro's refund API. The operator who triggers this
+ * is expected to also process the IQPro-side refund manually (or build that
+ * automation in a separate ticket).
+ */
+export async function refundTransaction(
+  transactionId: string,
+  organizationId: string,
+): Promise<RefundTransactionResult> {
+  const original = await db
+    .select()
+    .from(transactionSchema)
+    .where(and(eq(transactionSchema.id, transactionId), eq(transactionSchema.organizationId, organizationId)))
+    .limit(1);
+  const originalTx = original[0];
+  if (!originalTx) {
+    throw new TransactionNotFoundError(transactionId);
+  }
+  if (originalTx.status === 'refunded') {
+    throw new TransactionAlreadyRefundedError(transactionId);
+  }
+
+  const refundId = randomUUID();
+  await db.insert(transactionSchema).values({
+    id: refundId,
+    organizationId,
+    memberId: originalTx.memberId,
+    memberMembershipId: originalTx.memberMembershipId,
+    transactionType: 'refund',
+    amount: -Math.abs(originalTx.amount),
+    currency: originalTx.currency,
+    status: 'paid',
+    paymentMethod: originalTx.paymentMethod,
+    description: `Refund for transaction ${originalTx.id}`,
+    processedAt: new Date(),
+  });
+
+  await db
+    .update(transactionSchema)
+    .set({ status: 'refunded' })
+    .where(eq(transactionSchema.id, transactionId));
+
+  // Reverse coupon redemption(s) tied to the original transaction.
+  const usages = await db
+    .select({ id: couponUsageSchema.id, couponId: couponUsageSchema.couponId })
+    .from(couponUsageSchema)
+    .where(eq(couponUsageSchema.transactionId, transactionId));
+
+  let decrementedCoupons = 0;
+  for (const usage of usages) {
+    try {
+      await db.delete(couponUsageSchema).where(eq(couponUsageSchema.id, usage.id));
+      await db
+        .update(couponSchema)
+        .set({ usageCount: sql`GREATEST(COALESCE(${couponSchema.usageCount}, 0) - 1, 0)` })
+        .where(eq(couponSchema.id, usage.couponId));
+      decrementedCoupons += 1;
+    } catch (error) {
+      logger.error('[MemberPayment] Failed to reverse coupon redemption (non-fatal)', {
+        error,
+        couponUsageId: usage.id,
+        couponId: usage.couponId,
+        transactionId,
+      });
+    }
+  }
+
+  logger.info('[MemberPayment] Refund processed', {
+    refundTransactionId: refundId,
+    originalTransactionId: transactionId,
+    decrementedCoupons,
+  });
+
+  return {
+    refundTransactionId: refundId,
+    originalTransactionId: transactionId,
+    decrementedCoupons,
   };
 }
 

@@ -620,4 +620,100 @@ describe('AddEditCouponModal', () => {
       await expect.element(page.getByText('usage_limit_help')).toBeVisible();
     });
   });
+
+  describe('Per-user limit field', () => {
+    it('should default the per-user limit to 1', async () => {
+      render(
+        <AddEditCouponModal
+          isOpen={true}
+          onCloseAction={mockHandlers.onCloseAction}
+          onSaveAction={mockHandlers.onSaveAction}
+        />,
+      );
+
+      const input = page.getByTestId('coupon-per-user-limit-input');
+
+      expect(input.element()).toHaveProperty('value', '1');
+    });
+
+    it('should allow entering an integer per-user limit', async () => {
+      render(
+        <AddEditCouponModal
+          isOpen={true}
+          onCloseAction={mockHandlers.onCloseAction}
+          onSaveAction={mockHandlers.onSaveAction}
+        />,
+      );
+
+      const input = page.getByTestId('coupon-per-user-limit-input');
+      await userEvent.fill(input, '3');
+
+      expect(input.element()).toHaveProperty('value', '3');
+    });
+
+    it('should show help text for per-user limit', async () => {
+      render(
+        <AddEditCouponModal
+          isOpen={true}
+          onCloseAction={mockHandlers.onCloseAction}
+          onSaveAction={mockHandlers.onSaveAction}
+        />,
+      );
+
+      await expect.element(page.getByText('per_user_limit_help')).toBeVisible();
+    });
+  });
+
+  describe('Server error surfacing', () => {
+    it('renders the submit error when onSaveAction rejects', async () => {
+      const failingSave = vi.fn().mockRejectedValue(new Error('A coupon with code TEST20 already exists.'));
+      render(
+        <AddEditCouponModal
+          isOpen={true}
+          onCloseAction={mockHandlers.onCloseAction}
+          onSaveAction={failingSave}
+        />,
+      );
+
+      // Fill the minimum required fields
+      await userEvent.fill(page.getByTestId('coupon-code-input'), 'TEST20');
+      await userEvent.fill(page.getByTestId('coupon-description-input'), 'Twenty off');
+      await userEvent.fill(page.getByTestId('coupon-amount-input'), '20');
+      await userEvent.click(page.getByTestId('coupon-never-expires-checkbox'));
+
+      // Submit
+      await userEvent.click(page.getByText('add_button'));
+
+      await waitFor(() => {
+        expect(failingSave).toHaveBeenCalled();
+      });
+
+      await expect.element(page.getByTestId('coupon-submit-error')).toBeVisible();
+      await expect.element(page.getByText(/A coupon with code TEST20 already exists/)).toBeVisible();
+    });
+
+    it('shows the success message when onSaveAction resolves', async () => {
+      const succeedingSave = vi.fn().mockResolvedValue(undefined);
+      render(
+        <AddEditCouponModal
+          isOpen={true}
+          onCloseAction={mockHandlers.onCloseAction}
+          onSaveAction={succeedingSave}
+        />,
+      );
+
+      await userEvent.fill(page.getByTestId('coupon-code-input'), 'TEST20');
+      await userEvent.fill(page.getByTestId('coupon-description-input'), 'Twenty off');
+      await userEvent.fill(page.getByTestId('coupon-amount-input'), '20');
+      await userEvent.click(page.getByTestId('coupon-never-expires-checkbox'));
+
+      await userEvent.click(page.getByText('add_button'));
+
+      await waitFor(() => {
+        expect(succeedingSave).toHaveBeenCalled();
+      });
+
+      await expect.element(page.getByText('create_success')).toBeVisible();
+    });
+  });
 });

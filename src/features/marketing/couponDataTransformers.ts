@@ -1,4 +1,4 @@
-import type { Coupon, CouponApplyTo, CouponStatus, CouponType } from './types';
+import type { Coupon, CouponApplyTo, CouponFormData, CouponStatus, CouponType } from './types';
 import type { Coupon as DbCoupon } from '@/hooks/useCouponsCache';
 
 /**
@@ -104,6 +104,7 @@ export function transformCouponToUi(dbCoupon: DbCoupon): Coupon {
     startDateTime: formatDateTime(dbCoupon.validFrom),
     endDateTime: formatDateTime(dbCoupon.validUntil),
     status: transformStatus(dbCoupon.status),
+    perUserLimit: dbCoupon.perUserLimit,
   };
 }
 
@@ -112,4 +113,90 @@ export function transformCouponToUi(dbCoupon: DbCoupon): Coupon {
  */
 export function transformCouponsToUi(dbCoupons: DbCoupon[]): Coupon[] {
   return dbCoupons.map(transformCouponToUi);
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Inverse direction: form data → DB-shape payload for create/update
+// ──────────────────────────────────────────────────────────────────────
+
+function reverseDiscountType(type: CouponType): 'percentage' | 'fixed' | 'free_days' {
+  switch (type) {
+    case 'Percentage':
+      return 'percentage';
+    case 'Fixed Amount':
+      return 'fixed';
+    case 'Free Trial':
+      return 'free_days';
+  }
+}
+
+function reverseApplyTo(applyTo: CouponApplyTo): 'membership' | 'event' | 'all' {
+  switch (applyTo) {
+    case 'Memberships':
+      return 'membership';
+    case 'Products':
+      return 'event';
+    case 'Both':
+      return 'all';
+  }
+}
+
+function reverseStatus(status: CouponStatus): 'active' | 'expired' | 'inactive' {
+  switch (status) {
+    case 'Active':
+      return 'active';
+    case 'Expired':
+      return 'expired';
+    case 'Inactive':
+      return 'inactive';
+  }
+}
+
+function combineDateTime(date: string, time: string): Date {
+  // Time defaults to start-of-day if missing — Zod will coerce.
+  const safeTime = time && time.length > 0 ? time : '00:00:00';
+  return new Date(`${date}T${safeTime}`);
+}
+
+export type CouponDbPayload = {
+  code: string;
+  name: string;
+  description: string | null;
+  discountType: 'percentage' | 'fixed' | 'free_days';
+  discountValue: number;
+  applicableTo: 'membership' | 'event' | 'all';
+  usageLimit: number | null;
+  perUserLimit: number;
+  validFrom: Date;
+  validUntil: Date | null;
+  status: 'active' | 'expired' | 'inactive';
+};
+
+/**
+ * Translates the title-case UI form into the lowercase DB payload accepted by
+ * `client.coupons.create` / `client.coupons.update`. The UI doesn't have a
+ * separate `name` field — derive it from `code` to satisfy the not-null DB
+ * column.
+ */
+export function transformUiCouponFormToDb(formData: CouponFormData): CouponDbPayload {
+  const code = formData.code.trim().toUpperCase();
+  const description = formData.description.trim();
+  const usageLimitRaw = formData.usageLimit.trim();
+  const perUserLimitRaw = formData.perUserLimit.trim();
+
+  return {
+    code,
+    name: code,
+    description: description.length > 0 ? description : null,
+    discountType: reverseDiscountType(formData.type),
+    discountValue: Number.parseFloat(formData.amount),
+    applicableTo: reverseApplyTo(formData.applyTo),
+    usageLimit: usageLimitRaw === '' ? null : Number.parseInt(usageLimitRaw, 10),
+    perUserLimit: perUserLimitRaw === '' ? 1 : Number.parseInt(perUserLimitRaw, 10),
+    validFrom: combineDateTime(formData.startDate, formData.startTime),
+    validUntil: formData.neverExpires
+      ? null
+      : combineDateTime(formData.endDate, formData.endTime || '23:59:59'),
+    status: reverseStatus(formData.status),
+  };
 }

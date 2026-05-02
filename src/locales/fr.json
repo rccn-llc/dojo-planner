@@ -1035,6 +1035,10 @@
       "usage_limit_label": "Limite d'utilisation",
       "usage_limit_placeholder": "Illimité",
       "usage_limit_help": "Laisser vide pour illimité",
+      "per_user_limit_label": "Limite par utilisateur",
+      "per_user_limit_placeholder": "ex. 1",
+      "per_user_limit_help": "Nombre de fois qu'un membre peut utiliser ce coupon",
+      "per_user_limit_error": "La limite par utilisateur doit être un entier positif.",
       "start_date_label": "Date de début",
       "start_date_placeholder": "AAAA-MM-JJ",
       "start_time_label": "Heure de début",
@@ -1048,7 +1052,8 @@
       "save_changes_button": "Enregistrer les modifications",
       "saving_button": "Enregistrement...",
       "create_success": "Coupon créé avec succès",
-      "update_success": "Coupon mis à jour avec succès"
+      "update_success": "Coupon mis à jour avec succès",
+      "submit_error": "Impossible d'enregistrer le coupon. Veuillez réessayer."
     }
   },
   "MembershipsPage": {
