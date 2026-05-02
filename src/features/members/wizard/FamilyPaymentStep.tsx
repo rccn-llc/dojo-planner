@@ -59,7 +59,7 @@ export const FamilyPaymentStep = ({
   tokenizationConfig,
 }: FamilyPaymentStepProps) => {
   const t = useTranslations('AddMemberWizard.FamilyPaymentStep');
-  const tPayment = useTranslations('AddMemberWizard.MemberPaymentStep');
+  const tPayment = useTranslations('AddMemberWizard.PaymentStep');
   const { resolvedTheme } = useTheme();
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [tokenizing, setTokenizing] = useState(false);

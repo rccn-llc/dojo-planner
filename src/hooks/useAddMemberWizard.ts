@@ -18,16 +18,68 @@ export type AppliedCoupon = {
 
 export type SignerRelationship = 'self' | 'parent' | 'guardian' | 'legal_guardian';
 
-export type AddMemberWizardData = {
-  // Step 1: Member Type
-  memberType: MemberType | null;
-
-  // Step 2: Member Details
+/**
+ * Shape consumed by the shared wizard step components (`MembershipStep`,
+ * `WaiverStep`, `PaymentStep`). Both `AddMemberWizardData` and
+ * `ConvertMemberWizardData` extend this so step components can be reused
+ * without an adapter layer.
+ */
+export type WizardStepData = {
+  // Identity (used by waiver step for guardian-name defaults, etc.)
   firstName: string;
   lastName: string;
   email: string;
-  phone: string;
   dateOfBirth?: Date;
+
+  // Membership selection
+  membershipPlanId: string | null;
+  membershipPlanPrice?: number;
+  membershipPlanFrequency?: string;
+  membershipPlanName?: string;
+  membershipPlanIsTrial?: boolean;
+  membershipPlanContractLength?: string;
+  membershipPlanSignupFee?: number;
+
+  // Waiver
+  waiverTemplateId: string | null;
+  waiverSignatureDataUrl?: string;
+  waiverSignedByName?: string;
+  waiverSignedByRelationship?: SignerRelationship;
+  waiverGuardianEmail?: string;
+  waiverSignedAt?: Date;
+  waiverSkipped?: boolean;
+  waiverRenderedContent?: string;
+
+  // Payment
+  paymentMethod?: PaymentMethod;
+  billingType?: BillingType;
+  cardholderName?: string;
+  cardNumber?: string;
+  cardToken?: string;
+  cardFirstSix?: string;
+  cardLastFour?: string;
+  cardExpiry?: string;
+  cardCvc?: string;
+  achAccountHolder?: string;
+  achRoutingNumber?: string;
+  achAccountNumber?: string;
+  achAccountType?: 'Checking' | 'Savings';
+
+  // Coupon
+  appliedCoupon?: AppliedCoupon | null;
+
+  // Payment processing state
+  paymentStatus?: PaymentStatus;
+  paymentDeclineReason?: PaymentDeclineReason;
+  paymentProcessed?: boolean;
+};
+
+export type AddMemberWizardData = WizardStepData & {
+  // Step 1: Member Type
+  memberType: MemberType | null;
+
+  // Step 2: Member Details (firstName/lastName/email/dateOfBirth come from WizardStepData)
+  phone: string;
   address?: {
     street: string;
     apartment?: string;
@@ -41,42 +93,9 @@ export type AddMemberWizardData = {
   photoFile?: File | null;
   photoUrl?: string;
 
-  // Step 4: Membership
-  membershipPlanId: string | null;
-  membershipPlanPrice?: number;
-  membershipPlanFrequency?: string;
-  membershipPlanName?: string;
-  membershipPlanIsTrial?: boolean;
-  membershipPlanContractLength?: string;
-  membershipPlanSignupFee?: number;
-  // Legacy fields (kept for backwards compatibility)
+  // Legacy membership fields (kept for backwards compatibility)
   subscriptionPlan?: SubscriptionPlan | null;
   subscriptionId?: string;
-
-  // Step 5: Waiver (required when membership has associated waiver)
-  waiverTemplateId: string | null;
-  waiverSignatureDataUrl?: string;
-  waiverSignedByName?: string;
-  waiverSignedByRelationship?: SignerRelationship;
-  waiverGuardianEmail?: string;
-  waiverSignedAt?: Date;
-  waiverSkipped?: boolean;
-  waiverRenderedContent?: string;
-
-  // Step 6: Payment (only for monthly/annual plans)
-  paymentMethod?: PaymentMethod;
-  billingType?: BillingType; // autopay (recurring) or one-time payment
-  cardholderName?: string;
-  cardNumber?: string; // Fallback: raw card (local dev without IQPro)
-  cardToken?: string; // PCI-compliant: tokenized card from TokenEx iframe
-  cardFirstSix?: string; // First 6 digits (BIN) from TokenEx tokenization (for maskedCard)
-  cardLastFour?: string; // Last 4 digits from TokenEx tokenization (for maskedCard)
-  cardExpiry?: string;
-  cardCvc?: string;
-  achAccountHolder?: string;
-  achRoutingNumber?: string;
-  achAccountNumber?: string;
-  achAccountType?: 'Checking' | 'Savings';
 
   // HOH (Head of Household) fields — used when memberType is 'family-member'
   hohMemberId?: string;
@@ -88,14 +107,6 @@ export type AddMemberWizardData = {
 
   // Membership skipped (HOH only — no membership selected, card capture only)
   membershipSkipped?: boolean;
-
-  // Coupon applied to payment
-  appliedCoupon?: AppliedCoupon | null;
-
-  // Payment processing state
-  paymentStatus?: PaymentStatus;
-  paymentDeclineReason?: PaymentDeclineReason;
-  paymentProcessed?: boolean;
 };
 
 export type WizardStep = 'member-type' | 'details' | 'photo' | 'subscription' | 'waiver' | 'payment' | 'hoh-selection' | 'family-payment' | 'success';

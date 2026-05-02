@@ -1,7 +1,7 @@
 'use client';
 
 import type { Coupon } from '@/features/marketing';
-import type { AddMemberWizardData, AppliedCoupon, MemberType, PaymentDeclineReason } from '@/hooks/useAddMemberWizard';
+import type { AppliedCoupon, MemberType, PaymentDeclineReason } from '@/hooks/useAddMemberWizard';
 import type { ConversionType, ConvertMemberWizardData } from '@/hooks/useConvertMemberWizard';
 import type { TokenizationIframeConfig } from '@/libs/IQPro';
 import { useTranslations } from 'next-intl';
@@ -10,9 +10,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useConvertMemberWizard } from '@/hooks/useConvertMemberWizard';
 import { client } from '@/libs/Orpc';
-import { MemberMembershipStep } from '../wizard/MemberMembershipStep';
-import { MemberPaymentStep } from '../wizard/MemberPaymentStep';
-import { MemberWaiverStep } from '../wizard/MemberWaiverStep';
+import { MembershipStep } from '../wizard/MembershipStep';
+import { PaymentStep } from '../wizard/PaymentStep';
+import { WaiverStep } from '../wizard/WaiverStep';
 import { ConvertConfirmStep } from './ConvertConfirmStep';
 import { ConvertSuccessStep } from './ConvertSuccessStep';
 
@@ -34,53 +34,6 @@ function computeDiscountedPrice(price: number | undefined, coupon: AppliedCoupon
     case 'Free Trial':
       return 0;
   }
-}
-
-/**
- * Adapt ConvertMemberWizardData to AddMemberWizardData shape
- * so existing step components (MemberMembershipStep, MemberWaiverStep, MemberPaymentStep) can be reused.
- */
-function toAddMemberData(data: ConvertMemberWizardData): AddMemberWizardData {
-  return {
-    memberType: data.targetMemberType,
-    firstName: data.memberName.split(' ')[0] ?? '',
-    lastName: data.memberName.split(' ').slice(1).join(' ') ?? '',
-    email: data.memberEmail,
-    phone: '',
-    dateOfBirth: data.memberDateOfBirth,
-    membershipPlanId: data.membershipPlanId,
-    membershipPlanPrice: data.membershipPlanPrice,
-    membershipPlanFrequency: data.membershipPlanFrequency,
-    membershipPlanName: data.membershipPlanName,
-    membershipPlanIsTrial: data.membershipPlanIsTrial,
-    membershipPlanContractLength: data.membershipPlanContractLength,
-    membershipPlanSignupFee: data.membershipPlanSignupFee,
-    waiverTemplateId: data.waiverTemplateId,
-    waiverSignatureDataUrl: data.waiverSignatureDataUrl,
-    waiverSignedByName: data.waiverSignedByName,
-    waiverSignedByRelationship: data.waiverSignedByRelationship,
-    waiverGuardianEmail: data.waiverGuardianEmail,
-    waiverSignedAt: data.waiverSignedAt,
-    waiverSkipped: data.waiverSkipped,
-    waiverRenderedContent: data.waiverRenderedContent,
-    paymentMethod: data.paymentMethod,
-    billingType: data.billingType,
-    cardholderName: data.cardholderName,
-    cardNumber: data.cardNumber,
-    cardToken: data.cardToken,
-    cardFirstSix: data.cardFirstSix,
-    cardLastFour: data.cardLastFour,
-    cardExpiry: data.cardExpiry,
-    cardCvc: data.cardCvc,
-    achAccountHolder: data.achAccountHolder,
-    achRoutingNumber: data.achRoutingNumber,
-    achAccountNumber: data.achAccountNumber,
-    achAccountType: data.achAccountType,
-    appliedCoupon: data.appliedCoupon,
-    paymentStatus: data.paymentStatus,
-    paymentDeclineReason: data.paymentDeclineReason,
-    paymentProcessed: data.paymentProcessed,
-  };
 }
 
 type ConvertMemberModalProps = {
@@ -383,55 +336,6 @@ export const ConvertMemberModal = ({
     }
   };
 
-  // Adapter for step components that expect AddMemberWizardData
-  const adaptedData = toAddMemberData(wizard.data);
-
-  // Fields shared between AddMemberWizardData and ConvertMemberWizardData
-  const SHARED_FIELDS = [
-    'membershipPlanId',
-    'membershipPlanPrice',
-    'membershipPlanFrequency',
-    'membershipPlanName',
-    'membershipPlanIsTrial',
-    'membershipPlanContractLength',
-    'membershipPlanSignupFee',
-    'waiverTemplateId',
-    'waiverSignatureDataUrl',
-    'waiverSignedByName',
-    'waiverSignedByRelationship',
-    'waiverGuardianEmail',
-    'waiverSignedAt',
-    'waiverSkipped',
-    'waiverRenderedContent',
-    'paymentMethod',
-    'billingType',
-    'cardholderName',
-    'cardNumber',
-    'cardToken',
-    'cardFirstSix',
-    'cardLastFour',
-    'cardExpiry',
-    'cardCvc',
-    'achAccountHolder',
-    'achRoutingNumber',
-    'achAccountNumber',
-    'achAccountType',
-    'appliedCoupon',
-    'paymentStatus',
-    'paymentDeclineReason',
-    'paymentProcessed',
-  ] as const;
-
-  const adaptedUpdate = (updates: Partial<AddMemberWizardData>) => {
-    const mapped: Partial<ConvertMemberWizardData> = {};
-    for (const key of SHARED_FIELDS) {
-      if (updates[key] !== undefined) {
-        (mapped as Record<string, unknown>)[key] = updates[key];
-      }
-    }
-    updateDataWithRef(mapped);
-  };
-
   return (
     <Dialog open={isOpen} onOpenChange={open => !open && handleCancel()}>
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-3xl">
@@ -449,9 +353,9 @@ export const ConvertMemberModal = ({
           )}
 
           {wizard.step === 'subscription' && (
-            <MemberMembershipStep
-              data={adaptedData}
-              onUpdate={adaptedUpdate}
+            <MembershipStep
+              data={wizard.data}
+              onUpdate={updateDataWithRef}
               onNext={wizard.nextStep}
               onBack={wizard.previousStep}
               onCancel={handleCancel}
@@ -460,9 +364,9 @@ export const ConvertMemberModal = ({
           )}
 
           {wizard.step === 'waiver' && (
-            <MemberWaiverStep
-              data={adaptedData}
-              onUpdate={adaptedUpdate}
+            <WaiverStep
+              data={wizard.data}
+              onUpdate={updateDataWithRef}
               onNext={wizard.nextStep}
               onBack={wizard.previousStep}
               onCancel={handleCancel}
@@ -472,9 +376,9 @@ export const ConvertMemberModal = ({
           )}
 
           {wizard.step === 'payment' && (
-            <MemberPaymentStep
-              data={adaptedData}
-              onUpdateAction={adaptedUpdate}
+            <PaymentStep
+              data={wizard.data}
+              onUpdateAction={updateDataWithRef}
               onNextAction={handleConvert}
               onBackAction={wizard.previousStep}
               onCancelAction={handleCancel}

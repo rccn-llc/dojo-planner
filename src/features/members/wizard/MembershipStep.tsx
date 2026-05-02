@@ -1,6 +1,6 @@
 'use client';
 
-import type { AddMemberWizardData } from '@/hooks/useAddMemberWizard';
+import type { MemberType, WizardStepData } from '@/hooks/useAddMemberWizard';
 import type { MembershipPlanData } from '@/services/MembersService';
 import { Check } from 'lucide-react';
 import { useTranslations } from 'next-intl';
@@ -8,9 +8,22 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { client } from '@/libs/Orpc';
 
-type MemberMembershipStepProps = {
-  data: AddMemberWizardData;
-  onUpdate: (updates: Partial<AddMemberWizardData>) => void;
+/**
+ * The AddMember flow has a HOH-only "Skip for now" button that the convert
+ * flow doesn't need. We model this by accepting an optional `memberType` +
+ * `membershipSkipped` superset of `WizardStepData` — the convert flow simply
+ * omits them and the Skip button is hidden. Both AddMemberWizardData and
+ * ConvertMemberWizardData are assignable here because the extra fields are
+ * optional.
+ */
+type MembershipStepData = WizardStepData & {
+  memberType?: MemberType | null;
+  membershipSkipped?: boolean;
+};
+
+type MembershipStepProps = {
+  data: MembershipStepData;
+  onUpdate: (updates: Partial<MembershipStepData>) => void;
   onNext: () => void | Promise<void>;
   onBack: () => void;
   onCancel: () => void;
@@ -112,15 +125,15 @@ const mockMembershipPlans: MembershipPlanData[] = [
   },
 ];
 
-export const MemberMembershipStep = ({
+export const MembershipStep = ({
   data,
   onUpdate,
   onNext,
   onBack,
   onCancel,
   isLoading = false,
-}: MemberMembershipStepProps) => {
-  const t = useTranslations('AddMemberWizard.MemberMembershipStep');
+}: MembershipStepProps) => {
+  const t = useTranslations('AddMemberWizard.MembershipStep');
 
   const [membershipPlans, setMembershipPlans] = useState<MembershipPlanData[]>([]);
   const [isFetchingPlans, setIsFetchingPlans] = useState(true);

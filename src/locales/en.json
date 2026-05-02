@@ -375,7 +375,7 @@
       "cancel_button": "Cancel",
       "next_button": "Next"
     },
-    "MemberMembershipStep": {
+    "MembershipStep": {
       "title": "Choose Membership Plan",
       "subtitle": "Select a membership plan for this member",
       "loading_plans": "Loading membership plans...",
@@ -388,7 +388,7 @@
       "next_button": "Next",
       "skip_button": "Skip for now"
     },
-    "MemberPaymentStep": {
+    "PaymentStep": {
       "pay_amount": "Pay {amount}",
       "payment_description": "This signs up this member for a {plan} recurring membership. They will be charged {amount} every {period} on this day until they cancel.",
       "card_tab_label": "Debit / Credit Card",
@@ -486,7 +486,7 @@
       "back_button": "Back",
       "cancel_button": "Cancel"
     },
-    "MemberPaymentStep_HOHNotice": {
+    "PaymentStep_HOHNotice": {
       "notice": "Note: If family members are added to your account in the future, their membership fees will be charged to this payment method on the date they join, with recurring billing based on their join date."
     },
     "MemberSuccessStep": {
@@ -1115,8 +1115,12 @@
     "add_new_waiver_button": "Add Waiver",
     "manage_fields_button": "Manage Merge Fields",
     "search_placeholder": "Search waivers...",
+    "filter_status_label": "Status",
+    "filter_status_all": "All statuses",
+    "filter_status_active": "Active",
+    "filter_status_inactive": "Inactive",
     "no_waivers_found": "No waivers found",
-    "no_results_found": "No waivers match your search",
+    "no_results_found": "No waivers match your filters",
     "AddWaiverModal": {
       "title": "Add Waiver",
       "name_label": "Waiver Name",
@@ -1280,7 +1284,7 @@
     "content_label": "Waiver Content",
     "close_button": "Close"
   },
-  "MemberWaiverStep": {
+  "WaiverStep": {
     "title": "Sign Waiver",
     "subtitle": "Please review and sign the liability waiver",
     "loading_waiver": "Loading waiver...",
@@ -1302,7 +1306,8 @@
     "continue_button": "Continue",
     "signature_required_error": "Please provide your signature",
     "name_required_error": "Please enter your full name",
-    "agreement_required_error": "You must agree to the waiver terms"
+    "agreement_required_error": "You must agree to the waiver terms",
+    "no_waiver_required_message": "No waiver is required for the selected membership plan. Click Continue to proceed."
   },
   "SignatureCanvas": {
     "placeholder": "Sign here",

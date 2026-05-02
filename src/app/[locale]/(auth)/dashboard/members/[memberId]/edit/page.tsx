@@ -1480,7 +1480,7 @@ export default function EditMemberPage() {
                   </div>
                   <h3 className="font-semibold text-foreground">Add Family Member</h3>
                   <p className="text-sm text-muted-foreground">Create a new family membership</p>
-                  <Button variant="outline" className="mt-2" onClick={() => setIsAddFamilyModalOpen(true)}>
+                  <Button variant="outline" className="mt-2" disabled={isLoadingPayment} onClick={() => setIsAddFamilyModalOpen(true)}>
                     Add Family Member
                   </Button>
                 </div>
@@ -1513,7 +1513,7 @@ export default function EditMemberPage() {
         />
       )}
 
-      {hohMemberData && (
+      {isAddFamilyModalOpen && hohMemberData && (
         <AddFamilyMembersModal
           isOpen={isAddFamilyModalOpen}
           onCloseAction={handleAddFamilyModalClose}

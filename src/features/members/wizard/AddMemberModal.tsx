@@ -12,12 +12,12 @@ import { client } from '@/libs/Orpc';
 import { FamilyPaymentStep } from './FamilyPaymentStep';
 import { HOHSelectionStep } from './HOHSelectionStep';
 import { MemberDetailsStep } from './MemberDetailsStep';
-import { MemberMembershipStep } from './MemberMembershipStep';
-import { MemberPaymentStep } from './MemberPaymentStep';
 import { MemberPhotoStep } from './MemberPhotoStep';
+import { MembershipStep } from './MembershipStep';
 import { MemberSuccessStep } from './MemberSuccessStep';
 import { MemberTypeStep } from './MemberTypeStep';
-import { MemberWaiverStep } from './MemberWaiverStep';
+import { PaymentStep } from './PaymentStep';
+import { WaiverStep } from './WaiverStep';
 
 function computeDiscountedPrice(price: number | undefined, coupon: AppliedCoupon): number | undefined {
   if (price === undefined || price <= 0) {
@@ -397,7 +397,7 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
               ? `Membership: ${wizard.data.membershipPlanName}`
               : 'Membership payment',
             // Card fields (cardToken = PCI-compliant tokenized card; cardNumber = fallback)
-            // Read cardToken from ref because React setState in MemberPaymentStep is async
+            // Read cardToken from ref because React setState in PaymentStep is async
             // and wizard.data.cardToken may not yet reflect the tokenized value.
             ...(wizard.data.cardholderName && { cardholderName: wizard.data.cardholderName }),
             ...((cardTokenRef.current || wizard.data.cardToken) && { cardToken: cardTokenRef.current || wizard.data.cardToken }),
@@ -772,7 +772,7 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
           )}
 
           {wizard.step === 'subscription' && (
-            <MemberMembershipStep
+            <MembershipStep
               data={wizard.data}
               onUpdate={wizard.updateData}
               onNext={handleSubscriptionNext}
@@ -783,7 +783,7 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
           )}
 
           {wizard.step === 'waiver' && (
-            <MemberWaiverStep
+            <WaiverStep
               data={wizard.data}
               onUpdate={wizard.updateData}
               onNext={wizard.nextStep}
@@ -795,7 +795,7 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
           )}
 
           {wizard.step === 'payment' && (
-            <MemberPaymentStep
+            <PaymentStep
               data={wizard.data}
               onUpdateAction={updateDataWithRef}
               onNextAction={handleFinalNext}

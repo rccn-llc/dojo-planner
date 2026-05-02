@@ -2,7 +2,7 @@ import type { AddMemberWizardData } from '@/hooks/useAddMemberWizard';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { page } from 'vitest/browser';
-import { MemberMembershipStep } from './MemberMembershipStep';
+import { MembershipStep } from './MembershipStep';
 
 // Mock translation keys
 const translationKeys: Record<string, string> = {
@@ -135,7 +135,7 @@ const mockMembershipPlans = [
   },
 ];
 
-describe('MemberMembershipStep', () => {
+describe('MembershipStep', () => {
   const mockData: AddMemberWizardData = {
     memberType: 'individual',
     firstName: 'John',
@@ -161,7 +161,7 @@ describe('MemberMembershipStep', () => {
   describe('Rendering', () => {
     it('should render the membership step title and subtitle', async () => {
       render(
-        <MemberMembershipStep
+        <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -180,7 +180,7 @@ describe('MemberMembershipStep', () => {
       );
 
       render(
-        <MemberMembershipStep
+        <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -194,7 +194,7 @@ describe('MemberMembershipStep', () => {
 
     it('should display 6 membership plans after loading', async () => {
       render(
-        <MemberMembershipStep
+        <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -213,7 +213,7 @@ describe('MemberMembershipStep', () => {
 
     it('should display prices correctly', async () => {
       render(
-        <MemberMembershipStep
+        <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -230,7 +230,7 @@ describe('MemberMembershipStep', () => {
 
     it('should show Free for trial plans', async () => {
       render(
-        <MemberMembershipStep
+        <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -247,7 +247,7 @@ describe('MemberMembershipStep', () => {
 
     it('should show Trial badge for trial plans', async () => {
       render(
-        <MemberMembershipStep
+        <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -264,7 +264,7 @@ describe('MemberMembershipStep', () => {
 
     it('should render Back, Cancel, and Next buttons', async () => {
       render(
-        <MemberMembershipStep
+        <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -284,7 +284,7 @@ describe('MemberMembershipStep', () => {
   describe('Plan Selection', () => {
     it('should disable Next button when no plan is selected', async () => {
       render(
-        <MemberMembershipStep
+        <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -307,7 +307,7 @@ describe('MemberMembershipStep', () => {
       };
 
       render(
-        <MemberMembershipStep
+        <MembershipStep
           data={dataWithSelection}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -325,7 +325,7 @@ describe('MemberMembershipStep', () => {
 
     it('should call onUpdate when a plan is clicked', async () => {
       render(
-        <MemberMembershipStep
+        <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -357,7 +357,7 @@ describe('MemberMembershipStep', () => {
       };
 
       render(
-        <MemberMembershipStep
+        <MembershipStep
           data={dataWithSelection}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -378,7 +378,7 @@ describe('MemberMembershipStep', () => {
   describe('Navigation', () => {
     it('should call onBack when Back button is clicked', async () => {
       render(
-        <MemberMembershipStep
+        <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -397,7 +397,7 @@ describe('MemberMembershipStep', () => {
 
     it('should call onCancel when Cancel button is clicked', async () => {
       render(
-        <MemberMembershipStep
+        <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -421,7 +421,7 @@ describe('MemberMembershipStep', () => {
       };
 
       render(
-        <MemberMembershipStep
+        <MembershipStep
           data={dataWithSelection}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -444,7 +444,7 @@ describe('MemberMembershipStep', () => {
       mockListMembershipPlans.mockResolvedValue({ plans: [] });
 
       render(
-        <MemberMembershipStep
+        <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -462,7 +462,7 @@ describe('MemberMembershipStep', () => {
       mockListMembershipPlans.mockRejectedValue(new Error('Network error'));
 
       render(
-        <MemberMembershipStep
+        <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -484,7 +484,7 @@ describe('MemberMembershipStep', () => {
       };
 
       render(
-        <MemberMembershipStep
+        <MembershipStep
           data={dataWithSelection}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -507,7 +507,7 @@ describe('MemberMembershipStep', () => {
       };
 
       render(
-        <MemberMembershipStep
+        <MembershipStep
           data={dataWithSelection}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -528,7 +528,7 @@ describe('MemberMembershipStep', () => {
   describe('Plan Details Display', () => {
     it('should display plan categories', async () => {
       render(
-        <MemberMembershipStep
+        <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -544,7 +544,7 @@ describe('MemberMembershipStep', () => {
 
     it('should display contract lengths', async () => {
       render(
-        <MemberMembershipStep
+        <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -561,7 +561,7 @@ describe('MemberMembershipStep', () => {
 
     it('should display signup fees for paid plans', async () => {
       render(
-        <MemberMembershipStep
+        <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -577,7 +577,7 @@ describe('MemberMembershipStep', () => {
 
     it('should display plan descriptions', async () => {
       render(
-        <MemberMembershipStep
+        <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}

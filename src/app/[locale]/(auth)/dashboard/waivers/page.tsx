@@ -9,6 +9,13 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AddWaiverModal } from '@/features/waivers/AddWaiverModal';
 import { MergeFieldsManagement } from '@/features/waivers/MergeFieldsManagement';
@@ -22,6 +29,7 @@ export default function WaiversPage() {
   const [waivers, setWaivers] = useState<WaiverTemplateWithStats[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [isMergeFieldsSheetOpen, setIsMergeFieldsSheetOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
@@ -79,17 +87,43 @@ export default function WaiversPage() {
     membershipsUsing: 0, // TODO: Count from membership_waiver table
   }), [waivers]);
 
-  // Filter waivers by search
+  const hasActiveWaivers = stats.active > 0;
+  const hasInactiveWaivers = stats.totalWaivers - stats.active > 0;
+  // Only render the filter when both statuses are present — otherwise the
+  // dropdown would be a no-op (one status + 'all' both show the same list).
+  const showStatusFilter = hasActiveWaivers && hasInactiveWaivers;
+
+  // If the selected filter is no longer applicable to the current waiver set
+  // (e.g. user picked 'inactive' then deleted the only inactive waiver), treat
+  // the filter as 'all' for filtering purposes without resetting state.
+  const effectiveStatusFilter: 'all' | 'active' | 'inactive'
+    = (statusFilter === 'active' && !hasActiveWaivers)
+      || (statusFilter === 'inactive' && !hasInactiveWaivers)
+      ? 'all'
+      : statusFilter;
+
+  // Filter waivers by search query and active/inactive status. Both filters
+  // AND together; an empty search and 'all' status returns the whole list.
   const filteredWaivers = useMemo(() => {
-    if (!search.trim()) {
-      return waivers;
-    }
-    const searchLower = search.toLowerCase();
-    return waivers.filter(waiver =>
-      waiver.name.toLowerCase().includes(searchLower)
-      || (waiver.description?.toLowerCase().includes(searchLower) ?? false),
-    );
-  }, [waivers, search]);
+    const searchLower = search.trim().toLowerCase();
+    return waivers.filter((waiver) => {
+      if (effectiveStatusFilter === 'active' && !waiver.isActive) {
+        return false;
+      }
+      if (effectiveStatusFilter === 'inactive' && waiver.isActive) {
+        return false;
+      }
+      if (!searchLower) {
+        return true;
+      }
+      return (
+        waiver.name.toLowerCase().includes(searchLower)
+        || (waiver.description?.toLowerCase().includes(searchLower) ?? false)
+      );
+    });
+  }, [waivers, search, effectiveStatusFilter]);
+
+  const hasActiveFilters = search.trim().length > 0 || effectiveStatusFilter !== 'all';
 
   const statsData = useMemo(() => [
     { id: 'total', label: t('total_waivers_label'), value: stats.totalWaivers },
@@ -133,17 +167,34 @@ export default function WaiversPage() {
         </Button>
       </div>
 
-      {/* Search Bar and Add Button */}
+      {/* Search Bar, Status Filter, and Add Button */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-        <div className="relative min-w-50 flex-1 sm:max-w-xs">
-          <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="text"
-            placeholder={t('search_placeholder')}
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="pl-9"
-          />
+        <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center sm:gap-3">
+          <div className="relative min-w-50 flex-1 sm:max-w-xs">
+            <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder={t('search_placeholder')}
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          {showStatusFilter && (
+            <Select
+              value={statusFilter}
+              onValueChange={value => setStatusFilter(value as 'all' | 'active' | 'inactive')}
+            >
+              <SelectTrigger className="w-full sm:w-44" aria-label={t('filter_status_label')}>
+                <SelectValue placeholder={t('filter_status_label')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t('filter_status_all')}</SelectItem>
+                <SelectItem value="active">{t('filter_status_active')}</SelectItem>
+                <SelectItem value="inactive">{t('filter_status_inactive')}</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
         </div>
 
         {/* Add New Waiver Button */}
@@ -158,7 +209,7 @@ export default function WaiversPage() {
         {filteredWaivers.length === 0
           ? (
               <div className="col-span-full p-8 text-center text-muted-foreground">
-                {search
+                {hasActiveFilters
                   ? t('no_results_found')
                   : t('no_waivers_found')}
               </div>

@@ -14,6 +14,10 @@ const baseData: ConvertMemberWizardData = {
   targetMemberType: 'individual',
   hasMembership: true,
   hasPaymentMethod: true,
+  // WizardStepData fields:
+  firstName: 'John',
+  lastName: 'Doe',
+  email: 'john@test.com',
   membershipPlanId: null,
   waiverTemplateId: null,
 };

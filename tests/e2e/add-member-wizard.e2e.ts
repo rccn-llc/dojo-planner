@@ -117,6 +117,27 @@ async function fillDetailsStep(page: Page): Promise<MemberDetails> {
   return { firstName, lastName, email, phone };
 }
 
+/**
+ * Pass the waiver step — clicks Continue on the "No waiver required" panel
+ * (the path mock plans take in CI, since they have no waiver association).
+ * If a real waiver is shown instead, this is a no-op and the caller should
+ * sign + submit explicitly.
+ */
+async function passNoWaiverStep(page: Page) {
+  // Wait briefly for the waiver step to settle. If a waiver is present,
+  // the "Sign Waiver" heading appears and we leave the step alone.
+  // Otherwise the explicit no-waiver panel renders with a Continue button.
+  const noWaiverMessage = page.getByText(/No waiver is required for the selected membership plan/i);
+  try {
+    await expect(noWaiverMessage).toBeVisible({ timeout: 5000 });
+
+    // We're on the no-waiver panel — click Continue
+    await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  } catch {
+    // No panel — assume the caller will handle the real waiver
+  }
+}
+
 /** Navigate through steps 1-3 (type → details → photo) and land on subscription step. */
 async function navigateToSubscriptionStep(page: Page, memberType: 'Individual' | 'Head of Household' | 'Family Member' = 'Individual'): Promise<MemberDetails> {
   await openWizard(page);
@@ -145,7 +166,10 @@ async function navigateToPaymentStep(page: Page, memberType: 'Individual' | 'Hea
   await page.locator('button[aria-pressed]').first().click();
   await page.getByRole('button', { name: 'Next', exact: true }).click();
 
-  // Waiver step auto-skips → lands on payment step
+  // Waiver step — for mock plans there's no waiver association, so the
+  // "No waiver required" panel is shown. Click Continue to advance.
+  await passNoWaiverStep(page);
+
   await expect(page.getByText('Payment Information')).toBeVisible({ timeout: 10000 });
 
   return details;
@@ -218,7 +242,10 @@ async function completeHOHWizardFlow(page: Page): Promise<MemberDetails> {
   await page.locator('button[aria-pressed]').first().click();
   await page.getByRole('button', { name: 'Next', exact: true }).click();
 
-  // Step 5: Waiver auto-skips → Step 6: Payment
+  // Step 5: Waiver — click Continue on the no-waiver panel (mock plans)
+  await passNoWaiverStep(page);
+
+  // Step 6: Payment
   await expect(page.getByText('Payment Information')).toBeVisible({ timeout: 10000 });
 
   await fillPaymentStep(page);
@@ -413,7 +440,10 @@ test.describe('Add Member Wizard', () => {
       await page.locator('button[aria-pressed]').first().click();
       await page.getByRole('button', { name: 'Next', exact: true }).click();
 
-      // Step 5: Waiver auto-skips → Step 6: Payment
+      // Step 5: Waiver — click Continue on the no-waiver panel (mock plans)
+      await passNoWaiverStep(page);
+
+      // Step 6: Payment
       await expect(page.getByText('Payment Information')).toBeVisible({ timeout: 10000 });
 
       // Fill payment details (handles both card fallback and ACH when iframe active)
@@ -471,7 +501,10 @@ test.describe('Add Member Wizard', () => {
       await page.locator('button[aria-pressed]').first().click();
       await page.getByRole('button', { name: 'Next', exact: true }).click();
 
-      // Step 5: Waiver auto-skips → Step 6: Payment
+      // Step 5: Waiver — click Continue on the no-waiver panel (mock plans)
+      await passNoWaiverStep(page);
+
+      // Step 6: Payment
       await expect(page.getByText('Payment Information')).toBeVisible({ timeout: 10000 });
 
       // Verify HOH billing notice is visible on the payment step
@@ -508,7 +541,10 @@ test.describe('Add Member Wizard', () => {
       await page.locator('button[aria-pressed]').first().click();
       await page.getByRole('button', { name: 'Next', exact: true }).click();
 
-      // Waiver auto-skips → should land on HOH Selection step (NOT payment)
+      // Waiver — click Continue on the no-waiver panel (mock plans), then
+      // should land on HOH Selection step (NOT payment).
+      await passNoWaiverStep(page);
+
       // Use heading role to disambiguate from dialog title (both have same text)
       await expect(page.getByPlaceholder('Search by name or email...')).toBeVisible({ timeout: 10000 });
 
@@ -550,7 +586,10 @@ test.describe('Add Member Wizard', () => {
       await page.locator('button[aria-pressed]').first().click();
       await page.getByRole('button', { name: 'Next', exact: true }).click();
 
-      // Step 5: Waiver auto-skips → Step 6: HOH Selection
+      // Step 5: Waiver — click Continue on the no-waiver panel (mock plans)
+      await passNoWaiverStep(page);
+
+      // Step 6: HOH Selection
       await expect(page.getByPlaceholder('Search by name or email...')).toBeVisible({ timeout: 10000 });
 
       // Search for and select the HOH we just created
@@ -649,6 +688,9 @@ test.describe('Add Member Wizard', () => {
 
       await page.locator('button[aria-pressed]').first().click();
       await page.getByRole('button', { name: 'Next', exact: true }).click();
+
+      // Waiver — click Continue on the no-waiver panel (mock plans)
+      await passNoWaiverStep(page);
 
       // HOH Selection step — verify by search input (dialog title also says "Select Head of Household")
       await expect(page.getByPlaceholder('Search by name or email...')).toBeVisible({ timeout: 10000 });
