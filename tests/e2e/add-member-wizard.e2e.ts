@@ -689,6 +689,9 @@ test.describe('Add Member Wizard', () => {
       await page.locator('button[aria-pressed]').first().click();
       await page.getByRole('button', { name: 'Next', exact: true }).click();
 
+      // Waiver — click Continue on the no-waiver panel (mock plans)
+      await passNoWaiverStep(page);
+
       // HOH Selection step — verify by search input (dialog title also says "Select Head of Household")
       await expect(page.getByPlaceholder('Search by name or email...')).toBeVisible({ timeout: 10000 });
 
