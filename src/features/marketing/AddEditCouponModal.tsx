@@ -21,7 +21,7 @@ type AddEditCouponModalProps = {
   isOpen: boolean;
   onCloseAction: () => void;
   coupon?: Coupon | null;
-  onSaveAction: (couponData: CouponFormData, isEdit: boolean) => void;
+  onSaveAction: (couponData: CouponFormData, isEdit: boolean) => Promise<void>;
 };
 
 function parseDateTime(dateTimeStr: string): { date: string; time: string } {
@@ -52,6 +52,7 @@ function getInitialFormData(coupon?: Coupon | null): CouponFormData {
       amount: coupon.amount.replace(/[$%]/g, '').replace(' Days', ''),
       applyTo: coupon.applyTo,
       usageLimit,
+      perUserLimit: coupon.perUserLimit !== undefined ? String(coupon.perUserLimit) : '1',
       startDate: startParsed.date,
       startTime: startParsed.time,
       endDate: endParsed.date,
@@ -61,6 +62,9 @@ function getInitialFormData(coupon?: Coupon | null): CouponFormData {
     };
   }
 
+  // Default startDate = today so validFrom < validUntil even when the user
+  // doesn't explicitly pick a start date.
+  const today = new Date().toISOString().split('T')[0]!;
   return {
     code: '',
     description: '',
@@ -68,7 +72,8 @@ function getInitialFormData(coupon?: Coupon | null): CouponFormData {
     amount: '',
     applyTo: 'Memberships',
     usageLimit: '',
-    startDate: '',
+    perUserLimit: '1',
+    startDate: today,
     startTime: '00:00:00',
     endDate: '',
     endTime: '23:59:59',
@@ -87,6 +92,7 @@ function CouponFormContent({ coupon, onCloseAction, onSaveAction }: CouponFormCo
   const t = useTranslations('MarketingPage.AddEditCouponModal');
   const [formData, setFormData] = useState<CouponFormData>(() => getInitialFormData(coupon));
   const [errors, setErrors] = useState<Partial<Record<keyof CouponFormData, string>>>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -105,6 +111,18 @@ function CouponFormContent({ coupon, onCloseAction, onSaveAction }: CouponFormCo
 
     if (!formData.amount.trim()) {
       newErrors.amount = t('amount_error');
+    } else {
+      const parsed = Number.parseFloat(formData.amount);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        newErrors.amount = t('amount_error');
+      }
+    }
+
+    if (formData.perUserLimit.trim()) {
+      const parsed = Number.parseInt(formData.perUserLimit, 10);
+      if (!Number.isFinite(parsed) || parsed < 1) {
+        newErrors.perUserLimit = t('per_user_limit_error');
+      }
     }
 
     // Only require end date if neverExpires is false
@@ -122,19 +140,20 @@ function CouponFormContent({ coupon, onCloseAction, onSaveAction }: CouponFormCo
     }
 
     setIsLoading(true);
+    setSubmitError(null);
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    onSaveAction(formData, isEditMode);
-
-    setSuccessMessage(isEditMode ? t('update_success') : t('create_success'));
-
-    setTimeout(() => {
-      onCloseAction();
-    }, 1500);
-
-    setIsLoading(false);
+    try {
+      await onSaveAction(formData, isEditMode);
+      setSuccessMessage(isEditMode ? t('update_success') : t('create_success'));
+      setTimeout(() => {
+        onCloseAction();
+      }, 1500);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : t('submit_error');
+      setSubmitError(message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleInputChange = (field: keyof CouponFormData, value: string | boolean) => {
@@ -181,6 +200,11 @@ function CouponFormContent({ coupon, onCloseAction, onSaveAction }: CouponFormCo
             )
           : (
               <div className="space-y-4">
+                {submitError && (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" data-testid="coupon-submit-error">
+                    {submitError}
+                  </div>
+                )}
                 {/* Coupon Code */}
                 <div className="space-y-2">
                   <Label htmlFor="coupon-code">{t('code_label')}</Label>
@@ -288,18 +312,38 @@ function CouponFormContent({ coupon, onCloseAction, onSaveAction }: CouponFormCo
                   </div>
                 </div>
 
-                {/* Usage Limit */}
-                <div className="space-y-2">
-                  <Label htmlFor="coupon-usage-limit">{t('usage_limit_label')}</Label>
-                  <Input
-                    id="coupon-usage-limit"
-                    type="number"
-                    value={formData.usageLimit}
-                    onChange={e => handleInputChange('usageLimit', e.target.value)}
-                    placeholder={t('usage_limit_placeholder')}
-                    data-testid="coupon-usage-limit-input"
-                  />
-                  <p className="text-xs text-muted-foreground">{t('usage_limit_help')}</p>
+                {/* Usage Limit + Per-User Limit */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="coupon-usage-limit">{t('usage_limit_label')}</Label>
+                    <Input
+                      id="coupon-usage-limit"
+                      type="number"
+                      min="1"
+                      value={formData.usageLimit}
+                      onChange={e => handleInputChange('usageLimit', e.target.value)}
+                      placeholder={t('usage_limit_placeholder')}
+                      data-testid="coupon-usage-limit-input"
+                    />
+                    <p className="text-xs text-muted-foreground">{t('usage_limit_help')}</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="coupon-per-user-limit">{t('per_user_limit_label')}</Label>
+                    <Input
+                      id="coupon-per-user-limit"
+                      type="number"
+                      min="1"
+                      value={formData.perUserLimit}
+                      onChange={e => handleInputChange('perUserLimit', e.target.value)}
+                      placeholder={t('per_user_limit_placeholder')}
+                      data-testid="coupon-per-user-limit-input"
+                    />
+                    <p className="text-xs text-muted-foreground">{t('per_user_limit_help')}</p>
+                    {errors.perUserLimit && (
+                      <p className="text-sm text-destructive">{errors.perUserLimit}</p>
+                    )}
+                  </div>
                 </div>
 
                 {/* Start Date and Time */}

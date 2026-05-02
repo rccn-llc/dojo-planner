@@ -1032,6 +1032,10 @@
       "usage_limit_label": "Usage Limit",
       "usage_limit_placeholder": "e.g., 100",
       "usage_limit_help": "Leave empty for unlimited usage",
+      "per_user_limit_label": "Per-User Limit",
+      "per_user_limit_placeholder": "e.g., 1",
+      "per_user_limit_help": "How many times each member can redeem this coupon",
+      "per_user_limit_error": "Per-user limit must be a positive integer.",
       "start_date_label": "Start Date",
       "start_date_placeholder": "YYYY-MM-DD",
       "start_time_label": "Start Time",
@@ -1045,7 +1049,8 @@
       "save_changes_button": "Save Changes",
       "saving_button": "Saving...",
       "create_success": "Coupon created successfully!",
-      "update_success": "Coupon updated successfully!"
+      "update_success": "Coupon updated successfully!",
+      "submit_error": "Could not save the coupon. Please try again."
     }
   },
   "MembershipsPage": {

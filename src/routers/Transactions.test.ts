@@ -15,6 +15,14 @@ vi.mock('@/services/TransactionsService', () => ({
   getOrganizationTransactions: vi.fn(),
   getTransactionById: vi.fn(),
 }));
+vi.mock('@/services/AuditService', () => ({ audit: vi.fn() }));
+vi.mock('@/services/MemberPaymentService', async () => {
+  const actual = await vi.importActual<typeof import('@/services/MemberPaymentService')>('@/services/MemberPaymentService');
+  return {
+    ...actual,
+    refundTransaction: vi.fn(),
+  };
+});
 
 const mockContext: AuditContext = {
   userId: 'test-user-123',
@@ -256,6 +264,72 @@ describe('Transactions Router', () => {
       const result = await callHandler(get, { id: 'txn_2' });
 
       expect(result).toEqual({ transaction: mockTransaction });
+    });
+  });
+
+  describe('refund', () => {
+    const adminContext: AuditContext = {
+      userId: 'test-user-123',
+      orgId: 'test-org-456',
+      role: 'org:admin',
+    };
+
+    it('refunds the transaction and emits a success audit event', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { refundTransaction } = await import('@/services/MemberPaymentService');
+      const { audit } = await import('@/services/AuditService');
+      vi.mocked(guardRole).mockResolvedValue(adminContext);
+      vi.mocked(refundTransaction).mockResolvedValue({
+        refundTransactionId: 'refund-tx-1',
+        originalTransactionId: '11111111-1111-1111-1111-111111111111',
+        decrementedCoupons: 1,
+      });
+
+      const { refund } = await import('./Transactions');
+      const result = await callHandler(refund, { transactionId: '11111111-1111-1111-1111-111111111111' });
+
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ADMIN);
+      expect(refundTransaction).toHaveBeenCalledWith('11111111-1111-1111-1111-111111111111', 'test-org-456');
+      expect(audit).toHaveBeenCalledWith(
+        adminContext,
+        'transaction.refund',
+        'transaction',
+        expect.objectContaining({
+          entityId: '11111111-1111-1111-1111-111111111111',
+          status: 'success',
+        }),
+      );
+      expect(result).toEqual({
+        refundTransactionId: 'refund-tx-1',
+        originalTransactionId: '11111111-1111-1111-1111-111111111111',
+        decrementedCoupons: 1,
+      });
+    });
+
+    it('maps TransactionNotFoundError to a 404 ORPCError', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { refundTransaction, TransactionNotFoundError } = await import('@/services/MemberPaymentService');
+      vi.mocked(guardRole).mockResolvedValue(adminContext);
+      vi.mocked(refundTransaction).mockRejectedValue(new TransactionNotFoundError('11111111-1111-1111-1111-111111111111'));
+
+      const { refund } = await import('./Transactions');
+
+      await expect(callHandler(refund, { transactionId: '11111111-1111-1111-1111-111111111111' }))
+        .rejects
+        .toBeInstanceOf(ORPCError);
+    });
+
+    it('maps TransactionAlreadyRefundedError to a 409 ORPCError', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { refundTransaction, TransactionAlreadyRefundedError } = await import('@/services/MemberPaymentService');
+      vi.mocked(guardRole).mockResolvedValue(adminContext);
+      vi.mocked(refundTransaction).mockRejectedValue(new TransactionAlreadyRefundedError('11111111-1111-1111-1111-111111111111'));
+
+      const { refund } = await import('./Transactions');
+
+      await expect(callHandler(refund, { transactionId: '11111111-1111-1111-1111-111111111111' }))
+        .rejects
+        .toBeInstanceOf(ORPCError);
     });
   });
 });

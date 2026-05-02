@@ -18,6 +18,7 @@ type DeleteCouponAlertDialogProps = {
   couponCode: string;
   onCloseAction: () => void;
   onConfirmAction: () => void;
+  errorMessage?: string | null;
 };
 
 export function DeleteCouponAlertDialog({
@@ -25,6 +26,7 @@ export function DeleteCouponAlertDialog({
   couponCode,
   onCloseAction,
   onConfirmAction,
+  errorMessage,
 }: DeleteCouponAlertDialogProps) {
   const t = useTranslations('DeleteCouponAlertDialog');
 
@@ -47,6 +49,11 @@ export function DeleteCouponAlertDialog({
             {t('description', { couponCode })}
           </AlertDialogDescription>
         </AlertDialogHeader>
+        {errorMessage && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" data-testid="coupon-delete-error">
+            {errorMessage}
+          </div>
+        )}
         <AlertDialogFooter>
           <AlertDialogCancel>{t('cancel_button')}</AlertDialogCancel>
           <AlertDialogAction

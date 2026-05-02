@@ -46,7 +46,7 @@ test.describe('Marketing — Coupons', () => {
 
     await dialog.getByRole('button', { name: /add coupon/i }).click();
 
-    // Save is mock — dialog closes after success message; verify dialog closes
+    // Real ORPC create — modal shows the success message for ~1.5s, then closes.
     await expect(dialog).toBeHidden({ timeout: 15000 });
   });
 
@@ -80,7 +80,7 @@ test.describe('Marketing — Coupons', () => {
 
     await dialog.getByRole('button', { name: /add coupon/i }).click();
 
-    // Save is mock — dialog closes after success message; verify dialog closes
+    // Real ORPC create — modal shows the success message for ~1.5s, then closes.
     await expect(dialog).toBeHidden({ timeout: 15000 });
   });
 

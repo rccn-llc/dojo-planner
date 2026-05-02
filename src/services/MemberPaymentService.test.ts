@@ -18,6 +18,11 @@ vi.mock('@/libs/DB', () => ({ db: dbMocks }));
 
 vi.mock('drizzle-orm', () => ({
   eq: vi.fn((_col, val) => ({ _type: 'eq', value: val })),
+  and: vi.fn((...conds) => ({ _type: 'and', conds })),
+  sql: Object.assign(
+    vi.fn((..._args) => ({ _type: 'sql' })),
+    { raw: vi.fn() },
+  ),
 }));
 
 vi.mock('@/models/Schema', () => ({
@@ -25,6 +30,16 @@ vi.mock('@/models/Schema', () => ({
   paymentMethodSchema: {},
   transactionSchema: {},
   memberMembershipSchema: { id: 'id' },
+  couponSchema: {
+    id: 'id',
+    perUserLimit: 'per_user_limit',
+    usageCount: 'usage_count',
+  },
+  couponUsageSchema: {
+    couponId: 'coupon_id',
+    memberId: 'member_id',
+    transactionId: 'transaction_id',
+  },
 }));
 
 vi.mock('@/libs/IQPro', () => ({
