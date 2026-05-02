@@ -14,9 +14,9 @@ import { client } from '@/libs/Orpc';
 import { FamilyMemberSuccessStep } from './FamilyMemberSuccessStep';
 import { FamilyPaymentStep } from './FamilyPaymentStep';
 import { MemberDetailsStep } from './MemberDetailsStep';
-import { MemberMembershipStep } from './MemberMembershipStep';
 import { MemberPhotoStep } from './MemberPhotoStep';
-import { MemberWaiverStep } from './MemberWaiverStep';
+import { MembershipStep } from './MembershipStep';
+import { WaiverStep } from './WaiverStep';
 
 function computeDiscountedPrice(price: number | undefined, coupon: AppliedCoupon): number | undefined {
   if (price === undefined || price <= 0) {
@@ -467,7 +467,7 @@ export const AddFamilyMembersModal = ({
         )}
 
         {wizard.step === 'subscription' && (
-          <MemberMembershipStep
+          <MembershipStep
             data={wizard.data}
             onUpdate={wizard.updateData}
             onNext={wizard.nextStep}
@@ -478,7 +478,7 @@ export const AddFamilyMembersModal = ({
         )}
 
         {wizard.step === 'waiver' && (
-          <MemberWaiverStep
+          <WaiverStep
             data={wizard.data}
             onUpdate={wizard.updateData}
             onNext={wizard.nextStep}

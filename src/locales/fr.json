@@ -375,7 +375,7 @@
       "cancel_button": "Annuler",
       "next_button": "Suivant"
     },
-    "MemberMembershipStep": {
+    "MembershipStep": {
       "title": "Choisir un plan d'adhésion",
       "subtitle": "Sélectionnez un plan d'adhésion pour ce membre",
       "loading_plans": "Chargement des plans d'adhésion...",
@@ -388,7 +388,7 @@
       "next_button": "Suivant",
       "skip_button": "Passer pour l'instant"
     },
-    "MemberPaymentStep": {
+    "PaymentStep": {
       "pay_amount": "Payer {amount}",
       "payment_description": "Ceci inscrit ce membre pour un abonnement récurrent {plan}. Il sera facturé {amount} tous les {period} à partir de ce jour jusqu'à l'annulation.",
       "card_tab_label": "Carte de débit / crédit",
@@ -486,7 +486,7 @@
       "back_button": "Retour",
       "cancel_button": "Annuler"
     },
-    "MemberPaymentStep_HOHNotice": {
+    "PaymentStep_HOHNotice": {
       "notice": "Remarque : Si des membres de la famille sont ajoutés à votre compte à l'avenir, leurs frais d'adhésion seront débités sur ce mode de paiement à la date de leur inscription, avec une facturation récurrente basée sur leur date d'inscription."
     },
     "MemberSuccessStep": {
@@ -1119,8 +1119,12 @@
     "add_new_waiver_button": "Ajouter une décharge",
     "manage_fields_button": "Gérer les champs de fusion",
     "search_placeholder": "Rechercher des décharges...",
+    "filter_status_label": "Statut",
+    "filter_status_all": "Tous les statuts",
+    "filter_status_active": "Actives",
+    "filter_status_inactive": "Inactives",
     "no_waivers_found": "Aucune décharge trouvée",
-    "no_results_found": "Aucune décharge ne correspond à votre recherche",
+    "no_results_found": "Aucune décharge ne correspond à vos filtres",
     "AddWaiverModal": {
       "title": "Ajouter une décharge",
       "name_label": "Nom de la décharge",
@@ -1284,7 +1288,7 @@
     "content_label": "Contenu de la décharge",
     "close_button": "Fermer"
   },
-  "MemberWaiverStep": {
+  "WaiverStep": {
     "title": "Signer la décharge",
     "subtitle": "Veuillez lire et signer la décharge de responsabilité",
     "loading_waiver": "Chargement de la décharge...",
@@ -1306,7 +1310,8 @@
     "continue_button": "Continuer",
     "signature_required_error": "Veuillez fournir votre signature",
     "name_required_error": "Veuillez entrer votre nom complet",
-    "agreement_required_error": "Vous devez accepter les termes de la décharge"
+    "agreement_required_error": "Vous devez accepter les termes de la décharge",
+    "no_waiver_required_message": "Aucune décharge n'est requise pour le plan d'adhésion sélectionné. Cliquez sur Continuer pour poursuivre."
   },
   "SignatureCanvas": {
     "placeholder": "Signez ici",

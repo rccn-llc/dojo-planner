@@ -1,9 +1,9 @@
 'use client';
 
-import type { AddMemberWizardData } from '@/hooks/useAddMemberWizard';
+import type { WizardStepData } from '@/hooks/useAddMemberWizard';
 import type { WaiverTemplate } from '@/services/WaiversService';
 import { useTranslations } from 'next-intl';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -15,9 +15,9 @@ import { client } from '@/libs/Orpc';
 
 type SignerRelationship = 'self' | 'parent' | 'guardian' | 'legal_guardian';
 
-type MemberWaiverStepProps = {
-  data: AddMemberWizardData;
-  onUpdate: (updates: Partial<AddMemberWizardData>) => void;
+type WaiverStepProps = {
+  data: WizardStepData;
+  onUpdate: (updates: Partial<WizardStepData>) => void;
   onNext: () => void | Promise<void>;
   onBack: () => void;
   onCancel: () => void;
@@ -39,7 +39,7 @@ function calculateAge(dob: Date): number {
   return age;
 }
 
-export function MemberWaiverStep({
+export function WaiverStep({
   data,
   onUpdate,
   onNext,
@@ -47,8 +47,8 @@ export function MemberWaiverStep({
   onCancel,
   isLoading = false,
   memberDateOfBirth,
-}: MemberWaiverStepProps) {
-  const t = useTranslations('MemberWaiverStep');
+}: WaiverStepProps) {
+  const t = useTranslations('WaiverStep');
 
   const [waiver, setWaiver] = useState<WaiverTemplate | null>(null);
   const [resolvedContent, setResolvedContent] = useState<string>('');
@@ -81,7 +81,11 @@ export function MemberWaiverStep({
     return waiver.requiresGuardian && memberAge < waiver.guardianAgeThreshold;
   }, [waiver, memberAge]);
 
-  // Fetch waiver for selected membership plan
+  const onUpdateRef = useRef(onUpdate);
+  useEffect(() => {
+    onUpdateRef.current = onUpdate;
+  });
+
   useEffect(() => {
     const fetchWaiver = async () => {
       if (!data.membershipPlanId) {
@@ -91,27 +95,22 @@ export function MemberWaiverStep({
 
       setIsFetchingWaiver(true);
       try {
-        // Get waivers associated with the selected membership plan
         const result = await client.waivers.getWaiversForMembership({
           membershipPlanId: data.membershipPlanId,
         });
 
-        // Use the first active waiver
         const activeWaivers = result.waivers.filter(w => w.isActive);
         if (activeWaivers.length > 0) {
           const selectedWaiver = activeWaivers[0]!;
           setWaiver(selectedWaiver);
 
-          // Resolve placeholders
           const resolved = await client.waivers.resolvePlaceholders({
             templateId: selectedWaiver.id,
           });
           setResolvedContent(resolved.resolvedContent);
 
-          // Update data with waiver template ID
-          onUpdate({ waiverTemplateId: selectedWaiver.id });
+          onUpdateRef.current({ waiverTemplateId: selectedWaiver.id });
         } else {
-          // No waiver required for this membership
           setWaiver(null);
         }
       } catch (error) {
@@ -123,23 +122,19 @@ export function MemberWaiverStep({
     };
 
     fetchWaiver();
-  }, [data.membershipPlanId, onUpdate]);
+  }, [data.membershipPlanId]);
 
-  // Auto-advance if no waiver is required
-  useEffect(() => {
-    if (!isFetchingWaiver && !waiver) {
-      // Clear any waiver data and proceed to next step
-      onUpdate({
-        waiverTemplateId: null,
-        waiverSignatureDataUrl: undefined,
-        waiverSignedByName: undefined,
-        waiverSignedByRelationship: undefined,
-        waiverGuardianEmail: undefined,
-        waiverSkipped: true,
-      });
-      onNext();
-    }
-  }, [isFetchingWaiver, waiver, onUpdate, onNext]);
+  const handleContinueWithoutWaiver = useCallback(async () => {
+    onUpdate({
+      waiverTemplateId: null,
+      waiverSignatureDataUrl: undefined,
+      waiverSignedByName: undefined,
+      waiverSignedByRelationship: undefined,
+      waiverGuardianEmail: undefined,
+      waiverSkipped: true,
+    });
+    await onNext();
+  }, [onUpdate, onNext]);
 
   const handleSignatureChange = useCallback((dataUrl: string | null) => {
     setSignatureDataUrl(dataUrl);
@@ -203,9 +198,33 @@ export function MemberWaiverStep({
     );
   }
 
-  // If no waiver needed, component auto-advances (see useEffect above)
   if (!waiver) {
-    return null;
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-lg font-semibold">{t('title')}</h2>
+          <p className="text-sm text-muted-foreground">{t('subtitle')}</p>
+        </div>
+
+        <div className="rounded-lg border bg-muted/30 p-6 text-center">
+          <p className="text-sm text-muted-foreground">{t('no_waiver_required_message')}</p>
+        </div>
+
+        <div className="flex justify-between gap-3 pt-6">
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={onBack}>
+              {t('back_button')}
+            </Button>
+            <Button variant="outline" onClick={onCancel}>
+              {t('cancel_button')}
+            </Button>
+          </div>
+          <Button onClick={handleContinueWithoutWaiver} disabled={isLoading}>
+            {isLoading ? `${t('continue_button')}...` : t('continue_button')}
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   return (

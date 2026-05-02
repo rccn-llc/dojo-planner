@@ -1,10 +1,11 @@
 import type { AddMemberWizardData } from '@/hooks/useAddMemberWizard';
+import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { page, userEvent } from 'vitest/browser';
-import { MemberWaiverStep } from './MemberWaiverStep';
+import { WaiverStep } from './WaiverStep';
 
-// Translation keys for MemberWaiverStep
+// Translation keys for WaiverStep
 const translationKeys: Record<string, string> = {
   title: 'Sign Waiver',
   subtitle: 'Please review and sign the liability waiver',
@@ -28,6 +29,7 @@ const translationKeys: Record<string, string> = {
   signature_required_error: 'Please provide your signature',
   name_required_error: 'Please enter your full name',
   agreement_required_error: 'You must agree to the waiver terms',
+  no_waiver_required_message: 'No waiver is required for the selected membership plan. Click Continue to proceed.',
 };
 
 // Translation keys for SignatureCanvas
@@ -112,7 +114,7 @@ const mockWaiver = {
 
 const resolvedContent = 'I, the undersigned, acknowledge the risks associated with martial arts training at Iron Fist Dojo.';
 
-describe('MemberWaiverStep', () => {
+describe('WaiverStep', () => {
   const mockData: AddMemberWizardData = {
     memberType: 'individual',
     firstName: 'John',
@@ -147,7 +149,7 @@ describe('MemberWaiverStep', () => {
       );
 
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -160,12 +162,12 @@ describe('MemberWaiverStep', () => {
     });
   });
 
-  describe('Auto-Advance When No Waiver', () => {
-    it('should call onNext and onUpdate to skip when no active waivers exist', async () => {
+  describe('No Waiver Required Panel', () => {
+    it('should render the no-waiver panel with Back and Continue buttons when no active waivers exist', async () => {
       mockGetWaiversForMembership.mockResolvedValue({ waivers: [] });
 
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -174,29 +176,24 @@ describe('MemberWaiverStep', () => {
         />,
       );
 
-      // Wait for the auto-advance to happen
-      await vi.waitFor(() => {
-        expect(mockHandlers.onUpdate).toHaveBeenCalledWith(
-          expect.objectContaining({
-            waiverTemplateId: null,
-            waiverSkipped: true,
-          }),
-        );
-      });
+      await expect.element(
+        page.getByText('No waiver is required for the selected membership plan. Click Continue to proceed.'),
+      ).toBeInTheDocument();
+      expect(page.getByRole('button', { name: 'Back' })).toBeTruthy();
+      expect(page.getByRole('button', { name: 'Continue' })).toBeTruthy();
 
-      await vi.waitFor(() => {
-        expect(mockHandlers.onNext).toHaveBeenCalled();
-      });
+      // It should NOT auto-advance
+      expect(mockHandlers.onNext).not.toHaveBeenCalled();
     });
 
-    it('should auto-advance when no membership plan is selected', async () => {
+    it('should render the no-waiver panel when no membership plan is selected', async () => {
       const dataWithoutPlan: AddMemberWizardData = {
         ...mockData,
         membershipPlanId: null,
       };
 
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={dataWithoutPlan}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -205,18 +202,19 @@ describe('MemberWaiverStep', () => {
         />,
       );
 
-      await vi.waitFor(() => {
-        expect(mockHandlers.onNext).toHaveBeenCalled();
-      });
+      await expect.element(
+        page.getByText('No waiver is required for the selected membership plan. Click Continue to proceed.'),
+      ).toBeInTheDocument();
+      expect(mockHandlers.onNext).not.toHaveBeenCalled();
     });
 
-    it('should auto-advance when waiver fetch returns only inactive waivers', async () => {
+    it('should render the no-waiver panel when waiver fetch returns only inactive waivers', async () => {
       mockGetWaiversForMembership.mockResolvedValue({
         waivers: [{ ...mockWaiver, isActive: false }],
       });
 
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -224,6 +222,32 @@ describe('MemberWaiverStep', () => {
           onCancel={mockHandlers.onCancel}
         />,
       );
+
+      await expect.element(
+        page.getByText('No waiver is required for the selected membership plan. Click Continue to proceed.'),
+      ).toBeInTheDocument();
+      expect(mockHandlers.onNext).not.toHaveBeenCalled();
+    });
+
+    it('should call onUpdate({waiverSkipped: true}) and onNext when Continue is clicked from no-waiver panel', async () => {
+      mockGetWaiversForMembership.mockResolvedValue({ waivers: [] });
+
+      render(
+        <WaiverStep
+          data={mockData}
+          onUpdate={mockHandlers.onUpdate}
+          onNext={mockHandlers.onNext}
+          onBack={mockHandlers.onBack}
+          onCancel={mockHandlers.onCancel}
+        />,
+      );
+
+      await expect.element(
+        page.getByText('No waiver is required for the selected membership plan. Click Continue to proceed.'),
+      ).toBeInTheDocument();
+
+      const continueButton = page.getByRole('button', { name: 'Continue' });
+      await userEvent.click(continueButton);
 
       await vi.waitFor(() => {
         expect(mockHandlers.onUpdate).toHaveBeenCalledWith(
@@ -233,13 +257,38 @@ describe('MemberWaiverStep', () => {
           }),
         );
       });
+
+      expect(mockHandlers.onNext).toHaveBeenCalled();
+    });
+
+    it('should call onBack when Back is clicked from no-waiver panel', async () => {
+      mockGetWaiversForMembership.mockResolvedValue({ waivers: [] });
+
+      render(
+        <WaiverStep
+          data={mockData}
+          onUpdate={mockHandlers.onUpdate}
+          onNext={mockHandlers.onNext}
+          onBack={mockHandlers.onBack}
+          onCancel={mockHandlers.onCancel}
+        />,
+      );
+
+      await expect.element(
+        page.getByText('No waiver is required for the selected membership plan. Click Continue to proceed.'),
+      ).toBeInTheDocument();
+
+      const backButton = page.getByRole('button', { name: 'Back' });
+      await userEvent.click(backButton);
+
+      expect(mockHandlers.onBack).toHaveBeenCalled();
     });
   });
 
   describe('Rendering With Waiver', () => {
     it('should render the waiver step title and subtitle', async () => {
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -254,7 +303,7 @@ describe('MemberWaiverStep', () => {
 
     it('should display the resolved waiver content', async () => {
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -268,7 +317,7 @@ describe('MemberWaiverStep', () => {
 
     it('should render the signer name input', async () => {
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -283,7 +332,7 @@ describe('MemberWaiverStep', () => {
 
     it('should render the signature canvas', async () => {
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -298,7 +347,7 @@ describe('MemberWaiverStep', () => {
 
     it('should render the agreement checkbox', async () => {
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -312,7 +361,7 @@ describe('MemberWaiverStep', () => {
 
     it('should render Back, Cancel, and Continue buttons', async () => {
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -330,7 +379,7 @@ describe('MemberWaiverStep', () => {
 
     it('should update waiver template ID when waiver is loaded', async () => {
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -354,7 +403,7 @@ describe('MemberWaiverStep', () => {
       minorDob.setFullYear(minorDob.getFullYear() - 14);
 
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -375,7 +424,7 @@ describe('MemberWaiverStep', () => {
       minorDob.setFullYear(minorDob.getFullYear() - 14);
 
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -395,7 +444,7 @@ describe('MemberWaiverStep', () => {
       adultDob.setFullYear(adultDob.getFullYear() - 25);
 
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -414,7 +463,7 @@ describe('MemberWaiverStep', () => {
 
     it('should not show guardian section when date of birth is not provided', async () => {
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -435,7 +484,7 @@ describe('MemberWaiverStep', () => {
       minorDob.setFullYear(minorDob.getFullYear() - 14);
 
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -452,7 +501,7 @@ describe('MemberWaiverStep', () => {
   describe('Signer Name Input', () => {
     it('should allow entering a signer name', async () => {
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -476,7 +525,7 @@ describe('MemberWaiverStep', () => {
       };
 
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={dataWithSignerName}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -496,7 +545,7 @@ describe('MemberWaiverStep', () => {
   describe('Validation', () => {
     it('should show signature error when submitting without signature', async () => {
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -520,7 +569,7 @@ describe('MemberWaiverStep', () => {
 
     it('should show name error when submitting without signer name', async () => {
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -540,7 +589,7 @@ describe('MemberWaiverStep', () => {
 
     it('should show agreement error when checkbox is not checked', async () => {
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -560,7 +609,7 @@ describe('MemberWaiverStep', () => {
 
     it('should clear name error when user starts typing', async () => {
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -588,7 +637,7 @@ describe('MemberWaiverStep', () => {
 
     it('should not call onNext when validation fails', async () => {
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -614,7 +663,7 @@ describe('MemberWaiverStep', () => {
   describe('Successful Submission', () => {
     it('should call onUpdate and onNext with correct data when all fields are valid', async () => {
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -660,7 +709,7 @@ describe('MemberWaiverStep', () => {
   describe('Navigation', () => {
     it('should call onBack when Back button is clicked', async () => {
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -679,7 +728,7 @@ describe('MemberWaiverStep', () => {
 
     it('should call onCancel when Cancel button is clicked', async () => {
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -700,7 +749,7 @@ describe('MemberWaiverStep', () => {
   describe('Loading State in Button', () => {
     it('should show loading indicator in Continue button when isLoading is true', async () => {
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -717,7 +766,7 @@ describe('MemberWaiverStep', () => {
 
     it('should disable Continue button when isLoading is true', async () => {
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -736,11 +785,11 @@ describe('MemberWaiverStep', () => {
   });
 
   describe('Error Handling', () => {
-    it('should auto-advance when waiver fetch fails', async () => {
+    it('should render the no-waiver panel when waiver fetch fails', async () => {
       mockGetWaiversForMembership.mockRejectedValue(new Error('Network error'));
 
       render(
-        <MemberWaiverStep
+        <WaiverStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
           onNext={mockHandlers.onNext}
@@ -749,10 +798,50 @@ describe('MemberWaiverStep', () => {
         />,
       );
 
-      // When fetch fails, waiver is set to null, so auto-advance should trigger
-      await vi.waitFor(() => {
-        expect(mockHandlers.onNext).toHaveBeenCalled();
-      });
+      await expect.element(
+        page.getByText('No waiver is required for the selected membership plan. Click Continue to proceed.'),
+      ).toBeInTheDocument();
+      expect(mockHandlers.onNext).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Fetch Effect Stability', () => {
+    it('should fetch the waiver only once even when onUpdate reference changes between renders', async () => {
+      // Parent that triggers re-renders by clicking a button. Each render
+      // creates a fresh `onUpdate` arrow function — pre-fix, this caused the
+      // fetch effect to re-run infinitely (#143). After the onUpdateRef fix,
+      // the effect only depends on data.membershipPlanId.
+      function Parent() {
+        const [, setTick] = useState(0);
+        return (
+          <div>
+            <button type="button" data-testid="rerender" onClick={() => setTick(t => t + 1)}>
+              Rerender
+            </button>
+            <WaiverStep
+              data={mockData}
+              onUpdate={(...args) => mockHandlers.onUpdate(...args)}
+              onNext={mockHandlers.onNext}
+              onBack={mockHandlers.onBack}
+              onCancel={mockHandlers.onCancel}
+            />
+          </div>
+        );
+      }
+
+      render(<Parent />);
+
+      await expect.element(page.getByText('Sign Waiver')).toBeInTheDocument();
+
+      const rerenderBtn = page.getByTestId('rerender');
+      await userEvent.click(rerenderBtn);
+      await userEvent.click(rerenderBtn);
+      await userEvent.click(rerenderBtn);
+
+      // Give effects time to flush
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      expect(mockGetWaiversForMembership).toHaveBeenCalledTimes(1);
     });
   });
 });

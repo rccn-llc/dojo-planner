@@ -3,7 +3,7 @@ import type { AddMemberWizardData } from '@/hooks/useAddMemberWizard';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { page, userEvent } from 'vitest/browser';
-import { MemberPaymentStep } from './MemberPaymentStep';
+import { PaymentStep } from './PaymentStep';
 
 // Mock next-intl
 const translationKeys: Record<string, string> = {
@@ -185,10 +185,10 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe('MemberPaymentStep', () => {
+describe('PaymentStep', () => {
   it('renders payment amount for monthly plan', () => {
     render(
-      <MemberPaymentStep {...defaultProps} />,
+      <PaymentStep {...defaultProps} />,
     );
 
     expect(page.getByText(/Pay \$160/)).toBeTruthy();
@@ -196,7 +196,7 @@ describe('MemberPaymentStep', () => {
 
   it('renders payment description with correct plan type', () => {
     render(
-      <MemberPaymentStep {...defaultProps} />,
+      <PaymentStep {...defaultProps} />,
     );
 
     const description = page.getByText(/monthly recurring membership/);
@@ -214,7 +214,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...annualProps} />,
+      <PaymentStep {...annualProps} />,
     );
 
     expect(page.getByText(/Pay \$1600/)).toBeTruthy();
@@ -222,7 +222,7 @@ describe('MemberPaymentStep', () => {
 
   it('shows credit card tab as selected by default', () => {
     render(
-      <MemberPaymentStep {...defaultProps} />,
+      <PaymentStep {...defaultProps} />,
     );
 
     const cardButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent?.includes('Debit / Credit Card')) as HTMLButtonElement;
@@ -233,7 +233,7 @@ describe('MemberPaymentStep', () => {
   it('switches to ACH tab when clicked', async () => {
     const onUpdateAction = vi.fn();
     render(
-      <MemberPaymentStep
+      <PaymentStep
         {...defaultProps}
         onUpdateAction={onUpdateAction}
       />,
@@ -253,7 +253,7 @@ describe('MemberPaymentStep', () => {
 
   it('renders card form fields when card tab is selected', () => {
     render(
-      <MemberPaymentStep {...defaultProps} />,
+      <PaymentStep {...defaultProps} />,
     );
 
     expect(page.getByLabelText(/Name on card/)).toBeTruthy();
@@ -272,7 +272,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...achProps} />,
+      <PaymentStep {...achProps} />,
     );
 
     expect(page.getByLabelText(/Account holder name/)).toBeTruthy();
@@ -283,7 +283,7 @@ describe('MemberPaymentStep', () => {
 
   it('disables Next button when card form is incomplete', () => {
     render(
-      <MemberPaymentStep {...defaultProps} />,
+      <PaymentStep {...defaultProps} />,
     );
 
     const nextButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent === 'Next') as HTMLButtonElement;
@@ -302,7 +302,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...achProps} />,
+      <PaymentStep {...achProps} />,
     );
 
     const nextButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent === 'Next') as HTMLButtonElement;
@@ -323,7 +323,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...completedProps} />,
+      <PaymentStep {...completedProps} />,
     );
 
     const nextButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent === 'Next') as HTMLButtonElement;
@@ -344,7 +344,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...completedProps} />,
+      <PaymentStep {...completedProps} />,
     );
 
     const nextButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent === 'Next') as HTMLButtonElement;
@@ -355,7 +355,7 @@ describe('MemberPaymentStep', () => {
   it('calls onUpdateAction when card field changes', async () => {
     const onUpdateAction = vi.fn();
     render(
-      <MemberPaymentStep
+      <PaymentStep
         {...defaultProps}
         onUpdateAction={onUpdateAction}
       />,
@@ -381,7 +381,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...achProps} />,
+      <PaymentStep {...achProps} />,
     );
 
     const accountHolderInput = document.querySelector('input#achAccountHolder') as HTMLInputElement;
@@ -407,7 +407,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...completedProps} />,
+      <PaymentStep {...completedProps} />,
     );
 
     const nextButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent === 'Next');
@@ -434,7 +434,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...declinedProps} />,
+      <PaymentStep {...declinedProps} />,
     );
 
     expect(page.getByText('Payment Declined')).toBeTruthy();
@@ -458,7 +458,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...declinedProps} />,
+      <PaymentStep {...declinedProps} />,
     );
 
     const button = page.getByText('Add Member Anyway');
@@ -474,7 +474,7 @@ describe('MemberPaymentStep', () => {
 
   it('shows "Next" button when payment status is not declined', () => {
     render(
-      <MemberPaymentStep {...defaultProps} />,
+      <PaymentStep {...defaultProps} />,
     );
 
     const button = page.getByText('Next');
@@ -497,7 +497,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...approvedProps} />,
+      <PaymentStep {...approvedProps} />,
     );
 
     expect(page.getByText('Payment Approved')).toBeTruthy();
@@ -507,7 +507,7 @@ describe('MemberPaymentStep', () => {
   it('calls onBackAction when back button is clicked', async () => {
     const onBackAction = vi.fn();
     render(
-      <MemberPaymentStep
+      <PaymentStep
         {...defaultProps}
         onBackAction={onBackAction}
       />,
@@ -524,7 +524,7 @@ describe('MemberPaymentStep', () => {
   it('calls onCancelAction when cancel button is clicked', async () => {
     const onCancelAction = vi.fn();
     render(
-      <MemberPaymentStep
+      <PaymentStep
         {...defaultProps}
         onCancelAction={onCancelAction}
       />,
@@ -552,7 +552,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...loadingProps} />,
+      <PaymentStep {...loadingProps} />,
     );
 
     const nextButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent?.includes('Processing...')) as HTMLButtonElement;
@@ -574,7 +574,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...populatedProps} />,
+      <PaymentStep {...populatedProps} />,
     );
 
     const nameInput = document.querySelector('input#cardholderName') as HTMLInputElement;
@@ -601,7 +601,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...populatedProps} />,
+      <PaymentStep {...populatedProps} />,
     );
 
     const accountHolderInput = document.querySelector('input#achAccountHolder') as HTMLInputElement;
@@ -625,7 +625,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...invalidCvcProps} />,
+      <PaymentStep {...invalidCvcProps} />,
     );
 
     expect(page.getByText(/CVC\/CVV code is incorrect/)).toBeTruthy();
@@ -643,7 +643,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...expiredProps} />,
+      <PaymentStep {...expiredProps} />,
     );
 
     expect(page.getByText(/card has expired/)).toBeTruthy();
@@ -661,7 +661,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...declinedProps} />,
+      <PaymentStep {...declinedProps} />,
     );
 
     expect(page.getByText(/card was declined/)).toBeTruthy();
@@ -680,7 +680,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...achFailedProps} />,
+      <PaymentStep {...achFailedProps} />,
     );
 
     expect(page.getByText(/ACH transaction failed/)).toBeTruthy();
@@ -698,7 +698,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...genericDeclineProps} />,
+      <PaymentStep {...genericDeclineProps} />,
     );
 
     expect(page.getByText(/payment could not be processed/)).toBeTruthy();
@@ -714,7 +714,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...freeTrialProps} />,
+      <PaymentStep {...freeTrialProps} />,
     );
 
     expect(page.getByText(/Pay \$0/)).toBeTruthy();
@@ -730,7 +730,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...noSubProps} />,
+      <PaymentStep {...noSubProps} />,
     );
 
     expect(page.getByText(/Pay \$0/)).toBeTruthy();
@@ -746,7 +746,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...processingProps} />,
+      <PaymentStep {...processingProps} />,
     );
 
     expect(page.getByText(/Processing payment, please wait/)).toBeTruthy();
@@ -754,7 +754,7 @@ describe('MemberPaymentStep', () => {
 
   it('shows validation error for cardholder name after blur', async () => {
     render(
-      <MemberPaymentStep {...defaultProps} />,
+      <PaymentStep {...defaultProps} />,
     );
 
     const nameInput = document.querySelector('input#cardholderName') as HTMLInputElement;
@@ -783,7 +783,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...achProps} />,
+      <PaymentStep {...achProps} />,
     );
 
     const cardButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent?.includes('Debit / Credit Card')) as HTMLButtonElement;
@@ -800,7 +800,7 @@ describe('MemberPaymentStep', () => {
   it('updates card number field', async () => {
     const onUpdateAction = vi.fn();
     render(
-      <MemberPaymentStep
+      <PaymentStep
         {...defaultProps}
         onUpdateAction={onUpdateAction}
       />,
@@ -817,7 +817,7 @@ describe('MemberPaymentStep', () => {
   it('updates card expiry field', async () => {
     const onUpdateAction = vi.fn();
     render(
-      <MemberPaymentStep
+      <PaymentStep
         {...defaultProps}
         onUpdateAction={onUpdateAction}
       />,
@@ -834,7 +834,7 @@ describe('MemberPaymentStep', () => {
   it('updates card CVC field', async () => {
     const onUpdateAction = vi.fn();
     render(
-      <MemberPaymentStep
+      <PaymentStep
         {...defaultProps}
         onUpdateAction={onUpdateAction}
       />,
@@ -860,7 +860,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...achProps} />,
+      <PaymentStep {...achProps} />,
     );
 
     const routingInput = document.querySelector('input#achRoutingNumber') as HTMLInputElement;
@@ -883,7 +883,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...achProps} />,
+      <PaymentStep {...achProps} />,
     );
 
     const accountInput = document.querySelector('input#achAccountNumber') as HTMLInputElement;
@@ -904,7 +904,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...annualProps} />,
+      <PaymentStep {...annualProps} />,
     );
 
     expect(page.getByText(/annual recurring membership/)).toBeTruthy();
@@ -924,7 +924,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...loadingProps} />,
+      <PaymentStep {...loadingProps} />,
     );
 
     const nameInput = document.querySelector('input#cardholderName') as HTMLInputElement;
@@ -939,7 +939,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...loadingProps} />,
+      <PaymentStep {...loadingProps} />,
     );
 
     const achButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent?.includes('ACH Bank Account')) as HTMLButtonElement;
@@ -957,7 +957,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...achProps} />,
+      <PaymentStep {...achProps} />,
     );
 
     const accountHolderInput = document.querySelector('input#achAccountHolder') as HTMLInputElement;
@@ -979,7 +979,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...achProps} />,
+      <PaymentStep {...achProps} />,
     );
 
     const routingInput = document.querySelector('input#achRoutingNumber') as HTMLInputElement;
@@ -1001,7 +1001,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...achProps} />,
+      <PaymentStep {...achProps} />,
     );
 
     const accountInput = document.querySelector('input#achAccountNumber') as HTMLInputElement;
@@ -1025,7 +1025,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...priceProps} />,
+      <PaymentStep {...priceProps} />,
     );
 
     expect(page.getByText(/Pay \$149\.99/)).toBeTruthy();
@@ -1043,7 +1043,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...annualPriceProps} />,
+      <PaymentStep {...annualPriceProps} />,
     );
 
     expect(page.getByText(/year/)).toBeTruthy();
@@ -1061,7 +1061,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...yearlyPriceProps} />,
+      <PaymentStep {...yearlyPriceProps} />,
     );
 
     expect(page.getByText(/year/)).toBeTruthy();
@@ -1079,7 +1079,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...noneFrequencyProps} />,
+      <PaymentStep {...noneFrequencyProps} />,
     );
 
     // The plan description should show without a period text
@@ -1104,7 +1104,7 @@ describe('MemberPaymentStep', () => {
     };
 
     render(
-      <MemberPaymentStep {...declinedProps} />,
+      <PaymentStep {...declinedProps} />,
     );
 
     // Change card number to trigger reset
@@ -1136,7 +1136,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...propsWithCoupons} />,
+        <PaymentStep {...propsWithCoupons} />,
       );
 
       expect(page.getByText(/Apply Coupon/)).toBeTruthy();
@@ -1154,7 +1154,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...propsWithoutCoupons} />,
+        <PaymentStep {...propsWithoutCoupons} />,
       );
 
       // Should not find the coupon label
@@ -1175,7 +1175,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...propsWithZeroPrice} />,
+        <PaymentStep {...propsWithZeroPrice} />,
       );
 
       // Should not find the coupon label since price is 0
@@ -1196,7 +1196,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...propsWithCoupons} />,
+        <PaymentStep {...propsWithCoupons} />,
       );
 
       const select = document.querySelector('#couponSelect');
@@ -1223,7 +1223,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...propsWithAppliedCoupon} />,
+        <PaymentStep {...propsWithAppliedCoupon} />,
       );
 
       // Should show coupon applied alert
@@ -1250,7 +1250,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...propsWithAppliedCoupon} />,
+        <PaymentStep {...propsWithAppliedCoupon} />,
       );
 
       // Should show the original price crossed out ($160)
@@ -1279,7 +1279,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...propsWithPercentageCoupon} />,
+        <PaymentStep {...propsWithPercentageCoupon} />,
       );
 
       // 15% of $200 = $30 off, so final price = $170
@@ -1307,7 +1307,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...propsWithFixedCoupon} />,
+        <PaymentStep {...propsWithFixedCoupon} />,
       );
 
       // $50 off from $200 = $150
@@ -1335,7 +1335,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...propsWithFreeTrialCoupon} />,
+        <PaymentStep {...propsWithFreeTrialCoupon} />,
       );
 
       // Free trial makes payment $0
@@ -1358,7 +1358,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...propsWithCoupons} />,
+        <PaymentStep {...propsWithCoupons} />,
       );
 
       // Click on the select trigger to open dropdown
@@ -1383,7 +1383,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...propsWithoutCoupon} />,
+        <PaymentStep {...propsWithoutCoupon} />,
       );
 
       const couponAppliedText = Array.from(document.querySelectorAll('*')).find(el => el.textContent?.includes('Coupon Applied:'));
@@ -1404,7 +1404,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...propsWithCoupons} />,
+        <PaymentStep {...propsWithCoupons} />,
       );
 
       const selectTrigger = document.querySelector('#couponSelect');
@@ -1432,7 +1432,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...propsWithAppliedCoupon} />,
+        <PaymentStep {...propsWithAppliedCoupon} />,
       );
 
       // Coupon should still be applied
@@ -1461,7 +1461,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...propsWithLargeCoupon} />,
+        <PaymentStep {...propsWithLargeCoupon} />,
       );
 
       // Discount should be capped at the price, so final = $0
@@ -1486,7 +1486,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...propsWithMonthlyMembership} />,
+        <PaymentStep {...propsWithMonthlyMembership} />,
       );
 
       expect(page.getByText('Payment Schedule')).toBeTruthy();
@@ -1507,7 +1507,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...propsWithAnnualMembership} />,
+        <PaymentStep {...propsWithAnnualMembership} />,
       );
 
       expect(page.getByText('Payment Schedule')).toBeTruthy();
@@ -1528,7 +1528,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...propsWithTrialMembership} />,
+        <PaymentStep {...propsWithTrialMembership} />,
       );
 
       // Should not find the billing type label
@@ -1550,7 +1550,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...propsWithOneTimeMembership} />,
+        <PaymentStep {...propsWithOneTimeMembership} />,
       );
 
       // Should not find the billing type label
@@ -1572,7 +1572,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...propsWithZeroPrice} />,
+        <PaymentStep {...propsWithZeroPrice} />,
       );
 
       // Should not find the billing type label
@@ -1595,7 +1595,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...propsWithMonthlyMembership} />,
+        <PaymentStep {...propsWithMonthlyMembership} />,
       );
 
       // Find the autopay button and check it has the selected class
@@ -1619,7 +1619,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...propsWithMonthlyMembership} />,
+        <PaymentStep {...propsWithMonthlyMembership} />,
       );
 
       const oneTimeButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent?.includes('One-Time'));
@@ -1651,7 +1651,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...propsWithOneTimeBilling} />,
+        <PaymentStep {...propsWithOneTimeBilling} />,
       );
 
       const autopayButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent?.includes('Autopay'));
@@ -1681,7 +1681,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...propsWithAutopay} />,
+        <PaymentStep {...propsWithAutopay} />,
       );
 
       expect(page.getByText(/automatically every month/i)).toBeTruthy();
@@ -1701,7 +1701,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...propsWithOneTime} />,
+        <PaymentStep {...propsWithOneTime} />,
       );
 
       // Should not find the autopay note
@@ -1728,7 +1728,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...propsWithOneTime} />,
+        <PaymentStep {...propsWithOneTime} />,
       );
 
       // Find one-time button and verify it's selected
@@ -1751,7 +1751,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...loadingProps} />,
+        <PaymentStep {...loadingProps} />,
       );
 
       const oneTimeButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent?.includes('One-Time')) as HTMLButtonElement;
@@ -1772,7 +1772,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...propsWithMonthlyMembership} />,
+        <PaymentStep {...propsWithMonthlyMembership} />,
       );
 
       expect(page.getByText(/every month/)).toBeTruthy();
@@ -1791,7 +1791,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...propsWithAnnualMembership} />,
+        <PaymentStep {...propsWithAnnualMembership} />,
       );
 
       expect(page.getByText(/every year/)).toBeTruthy();
@@ -1815,7 +1815,7 @@ describe('MemberPaymentStep', () => {
       mockIframeReturn.isCvvValid = false;
 
       render(
-        <MemberPaymentStep
+        <PaymentStep
           {...defaultProps}
           tokenizationConfig={tokenizationConfig}
         />,
@@ -1834,7 +1834,7 @@ describe('MemberPaymentStep', () => {
       mockIframeReturn.isCvvValid = false;
 
       render(
-        <MemberPaymentStep
+        <PaymentStep
           {...defaultProps}
           tokenizationConfig={tokenizationConfig}
         />,
@@ -1851,7 +1851,7 @@ describe('MemberPaymentStep', () => {
       mockIframeReturn.isLoaded = true;
 
       render(
-        <MemberPaymentStep
+        <PaymentStep
           {...defaultProps}
           tokenizationConfig={tokenizationConfig}
         />,
@@ -1868,7 +1868,7 @@ describe('MemberPaymentStep', () => {
       mockIframeReturn.isLoaded = true;
 
       render(
-        <MemberPaymentStep
+        <PaymentStep
           {...defaultProps}
           tokenizationConfig={tokenizationConfig}
         />,
@@ -1886,7 +1886,7 @@ describe('MemberPaymentStep', () => {
       mockIframeReturn.error = null;
 
       render(
-        <MemberPaymentStep
+        <PaymentStep
           {...defaultProps}
           tokenizationConfig={tokenizationConfig}
         />,
@@ -1906,7 +1906,7 @@ describe('MemberPaymentStep', () => {
       mockIframeReturn.error = null;
 
       render(
-        <MemberPaymentStep
+        <PaymentStep
           {...defaultProps}
           tokenizationConfig={tokenizationConfig}
         />,
@@ -1939,7 +1939,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...completedProps} />,
+        <PaymentStep {...completedProps} />,
       );
 
       const nextButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent === 'Next') as HTMLButtonElement;
@@ -1967,7 +1967,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...completedProps} />,
+        <PaymentStep {...completedProps} />,
       );
 
       const nextButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent === 'Next') as HTMLButtonElement;
@@ -1994,7 +1994,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...completedProps} />,
+        <PaymentStep {...completedProps} />,
       );
 
       const nextButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent === 'Next') as HTMLButtonElement;
@@ -2009,7 +2009,7 @@ describe('MemberPaymentStep', () => {
       mockIframeReturn.isLoaded = true;
 
       render(
-        <MemberPaymentStep
+        <PaymentStep
           {...defaultProps}
           tokenizationConfig={tokenizationConfig}
         />,
@@ -2035,7 +2035,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...achProps} />,
+        <PaymentStep {...achProps} />,
       );
 
       // ACH fields should still be regular inputs
@@ -2053,7 +2053,7 @@ describe('MemberPaymentStep', () => {
       mockIframeReturn.error = null;
 
       render(
-        <MemberPaymentStep
+        <PaymentStep
           {...defaultProps}
           tokenizationConfig={tokenizationConfig}
         />,
@@ -2067,7 +2067,7 @@ describe('MemberPaymentStep', () => {
       mockIframeReturn.error = 'Script failed to load';
 
       render(
-        <MemberPaymentStep
+        <PaymentStep
           {...defaultProps}
           tokenizationConfig={tokenizationConfig}
         />,
@@ -2099,7 +2099,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...completedProps} />,
+        <PaymentStep {...completedProps} />,
       );
 
       const nextButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent === 'Next');
@@ -2141,7 +2141,7 @@ describe('MemberPaymentStep', () => {
       };
 
       render(
-        <MemberPaymentStep {...completedProps} />,
+        <PaymentStep {...completedProps} />,
       );
 
       const nextButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent === 'Next');

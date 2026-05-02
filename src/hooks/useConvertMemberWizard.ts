@@ -1,15 +1,15 @@
-import type { AppliedCoupon, BillingType, MemberType, PaymentDeclineReason, PaymentMethod, PaymentStatus, SignerRelationship } from './useAddMemberWizard';
+import type { MemberType, WizardStepData } from './useAddMemberWizard';
 import { useState } from 'react';
 
 export type ConversionType = 'hoh-to-individual' | 'individual-to-hoh' | 'family-to-individual';
 
 export type ConvertWizardStep = 'confirm' | 'subscription' | 'waiver' | 'payment' | 'success';
 
-export type ConvertMemberWizardData = {
+export type ConvertMemberWizardData = WizardStepData & {
   // Source member info (pre-populated)
   memberId: string;
-  memberName: string;
-  memberEmail: string;
+  memberName: string; // full name kept for the convert-confirm UI
+  memberEmail: string; // canonical email kept for the convert-confirm UI
   currentMemberType: MemberType;
   memberDateOfBirth?: Date;
 
@@ -25,48 +25,6 @@ export type ConvertMemberWizardData = {
   hasMembership: boolean;
   // Whether the member currently has a valid payment method
   hasPaymentMethod: boolean;
-
-  // Membership selection (when member needs a new membership)
-  membershipPlanId: string | null;
-  membershipPlanPrice?: number;
-  membershipPlanFrequency?: string;
-  membershipPlanName?: string;
-  membershipPlanIsTrial?: boolean;
-  membershipPlanContractLength?: string;
-  membershipPlanSignupFee?: number;
-
-  // Waiver
-  waiverTemplateId: string | null;
-  waiverSignatureDataUrl?: string;
-  waiverSignedByName?: string;
-  waiverSignedByRelationship?: SignerRelationship;
-  waiverGuardianEmail?: string;
-  waiverSignedAt?: Date;
-  waiverSkipped?: boolean;
-  waiverRenderedContent?: string;
-
-  // Payment
-  paymentMethod?: PaymentMethod;
-  billingType?: BillingType;
-  cardholderName?: string;
-  cardNumber?: string;
-  cardToken?: string;
-  cardFirstSix?: string;
-  cardLastFour?: string;
-  cardExpiry?: string;
-  cardCvc?: string;
-  achAccountHolder?: string;
-  achRoutingNumber?: string;
-  achAccountNumber?: string;
-  achAccountType?: 'Checking' | 'Savings';
-
-  // Coupon
-  appliedCoupon?: AppliedCoupon | null;
-
-  // Payment processing state
-  paymentStatus?: PaymentStatus;
-  paymentDeclineReason?: PaymentDeclineReason;
-  paymentProcessed?: boolean;
 };
 
 export function getStepsForConversion(
@@ -109,9 +67,24 @@ type ConvertMemberWizardInit = {
   currentHOHName?: string;
 };
 
-export const useConvertMemberWizard = (init: ConvertMemberWizardInit) => {
-  const [step, setStep] = useState<ConvertWizardStep>('confirm');
-  const [data, setData] = useState<ConvertMemberWizardData>({
+// Split full name into first/last so the shared step components (which expect
+// discrete `firstName` / `lastName` from `WizardStepData`) work without an
+// adapter. Single-word names produce an empty `lastName`.
+function splitFullName(fullName: string): { firstName: string; lastName: string } {
+  const trimmed = fullName.trim();
+  const spaceIdx = trimmed.indexOf(' ');
+  if (spaceIdx === -1) {
+    return { firstName: trimmed, lastName: '' };
+  }
+  return {
+    firstName: trimmed.slice(0, spaceIdx),
+    lastName: trimmed.slice(spaceIdx + 1).trim(),
+  };
+}
+
+function createInitialData(init: ConvertMemberWizardInit): ConvertMemberWizardData {
+  const { firstName, lastName } = splitFullName(init.memberName);
+  return {
     memberId: init.memberId,
     memberName: init.memberName,
     memberEmail: init.memberEmail,
@@ -123,9 +96,19 @@ export const useConvertMemberWizard = (init: ConvertMemberWizardInit) => {
     hasPaymentMethod: init.hasPaymentMethod,
     currentHOHId: init.currentHOHId,
     currentHOHName: init.currentHOHName,
+    // WizardStepData fields:
+    firstName,
+    lastName,
+    email: init.memberEmail,
+    dateOfBirth: init.memberDateOfBirth,
     membershipPlanId: null,
     waiverTemplateId: null,
-  });
+  };
+}
+
+export const useConvertMemberWizard = (init: ConvertMemberWizardInit) => {
+  const [step, setStep] = useState<ConvertWizardStep>('confirm');
+  const [data, setData] = useState<ConvertMemberWizardData>(() => createInitialData(init));
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -170,21 +153,7 @@ export const useConvertMemberWizard = (init: ConvertMemberWizardInit) => {
 
   const reset = () => {
     setStep('confirm');
-    setData({
-      memberId: init.memberId,
-      memberName: init.memberName,
-      memberEmail: init.memberEmail,
-      currentMemberType: init.currentMemberType,
-      memberDateOfBirth: init.memberDateOfBirth,
-      conversionType: init.conversionType,
-      targetMemberType: init.targetMemberType,
-      hasMembership: init.hasMembership,
-      hasPaymentMethod: init.hasPaymentMethod,
-      currentHOHId: init.currentHOHId,
-      currentHOHName: init.currentHOHName,
-      membershipPlanId: null,
-      waiverTemplateId: null,
-    });
+    setData(createInitialData(init));
     setError(null);
     setIsLoading(false);
   };

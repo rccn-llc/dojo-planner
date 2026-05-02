@@ -1,7 +1,7 @@
 'use client';
 
 import type { Coupon } from '@/features/marketing';
-import type { AddMemberWizardData, AppliedCoupon, BillingType, MemberType, PaymentDeclineReason, PaymentMethod } from '@/hooks/useAddMemberWizard';
+import type { AppliedCoupon, BillingType, MemberType, PaymentDeclineReason, PaymentMethod, WizardStepData } from '@/hooks/useAddMemberWizard';
 import type { TokenizationIframeConfig } from '@/libs/IQPro';
 import { AlertCircle, CheckCircle2, CreditCard, Info, Landmark, Loader2, RefreshCw, Tag } from 'lucide-react';
 import { useTranslations } from 'next-intl';
@@ -13,9 +13,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { calculateCouponDiscount, getValidMembershipCoupons } from '@/features/marketing';
 import { useTokenExIframe } from '@/hooks/useTokenExIframe';
 
-type MemberPaymentStepProps = {
-  data: AddMemberWizardData;
-  onUpdateAction: (updates: Partial<AddMemberWizardData>) => void;
+type PaymentStepProps = {
+  data: WizardStepData;
+  onUpdateAction: (updates: Partial<WizardStepData>) => void;
   onNextAction: () => void;
   onBackAction: () => void;
   onCancelAction: () => void;
@@ -50,7 +50,7 @@ const getFrequencyLabel = (frequency?: string): string => {
   return lower;
 };
 
-export const MemberPaymentStep = ({
+export const PaymentStep = ({
   data,
   onUpdateAction,
   onNextAction,
@@ -61,9 +61,9 @@ export const MemberPaymentStep = ({
   tokenizationConfig,
   memberType,
   captureOnly = false,
-}: MemberPaymentStepProps) => {
-  const t = useTranslations('AddMemberWizard.MemberPaymentStep');
-  const tHOH = useTranslations('AddMemberWizard.MemberPaymentStep_HOHNotice');
+}: PaymentStepProps) => {
+  const t = useTranslations('AddMemberWizard.PaymentStep');
+  const tHOH = useTranslations('AddMemberWizard.PaymentStep_HOHNotice');
   const { resolvedTheme } = useTheme();
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [tokenizing, setTokenizing] = useState(false);
