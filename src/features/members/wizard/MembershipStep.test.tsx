@@ -590,4 +590,55 @@ describe('MembershipStep', () => {
       await expect.element(page.getByText('7-day trial with 3 classes')).toBeInTheDocument();
     });
   });
+
+  describe('Stale membershipSkipped clearing on mount (#133)', () => {
+    it('clears membershipSkipped on mount when previously true', async () => {
+      const onUpdate = vi.fn();
+      render(
+        <MembershipStep
+          data={{ ...mockData, membershipSkipped: true }}
+          onUpdate={onUpdate}
+          onNext={mockHandlers.onNext}
+          onBack={mockHandlers.onBack}
+          onCancel={mockHandlers.onCancel}
+        />,
+      );
+
+      // Title fires after fetch — gives the mount effect a moment to run.
+      await expect.element(page.getByText('Choose Membership Plan')).toBeInTheDocument();
+
+      const skipResetCall = onUpdate.mock.calls.find(
+        (call) => {
+          const arg = call[0] as Record<string, unknown> | undefined;
+          return arg?.membershipSkipped === false;
+        },
+      );
+
+      expect(skipResetCall).toBeTruthy();
+    });
+
+    it('does not call onUpdate at mount when membershipSkipped is already false', async () => {
+      const onUpdate = vi.fn();
+      render(
+        <MembershipStep
+          data={{ ...mockData, membershipSkipped: false }}
+          onUpdate={onUpdate}
+          onNext={mockHandlers.onNext}
+          onBack={mockHandlers.onBack}
+          onCancel={mockHandlers.onCancel}
+        />,
+      );
+
+      await expect.element(page.getByText('Choose Membership Plan')).toBeInTheDocument();
+
+      const skipResetCall = onUpdate.mock.calls.find(
+        (call) => {
+          const arg = call[0] as Record<string, unknown> | undefined;
+          return arg?.membershipSkipped === false;
+        },
+      );
+
+      expect(skipResetCall).toBeUndefined();
+    });
+  });
 });

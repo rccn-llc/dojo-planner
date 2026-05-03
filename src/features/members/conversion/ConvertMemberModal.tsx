@@ -93,6 +93,9 @@ export const ConvertMemberModal = ({
   const cardFirstSixRef = useRef<string | undefined>(undefined);
   const cardLastFourRef = useRef<string | undefined>(undefined);
 
+  // Re-entrancy guard for handleConvert — see AddMemberModal for rationale.
+  const submittingRef = useRef(false);
+
   const updateDataWithRef = (updates: Partial<ConvertMemberWizardData>) => {
     if (updates.cardToken !== undefined) {
       cardTokenRef.current = updates.cardToken;
@@ -125,6 +128,7 @@ export const ConvertMemberModal = ({
     cardTokenRef.current = undefined;
     cardFirstSixRef.current = undefined;
     cardLastFourRef.current = undefined;
+    submittingRef.current = false;
     wizard.reset();
     onCloseAction();
   };
@@ -133,6 +137,7 @@ export const ConvertMemberModal = ({
     cardTokenRef.current = undefined;
     cardFirstSixRef.current = undefined;
     cardLastFourRef.current = undefined;
+    submittingRef.current = false;
     wizard.reset();
     onCloseAction();
     router.refresh();
@@ -144,6 +149,12 @@ export const ConvertMemberModal = ({
       wizard.setStep('success');
       return;
     }
+
+    // Re-entrancy guard — see AddMemberModal.handleFinalNext for rationale.
+    if (submittingRef.current) {
+      return;
+    }
+    submittingRef.current = true;
 
     try {
       wizard.setIsLoading(true);
@@ -307,6 +318,7 @@ export const ConvertMemberModal = ({
       wizard.setError(errorMessage);
     } finally {
       wizard.setIsLoading(false);
+      submittingRef.current = false;
     }
   };
 

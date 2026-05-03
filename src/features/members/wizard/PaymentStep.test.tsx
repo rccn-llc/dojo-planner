@@ -2160,4 +2160,60 @@ describe('PaymentStep', () => {
       mockIframeReturn.isCvvValid = false;
     });
   });
+
+  describe('Try Again button (#131)', () => {
+    function declinedProps(overrides: Partial<typeof defaultProps> & { captureOnly?: boolean } = {}) {
+      const { captureOnly, ...rest } = overrides;
+      return {
+        ...defaultProps,
+        ...rest,
+        ...(captureOnly !== undefined ? { captureOnly } : {}),
+        data: {
+          ...defaultProps.data,
+          paymentStatus: 'declined' as const,
+          paymentDeclineReason: 'card_declined' as const,
+          paymentProcessed: true,
+          cardholderName: 'Jane Doe',
+          cardNumber: '4111111111111111',
+          cardExpiry: '12/30',
+          cardCvc: '123',
+          ...overrides.data,
+        },
+      };
+    }
+
+    it('does not render when paymentStatus is undefined', async () => {
+      render(<PaymentStep {...defaultProps} />);
+
+      await expect.element(page.getByTestId('payment-try-again-button')).not.toBeInTheDocument();
+    });
+
+    it('does not render when captureOnly mode is on', async () => {
+      const props = declinedProps({ captureOnly: true });
+      render(<PaymentStep {...props} />);
+
+      await expect.element(page.getByTestId('payment-try-again-button')).not.toBeInTheDocument();
+    });
+
+    it('renders when paymentStatus is declined and not captureOnly', async () => {
+      render(<PaymentStep {...declinedProps()} />);
+
+      await expect.element(page.getByTestId('payment-try-again-button')).toBeInTheDocument();
+    });
+
+    it('clicking it clears decline state without calling onNextAction', async () => {
+      const onUpdateAction = vi.fn();
+      const onNextAction = vi.fn();
+      render(<PaymentStep {...declinedProps({ onUpdateAction, onNextAction })} />);
+
+      await userEvent.click(page.getByTestId('payment-try-again-button'));
+
+      expect(onUpdateAction).toHaveBeenCalledWith({
+        paymentStatus: undefined,
+        paymentDeclineReason: undefined,
+        paymentProcessed: false,
+      });
+      expect(onNextAction).not.toHaveBeenCalled();
+    });
+  });
 });

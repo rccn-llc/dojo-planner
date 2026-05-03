@@ -57,6 +57,10 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
   const cardFirstSixRef = useRef<string | undefined>(undefined);
   const cardLastFourRef = useRef<string | undefined>(undefined);
 
+  // Re-entrancy guard: flips synchronously on click to drop duplicate submissions
+  // that fire before React flushes the disabled-button state.
+  const submittingRef = useRef(false);
+
   // Wrapper around wizard.updateData that also captures card refs synchronously
   // so handleFinalNext can read them (React setState is async).
   const updateDataWithRef = (updates: Partial<typeof wizard.data>) => {
@@ -94,6 +98,7 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
     cardTokenRef.current = undefined;
     cardFirstSixRef.current = undefined;
     cardLastFourRef.current = undefined;
+    submittingRef.current = false;
     wizard.reset();
     onCloseAction();
   };
@@ -106,6 +111,7 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
     cardTokenRef.current = undefined;
     cardFirstSixRef.current = undefined;
     cardLastFourRef.current = undefined;
+    submittingRef.current = false;
     wizard.reset();
     onCloseAction();
     router.refresh();
@@ -176,6 +182,14 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
       wizard.setStep('success');
       return;
     }
+
+    // Re-entrancy guard: a second click that lands before React flushes the
+    // disabled-button state would otherwise fire a duplicate `member.create`.
+    // The ref flips synchronously, so the duplicate hits this early-return.
+    if (submittingRef.current) {
+      return;
+    }
+    submittingRef.current = true;
 
     try {
       wizard.setIsLoading(true);
@@ -484,6 +498,7 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
       wizard.setError(errorMessage);
     } finally {
       wizard.setIsLoading(false);
+      submittingRef.current = false;
     }
   };
 
@@ -495,6 +510,12 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
       wizard.setStep('success');
       return;
     }
+
+    // Re-entrancy guard — same rationale as handleFinalNext above.
+    if (submittingRef.current) {
+      return;
+    }
+    submittingRef.current = true;
 
     try {
       wizard.setIsLoading(true);
@@ -713,6 +734,7 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
       wizard.setError(errorMessage);
     } finally {
       wizard.setIsLoading(false);
+      submittingRef.current = false;
     }
   };
 

@@ -273,6 +273,18 @@ export const PaymentStep = ({
     }
   }, [useIframe, paymentMethod, onNextAction, onUpdateAction, iframeTokenize]);
 
+  // Try Again: clear the declined status so the user can re-submit the form
+  // without re-entering payment fields. We deliberately do NOT auto-fire the
+  // submit — the user reviews their card details (which are preserved) and
+  // clicks the primary button explicitly.
+  const handleTryAgain = useCallback(() => {
+    onUpdateAction({
+      paymentStatus: undefined,
+      paymentDeclineReason: undefined,
+      paymentProcessed: false,
+    });
+  }, [onUpdateAction]);
+
   return (
     <div className="space-y-6">
       <div>
@@ -711,24 +723,36 @@ export const PaymentStep = ({
             {t('cancel_button')}
           </Button>
         </div>
-        <Button
-          onClick={handleNextClick}
-          disabled={!isFormValid || isLoading || tokenizing}
-          variant={paymentStatus === 'declined' ? 'outline' : 'default'}
-        >
-          {(isLoading || tokenizing)
-            ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {t('processing_button')}
-                </>
-              )
-            : captureOnly
-              ? t('save_payment_method_button')
-              : paymentStatus === 'declined'
-                ? t('continue_without_payment_button')
-                : t('next_button')}
-        </Button>
+        <div className="flex gap-3">
+          {!captureOnly && paymentStatus === 'declined' && (
+            <Button
+              variant="default"
+              onClick={handleTryAgain}
+              disabled={isLoading || tokenizing}
+              data-testid="payment-try-again-button"
+            >
+              {t('try_again_button')}
+            </Button>
+          )}
+          <Button
+            onClick={handleNextClick}
+            disabled={!isFormValid || isLoading || tokenizing}
+            variant={paymentStatus === 'declined' ? 'outline' : 'default'}
+          >
+            {(isLoading || tokenizing)
+              ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {t('processing_button')}
+                  </>
+                )
+              : captureOnly
+                ? t('save_payment_method_button')
+                : paymentStatus === 'declined'
+                  ? t('continue_without_payment_button')
+                  : t('next_button')}
+          </Button>
+        </div>
       </div>
     </div>
   );

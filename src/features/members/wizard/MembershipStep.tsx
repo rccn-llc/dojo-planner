@@ -139,6 +139,20 @@ export const MembershipStep = ({
   const [isFetchingPlans, setIsFetchingPlans] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // #133: when the user reaches this step (which includes navigating Back from
+  // a later step after previously clicking Skip), clear the stale
+  // `membershipSkipped` flag. Without this, returning to Subscription leaves
+  // the wizard in a stuck "you skipped" state where Next is disabled and the
+  // user has to click Skip a second time to advance.
+  useEffect(() => {
+    if (data.membershipSkipped) {
+      onUpdate({ membershipSkipped: false });
+    }
+    // Run once on mount only — the click on Skip happens AFTER mount, and we
+    // don't want this effect to wipe the flag the user just set.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Fetch membership plans from database or use mocks
   useEffect(() => {
     const fetchPlans = async () => {
