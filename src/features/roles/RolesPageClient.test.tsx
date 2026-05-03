@@ -1,11 +1,30 @@
 import type { Role } from './RolesPageClient';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { page, userEvent } from 'vitest/browser';
 import { RolesPageClient } from './RolesPageClient';
 
+const mockRefresh = vi.fn();
+const mockCreate = vi.fn();
+const mockUpdate = vi.fn();
+const mockRemove = vi.fn();
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: mockRefresh }),
+}));
+
+vi.mock('@/libs/Orpc', () => ({
+  client: {
+    roles: {
+      create: (...args: unknown[]) => mockCreate(...args),
+      update: (...args: unknown[]) => mockUpdate(...args),
+      remove: (...args: unknown[]) => mockRemove(...args),
+    },
+  },
+}));
+
 vi.mock('next-intl', () => ({
-  useTranslations: () => (key: string) => {
+  useTranslations: () => (key: string, vars?: Record<string, unknown>) => {
     const translations: Record<string, string> = {
       title: 'Roles',
       total_roles_label: 'Total Roles',
@@ -23,12 +42,28 @@ vi.mock('next-intl', () => ({
       member_plural: 'Members',
       edit_button_aria_label: 'Edit role',
       delete_button_aria_label: 'Delete role',
+      delete_dialog_title: 'Delete Role',
+      delete_dialog_description: `Are you sure you want to delete the role "${vars?.roleName ?? ''}"?`,
+      delete_cancel_button: 'Cancel',
+      delete_confirm_button: 'Delete Role',
+      save_error: 'Failed to save role.',
+      delete_error: 'Failed to delete role.',
     };
     return translations[key] || key;
   },
 }));
 
 describe('RolesPageClient', () => {
+  beforeEach(() => {
+    mockRefresh.mockReset();
+    mockCreate.mockReset();
+    mockUpdate.mockReset();
+    mockRemove.mockReset();
+    mockCreate.mockResolvedValue({ role: { id: 'role-new' } });
+    mockUpdate.mockResolvedValue({ role: { id: 'role-1' } });
+    mockRemove.mockResolvedValue({ success: true });
+  });
+
   const mockPermissions = [
     { id: 'perm-1', key: 'org:manage_members', name: 'Manage Members', description: 'Can manage member data' },
     { id: 'perm-2', key: 'org:manage_billing', name: 'Manage Billing', description: 'Can manage billing' },
@@ -432,22 +467,85 @@ describe('RolesPageClient', () => {
   });
 
   describe('Delete Role', () => {
-    it('should log delete request when delete button is clicked', async () => {
-      const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    it('opens the confirmation dialog with the role name when delete is clicked', async () => {
       render(<RolesPageClient {...defaultProps} />);
 
-      // Find and click a delete button (Coach role - non-system, non-admin)
       const deleteButtons = page.getByRole('button', { name: /delete role/i }).elements();
       await userEvent.click(deleteButtons[0]!);
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        '[Roles] Delete role requested:',
-        expect.objectContaining({
-          roleId: expect.any(String),
-        }),
-      );
+      // First non-system role visible to non-admin is Coach
+      expect(page.getByRole('alertdialog')).toBeDefined();
+      expect(page.getByText(/Are you sure you want to delete the role "Coach"/)).toBeDefined();
+    });
 
-      consoleSpy.mockRestore();
+    it('calls client.roles.remove and refreshes when confirmed', async () => {
+      render(<RolesPageClient {...defaultProps} />);
+
+      const deleteButtons = page.getByRole('button', { name: /delete role/i }).elements();
+      await userEvent.click(deleteButtons[0]!);
+
+      const confirmButton = page.getByTestId('role-delete-confirm');
+      await userEvent.click(confirmButton);
+
+      expect(mockRemove).toHaveBeenCalledWith({ id: 'role-2' });
+      expect(mockRefresh).toHaveBeenCalled();
+    });
+
+    it('surfaces the error message when remove rejects', async () => {
+      mockRemove.mockRejectedValueOnce(new Error('Clerk API error: 422 - role assigned to members'));
+      render(<RolesPageClient {...defaultProps} />);
+
+      const deleteButtons = page.getByRole('button', { name: /delete role/i }).elements();
+      await userEvent.click(deleteButtons[0]!);
+
+      const confirmButton = page.getByTestId('role-delete-confirm');
+      await userEvent.click(confirmButton);
+
+      const errorBanner = page.getByTestId('role-delete-error');
+
+      expect(errorBanner).toBeDefined();
+      expect(mockRefresh).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Save Role (Create / Update)', () => {
+    it('calls client.roles.create with permission keys and refreshes', async () => {
+      render(<RolesPageClient {...adminProps} />);
+
+      await userEvent.click(page.getByTestId('add-role-button'));
+      await userEvent.fill(page.getByTestId('role-name-input'), 'Front Desk');
+      await userEvent.fill(page.getByTestId('role-description-input'), 'Day-to-day');
+
+      // Submit: form generates the key from the name in AddEditRoleModal.
+      const saveButton = page.getByTestId('role-save-button');
+      await userEvent.click(saveButton);
+
+      expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({
+        name: 'Front Desk',
+        key: 'org:front_desk',
+        description: 'Day-to-day',
+        permissions: [],
+      }));
+      expect(mockRefresh).toHaveBeenCalled();
+    });
+
+    it('calls client.roles.update with id + present fields when editing', async () => {
+      render(<RolesPageClient {...adminProps} />);
+
+      // Edit Coach (the first non-system, non-admin role visible to admin).
+      const editButtons = page.getByRole('button', { name: /edit role/i }).elements();
+      // For admin, role 0 is Admin (system, but edit is gated on canEditSystemRoles).
+      // To avoid relying on system-role edit, click index 1 (Coach).
+      await userEvent.click(editButtons[1]!);
+
+      const saveButton = page.getByTestId('role-save-button');
+      await userEvent.click(saveButton);
+
+      expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
+        id: 'role-2',
+        name: 'Coach',
+      }));
+      expect(mockRefresh).toHaveBeenCalled();
     });
   });
 });

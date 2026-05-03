@@ -28,6 +28,7 @@ import { create as createNoteHandler, list as listNotes, remove as removeNoteHan
 import { getTokenizationIframeConfig, processPayment, registerPaymentMethod } from './Payment';
 import { create as createProgram, list as listPrograms, remove as removeProgram, update as updateProgram } from './Programs';
 import { chartData as reportChartData, currentValues as reportCurrentValues, insights as reportInsights } from './Reports';
+import { create as createRole, remove as removeRole, update as updateRole } from './Roles';
 import { cancelSaasSubscription, changeSaasPlan, getCurrentPlan, getSaasBillingHistory, getSaasTokenizationConfig, subscribeToPlan } from './SaasSubscription';
 import { create as createTagHandler, listAll as listAllTags, listClassTags, listMembershipTags, remove as removeTagHandler, update as updateTagHandler } from './Tags';
 import { get as getTransaction, list as listTransactions, refund as refundTransaction } from './Transactions';
@@ -171,6 +172,11 @@ export const router = {
     categoryRemove,
     imageCreate,
     imageRemove,
+  },
+  roles: {
+    create: createRole,
+    update: updateRole,
+    remove: removeRole,
   },
   saasSubscription: {
     getCurrentPlan,

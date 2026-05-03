@@ -39,6 +39,7 @@ type AddEditRoleModalProps = {
   availablePermissions: Permission[];
   isLoading?: boolean;
   canEditSystemRoles?: boolean;
+  errorMessage?: string | null;
 };
 
 const initialFormData: RoleFormData = {
@@ -311,6 +312,7 @@ export function AddEditRoleModal({
   availablePermissions,
   isLoading = false,
   canEditSystemRoles = false,
+  errorMessage,
 }: AddEditRoleModalProps) {
   const t = useTranslations('AddEditRoleModal');
   const isEditMode = !!role?.id;
@@ -333,6 +335,12 @@ export function AddEditRoleModal({
             {isEditMode ? t('edit_title') : t('add_title')}
           </DialogTitle>
         </DialogHeader>
+
+        {errorMessage && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" data-testid="role-save-error">
+            {errorMessage}
+          </div>
+        )}
 
         {isOpen && (
           <AddEditRoleForm
