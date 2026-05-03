@@ -32,6 +32,10 @@ export default function WaiversPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [isMergeFieldsSheetOpen, setIsMergeFieldsSheetOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [dashboardStats, setDashboardStats] = useState<{ signedThisMonth: number; membershipsUsing: number }>({
+    signedThisMonth: 0,
+    membershipsUsing: 0,
+  });
 
   useEffect(() => {
     const fetchWaivers = async () => {
@@ -47,6 +51,23 @@ export default function WaiversPage() {
     };
 
     fetchWaivers();
+  }, []);
+
+  useEffect(() => {
+    const fetchDashboardStats = async () => {
+      try {
+        const result = await client.waivers.getDashboardStats();
+        setDashboardStats({
+          signedThisMonth: result.signedThisMonth,
+          membershipsUsing: result.membershipsUsing,
+        });
+      } catch (err) {
+        // Stats are non-critical — leave defaults of 0 if the call fails.
+        console.warn('[WaiversPage] Failed to fetch dashboard stats:', err);
+      }
+    };
+
+    fetchDashboardStats();
   }, []);
 
   const handleEditWaiver = useCallback((id: string) => {
@@ -79,13 +100,15 @@ export default function WaiversPage() {
     setIsAddModalOpen(false);
   }, []);
 
-  // Compute stats
+  // Compute stats. signedThisMonth + membershipsUsing come from the
+  // server-side dashboard-stats endpoint; the totals + active counts are
+  // derived from the in-memory list.
   const stats = useMemo(() => ({
     totalWaivers: waivers.length,
     active: waivers.filter(w => w.isActive).length,
-    signedThisMonth: 0, // TODO: Fetch from signed_waiver table
-    membershipsUsing: 0, // TODO: Count from membership_waiver table
-  }), [waivers]);
+    signedThisMonth: dashboardStats.signedThisMonth,
+    membershipsUsing: dashboardStats.membershipsUsing,
+  }), [waivers, dashboardStats]);
 
   const hasActiveWaivers = stats.active > 0;
   const hasInactiveWaivers = stats.totalWaivers - stats.active > 0;

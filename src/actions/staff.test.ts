@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchStaffRoles, inviteStaffMember, updateStaffMember } from './staff';
+import { fetchStaffRoles, inviteStaffMember, removeStaffMember, updateStaffMember } from './staff';
 
 // Mock Clerk auth
 const mockAuth = vi.fn();
 const mockCreateInvitation = vi.fn();
 const mockUpdateMembership = vi.fn();
+const mockDeleteMembership = vi.fn();
 const mockUpdateUser = vi.fn();
 vi.mock('@clerk/nextjs/server', () => ({
   auth: () => mockAuth(),
@@ -12,6 +13,7 @@ vi.mock('@clerk/nextjs/server', () => ({
     organizations: {
       createOrganizationInvitation: mockCreateInvitation,
       updateOrganizationMembership: mockUpdateMembership,
+      deleteOrganizationMembership: mockDeleteMembership,
     },
     users: {
       updateUser: mockUpdateUser,
@@ -23,6 +25,16 @@ vi.mock('@clerk/nextjs/server', () => ({
 const mockGetOrganizationRoles = vi.fn();
 vi.mock('@/services/ClerkRolesService', () => ({
   getOrganizationRoles: () => mockGetOrganizationRoles(),
+}));
+
+// Mock next/cache (revalidatePath is called after invite/update/remove)
+vi.mock('next/cache', () => ({
+  revalidatePath: vi.fn(),
+}));
+
+// Mock the audit logger so writes don't blow up.
+vi.mock('@/services/AuditService', () => ({
+  audit: vi.fn().mockResolvedValue(undefined),
 }));
 
 describe('Staff Actions', () => {
@@ -355,6 +367,60 @@ describe('Staff Actions', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('You do not have permission to update this staff member.');
+    });
+  });
+
+  describe('removeStaffMember', () => {
+    it('returns error when user is not authenticated', async () => {
+      mockAuth.mockResolvedValue({ userId: null, orgId: null });
+
+      const result = await removeStaffMember({ userId: 'user_target' });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/not authenticated/i);
+    });
+
+    it('refuses to remove self', async () => {
+      mockAuth.mockResolvedValue({ userId: 'user_self', orgId: 'org_1' });
+
+      const result = await removeStaffMember({ userId: 'user_self' });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/cannot remove yourself/i);
+      expect(mockDeleteMembership).not.toHaveBeenCalled();
+    });
+
+    it('removes the staff member when authorized', async () => {
+      mockAuth.mockResolvedValue({ userId: 'user_self', orgId: 'org_1' });
+      mockDeleteMembership.mockResolvedValue({ id: 'membership_1' });
+
+      const result = await removeStaffMember({ userId: 'user_target' });
+
+      expect(result.success).toBe(true);
+      expect(mockDeleteMembership).toHaveBeenCalledWith({
+        organizationId: 'org_1',
+        userId: 'user_target',
+      });
+    });
+
+    it('translates Clerk not-found error', async () => {
+      mockAuth.mockResolvedValue({ userId: 'user_self', orgId: 'org_1' });
+      mockDeleteMembership.mockRejectedValue(new Error('User not found'));
+
+      const result = await removeStaffMember({ userId: 'user_missing' });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Staff member not found.');
+    });
+
+    it('returns generic error on unknown failures', async () => {
+      mockAuth.mockResolvedValue({ userId: 'user_self', orgId: 'org_1' });
+      mockDeleteMembership.mockRejectedValue(new Error('Internal server error'));
+
+      const result = await removeStaffMember({ userId: 'user_target' });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Failed to remove staff member. Please try again.');
     });
   });
 });

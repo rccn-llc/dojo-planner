@@ -348,12 +348,12 @@ const scheduleExceptionsData = [
 
 // Membership plans
 const membershipPlansData = [
-  { name: '12 Month Commitment (Gold)', slug: '12-month-gold', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', price: 149, signupFee: 99, frequency: 'Monthly', contractLength: '12 Months', accessLevel: 'Unlimited', isTrial: false },
-  { name: 'Month to Month (Gold)', slug: 'month-to-month-gold', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', price: 179, signupFee: 99, frequency: 'Monthly', contractLength: 'Month-to-Month', accessLevel: 'Unlimited', isTrial: false },
-  { name: '7-Day Free Trial', slug: '7-day-trial', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', price: 0, signupFee: 0, frequency: 'None', contractLength: '7 Days', accessLevel: 'Unlimited', isTrial: true },
-  { name: 'Kids Monthly', slug: 'kids-monthly', category: 'Kids Brazilian Jiu-Jitsu', program: 'Kids', price: 99, signupFee: 50, frequency: 'Monthly', contractLength: 'Month-to-Month', accessLevel: 'Kids Classes', isTrial: false },
-  { name: 'Competition Team', slug: 'competition-team', category: 'Competition', program: 'Competition', price: 199, signupFee: 0, frequency: 'Monthly', contractLength: 'Month-to-Month', accessLevel: 'Unlimited + Comp Classes', isTrial: false },
-  { name: '10-Class Punch Card', slug: '10-class-punchcard', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', price: 200, signupFee: 0, frequency: 'None', contractLength: 'N/A', accessLevel: '10 Classes', isTrial: false },
+  { name: '12 Month Commitment (Gold)', slug: '12-month-gold', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', programSlug: 'adult-bjj', price: 149, signupFee: 99, frequency: 'Monthly', contractLength: '12 Months', accessLevel: 'Unlimited', isTrial: false },
+  { name: 'Month to Month (Gold)', slug: 'month-to-month-gold', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', programSlug: 'adult-bjj', price: 179, signupFee: 99, frequency: 'Monthly', contractLength: 'Month-to-Month', accessLevel: 'Unlimited', isTrial: false },
+  { name: '7-Day Free Trial', slug: '7-day-trial', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', programSlug: 'adult-bjj', price: 0, signupFee: 0, frequency: 'None', contractLength: '7 Days', accessLevel: 'Unlimited', isTrial: true },
+  { name: 'Kids Monthly', slug: 'kids-monthly', category: 'Kids Brazilian Jiu-Jitsu', program: 'Kids', programSlug: 'kids-program', price: 99, signupFee: 50, frequency: 'Monthly', contractLength: 'Month-to-Month', accessLevel: 'Kids Classes', isTrial: false },
+  { name: 'Competition Team', slug: 'competition-team', category: 'Competition', program: 'Competition', programSlug: 'competition-team', price: 199, signupFee: 0, frequency: 'Monthly', contractLength: 'Month-to-Month', accessLevel: 'Unlimited + Comp Classes', isTrial: false },
+  { name: '10-Class Punch Card', slug: '10-class-punchcard', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', programSlug: 'adult-bjj', price: 200, signupFee: 0, frequency: 'None', contractLength: 'N/A', accessLevel: '10 Classes', isTrial: false },
 ];
 
 // Catalog categories
@@ -1067,6 +1067,7 @@ async function seedOrganization(organizationId: string) {
     await db.insert(membershipPlanSchema).values({
       id,
       organizationId,
+      programId: programIdMap[plan.programSlug] ?? null,
       name: plan.name,
       slug: plan.slug,
       category: plan.category,

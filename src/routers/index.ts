@@ -23,8 +23,10 @@ import { earningsChart, financialStats, memberAverageChart, membershipStats } fr
 import { list as listEvents } from './Events';
 import { addMembership, changeMembership, create as createMember, getHOHForMember, getHOHPaymentMethods, linkFamily, listAllMembershipPlans, listFamily, listMembershipPlans, listMemberTransactions, listPaymentMethods, remove as removeMember, restore as restoreMember, searchHOH, sendConfirmationEmail, unlinkFamily, updateLastAccessed, update as updateMember, updateContactInfo as updateMemberContactInfo, updatePhoto as updateMemberPhoto, updateMemberType } from './Member';
 import { list as listMembers } from './Members';
+import { create as createMembershipPlan, remove as removeMembershipPlan, update as updateMembershipPlan } from './MembershipPlans';
 import { create as createNoteHandler, list as listNotes, remove as removeNoteHandler, update as updateNoteHandler } from './Notes';
 import { getTokenizationIframeConfig, processPayment, registerPaymentMethod } from './Payment';
+import { create as createProgram, list as listPrograms, remove as removeProgram, update as updateProgram } from './Programs';
 import { chartData as reportChartData, currentValues as reportCurrentValues, insights as reportInsights } from './Reports';
 import { cancelSaasSubscription, changeSaasPlan, getCurrentPlan, getSaasBillingHistory, getSaasTokenizationConfig, subscribeToPlan } from './SaasSubscription';
 import { create as createTagHandler, listAll as listAllTags, listClassTags, listMembershipTags, remove as removeTagHandler, update as updateTagHandler } from './Tags';
@@ -37,6 +39,7 @@ import {
   deleteMergeFieldHandler,
   deleteTemplate as deleteWaiverTemplate,
   getSignedWaiver,
+  getDashboardStats as getWaiverDashboardStats,
   getWaiversForMembership,
   getTemplate as getWaiverTemplate,
   getTemplateVersion as getWaiverTemplateVersion,
@@ -125,6 +128,17 @@ export const router = {
     update: updateCoupon,
     remove: removeCoupon,
   },
+  membershipPlans: {
+    create: createMembershipPlan,
+    update: updateMembershipPlan,
+    remove: removeMembershipPlan,
+  },
+  programs: {
+    list: listPrograms,
+    create: createProgram,
+    update: updateProgram,
+    remove: removeProgram,
+  },
   notes: {
     list: listNotes,
     create: createNoteHandler,
@@ -178,5 +192,6 @@ export const router = {
     createMergeField: createMergeFieldHandler,
     updateMergeField: updateMergeFieldHandler,
     deleteMergeField: deleteMergeFieldHandler,
+    getDashboardStats: getWaiverDashboardStats,
   },
 };

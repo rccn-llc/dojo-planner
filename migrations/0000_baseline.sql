@@ -604,6 +604,7 @@ CREATE UNIQUE INDEX "member_clerk_user_idx" ON "member" USING btree ("clerk_user
 CREATE UNIQUE INDEX "member_iqpro_customer_idx" ON "member" USING btree ("iqpro_customer_id");--> statement-breakpoint
 CREATE INDEX "membership_plan_org_idx" ON "membership_plan" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "membership_plan_program_idx" ON "membership_plan" USING btree ("program_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "membership_plan_org_slug_idx" ON "membership_plan" USING btree ("organization_id","slug");--> statement-breakpoint
 CREATE UNIQUE INDEX "stripe_customer_id_idx" ON "organization" USING btree ("stripe_customer_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "iqpro_customer_id_idx" ON "organization" USING btree ("iqpro_customer_id");--> statement-breakpoint
 CREATE INDEX "program_org_idx" ON "program" USING btree ("organization_id");--> statement-breakpoint
@@ -623,4 +624,18 @@ CREATE INDEX "waiver_merge_field_org_idx" ON "waiver_merge_field" USING btree ("
 CREATE UNIQUE INDEX "waiver_merge_field_org_key_idx" ON "waiver_merge_field" USING btree ("organization_id","key");--> statement-breakpoint
 CREATE INDEX "waiver_template_org_idx" ON "waiver_template" USING btree ("organization_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "waiver_template_org_slug_version_idx" ON "waiver_template" USING btree ("organization_id","slug","version");--> statement-breakpoint
-CREATE INDEX "waiver_template_parent_idx" ON "waiver_template" USING btree ("parent_id");
+CREATE INDEX "waiver_template_parent_idx" ON "waiver_template" USING btree ("parent_id");--> statement-breakpoint
+-- Backfill `membership_plan.program_id` for existing rows where the FK is
+-- null but the legacy `program` text column matches a `program.name` within
+-- the same organization (case-insensitive).
+--
+-- Rows whose legacy `program` text doesn't match any program name (e.g.
+-- short labels like 'Adult' when the program is named 'Adult Brazilian
+-- Jiu-Jitsu') stay null and are operator-fixable via the edit-association
+-- modal on the membership detail page.
+UPDATE "membership_plan" mp
+SET program_id = p.id
+FROM "program" p
+WHERE p.organization_id = mp.organization_id
+  AND mp.program_id IS NULL
+  AND lower(p.name) = lower(mp.program);

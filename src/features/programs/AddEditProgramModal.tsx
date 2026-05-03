@@ -26,9 +26,10 @@ export type ProgramFormData = {
 type AddEditProgramModalProps = {
   isOpen: boolean;
   onCloseAction: () => void;
-  onSaveAction: (data: ProgramFormData) => void;
+  onSaveAction: (data: ProgramFormData) => Promise<void>;
   program?: ProgramFormData | null;
   isLoading?: boolean;
+  errorMessage?: string | null;
 };
 
 const initialFormData: ProgramFormData = {
@@ -42,11 +43,13 @@ function AddEditProgramForm({
   isLoading,
   onSaveAction,
   onCloseAction,
+  errorMessage,
 }: {
   program: ProgramFormData | null | undefined;
   isLoading: boolean;
-  onSaveAction: (data: ProgramFormData) => void;
+  onSaveAction: (data: ProgramFormData) => Promise<void>;
   onCloseAction: () => void;
+  errorMessage?: string | null;
 }) {
   const t = useTranslations('AddEditProgramModal');
 
@@ -118,6 +121,12 @@ function AddEditProgramForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {errorMessage && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" data-testid="program-submit-error">
+          {errorMessage}
+        </div>
+      )}
+
       {/* Program Name */}
       <div className="space-y-1.5">
         <Label htmlFor="program-name">
@@ -200,6 +209,7 @@ export function AddEditProgramModal({
   onSaveAction,
   program,
   isLoading = false,
+  errorMessage,
 }: AddEditProgramModalProps) {
   const t = useTranslations('AddEditProgramModal');
   const isEditMode = !!program?.id;
@@ -230,6 +240,7 @@ export function AddEditProgramModal({
             isLoading={isLoading}
             onSaveAction={onSaveAction}
             onCloseAction={onCloseAction}
+            errorMessage={errorMessage}
           />
         )}
       </DialogContent>

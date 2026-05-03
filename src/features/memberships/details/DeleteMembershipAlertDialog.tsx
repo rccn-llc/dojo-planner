@@ -18,6 +18,7 @@ type DeleteMembershipAlertDialogProps = {
   membershipName: string;
   onCloseAction: () => void;
   onConfirmAction: () => void;
+  errorMessage?: string | null;
 };
 
 export function DeleteMembershipAlertDialog({
@@ -25,6 +26,7 @@ export function DeleteMembershipAlertDialog({
   membershipName,
   onCloseAction,
   onConfirmAction,
+  errorMessage,
 }: DeleteMembershipAlertDialogProps) {
   const t = useTranslations('DeleteMembershipAlertDialog');
 
@@ -47,6 +49,11 @@ export function DeleteMembershipAlertDialog({
             {t('description', { membershipName })}
           </AlertDialogDescription>
         </AlertDialogHeader>
+        {errorMessage && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" data-testid="membership-delete-error">
+            {errorMessage}
+          </div>
+        )}
         <AlertDialogFooter>
           <AlertDialogCancel>{t('cancel_button')}</AlertDialogCancel>
           <AlertDialogAction

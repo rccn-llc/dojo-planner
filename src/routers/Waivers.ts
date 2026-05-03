@@ -3,6 +3,8 @@ import { logger } from '@/libs/Logger';
 import { audit } from '@/services/AuditService';
 import {
   addWaiverToMembershipPlan,
+  countMembershipsUsingWaivers,
+  countSignedWaiversThisMonth,
   createMergeField,
   createSignedWaiver,
   createWaiverTemplate,
@@ -613,3 +615,19 @@ export const deleteMergeFieldHandler = os
       throw error instanceof ORPCError ? error : new ORPCError('Failed to delete merge field.', { status: 500 });
     }
   });
+
+/**
+ * Read-only dashboard stats for the waivers page. Returns the count of
+ * waivers signed in the current calendar month and the count of distinct
+ * membership plans that have at least one waiver association.
+ */
+export const getDashboardStats = os.handler(async () => {
+  const { orgId } = await guardRole(ORG_ROLE.FRONT_DESK);
+
+  const [signedThisMonth, membershipsUsing] = await Promise.all([
+    countSignedWaiversThisMonth(orgId),
+    countMembershipsUsingWaivers(orgId),
+  ]);
+
+  return { signedThisMonth, membershipsUsing };
+});

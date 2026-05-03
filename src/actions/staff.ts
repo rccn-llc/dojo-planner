@@ -26,7 +26,10 @@
 'use server';
 
 import { auth, clerkClient } from '@clerk/nextjs/server';
+import { revalidatePath } from 'next/cache';
+import { audit } from '@/services/AuditService';
 import { getOrganizationRoles } from '@/services/ClerkRolesService';
+import { AUDIT_ACTION, AUDIT_ENTITY_TYPE } from '@/types/Audit';
 import { ORG_ROLE } from '@/types/Auth';
 
 export type StaffRole = {
@@ -43,6 +46,11 @@ type InviteStaffResult = {
 };
 
 type UpdateStaffResult = {
+  success: boolean;
+  error?: string;
+};
+
+type RemoveStaffResult = {
   success: boolean;
   error?: string;
 };
@@ -151,6 +159,13 @@ export async function inviteStaffMember(params: {
       role: params.roleKey,
     });
 
+    await audit({ userId, orgId }, AUDIT_ACTION.STAFF_INVITE, AUDIT_ENTITY_TYPE.STAFF, {
+      entityId: invitation.id,
+      status: 'success',
+    });
+
+    revalidatePath('/dashboard/staff');
+
     return {
       success: true,
       invitationId: invitation.id,
@@ -226,6 +241,13 @@ export async function updateStaffMember(params: {
       role: params.roleKey,
     });
 
+    await audit({ userId: currentUserId, orgId }, AUDIT_ACTION.STAFF_UPDATE, AUDIT_ENTITY_TYPE.STAFF, {
+      entityId: params.userId,
+      status: 'success',
+    });
+
+    revalidatePath('/dashboard/staff');
+
     return {
       success: true,
     };
@@ -251,6 +273,75 @@ export async function updateStaffMember(params: {
     return {
       success: false,
       error: 'Failed to update staff member. Please try again.',
+    };
+  }
+}
+
+/**
+ * Removes a staff member from the organization via Clerk. The user's auth
+ * account is preserved — only their organization membership is revoked.
+ */
+export async function removeStaffMember(params: {
+  userId: string;
+}): Promise<RemoveStaffResult> {
+  try {
+    const { userId: currentUserId, orgId } = await auth();
+
+    if (!currentUserId || !orgId) {
+      return {
+        success: false,
+        error: 'User is not authenticated or not part of an organization',
+      };
+    }
+
+    if (params.userId === currentUserId) {
+      return {
+        success: false,
+        error: 'You cannot remove yourself from the organization.',
+      };
+    }
+
+    const authClient = await clerkClient();
+    await authClient.organizations.deleteOrganizationMembership({
+      organizationId: orgId,
+      userId: params.userId,
+    });
+
+    console.info('[removeStaffMember] Staff member removed successfully:', {
+      userId: params.userId,
+    });
+
+    await audit({ userId: currentUserId, orgId }, AUDIT_ACTION.STAFF_REMOVE, AUDIT_ENTITY_TYPE.STAFF, {
+      entityId: params.userId,
+      status: 'success',
+    });
+
+    revalidatePath('/dashboard/staff');
+
+    return {
+      success: true,
+    };
+  } catch (error) {
+    console.error('[removeStaffMember] Failed to remove staff member:', error);
+
+    if (error instanceof Error) {
+      if (error.message.includes('not found')) {
+        return {
+          success: false,
+          error: 'Staff member not found.',
+        };
+      }
+      if (error.message.includes('permission')) {
+        return {
+          success: false,
+          error: 'You do not have permission to remove this staff member.',
+        };
+      }
+    }
+
+    return {
+      success: false,
+      error: 'Failed to remove staff member. Please try again.',
     };
   }
 }

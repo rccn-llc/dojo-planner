@@ -1381,6 +1381,13 @@
     "cancel_button": "Cancel",
     "delete_button": "Delete"
   },
+  "RemoveStaffAlertDialog": {
+    "title": "Remove staff member?",
+    "description": "{staffName} will lose access to this organization. Their user account is preserved \u2014 only their organization membership is revoked.",
+    "cancel_button": "Cancel",
+    "remove_button": "Remove",
+    "removing_button": "Removing..."
+  },
   "DeleteClassAlertDialog": {
     "title": "Are you absolutely sure?",
     "description": "This action cannot be undone. This will permanently delete the \"{className}\" class and remove the data from the servers.",

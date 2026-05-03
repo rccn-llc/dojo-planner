@@ -211,6 +211,7 @@ export const membershipPlanSchema = pgTable(
   table => [
     index('membership_plan_org_idx').on(table.organizationId),
     index('membership_plan_program_idx').on(table.programId),
+    uniqueIndex('membership_plan_org_slug_idx').on(table.organizationId, table.slug),
   ],
 );
 

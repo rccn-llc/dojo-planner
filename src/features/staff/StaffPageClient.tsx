@@ -3,9 +3,12 @@
 import type { StaffMemberData } from '@/hooks/useInviteStaffForm';
 import { Plus } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { removeStaffMember } from '@/actions/staff';
 import { Button } from '@/components/ui/button';
 import { InviteStaffModal } from './InviteStaffModal';
+import { RemoveStaffAlertDialog } from './RemoveStaffAlertDialog';
 import { StaffTable } from './StaffTable';
 
 type StaffMember = {
@@ -28,8 +31,12 @@ type StaffPageClientProps = {
 
 export function StaffPageClient({ staffMembers, currentUserRole, currentUserId }: StaffPageClientProps) {
   const t = useTranslations('Staff');
+  const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStaffMember, setEditingStaffMember] = useState<StaffMemberData | null>(null);
+  const [removingStaff, setRemovingStaff] = useState<{ id: string; name: string } | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+  const [isRemoving, setIsRemoving] = useState(false);
 
   const handleOpenInviteModal = () => {
     setEditingStaffMember(null);
@@ -47,14 +54,50 @@ export function StaffPageClient({ staffMembers, currentUserRole, currentUserId }
   };
 
   const handleRemoveStaff = (staffId: string) => {
-    // TODO: Implement remove staff functionality
-    console.warn('[Staff] Remove staff action triggered for staff ID:', staffId);
+    const member = staffMembers.find(m => m.id === staffId);
+    if (!member) {
+      return;
+    }
+    const name = [member.firstName, member.lastName].filter(Boolean).join(' ') || member.email;
+    setRemovingStaff({ id: staffId, name });
+    setRemoveError(null);
+  };
+
+  const handleConfirmRemove = async () => {
+    if (!removingStaff) {
+      return;
+    }
+    setIsRemoving(true);
+    setRemoveError(null);
+    try {
+      const result = await removeStaffMember({ userId: removingStaff.id });
+      if (!result.success) {
+        setRemoveError(result.error ?? 'Failed to remove staff member.');
+        return;
+      }
+      setRemovingStaff(null);
+      // The Server Action calls revalidatePath, but a client-side router
+      // refresh ensures the rendered page picks up the new data immediately.
+      router.refresh();
+    } catch (err) {
+      setRemoveError(err instanceof Error ? err.message : 'Failed to remove staff member.');
+    } finally {
+      setIsRemoving(false);
+    }
+  };
+
+  const handleCloseRemoveDialog = () => {
+    if (isRemoving) {
+      return;
+    }
+    setRemovingStaff(null);
+    setRemoveError(null);
   };
 
   const handleSaveSuccess = () => {
-    // TODO: Refresh the staff list after successful save
-    // This would typically trigger a re-fetch of the data
-    console.info('[Staff] Staff member saved successfully');
+    // Server Actions invalidate via revalidatePath; this triggers a client-side
+    // re-render so the just-edited row reflects fresh data.
+    router.refresh();
   };
 
   return (
@@ -77,6 +120,14 @@ export function StaffPageClient({ staffMembers, currentUserRole, currentUserId }
         onCloseAction={handleCloseModal}
         staffMember={editingStaffMember}
         onSaveSuccess={handleSaveSuccess}
+      />
+      <RemoveStaffAlertDialog
+        isOpen={!!removingStaff}
+        staffName={removingStaff?.name ?? ''}
+        onCloseAction={handleCloseRemoveDialog}
+        onConfirmAction={handleConfirmRemove}
+        errorMessage={removeError}
+        isLoading={isRemoving}
       />
     </>
   );

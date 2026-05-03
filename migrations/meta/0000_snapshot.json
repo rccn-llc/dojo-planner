@@ -3348,6 +3348,27 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "membership_plan_org_slug_idx": {
+          "name": "membership_plan_org_slug_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "slug",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {

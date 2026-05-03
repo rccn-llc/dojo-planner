@@ -125,6 +125,11 @@ export const AUDIT_ACTION = {
   NOTE_CREATE: 'note.create',
   NOTE_UPDATE: 'note.update',
   NOTE_DELETE: 'note.delete',
+
+  // Staff operations
+  STAFF_INVITE: 'staff.invite',
+  STAFF_UPDATE: 'staff.update',
+  STAFF_REMOVE: 'staff.remove',
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTION)[keyof typeof AUDIT_ACTION];
@@ -161,6 +166,7 @@ export const AUDIT_ENTITY_TYPE = {
   PAYMENT_METHOD: 'paymentMethod',
   ORGANIZATION: 'organization',
   NOTE: 'note',
+  STAFF: 'staff',
 } as const;
 
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPE)[keyof typeof AUDIT_ENTITY_TYPE];
