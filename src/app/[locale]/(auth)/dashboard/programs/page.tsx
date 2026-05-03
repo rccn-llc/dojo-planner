@@ -3,14 +3,18 @@
 import type { ProgramFormData } from '@/features/programs/AddEditProgramModal';
 import type { ProgramFilters } from '@/features/programs/ProgramFilterBar';
 import type { ProgramCardProps, ProgramStatus } from '@/templates/ProgramCard';
+import { useOrganization } from '@clerk/nextjs';
 import { Plus } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useCallback, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { AddEditProgramModal } from '@/features/programs/AddEditProgramModal';
 import { DeleteProgramAlertDialog } from '@/features/programs/DeleteProgramAlertDialog';
 import { ProgramFilterBar } from '@/features/programs/ProgramFilterBar';
 import { useHasRole } from '@/hooks/useHasRole';
+import { invalidateProgramsCache, useProgramsCache } from '@/hooks/useProgramsCache';
+import { client } from '@/libs/Orpc';
 import { ProgramCard } from '@/templates/ProgramCard';
 import { StatsCards } from '@/templates/StatsCards';
 import { ORG_ROLE } from '@/types/Auth';
@@ -24,61 +28,32 @@ type Program = {
   status: ProgramStatus;
 };
 
-const initialMockPrograms: Program[] = [
-  {
-    id: '1',
-    name: 'Adult Brazilian Jiu-jitsu',
-    description: 'Traditional Brazilian Jiu-Jitsu program for adults focusing on self-defense, competition, and fitness.',
-    classCount: 5,
-    classNames: 'BJJ Fundamentals I & II, Intermediate, Advanced, Advanced No-Gi',
-    status: 'Active',
-  },
-  {
-    id: '2',
-    name: 'Kids Program',
-    description: 'Fun and engaging martial arts program designed specifically for children ages 6-12.',
-    classCount: 2,
-    classNames: 'Kids Class (Ages 6-9), Kids Class (Ages 10-12)',
-    status: 'Active',
-  },
-  {
-    id: '3',
-    name: 'Competition Team',
-    description: 'Elite training program for competitive athletes with advanced techniques and intensive conditioning.',
-    classCount: 3,
-    classNames: 'Competition Team Training, Advanced Sparring, Competition Prep',
-    status: 'Active',
-  },
-  {
-    id: '4',
-    name: 'Judo Fundamentals',
-    description: 'Traditional Judo program focusing on throws, breakfalls, and Olympic-style techniques.',
-    classCount: 1,
-    classNames: 'Judo Fundamentals',
-    status: 'Active',
-  },
-  {
-    id: '5',
-    name: 'Wrestling Fundamentals',
-    description: 'Traditional Wrestling program focusing on takedowns, mat control, and collegiate-style techniques.',
-    classCount: 0,
-    classNames: '',
-    status: 'Inactive',
-  },
-];
-
 export default function ProgramsPage() {
   const t = useTranslations('ProgramsPage');
   const canEdit = useHasRole(ORG_ROLE.ACADEMY_OWNER);
+  const { organization } = useOrganization();
+  const { programs: rawPrograms, loading } = useProgramsCache(organization?.id);
+
+  const programs: Program[] = useMemo(() => rawPrograms.map(p => ({
+    id: p.id,
+    name: p.name,
+    description: p.description ?? '',
+    classCount: p.classCount,
+    classNames: '', // Class names are not joined into the cache; the card no
+    // longer relies on this — kept for type compatibility.
+    status: p.isActive ? 'Active' as ProgramStatus : 'Inactive' as ProgramStatus,
+  })), [rawPrograms]);
+
   const [filters, setFilters] = useState<ProgramFilters>({
     search: '',
     status: 'all',
   });
-  const [programs, setPrograms] = useState<Program[]>(initialMockPrograms);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProgram, setEditingProgram] = useState<ProgramFormData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [deletingProgram, setDeletingProgram] = useState<{ id: string; name: string } | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const stats = useMemo(() => ({
     totalPrograms: programs.length,
@@ -127,48 +102,56 @@ export default function ProgramsPage() {
 
   const handleCloseDeleteDialog = useCallback(() => {
     setDeletingProgram(null);
+    setDeleteError(null);
   }, []);
 
-  const handleConfirmDelete = useCallback(() => {
-    if (deletingProgram) {
-      setPrograms(prev => prev.filter(p => p.id !== deletingProgram.id));
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deletingProgram) {
+      return;
+    }
+    setDeleteError(null);
+    try {
+      await client.programs.remove({ id: deletingProgram.id });
+      await invalidateProgramsCache();
       setDeletingProgram(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete program.';
+      setDeleteError(message);
     }
   }, [deletingProgram]);
 
   const handleCloseModal = useCallback(() => {
     setIsModalOpen(false);
     setEditingProgram(null);
+    setSaveError(null);
   }, []);
 
   const handleSaveProgram = useCallback(async (data: ProgramFormData) => {
     setIsLoading(true);
+    setSaveError(null);
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 300));
-
+      const isActive = data.status === 'Active';
+      const description = data.description.trim() === '' ? null : data.description.trim();
       if (data.id) {
-        // Edit existing program
-        setPrograms(prev => prev.map(p =>
-          p.id === data.id
-            ? { ...p, name: data.name, description: data.description, status: data.status }
-            : p,
-        ));
-      } else {
-        // Add new program
-        const newProgram: Program = {
-          id: String(Date.now()),
+        await client.programs.update({
+          id: data.id,
           name: data.name,
-          description: data.description,
-          classCount: 0,
-          classNames: '',
-          status: data.status,
-        };
-        setPrograms(prev => [...prev, newProgram]);
+          description,
+          isActive,
+        });
+      } else {
+        await client.programs.create({
+          name: data.name,
+          description,
+          isActive,
+        });
       }
-
+      await invalidateProgramsCache();
       handleCloseModal();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to save program.';
+      setSaveError(message);
     } finally {
       setIsLoading(false);
     }
@@ -179,6 +162,24 @@ export default function ProgramsPage() {
     { id: 'active', label: t('active_label'), value: stats.active },
     { id: 'classes', label: t('total_classes_label'), value: stats.totalClasses },
   ], [stats, t]);
+
+  if (loading) {
+    return (
+      <div className="w-full space-y-6">
+        <div className="grid gap-4 md:grid-cols-3">
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+        </div>
+        <Skeleton className="h-10 w-48" />
+        <Skeleton className="h-10 w-full" />
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <Skeleton className="h-40" />
+          <Skeleton className="h-40" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full space-y-6">
@@ -238,6 +239,7 @@ export default function ProgramsPage() {
         onSaveAction={handleSaveProgram}
         program={editingProgram}
         isLoading={isLoading}
+        errorMessage={saveError}
       />
 
       {/* Delete Program Confirmation Dialog */}
@@ -246,6 +248,7 @@ export default function ProgramsPage() {
         programName={deletingProgram?.name ?? ''}
         onCloseAction={handleCloseDeleteDialog}
         onConfirmAction={handleConfirmDelete}
+        errorMessage={deleteError}
       />
     </div>
   );

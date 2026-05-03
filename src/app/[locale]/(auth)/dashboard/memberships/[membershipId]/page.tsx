@@ -27,8 +27,9 @@ import { MembershipBasicsCard } from '@/features/memberships/details/MembershipB
 import { MembershipContractTermsCard } from '@/features/memberships/details/MembershipContractTermsCard';
 import { MembershipPaymentDetailsCard } from '@/features/memberships/details/MembershipPaymentDetailsCard';
 import { MembershipStatsCard } from '@/features/memberships/details/MembershipStatsCard';
+import { transformDetailDataToDb } from '@/features/memberships/membershipPlanTransformers';
 import { useHasRole } from '@/hooks/useHasRole';
-import { useMembershipPlansCache } from '@/hooks/useMembershipPlansCache';
+import { invalidateMembershipPlansCache, useMembershipPlansCache } from '@/hooks/useMembershipPlansCache';
 import { client } from '@/libs/Orpc';
 import { ORG_ROLE } from '@/types/Auth';
 
@@ -204,14 +205,51 @@ export default function MembershipDetailPage({ params }: { params: Promise<PageP
   // Check if deletion is allowed (must be inactive with zero members)
   const canDelete = membershipData?.status === 'inactive' && membershipData?.activeCount === 0;
 
-  // Handler for updating membership data
-  const handleUpdateMembership = (updates: Partial<MembershipDetailData>) => {
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Handler for updating membership data — persists via the API, then
+  // invalidates the cache so the page re-renders with fresh data. We still
+  // optimistically apply localOverrides so the modal closes with up-to-date
+  // values while the cache refetch is in flight.
+  const handleUpdateMembership = async (updates: Partial<MembershipDetailData>) => {
+    if (!membershipData) {
+      return;
+    }
+    setSaveError(null);
     setLocalOverrides(prev => ({ ...prev, ...updates }));
+
+    const merged = { ...membershipData, ...updates };
+    const rawPlan = plans.find(p => p.id === resolvedParams.membershipId);
+    const fallbackContractLength = rawPlan?.contractLength ?? 'Month-to-Month';
+    const fallbackAccessLevel = rawPlan?.accessLevel ?? 'Unlimited';
+    const payload = transformDetailDataToDb(merged, fallbackContractLength, fallbackAccessLevel);
+
+    try {
+      await client.membershipPlans.update({ id: membershipData.id, ...payload });
+      await invalidateMembershipPlansCache();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update membership.';
+      setSaveError(message);
+      // Roll back the optimistic update so UI matches reality.
+      setLocalOverrides({});
+    }
   };
 
   // Handler for deleting membership
-  const handleDeleteMembership = () => {
-    router.push('/dashboard/memberships');
+  const handleDeleteMembership = async () => {
+    if (!membershipData) {
+      return;
+    }
+    setDeleteError(null);
+    try {
+      await client.membershipPlans.remove({ id: membershipData.id });
+      await invalidateMembershipPlansCache();
+      router.push('/dashboard/memberships');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete membership.';
+      setDeleteError(message);
+    }
   };
 
   // Format price for display
@@ -275,6 +313,12 @@ export default function MembershipDetailPage({ params }: { params: Promise<PageP
         <h1 className="text-3xl font-bold text-foreground">{membershipData.membershipName}</h1>
         <p className="text-lg text-muted-foreground">{membershipData.category}</p>
       </div>
+
+      {saveError && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" data-testid="membership-save-error">
+          {saveError}
+        </div>
+      )}
 
       {/* Stats Card */}
       <MembershipStatsCard
@@ -396,8 +440,12 @@ export default function MembershipDetailPage({ params }: { params: Promise<PageP
       <DeleteMembershipAlertDialog
         isOpen={isDeleteDialogOpen}
         membershipName={membershipData.membershipName}
-        onCloseAction={() => setIsDeleteDialogOpen(false)}
+        onCloseAction={() => {
+          setIsDeleteDialogOpen(false);
+          setDeleteError(null);
+        }}
         onConfirmAction={handleDeleteMembership}
+        errorMessage={deleteError}
       />
     </div>
   );

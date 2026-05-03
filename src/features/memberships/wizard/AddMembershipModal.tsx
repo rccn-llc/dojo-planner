@@ -3,8 +3,12 @@
 import type { MembershipCardProps } from '@/templates/MembershipCard';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
+import { useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useAddMembershipWizard } from '@/hooks/useAddMembershipWizard';
+import { client } from '@/libs/Orpc';
+import { invalidateMembershipPlansCache } from '../../../hooks/useMembershipPlansCache';
+import { transformWizardDataToDb } from '../membershipPlanTransformers';
 import { MembershipBasicsStep } from './MembershipBasicsStep';
 import { MembershipContractStep } from './MembershipContractStep';
 import { MembershipPaymentStep } from './MembershipPaymentStep';
@@ -22,139 +26,72 @@ export const AddMembershipModal = ({ isOpen, onCloseAction, onMembershipCreated 
   const wizard = useAddMembershipWizard();
   const t = useTranslations('AddMembershipWizard');
 
+  // Re-entrancy guard — drops duplicate clicks before React flushes the
+  // disabled-button state. Mirrors the pattern in AddMemberModal.
+  const submittingRef = useRef(false);
+
   const handleCancel = () => {
+    submittingRef.current = false;
     wizard.reset();
     onCloseAction();
   };
 
   const handleSuccess = () => {
-    console.info('[Add Membership Wizard] Membership created successfully:', {
-      timestamp: new Date().toISOString(),
-      membershipData: wizard.data,
-    });
+    submittingRef.current = false;
     wizard.reset();
     onCloseAction();
     router.refresh();
   };
 
   const handleFinalStep = async () => {
+    if (submittingRef.current) {
+      return;
+    }
+    submittingRef.current = true;
+
     try {
       wizard.setIsLoading(true);
       wizard.clearError();
 
-      // Log creation (mock)
-      console.info('[Add Membership Wizard] Starting membership creation:', {
-        timestamp: new Date().toISOString(),
-        wizardData: wizard.data,
-      });
+      const payload = transformWizardDataToDb(wizard.data);
+      const result = await client.membershipPlans.create(payload);
 
-      // Mock API call delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Create the mock membership object
-      const isPunchcard = wizard.data.membershipType === 'punchcard';
-
-      const formatPrice = () => {
-        if (isPunchcard) {
-          if (wizard.data.punchcardPrice === null || wizard.data.punchcardPrice === 0) {
-            return 'Free';
-          }
-          return `$${wizard.data.punchcardPrice.toFixed(2)}`;
-        }
-        if (wizard.data.monthlyFee === null || wizard.data.monthlyFee === 0) {
-          return 'Free';
-        }
-        return `$${wizard.data.monthlyFee.toFixed(2)}/mo`;
-      };
-
-      const formatSignupFee = () => {
-        if (isPunchcard) {
-          return 'One-time purchase';
-        }
-        if (wizard.data.signUpFee === null || wizard.data.signUpFee === 0) {
-          return 'No signup fee';
-        }
-        return `$${wizard.data.signUpFee.toFixed(2)} signup fee`;
-      };
-
-      const getFrequency = () => {
-        if (isPunchcard) {
-          return 'One-time';
-        }
-        switch (wizard.data.paymentFrequency) {
-          case 'monthly':
-            return 'Monthly';
-          case 'weekly':
-            return 'Weekly';
-          case 'annually':
-            return 'Annually';
-          default:
-            return 'Monthly';
-        }
-      };
-
-      const getContract = () => {
-        if (isPunchcard) {
-          return `${wizard.data.classesIncluded} Classes`;
-        }
-        switch (wizard.data.contractLength) {
-          case 'month-to-month':
-            return 'Month-to-Month';
-          case '3-months':
-            return '3 Months';
-          case '6-months':
-            return '6 Months';
-          case '12-months':
-            return '12 Months';
-          default:
-            return 'Month-to-Month';
-        }
-      };
-
-      const getAccess = () => {
-        if (isPunchcard) {
-          return `${wizard.data.classesIncluded} Classes Total`;
-        }
-        return 'Full Access';
-      };
-
-      const newMembership: MembershipCardProps = {
-        id: `membership-${Date.now()}`,
-        name: wizard.data.membershipName,
-        category: wizard.data.associatedProgramName ?? 'No Program',
-        status: wizard.data.status === 'active' ? 'Active' : 'Inactive',
-        isTrial: wizard.data.membershipType === 'trial',
-        isMonthly: wizard.data.paymentFrequency === 'monthly' && !isPunchcard,
-        isPunchcard,
-        price: formatPrice(),
-        signupFee: formatSignupFee(),
-        frequency: getFrequency(),
-        contract: getContract(),
-        access: getAccess(),
-        activeCount: 0,
-        revenue: isPunchcard ? '$0 total' : '$0/mo revenue',
-      };
-
-      console.info('[Add Membership Wizard] Membership created successfully:', {
-        timestamp: new Date().toISOString(),
-        newMembership,
-      });
-
-      // Notify parent about the new membership
+      // Surface the new plan to the parent in UI shape so the optimistic
+      // append continues to work; the cache invalidation right after is the
+      // canonical refresh.
       if (onMembershipCreated) {
+        const isPunchcard = wizard.data.membershipType === 'punchcard';
+        const newMembership: MembershipCardProps = {
+          id: result.plan.id,
+          name: result.plan.name,
+          category: result.plan.category,
+          status: result.plan.isActive ? 'Active' : 'Inactive',
+          isTrial: result.plan.isTrial,
+          isMonthly: result.plan.frequency === 'Monthly' && !isPunchcard,
+          isPunchcard,
+          price: result.plan.price === 0 ? 'Free' : `$${result.plan.price.toFixed(2)}${isPunchcard ? '' : '/mo'}`,
+          signupFee: isPunchcard
+            ? 'One-time purchase'
+            : result.plan.signupFee === 0
+              ? 'No signup fee'
+              : `$${result.plan.signupFee.toFixed(2)} signup fee`,
+          frequency: result.plan.frequency,
+          contract: result.plan.contractLength,
+          access: result.plan.accessLevel,
+          activeCount: 0,
+          revenue: isPunchcard ? '$0 total' : '$0/mo revenue',
+        };
         onMembershipCreated(newMembership);
       }
 
-      // Move to success step
+      await invalidateMembershipPlansCache();
       wizard.setStep('success');
     } catch (err) {
-      console.error('[Add Membership Wizard] Failed to create membership:', {
-        timestamp: new Date().toISOString(),
-        error: err instanceof Error ? err.message : String(err),
-      });
-      wizard.setError('Failed to create membership. Please try again.');
+      const message = err instanceof Error ? err.message : 'Failed to create membership. Please try again.';
+      wizard.setError(message);
     } finally {
       wizard.setIsLoading(false);
+      submittingRef.current = false;
     }
   };
 

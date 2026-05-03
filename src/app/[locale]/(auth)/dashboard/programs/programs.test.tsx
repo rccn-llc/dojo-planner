@@ -12,6 +12,97 @@ vi.mock('@clerk/nextjs', () => ({
   }),
 }));
 
+// Mock useProgramsCache so tests run against deterministic fixture data
+// without hitting the network. The shape mirrors what the real cache returns.
+const mockPrograms = [
+  {
+    id: '1',
+    organizationId: 'test-org-123',
+    name: 'Adult Brazilian Jiu-jitsu',
+    slug: 'adult-bjj',
+    description: 'Traditional Brazilian Jiu-Jitsu program for adults focusing on self-defense, competition, and fitness.',
+    color: null,
+    isActive: true,
+    sortOrder: 0,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    classCount: 5,
+  },
+  {
+    id: '2',
+    organizationId: 'test-org-123',
+    name: 'Kids Program',
+    slug: 'kids',
+    description: 'Fun and engaging martial arts program designed specifically for children ages 6-12.',
+    color: null,
+    isActive: true,
+    sortOrder: 0,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    classCount: 2,
+  },
+  {
+    id: '3',
+    organizationId: 'test-org-123',
+    name: 'Competition Team',
+    slug: 'competition',
+    description: 'Elite training program for competitive athletes with advanced techniques and intensive conditioning.',
+    color: null,
+    isActive: true,
+    sortOrder: 0,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    classCount: 3,
+  },
+  {
+    id: '4',
+    organizationId: 'test-org-123',
+    name: 'Judo Fundamentals',
+    slug: 'judo',
+    description: 'Traditional Judo program focusing on throws, breakfalls, and Olympic-style techniques.',
+    color: null,
+    isActive: true,
+    sortOrder: 0,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    classCount: 1,
+  },
+  {
+    id: '5',
+    organizationId: 'test-org-123',
+    name: 'Wrestling Fundamentals',
+    slug: 'wrestling',
+    description: 'Traditional Wrestling program focusing on takedowns, mat control, and collegiate-style techniques.',
+    color: null,
+    isActive: false,
+    sortOrder: 0,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    classCount: 0,
+  },
+];
+
+vi.mock('@/hooks/useProgramsCache', () => ({
+  useProgramsCache: () => ({
+    programs: mockPrograms,
+    loading: false,
+    error: null,
+    revalidate: vi.fn(),
+  }),
+  invalidateProgramsCache: vi.fn(),
+}));
+
+// Mock the ORPC client so save/delete handlers don't try to hit the network.
+vi.mock('@/libs/Orpc', () => ({
+  client: {
+    programs: {
+      create: vi.fn().mockResolvedValue({ program: { id: 'new-program' } }),
+      update: vi.fn().mockResolvedValue({ program: { id: '1' } }),
+      remove: vi.fn().mockResolvedValue({ success: true }),
+    },
+  },
+}));
+
 describe('Programs Page', () => {
   describe('Page Layout', () => {
     it('renders programs management header', () => {
@@ -111,14 +202,6 @@ describe('Programs Page', () => {
       const fiveClasses = page.getByText('5', { exact: true }).elements();
 
       expect(fiveClasses.length).toBeGreaterThan(0);
-    });
-
-    it('renders program card class names', () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
-
-      const classNames = page.getByText(/BJJ Fundamentals I & II/);
-
-      expect(classNames).toBeInTheDocument();
     });
 
     it('renders classes label on program cards', () => {
@@ -445,11 +528,9 @@ describe('Programs Page', () => {
       expect(page.getByRole('heading', { name: 'Wrestling Fundamentals' })).toBeInTheDocument();
     });
 
-    it('removes program when delete is confirmed', async () => {
+    it('calls programs.remove with the program id when delete is confirmed', async () => {
+      const { client } = await import('@/libs/Orpc');
       render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
-
-      // Verify Wrestling Fundamentals exists
-      expect(page.getByRole('heading', { name: 'Wrestling Fundamentals' })).toBeInTheDocument();
 
       // Click delete button (only Wrestling has one since it has 0 classes)
       const deleteButton = page.getByRole('button', { name: /Delete program/i });
@@ -459,51 +540,10 @@ describe('Programs Page', () => {
       const confirmDeleteButton = page.getByRole('button', { name: 'Delete' });
       await userEvent.click(confirmDeleteButton);
 
-      // Wrestling Fundamentals should be removed
-      const wrestlingHeadings = page.getByRole('heading', { name: 'Wrestling Fundamentals' }).elements();
-
-      expect(wrestlingHeadings.length).toBe(0);
-    });
-
-    it('updates statistics after deletion is confirmed', async () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
-
-      // Initial total programs: 5
-      expect(page.getByText('5', { exact: true }).elements().length).toBeGreaterThan(0);
-
-      // Delete Wrestling
-      const deleteButton = page.getByRole('button', { name: /Delete program/i });
-      await userEvent.click(deleteButton);
-
-      // Confirm deletion
-      const confirmDeleteButton = page.getByRole('button', { name: 'Delete' });
-      await userEvent.click(confirmDeleteButton);
-
-      // Total programs should now be 4
-      const fourElements = page.getByText('4', { exact: true }).elements();
-
-      // There should be at least two "4"s now (programs count and active count)
-      expect(fourElements.length).toBeGreaterThanOrEqual(2);
-    });
-
-    it('removes delete button after last deletable program is deleted', async () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
-
-      // Initially 1 delete button (Wrestling has 0 classes)
-      expect(page.getByRole('button', { name: /Delete program/i }).elements().length).toBe(1);
-
-      // Delete Wrestling
-      const deleteButton = page.getByRole('button', { name: /Delete program/i });
-      await userEvent.click(deleteButton);
-
-      // Confirm deletion
-      const confirmDeleteButton = page.getByRole('button', { name: 'Delete' });
-      await userEvent.click(confirmDeleteButton);
-
-      // No more delete buttons (remaining programs all have classes)
-      const deleteButtons = page.getByRole('button', { name: /Delete program/i }).elements();
-
-      expect(deleteButtons.length).toBe(0);
+      // The remove mutation should have been called with Wrestling's id ('5'
+      // in the fixture). The fixture array doesn't mutate after delete since
+      // the cache hook is mocked statically — we assert the API call instead.
+      expect(client.programs.remove).toHaveBeenCalledWith({ id: '5' });
     });
 
     it('closes dialog after confirming deletion', async () => {

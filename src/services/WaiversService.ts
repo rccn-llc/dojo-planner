@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq, inArray, isNull, or } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/libs/DB';
 import {
   membershipPlanSchema,
@@ -984,4 +984,49 @@ export async function deleteMergeField(id: string, organizationId: string): Prom
         eq(waiverMergeFieldSchema.organizationId, organizationId),
       ),
     );
+}
+
+// =============================================================================
+// DASHBOARD STATS
+// =============================================================================
+
+/**
+ * Count signed waivers in the current calendar month for the organization.
+ * Used by the waivers dashboard "Signed This Month" stat card.
+ */
+export async function countSignedWaiversThisMonth(organizationId: string): Promise<number> {
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const rows = await db
+    .select({ count: sql<number>`cast(count(*) as integer)` })
+    .from(signedWaiverSchema)
+    .where(
+      and(
+        eq(signedWaiverSchema.organizationId, organizationId),
+        gte(signedWaiverSchema.signedAt, startOfMonth),
+      ),
+    );
+  return rows[0]?.count ?? 0;
+}
+
+/**
+ * Count distinct membership plans that have at least one waiver association
+ * within the organization. Used by the waivers dashboard "Memberships Using"
+ * stat card.
+ */
+export async function countMembershipsUsingWaivers(organizationId: string): Promise<number> {
+  // Join through waiverTemplateSchema so the count is org-scoped.
+  const rows = await db
+    .select({
+      count: sql<number>`cast(count(distinct ${membershipWaiverSchema.membershipPlanId}) as integer)`,
+    })
+    .from(membershipWaiverSchema)
+    .innerJoin(
+      waiverTemplateSchema,
+      eq(membershipWaiverSchema.waiverTemplateId, waiverTemplateSchema.id),
+    )
+    .where(eq(waiverTemplateSchema.organizationId, organizationId));
+
+  return rows[0]?.count ?? 0;
 }

@@ -1385,6 +1385,13 @@
     "cancel_button": "Annuler",
     "delete_button": "Supprimer"
   },
+  "RemoveStaffAlertDialog": {
+    "title": "Retirer ce membre du personnel?",
+    "description": "{staffName} perdra l'accès à cette organisation. Le compte utilisateur est conservé — seule l'adhésion à l'organisation est révoquée.",
+    "cancel_button": "Annuler",
+    "remove_button": "Retirer",
+    "removing_button": "Suppression..."
+  },
   "DeleteClassAlertDialog": {
     "title": "Êtes-vous absolument sûr?",
     "description": "Cette action est irréversible. Cela supprimera définitivement le cours « {className} » et supprimera les données des serveurs.",
