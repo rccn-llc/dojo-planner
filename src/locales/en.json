@@ -362,6 +362,7 @@
       "country_placeholder": "United States",
       "date_of_birth_label": "Date of Birth",
       "date_of_birth_placeholder": "Select date of birth",
+      "date_of_birth_picker_aria": "Pick date of birth",
       "back_button": "Back",
       "cancel_button": "Cancel",
       "next_button": "Next"
@@ -1319,6 +1320,7 @@
     "back_button": "Back",
     "cancel_button": "Cancel",
     "continue_button": "Continue",
+    "continue_without_signing_button": "Continue without signing",
     "signature_required_error": "Please provide your signature",
     "name_required_error": "Please enter your full name",
     "agreement_required_error": "You must agree to the waiver terms",

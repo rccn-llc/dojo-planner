@@ -26,6 +26,7 @@ const translationKeys: Record<string, string> = {
   back_button: 'Back',
   cancel_button: 'Cancel',
   continue_button: 'Continue',
+  continue_without_signing_button: 'Continue without signing',
   signature_required_error: 'Please provide your signature',
   name_required_error: 'Please enter your full name',
   agreement_required_error: 'You must agree to the waiver terms',
@@ -180,7 +181,7 @@ describe('WaiverStep', () => {
         page.getByText('No waiver is required for the selected membership plan. Click Continue to proceed.'),
       ).toBeInTheDocument();
       expect(page.getByRole('button', { name: 'Back' })).toBeTruthy();
-      expect(page.getByRole('button', { name: 'Continue' })).toBeTruthy();
+      expect(page.getByRole('button', { name: 'Continue', exact: true })).toBeTruthy();
 
       // It should NOT auto-advance
       expect(mockHandlers.onNext).not.toHaveBeenCalled();
@@ -246,7 +247,7 @@ describe('WaiverStep', () => {
         page.getByText('No waiver is required for the selected membership plan. Click Continue to proceed.'),
       ).toBeInTheDocument();
 
-      const continueButton = page.getByRole('button', { name: 'Continue' });
+      const continueButton = page.getByRole('button', { name: 'Continue', exact: true });
       await userEvent.click(continueButton);
 
       await vi.waitFor(() => {
@@ -374,7 +375,7 @@ describe('WaiverStep', () => {
 
       expect(page.getByRole('button', { name: 'Back' })).toBeTruthy();
       expect(page.getByRole('button', { name: 'Cancel' })).toBeTruthy();
-      expect(page.getByRole('button', { name: 'Continue' })).toBeTruthy();
+      expect(page.getByRole('button', { name: 'Continue', exact: true })).toBeTruthy();
     });
 
     it('should update waiver template ID when waiver is loaded', async () => {
@@ -561,7 +562,7 @@ describe('WaiverStep', () => {
       await userEvent.type(nameInput, 'John Doe');
 
       // Click Continue without signing
-      const continueButton = page.getByRole('button', { name: 'Continue' });
+      const continueButton = page.getByRole('button', { name: 'Continue', exact: true });
       await userEvent.click(continueButton);
 
       await expect.element(page.getByText('Please provide your signature')).toBeInTheDocument();
@@ -581,7 +582,7 @@ describe('WaiverStep', () => {
       await expect.element(page.getByText('Sign Waiver')).toBeInTheDocument();
 
       // Click Continue without entering name
-      const continueButton = page.getByRole('button', { name: 'Continue' });
+      const continueButton = page.getByRole('button', { name: 'Continue', exact: true });
       await userEvent.click(continueButton);
 
       await expect.element(page.getByText('Please enter your full name')).toBeInTheDocument();
@@ -601,7 +602,7 @@ describe('WaiverStep', () => {
       await expect.element(page.getByText('Sign Waiver')).toBeInTheDocument();
 
       // Click Continue without checking the agreement
-      const continueButton = page.getByRole('button', { name: 'Continue' });
+      const continueButton = page.getByRole('button', { name: 'Continue', exact: true });
       await userEvent.click(continueButton);
 
       await expect.element(page.getByText('You must agree to the waiver terms')).toBeInTheDocument();
@@ -621,7 +622,7 @@ describe('WaiverStep', () => {
       await expect.element(page.getByText('Sign Waiver')).toBeInTheDocument();
 
       // Click Continue to trigger errors
-      const continueButton = page.getByRole('button', { name: 'Continue' });
+      const continueButton = page.getByRole('button', { name: 'Continue', exact: true });
       await userEvent.click(continueButton);
 
       await expect.element(page.getByText('Please enter your full name')).toBeInTheDocument();
@@ -648,7 +649,7 @@ describe('WaiverStep', () => {
 
       await expect.element(page.getByText('Sign Waiver')).toBeInTheDocument();
 
-      const continueButton = page.getByRole('button', { name: 'Continue' });
+      const continueButton = page.getByRole('button', { name: 'Continue', exact: true });
       await userEvent.click(continueButton);
 
       // onNext should NOT be called when there are validation errors
@@ -687,7 +688,7 @@ describe('WaiverStep', () => {
       await userEvent.click(checkbox);
 
       // Click Continue
-      const continueButton = page.getByRole('button', { name: 'Continue' });
+      const continueButton = page.getByRole('button', { name: 'Continue', exact: true });
       await userEvent.click(continueButton);
 
       await vi.waitFor(() => {
@@ -842,6 +843,103 @@ describe('WaiverStep', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
 
       expect(mockGetWaiversForMembership).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // #143: when resolvePlaceholders returns empty content (e.g. an org with
+  // no merge fields configured against a placeholder-using template), the
+  // user used to see an empty box with no escape. The fallback shows raw
+  // template content; the new "Continue without signing" button on the
+  // rendered-waiver path is a separate escape hatch.
+  describe('Resolve-failure fallback + escape hatch (#143)', () => {
+    it('falls back to raw template content when resolvePlaceholders returns empty', async () => {
+      mockResolvePlaceholders.mockResolvedValueOnce({ resolvedContent: '' });
+      render(
+        <WaiverStep
+          data={mockData}
+          onUpdate={mockHandlers.onUpdate}
+          onNext={mockHandlers.onNext}
+          onBack={mockHandlers.onBack}
+          onCancel={mockHandlers.onCancel}
+        />,
+      );
+
+      // Wait for the waiver fetch + resolve to complete and the box to render.
+      await vi.waitFor(() => {
+        expect(page.getByText(mockWaiver.content)).toBeTruthy();
+      });
+    });
+
+    it('falls back to raw template content when resolvePlaceholders throws', async () => {
+      mockResolvePlaceholders.mockRejectedValueOnce(new Error('resolver exploded'));
+      render(
+        <WaiverStep
+          data={mockData}
+          onUpdate={mockHandlers.onUpdate}
+          onNext={mockHandlers.onNext}
+          onBack={mockHandlers.onBack}
+          onCancel={mockHandlers.onCancel}
+        />,
+      );
+
+      await vi.waitFor(() => {
+        expect(page.getByText(mockWaiver.content)).toBeTruthy();
+      });
+    });
+
+    it('renders a "Continue without signing" button on the rendered-waiver path', async () => {
+      render(
+        <WaiverStep
+          data={mockData}
+          onUpdate={mockHandlers.onUpdate}
+          onNext={mockHandlers.onNext}
+          onBack={mockHandlers.onBack}
+          onCancel={mockHandlers.onCancel}
+        />,
+      );
+
+      await vi.waitFor(() => {
+        const skipBtn = Array.from(document.querySelectorAll('button'))
+          .find(b => b.textContent?.includes('Continue without signing'));
+
+        expect(skipBtn).toBeTruthy();
+      });
+    });
+
+    it('clicking "Continue without signing" calls onUpdate with waiverSkipped:true and onNext', async () => {
+      const onUpdate = vi.fn();
+      const onNext = vi.fn();
+      render(
+        <WaiverStep
+          data={mockData}
+          onUpdate={onUpdate}
+          onNext={onNext}
+          onBack={mockHandlers.onBack}
+          onCancel={mockHandlers.onCancel}
+        />,
+      );
+
+      // Wait for the waiver fetch to settle and the skip button to render.
+      let skipBtn: HTMLButtonElement | undefined;
+      await vi.waitFor(() => {
+        skipBtn = Array.from(document.querySelectorAll('button'))
+          .find(b => b.textContent?.includes('Continue without signing')) as HTMLButtonElement | undefined;
+
+        expect(skipBtn).toBeTruthy();
+      });
+
+      await userEvent.click(skipBtn!);
+
+      // handleContinueWithoutWaiver clears signature/name/relationship and sets
+      // waiverSkipped: true, then awaits onNext.
+      await vi.waitFor(() => {
+        expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({
+          waiverTemplateId: null,
+          waiverSkipped: true,
+        }));
+      });
+
+      expect(onNext).toHaveBeenCalled();
     });
   });
 });

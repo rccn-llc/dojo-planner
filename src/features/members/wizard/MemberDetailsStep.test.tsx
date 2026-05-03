@@ -31,6 +31,7 @@ const translationKeys: Record<string, string> = {
   country_placeholder: 'United States',
   date_of_birth_label: 'Date of Birth',
   date_of_birth_placeholder: 'Select date of birth',
+  date_of_birth_picker_aria: 'Pick date of birth',
   back_button: 'Back',
   cancel_button: 'Cancel',
   next_button: 'Next',
@@ -325,5 +326,50 @@ describe('MemberDetailsStep', () => {
     await userEvent.click(nextButton);
 
     expect(mockHandlers.onNext).toHaveBeenCalled();
+  });
+
+  // #128 — replaced the native <input type="date"> with a Shadcn Popover +
+  // Calendar to fix macOS year-scroller momentum behavior. Verify the new
+  // trigger renders with the placeholder when no DOB is set, and shows the
+  // formatted date when one is set.
+  describe('Date of Birth picker (#128)', () => {
+    it('renders the picker trigger with the placeholder when no DOB is set', () => {
+      render(
+        <MemberDetailsStep
+          data={mockData}
+          onUpdate={mockHandlers.onUpdate}
+          onNext={mockHandlers.onNext}
+          onBack={mockHandlers.onBack}
+          onCancel={mockHandlers.onCancel}
+        />,
+      );
+
+      // Picker trigger is now a button with our aria-label.
+      expect(page.getByLabelText('Pick date of birth')).toBeTruthy();
+      // Native <input type="date"> should no longer exist.
+      expect(document.querySelector('input[type="date"]')).toBeNull();
+    });
+
+    it('shows the formatted date on the trigger when DOB is set', () => {
+      const dataWithDob: AddMemberWizardData = {
+        ...mockData,
+        dateOfBirth: new Date('1990-06-15T00:00:00'),
+      };
+
+      render(
+        <MemberDetailsStep
+          data={dataWithDob}
+          onUpdate={mockHandlers.onUpdate}
+          onNext={mockHandlers.onNext}
+          onBack={mockHandlers.onBack}
+          onCancel={mockHandlers.onCancel}
+        />,
+      );
+
+      const trigger = page.getByLabelText('Pick date of birth').element() as HTMLButtonElement;
+
+      // toLocaleDateString formatting includes the year.
+      expect(trigger.textContent).toContain('1990');
+    });
   });
 });

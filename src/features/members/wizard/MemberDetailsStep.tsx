@@ -1,10 +1,13 @@
 'use client';
 
 import type { AddMemberWizardData } from '@/hooks/useAddMemberWizard';
+import { CalendarIcon } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
 import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Select,
   SelectContent,
@@ -163,14 +166,44 @@ export const MemberDetailsStep = ({ data, onUpdate, onNext, onBack, onCancel, er
 
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground">{t('date_of_birth_label')}</label>
-          <Input
-            type="date"
-            placeholder={t('date_of_birth_placeholder')}
-            value={data.dateOfBirth ? data.dateOfBirth.toISOString().split('T')[0] : ''}
-            onChange={e => onUpdate({ dateOfBirth: e.target.value ? new Date(e.target.value) : undefined })}
-            onBlur={() => handleInputBlur('dateOfBirth')}
-            error={isDateOfBirthInvalid}
-          />
+          {/*
+            #128 — replaces the native <input type="date"> whose macOS year
+            scroller had a confusing momentum/snap-back behavior. Shadcn
+            Calendar uses Radix Select for month/year dropdowns and a
+            standard click-grid for days, so navigation is predictable.
+          */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                onBlur={() => handleInputBlur('dateOfBirth')}
+                aria-invalid={isDateOfBirthInvalid}
+                aria-label={t('date_of_birth_picker_aria')}
+                className={`w-full justify-start font-normal ${data.dateOfBirth ? 'text-foreground' : 'text-muted-foreground'}`}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
+                {data.dateOfBirth
+                  ? data.dateOfBirth.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+                  : t('date_of_birth_placeholder')}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-auto p-0">
+              <Calendar
+                mode="single"
+                selected={data.dateOfBirth}
+                onSelect={(date) => {
+                  if (date) {
+                    onUpdate({ dateOfBirth: date });
+                  }
+                }}
+                captionLayout="dropdown"
+                startMonth={new Date(new Date().getFullYear() - 100, 0)}
+                endMonth={new Date()}
+                defaultMonth={data.dateOfBirth ?? new Date(new Date().getFullYear() - 30, 0)}
+              />
+            </PopoverContent>
+          </Popover>
           {isDateOfBirthInvalid && (
             <p className="text-xs text-destructive">Please enter a date of birth.</p>
           )}
