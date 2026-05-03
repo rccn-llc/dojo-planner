@@ -809,7 +809,10 @@
     "two_factor_enabled_status": "Enabled",
     "setup_error": "Failed to set up 2FA. Please try again.",
     "verify_error": "Invalid code. Please try again.",
-    "disable_error": "Failed to remove 2FA. Please try again."
+    "disable_error": "Failed to remove 2FA. Please try again.",
+    "backup_codes_missing_error": "Your authenticator was set up, but backup codes weren't returned. Generate them now to keep a recovery option.",
+    "generate_backup_codes_button": "Generate backup codes",
+    "generating_button": "Generating..."
   },
   "Roles": {
     "title": "Roles",

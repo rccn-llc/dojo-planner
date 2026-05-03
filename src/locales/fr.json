@@ -812,7 +812,10 @@
     "two_factor_enabled_status": "Activé",
     "setup_error": "Échec de la configuration 2FA. Veuillez réessayer.",
     "verify_error": "Code invalide. Veuillez réessayer.",
-    "disable_error": "Échec de la suppression 2FA. Veuillez réessayer."
+    "disable_error": "Échec de la suppression 2FA. Veuillez réessayer.",
+    "backup_codes_missing_error": "Votre authentificateur a été configuré, mais les codes de secours n'ont pas été retournés. Générez-les maintenant pour garder une option de récupération.",
+    "generate_backup_codes_button": "Générer les codes de secours",
+    "generating_button": "Génération en cours..."
   },
   "Roles": {
     "title": "Rôles",
