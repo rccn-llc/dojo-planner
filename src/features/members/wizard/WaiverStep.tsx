@@ -104,10 +104,21 @@ export function WaiverStep({
           const selectedWaiver = activeWaivers[0]!;
           setWaiver(selectedWaiver);
 
-          const resolved = await client.waivers.resolvePlaceholders({
-            templateId: selectedWaiver.id,
-          });
-          setResolvedContent(resolved.resolvedContent);
+          // Resolve merge-field placeholders (e.g. <academy>). If the resolve
+          // call fails OR returns empty content (e.g. an org with no merge
+          // fields configured against a template that uses them), fall back
+          // to the raw template text so the user always sees something
+          // signable instead of an empty box (#143).
+          let resolvedText = '';
+          try {
+            const resolved = await client.waivers.resolvePlaceholders({
+              templateId: selectedWaiver.id,
+            });
+            resolvedText = resolved.resolvedContent;
+          } catch (resolveError) {
+            console.warn('[WaiverStep] Failed to resolve placeholders, falling back to raw template:', resolveError);
+          }
+          setResolvedContent(resolvedText.trim() ? resolvedText : selectedWaiver.content);
 
           onUpdateRef.current({ waiverTemplateId: selectedWaiver.id });
         } else {
@@ -342,9 +353,19 @@ export function WaiverStep({
             {t('cancel_button')}
           </Button>
         </div>
-        <Button onClick={handleNext} disabled={isLoading}>
-          {isLoading ? `${t('continue_button')}...` : t('continue_button')}
-        </Button>
+        <div className="flex gap-3">
+          {/* Escape hatch (#143): if the waiver content didn't render or
+              the user wants to sign later, let them advance without signing.
+              The membership is still created; the waiver row simply isn't
+              created and `waiverSkipped: true` is stored so the operator
+              knows to follow up. */}
+          <Button variant="outline" onClick={handleContinueWithoutWaiver} disabled={isLoading}>
+            {t('continue_without_signing_button')}
+          </Button>
+          <Button onClick={handleNext} disabled={isLoading}>
+            {isLoading ? `${t('continue_button')}...` : t('continue_button')}
+          </Button>
+        </div>
       </div>
     </div>
   );

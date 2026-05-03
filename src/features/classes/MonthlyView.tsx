@@ -6,6 +6,7 @@ import { Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ButtonGroupItem, ButtonGroupRoot } from '@/components/ui/button-group';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useClassesCache } from '@/hooks/useClassesCache';
 import { useEventsCache } from '@/hooks/useEventsCache';
@@ -253,6 +254,9 @@ export function MonthlyView({ withFilters }: MonthlyViewProps = {}) {
                                 classId={event.classId}
                                 className={event.className}
                                 color={event.color}
+                                hour={event.hour}
+                                minute={event.minute}
+                                duration={event.duration}
                                 exception={event.exception}
                                 sourceView="monthly"
                                 isEvent={event.isEvent}
@@ -262,11 +266,45 @@ export function MonthlyView({ withFilters }: MonthlyViewProps = {}) {
                               </ClassEventHoverCard>
                             ))}
                             {(monthlyEvents[day.toString()]?.length ?? 0) > 3 && (
-                              <div className="text-xs text-muted-foreground">
-                                +
-                                {monthlyEvents[day.toString()]!.length - 3}
-                                {' more'}
-                              </div>
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <button
+                                    type="button"
+                                    className="text-left text-xs text-muted-foreground hover:text-foreground hover:underline"
+                                    aria-label={`Show all ${monthlyEvents[day.toString()]!.length} events for ${monthName} ${day}`}
+                                  >
+                                    +
+                                    {monthlyEvents[day.toString()]!.length - 3}
+                                    {' more'}
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent align="start" className="w-72 p-2">
+                                  <div className="mb-2 text-sm font-semibold text-foreground">
+                                    {monthName}
+                                    {' '}
+                                    {day}
+                                  </div>
+                                  <div className="flex flex-col gap-1">
+                                    {monthlyEvents[day.toString()]!.map(event => (
+                                      <ClassEventHoverCard
+                                        key={`expanded-${event.classId}-${event.hour}-${event.minute}`}
+                                        classId={event.classId}
+                                        className={event.className}
+                                        color={event.color}
+                                        hour={event.hour}
+                                        minute={event.minute}
+                                        duration={event.duration}
+                                        exception={event.exception}
+                                        sourceView="monthly"
+                                        isEvent={event.isEvent}
+                                        eventId={event.eventId}
+                                      >
+                                        <span className="truncate">{event.className}</span>
+                                      </ClassEventHoverCard>
+                                    ))}
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
                             )}
                           </div>
                         </>

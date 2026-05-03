@@ -362,6 +362,7 @@
       "country_placeholder": "États-Unis",
       "date_of_birth_label": "Date de naissance",
       "date_of_birth_placeholder": "Sélectionner la date de naissance",
+      "date_of_birth_picker_aria": "Choisir la date de naissance",
       "back_button": "Retour",
       "cancel_button": "Annuler",
       "next_button": "Suivant"
@@ -1323,6 +1324,7 @@
     "back_button": "Retour",
     "cancel_button": "Annuler",
     "continue_button": "Continuer",
+    "continue_without_signing_button": "Continuer sans signer",
     "signature_required_error": "Veuillez fournir votre signature",
     "name_required_error": "Veuillez entrer votre nom complet",
     "agreement_required_error": "Vous devez accepter les termes de la décharge",

@@ -1,7 +1,7 @@
 import type { ConvertMemberWizardData } from '@/hooks/useConvertMemberWizard';
-import { page } from '@vitest/browser/context';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
+import { page } from 'vitest/browser';
 import { I18nWrapper } from '@/lib/test-utils';
 import { ConvertConfirmStep } from './ConvertConfirmStep';
 

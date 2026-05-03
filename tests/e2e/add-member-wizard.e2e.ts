@@ -98,15 +98,21 @@ async function fillDetailsStep(page: Page): Promise<MemberDetails> {
   await page.getByPlaceholder('you@example.com').fill(email);
   await page.getByPlaceholder('(555) 123-4567').fill(phone);
 
-  // Date of birth — use an adult date
-  await page.locator('input[type="date"]').fill('1990-01-15');
+  const dialog = page.getByRole('dialog');
+
+  // Date of birth — opens the Shadcn Popover + Calendar (#128 fix replaced
+  // the native <input type="date">). We don't need a specific date for the
+  // wizard flow tests; just pick any visible enabled day in the default
+  // month (which the component sets to ~30 years ago — well into adult).
+  await page.getByLabel('Pick date of birth').click();
+  // Calendar opens in a portaled popover; click the first day cell button.
+  await page.getByRole('gridcell').getByRole('button').first().click();
 
   // Address fields
   await page.getByPlaceholder('123 Main St').fill('100 Test Ave');
   await page.getByPlaceholder('San Francisco').fill('Testville');
 
   // State select — click the state trigger within the dialog, then pick CA
-  const dialog = page.getByRole('dialog');
   await dialog.locator('[data-slot="select-trigger"]').first().click();
   await page.getByRole('option', { name: 'CA', exact: true }).click();
 
