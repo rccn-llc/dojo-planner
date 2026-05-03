@@ -216,6 +216,16 @@ export const FamilyPaymentStep = ({
     onNextAction();
   }, [hohHasCard, useIframe, paymentMethod, onNextAction, onUpdateAction, iframeTokenize]);
 
+  // Try Again on a declined family payment — clear status so the user can
+  // re-submit without re-entering card details. Mirrors PaymentStep.handleTryAgain.
+  const handleTryAgain = useCallback(() => {
+    onUpdateAction({
+      paymentStatus: undefined,
+      paymentDeclineReason: undefined,
+      paymentProcessed: false,
+    });
+  }, [onUpdateAction]);
+
   return (
     <div className="space-y-6">
       <div>
@@ -619,22 +629,34 @@ export const FamilyPaymentStep = ({
             {t('cancel_button')}
           </Button>
         </div>
-        <Button
-          onClick={handleConfirm}
-          disabled={!canProceed || isLoading || tokenizing}
-          variant={paymentStatus === 'declined' ? 'outline' : 'default'}
-        >
-          {(isLoading || tokenizing)
-            ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {t('processing_button')}
-                </>
-              )
-            : paymentStatus === 'declined'
-              ? tPayment('continue_without_payment_button')
-              : t('confirm_button')}
-        </Button>
+        <div className="flex gap-3">
+          {paymentStatus === 'declined' && (
+            <Button
+              variant="default"
+              onClick={handleTryAgain}
+              disabled={isLoading || tokenizing}
+              data-testid="family-payment-try-again-button"
+            >
+              {tPayment('try_again_button')}
+            </Button>
+          )}
+          <Button
+            onClick={handleConfirm}
+            disabled={!canProceed || isLoading || tokenizing}
+            variant={paymentStatus === 'declined' ? 'outline' : 'default'}
+          >
+            {(isLoading || tokenizing)
+              ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {t('processing_button')}
+                  </>
+                )
+              : paymentStatus === 'declined'
+                ? tPayment('continue_without_payment_button')
+                : t('confirm_button')}
+          </Button>
+        </div>
       </div>
     </div>
   );

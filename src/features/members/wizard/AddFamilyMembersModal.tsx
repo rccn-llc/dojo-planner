@@ -64,6 +64,9 @@ export const AddFamilyMembersModal = ({
   const cardFirstSixRef = useRef<string | undefined>(undefined);
   const cardLastFourRef = useRef<string | undefined>(undefined);
 
+  // Re-entrancy guard for handleFamilyMemberSubmit — see AddMemberModal for rationale.
+  const submittingRef = useRef(false);
+
   // Key to force TokenEx iframe re-init between family members
   const [paymentStepKey, setPaymentStepKey] = useState(0);
 
@@ -102,6 +105,7 @@ export const AddFamilyMembersModal = ({
     cardTokenRef.current = undefined;
     cardFirstSixRef.current = undefined;
     cardLastFourRef.current = undefined;
+    submittingRef.current = false;
     wizard.reset();
     onCloseAction();
     if (wizard.completedMembers.length > 0) {
@@ -113,6 +117,7 @@ export const AddFamilyMembersModal = ({
     cardTokenRef.current = undefined;
     cardFirstSixRef.current = undefined;
     cardLastFourRef.current = undefined;
+    submittingRef.current = false;
     wizard.reset();
     onCloseAction();
     router.refresh();
@@ -122,6 +127,7 @@ export const AddFamilyMembersModal = ({
     cardTokenRef.current = undefined;
     cardFirstSixRef.current = undefined;
     cardLastFourRef.current = undefined;
+    submittingRef.current = false;
     wizard.resetForNextMember();
     setPaymentStepKey(prev => prev + 1);
   };
@@ -187,6 +193,12 @@ export const AddFamilyMembersModal = ({
       wizard.setStep('member-success');
       return;
     }
+
+    // Re-entrancy guard — see AddMemberModal.handleFinalNext for rationale.
+    if (submittingRef.current) {
+      return;
+    }
+    submittingRef.current = true;
 
     try {
       wizard.setIsLoading(true);
@@ -417,6 +429,7 @@ export const AddFamilyMembersModal = ({
       wizard.setError(errorMessage);
     } finally {
       wizard.setIsLoading(false);
+      submittingRef.current = false;
     }
   };
 

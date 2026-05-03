@@ -435,6 +435,7 @@
       "cancel_button": "Annuler",
       "next_button": "Suivant",
       "processing_button": "Traitement en cours...",
+      "try_again_button": "Réessayer",
       "continue_without_payment_button": "Ajouter le membre quand même",
       "payment_approved_title": "Paiement approuvé",
       "payment_approved_message": "Le paiement a été traité avec succès. Vous pouvez maintenant terminer l'inscription du membre.",

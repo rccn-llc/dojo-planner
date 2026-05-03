@@ -435,6 +435,7 @@
       "cancel_button": "Cancel",
       "next_button": "Next",
       "processing_button": "Processing...",
+      "try_again_button": "Try Again",
       "continue_without_payment_button": "Add Member Anyway",
       "payment_approved_title": "Payment Approved",
       "payment_approved_message": "The payment has been successfully processed. You can now proceed to complete member registration.",
