@@ -828,7 +828,13 @@
     "access_denied_title": "Access Denied",
     "access_denied_message": "You do not have permission to view the roles list. Please sign in to an organization.",
     "error_title": "Error Loading Roles",
-    "error_message": "Failed to load roles and permissions. Please try again later."
+    "error_message": "Failed to load roles and permissions. Please try again later.",
+    "save_error": "Failed to save role. Please try again.",
+    "delete_error": "Failed to delete role. Please try again.",
+    "delete_dialog_title": "Delete Role",
+    "delete_dialog_description": "Are you sure you want to delete the role \"{roleName}\"? This action cannot be undone. Members assigned to this role will need to be reassigned.",
+    "delete_cancel_button": "Cancel",
+    "delete_confirm_button": "Delete Role"
   },
   "RoleCard": {
     "system_role_badge": "System",

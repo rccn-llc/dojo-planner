@@ -831,7 +831,13 @@
     "access_denied_title": "Accès refusé",
     "access_denied_message": "Vous n'avez pas la permission de voir la liste des rôles. Veuillez vous connecter à une organisation.",
     "error_title": "Erreur de chargement des rôles",
-    "error_message": "Impossible de charger les rôles et les permissions. Veuillez réessayer plus tard."
+    "error_message": "Impossible de charger les rôles et les permissions. Veuillez réessayer plus tard.",
+    "save_error": "Échec de l'enregistrement du rôle. Veuillez réessayer.",
+    "delete_error": "Échec de la suppression du rôle. Veuillez réessayer.",
+    "delete_dialog_title": "Supprimer le rôle",
+    "delete_dialog_description": "Êtes-vous sûr de vouloir supprimer le rôle « {roleName} » ? Cette action est irréversible. Les membres affectés à ce rôle devront être réaffectés.",
+    "delete_cancel_button": "Annuler",
+    "delete_confirm_button": "Supprimer le rôle"
   },
   "RoleCard": {
     "system_role_badge": "Système",

@@ -4,11 +4,14 @@ import type { RoleFormData } from './AddEditRoleModal';
 import type { RolesFilters } from './RolesFilterBar';
 import { Plus } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { useRouter } from 'next/navigation';
 import { useCallback, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { client } from '@/libs/Orpc';
 import { RoleCard } from '@/templates/RoleCard';
 import { StatsCards } from '@/templates/StatsCards';
 import { AddEditRoleModal } from './AddEditRoleModal';
+import { DeleteRoleAlertDialog } from './DeleteRoleAlertDialog';
 import { RolesFilterBar } from './RolesFilterBar';
 
 type Permission = {
@@ -40,6 +43,7 @@ const ADMIN_ROLE_KEY = 'org:admin';
 
 export function RolesPageClient({ roles, totalPermissions, availablePermissions, currentUserRole }: RolesPageClientProps) {
   const t = useTranslations('Roles');
+  const router = useRouter();
   const [filters, setFilters] = useState<RolesFilters>({
     search: '',
     permission: 'all',
@@ -47,6 +51,9 @@ export function RolesPageClient({ roles, totalPermissions, availablePermissions,
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<RoleFormData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [deletingRole, setDeletingRole] = useState<{ id: string; name: string } | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Check if current user is an admin (can delete any non-admin role)
   const isAdmin = currentUserRole === ADMIN_ROLE_KEY;
@@ -84,6 +91,7 @@ export function RolesPageClient({ roles, totalPermissions, availablePermissions,
   // Handler for opening the Add Role modal
   const handleAddRoleClick = useCallback(() => {
     setEditingRole(null);
+    setSaveError(null);
     setIsModalOpen(true);
   }, []);
 
@@ -99,6 +107,7 @@ export function RolesPageClient({ roles, totalPermissions, availablePermissions,
         permissions: roleToEdit.permissions,
         isSystemRole: roleToEdit.isSystemRole,
       });
+      setSaveError(null);
       setIsModalOpen(true);
     }
   }, [roles]);
@@ -107,39 +116,70 @@ export function RolesPageClient({ roles, totalPermissions, availablePermissions,
   const handleModalClose = useCallback(() => {
     setIsModalOpen(false);
     setEditingRole(null);
+    setSaveError(null);
   }, []);
 
   // Handler for saving role (add or edit)
   const handleSaveRole = useCallback(async (data: RoleFormData) => {
     setIsLoading(true);
+    setSaveError(null);
     try {
-      // TODO: Implement actual API call to Clerk to create/update role
-      // For now, just log the data and close the modal
-      console.info('[Roles] Saving role:', {
-        timestamp: new Date().toISOString(),
-        isEdit: !!data.id,
-        data,
-      });
-
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-
+      // Clerk's BAPI for /organization_roles expects permission IDs (perm_xxx),
+      // not permission keys — sending keys yields 404 "Organization permission not found".
+      const permissionIds = data.permissions.map(p => p.id);
+      if (data.id) {
+        await client.roles.update({
+          id: data.id,
+          name: data.name,
+          description: data.description,
+          permissions: permissionIds,
+        });
+      } else {
+        await client.roles.create({
+          name: data.name,
+          key: data.key,
+          description: data.description,
+          permissions: permissionIds,
+        });
+      }
+      router.refresh();
       handleModalClose();
     } catch (error) {
-      console.error('[Roles] Failed to save role:', error);
+      const message = error instanceof Error ? error.message : t('save_error');
+      setSaveError(message);
     } finally {
       setIsLoading(false);
     }
-  }, [handleModalClose]);
+  }, [handleModalClose, router, t]);
 
-  // Handler for delete role
+  // Handler for opening delete confirmation dialog
   const handleDeleteRole = useCallback((id: string) => {
-    // TODO: Implement delete confirmation dialog and API call
-    console.info('[Roles] Delete role requested:', {
-      timestamp: new Date().toISOString(),
-      roleId: id,
-    });
+    const role = roles.find(r => r.id === id);
+    if (role) {
+      setDeletingRole({ id: role.id, name: role.name });
+      setDeleteError(null);
+    }
+  }, [roles]);
+
+  const handleCloseDeleteDialog = useCallback(() => {
+    setDeletingRole(null);
+    setDeleteError(null);
   }, []);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deletingRole) {
+      return;
+    }
+    setDeleteError(null);
+    try {
+      await client.roles.remove({ id: deletingRole.id });
+      router.refresh();
+      setDeletingRole(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : t('delete_error');
+      setDeleteError(message);
+    }
+  }, [deletingRole, router, t]);
 
   // Filter roles based on search and permission filter
   const filteredRoles = useMemo(() => {
@@ -241,6 +281,16 @@ export function RolesPageClient({ roles, totalPermissions, availablePermissions,
         availablePermissions={availablePermissions}
         isLoading={isLoading}
         canEditSystemRoles={isAdmin}
+        errorMessage={saveError}
+      />
+
+      {/* Delete Role Confirmation Dialog */}
+      <DeleteRoleAlertDialog
+        isOpen={deletingRole !== null}
+        roleName={deletingRole?.name ?? ''}
+        onCloseAction={handleCloseDeleteDialog}
+        onConfirmAction={handleConfirmDelete}
+        errorMessage={deleteError}
       />
     </div>
   );

@@ -132,6 +132,11 @@ export const AUDIT_ACTION = {
   STAFF_INVITE: 'staff.invite',
   STAFF_UPDATE: 'staff.update',
   STAFF_REMOVE: 'staff.remove',
+
+  // Role operations (Clerk organization roles)
+  ROLE_CREATE: 'role.create',
+  ROLE_UPDATE: 'role.update',
+  ROLE_DELETE: 'role.delete',
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTION)[keyof typeof AUDIT_ACTION];
@@ -169,6 +174,7 @@ export const AUDIT_ENTITY_TYPE = {
   ORGANIZATION: 'organization',
   NOTE: 'note',
   STAFF: 'staff',
+  ROLE: 'role',
 } as const;
 
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPE)[keyof typeof AUDIT_ENTITY_TYPE];

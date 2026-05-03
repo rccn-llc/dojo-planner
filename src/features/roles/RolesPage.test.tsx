@@ -3,6 +3,20 @@ import { render } from 'vitest-browser-react';
 import { page } from 'vitest/browser';
 import { RolesPageClient } from './RolesPageClient';
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
+
+vi.mock('@/libs/Orpc', () => ({
+  client: {
+    roles: {
+      create: vi.fn(),
+      update: vi.fn(),
+      remove: vi.fn(),
+    },
+  },
+}));
+
 vi.mock('next-intl', () => ({
   useTranslations: () => (key: string) => {
     const translations: Record<string, string> = {
