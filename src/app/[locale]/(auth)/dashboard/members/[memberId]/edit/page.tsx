@@ -23,6 +23,7 @@ import { ConvertMemberModal } from '@/features/members/conversion/ConvertMemberM
 import { ChangeMembershipModal } from '@/features/members/details/ChangeMembershipModal';
 import { EditContactInfoModal } from '@/features/members/details/EditContactInfoModal';
 import { EditMemberPhotoModal } from '@/features/members/details/EditMemberPhotoModal';
+import { EditPaymentMethodModal } from '@/features/members/details/EditPaymentMethodModal';
 import { MemberDetailAttendance } from '@/features/members/details/MemberDetailAttendance';
 import { MemberDetailNotes } from '@/features/members/details/MemberDetailNotes';
 import { AddFamilyMembersModal } from '@/features/members/wizard/AddFamilyMembersModal';
@@ -455,6 +456,7 @@ export default function EditMemberPage() {
 
   // State for edit photo modal
   const [isEditPhotoModalOpen, setIsEditPhotoModalOpen] = useState(false);
+  const [isEditPaymentMethodOpen, setIsEditPaymentMethodOpen] = useState(false);
 
   // State for change membership modal
   const [isChangeMembershipModalOpen, setIsChangeMembershipModalOpen] = useState(false);
@@ -614,25 +616,28 @@ export default function EditMemberPage() {
     fetchSignedWaivers();
   }, [memberId]);
 
-  // Fetch payment methods for this member
-  useEffect(() => {
-    const fetchPaymentMethods = async () => {
-      if (!memberId) {
-        return;
-      }
-      setIsLoadingPayment(true);
-      try {
-        const result = await client.member.listPaymentMethods({ memberId });
-        setPaymentMethods(result.paymentMethods);
-      } catch (err) {
-        console.warn('[Edit Member] Failed to fetch payment methods:', err);
-        setPaymentMethods([]);
-      } finally {
-        setIsLoadingPayment(false);
-      }
-    };
-    fetchPaymentMethods();
+  // Fetch payment methods for this member. Extracted into a useCallback so
+  // the EditPaymentMethodModal can call it via onSavedAction to refresh the
+  // displayed last-4 after saving a new card.
+  const reloadPaymentMethods = useCallback(async () => {
+    if (!memberId) {
+      return;
+    }
+    setIsLoadingPayment(true);
+    try {
+      const result = await client.member.listPaymentMethods({ memberId });
+      setPaymentMethods(result.paymentMethods);
+    } catch (err) {
+      console.warn('[Edit Member] Failed to fetch payment methods:', err);
+      setPaymentMethods([]);
+    } finally {
+      setIsLoadingPayment(false);
+    }
   }, [memberId]);
+
+  useEffect(() => {
+    void reloadPaymentMethods();
+  }, [reloadPaymentMethods]);
 
   // Fetch billing history for this member
   useEffect(() => {
@@ -1121,6 +1126,20 @@ export default function EditMemberPage() {
               }}
             />
 
+            <EditPaymentMethodModal
+              key={isEditPaymentMethodOpen ? 'pm-open' : 'pm-closed'}
+              isOpen={isEditPaymentMethodOpen}
+              onCloseAction={() => setIsEditPaymentMethodOpen(false)}
+              memberId={memberId}
+              memberEmail={state.currentData.contactInfo.email ?? ''}
+              memberFirstName={state.currentData.firstName}
+              memberLastName={state.currentData.lastName}
+              memberPhone={state.currentData.contactInfo.phone}
+              onSavedAction={() => {
+                void reloadPaymentMethods();
+              }}
+            />
+
             {/* Membership Details - Comprehensive */}
             <Card className="flex flex-col p-6">
               <div>
@@ -1243,7 +1262,33 @@ export default function EditMemberPage() {
             {/* Payment Method */}
             <Card className="flex flex-col p-6">
               <div>
-                <h2 className="mb-6 text-lg font-semibold text-foreground">Payment Method</h2>
+                <div className="mb-6 flex items-center justify-between">
+                  <h2 className="text-lg font-semibold text-foreground">Payment Method</h2>
+                  {!isLoadingPayment && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsEditPaymentMethodOpen(true)}
+                      aria-label={paymentMethods.length === 0 ? 'Add payment method' : 'Edit payment method'}
+                    >
+                      {paymentMethods.length === 0
+                        ? (
+                            <>
+                              <Plus className="mr-1 h-4 w-4" />
+                              {' '}
+                              Add
+                            </>
+                          )
+                        : (
+                            <>
+                              <Pencil className="mr-1 h-4 w-4" />
+                              {' '}
+                              Edit
+                            </>
+                          )}
+                    </Button>
+                  )}
+                </div>
                 {isLoadingPayment
                   ? (
                       <p className="text-sm text-muted-foreground">Loading payment methods...</p>

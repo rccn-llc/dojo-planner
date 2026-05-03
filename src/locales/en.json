@@ -2097,5 +2097,13 @@
       "membership_added": "Membership: {planName}",
       "done_button": "Done"
     }
+  },
+  "EditPaymentMethodModal": {
+    "title": "Edit payment method",
+    "save_button": "Save",
+    "saving_button": "Saving...",
+    "cancel_button": "Cancel",
+    "save_error": "Failed to save payment method. Please try again.",
+    "card_iframe_unavailable": "Card tokenization is not available in this environment."
   }
 }

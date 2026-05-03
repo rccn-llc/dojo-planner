@@ -6,7 +6,7 @@ import { useOrganization, useUser } from '@clerk/nextjs';
 import { ArrowDownAZ, ArrowUpZA, Check, ChevronLeft, ChevronRight, Loader2, X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useTheme } from 'next-themes';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { ButtonGroupItem, ButtonGroupRoot } from '@/components/ui/button-group';
@@ -47,9 +47,18 @@ export function SubscriptionDialog({ open, onOpenChange }: SubscriptionDialogPro
 
   const itemsPerPage = 10;
 
+  // Whether the payment form is currently mounted in the DOM. The TokenEx
+  // container <div id={TOKENEX_CONTAINER_ID}> only renders inside the
+  // payment-form card, which itself only renders when a plan has been
+  // selected and the user isn't already subscribed (see render block below).
+  // Pass `config: null` to the hook until the container exists; otherwise
+  // useTokenExIframe's effect runs while the div doesn't exist yet and the
+  // iframe never mounts (#160).
+  const showPaymentForm = !!selectedPlanId && !currentPlan?.hasActiveSubscription;
+
   const { isLoaded: iframeLoaded, isValid: iframeValid, tokenize } = useTokenExIframe({
     containerId: TOKENEX_CONTAINER_ID,
-    config: tokenizationConfig,
+    config: showPaymentForm ? tokenizationConfig : null,
     theme: resolvedTheme === 'dark' ? 'dark' : 'light',
   });
 
@@ -66,6 +75,16 @@ export function SubscriptionDialog({ open, onOpenChange }: SubscriptionDialogPro
       // If tokenization config fails, user will use plain card input
     }
   }, [tokenizationConfig]);
+
+  // Pre-load the tokenization config when the dialog opens for a not-yet-
+  // subscribed org. By the time the user clicks a plan and the payment form
+  // renders, the config is already cached and the iframe can mount without
+  // a visible loading delay (#160).
+  useEffect(() => {
+    if (open && !currentPlan?.hasActiveSubscription) {
+      void loadTokenizationConfig();
+    }
+  }, [open, currentPlan?.hasActiveSubscription, loadTokenizationConfig]);
 
   const handleSubscribe = async (planId: SaasPlanId) => {
     const plan = SaasPlanList[planId];

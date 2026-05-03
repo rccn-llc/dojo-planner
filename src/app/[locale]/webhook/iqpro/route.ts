@@ -1,11 +1,11 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { db } from '@/libs/DB';
 import { Env } from '@/libs/Env';
 import { logger } from '@/libs/Logger';
 import { getClientIP, isRateLimitingEnabled, webhookRateLimiter } from '@/libs/RateLimit';
-import { memberMembershipSchema, organizationSchema, transactionSchema } from '@/models/Schema';
+import { memberMembershipSchema, memberSchema, organizationSchema, transactionSchema } from '@/models/Schema';
 
 // Inline type to avoid top-level import from the optional @dojo-planner/iqpro-client package
 type WebhookPayload = { type: string; id?: string; data: Record<string, unknown> };
@@ -173,6 +173,14 @@ async function handleSubscriptionPaymentSucceeded(data: Record<string, unknown>)
     ? new Date(data.nextPaymentDate as string)
     : undefined;
 
+  // Look up the member that owns this membership BEFORE the update so we can
+  // mirror the membership status onto memberSchema.status (#138). Without
+  // this, the member-detail UI keeps showing the old status.
+  const membership = await db.query.memberMembershipSchema.findFirst({
+    where: eq(memberMembershipSchema.iqproSubscriptionId, subscriptionId),
+    columns: { memberId: true },
+  });
+
   await db
     .update(memberMembershipSchema)
     .set({
@@ -180,6 +188,20 @@ async function handleSubscriptionPaymentSucceeded(data: Record<string, unknown>)
       ...(nextPaymentDate && { nextPaymentDate }),
     })
     .where(eq(memberMembershipSchema.iqproSubscriptionId, subscriptionId));
+
+  // Mirror onto member.status — only flip past_due → active. We deliberately
+  // leave 'archived' / 'cancelled' / 'hold' / 'trial' alone so that a stray
+  // payment-success webhook doesn't reactivate a member the operator
+  // explicitly archived or put on hold.
+  if (membership?.memberId) {
+    await db
+      .update(memberSchema)
+      .set({ status: 'active', statusChangedAt: new Date() })
+      .where(and(
+        eq(memberSchema.id, membership.memberId),
+        eq(memberSchema.status, 'past_due'),
+      ));
+  }
 
   logger.info('[IQPro Webhook] Subscription payment succeeded', { subscriptionId });
 }
@@ -207,10 +229,30 @@ async function handleSubscriptionPaymentFailed(data: Record<string, unknown>): P
   }
 
   // Fall back to member membership subscription
+  const membership = await db.query.memberMembershipSchema.findFirst({
+    where: eq(memberMembershipSchema.iqproSubscriptionId, subscriptionId),
+    columns: { memberId: true },
+  });
+
   await db
     .update(memberMembershipSchema)
     .set({ status: 'past_due' })
     .where(eq(memberMembershipSchema.iqproSubscriptionId, subscriptionId));
+
+  // Mirror onto member.status (#138). Only flip if the member is currently
+  // 'active' or 'trial' — leaves archived / cancelled / hold rows alone so a
+  // stray webhook can't escalate a member the operator already finalised.
+  if (membership?.memberId) {
+    await db
+      .update(memberSchema)
+      .set({ status: 'past_due', statusChangedAt: new Date() })
+      .where(and(
+        eq(memberSchema.id, membership.memberId),
+        ne(memberSchema.status, 'archived'),
+        ne(memberSchema.status, 'cancelled'),
+        ne(memberSchema.status, 'hold'),
+      ));
+  }
 
   logger.info('[IQPro Webhook] Subscription payment failed', { subscriptionId });
 }
@@ -238,10 +280,37 @@ async function handleSubscriptionCancelled(data: Record<string, unknown>): Promi
   }
 
   // Fall back to member membership subscription
+  const membership = await db.query.memberMembershipSchema.findFirst({
+    where: eq(memberMembershipSchema.iqproSubscriptionId, subscriptionId),
+    columns: { memberId: true },
+  });
+
   await db
     .update(memberMembershipSchema)
     .set({ status: 'cancelled' })
     .where(eq(memberMembershipSchema.iqproSubscriptionId, subscriptionId));
+
+  // Mirror onto member.status (#138) only if the cancelled membership was the
+  // member's last active one. We don't want to cancel a member who still has
+  // a different active membership in the same org.
+  if (membership?.memberId) {
+    const activeOther = await db.query.memberMembershipSchema.findFirst({
+      where: and(
+        eq(memberMembershipSchema.memberId, membership.memberId),
+        eq(memberMembershipSchema.status, 'active'),
+      ),
+      columns: { id: true },
+    });
+    if (!activeOther) {
+      await db
+        .update(memberSchema)
+        .set({ status: 'cancelled', statusChangedAt: new Date() })
+        .where(and(
+          eq(memberSchema.id, membership.memberId),
+          ne(memberSchema.status, 'archived'),
+        ));
+    }
+  }
 
   logger.info('[IQPro Webhook] Subscription cancelled', { subscriptionId });
 }

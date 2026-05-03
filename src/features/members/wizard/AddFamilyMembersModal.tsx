@@ -64,6 +64,11 @@ export const AddFamilyMembersModal = ({
   const cardFirstSixRef = useRef<string | undefined>(undefined);
   const cardLastFourRef = useRef<string | undefined>(undefined);
 
+  // Tracks the just-created family member's id between member.create and the
+  // payment call. On payment decline + cancel, this is what we pass to
+  // client.member.removeFully to roll back the half-finished signup (#132).
+  const createdMemberIdRef = useRef<string | undefined>(undefined);
+
   // Re-entrancy guard for handleFamilyMemberSubmit — see AddMemberModal for rationale.
   const submittingRef = useRef(false);
 
@@ -102,9 +107,22 @@ export const AddFamilyMembersModal = ({
   };
 
   const handleCancel = () => {
+    // #132 — if the in-progress family member was created earlier in the
+    // flow and the user is now bailing after a payment decline, roll back.
+    // Already-completed family members (in wizard.completedMembers) are
+    // left alone — those payments succeeded.
+    const memberIdToRollBack = createdMemberIdRef.current;
+    if (memberIdToRollBack && wizard.data.paymentStatus === 'declined') {
+      void client.member.removeFully({ id: memberIdToRollBack }).catch((err) => {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[AddFamilyMembers] Rollback failed:', err);
+        }
+      });
+    }
     cardTokenRef.current = undefined;
     cardFirstSixRef.current = undefined;
     cardLastFourRef.current = undefined;
+    createdMemberIdRef.current = undefined;
     submittingRef.current = false;
     wizard.reset();
     onCloseAction();
@@ -117,6 +135,7 @@ export const AddFamilyMembersModal = ({
     cardTokenRef.current = undefined;
     cardFirstSixRef.current = undefined;
     cardLastFourRef.current = undefined;
+    createdMemberIdRef.current = undefined;
     submittingRef.current = false;
     wizard.reset();
     onCloseAction();
@@ -127,6 +146,7 @@ export const AddFamilyMembersModal = ({
     cardTokenRef.current = undefined;
     cardFirstSixRef.current = undefined;
     cardLastFourRef.current = undefined;
+    createdMemberIdRef.current = undefined;
     submittingRef.current = false;
     wizard.resetForNextMember();
     setPaymentStepKey(prev => prev + 1);
@@ -255,6 +275,9 @@ export const AddFamilyMembersModal = ({
           },
         }),
       });
+      // Track the new member's id so handleCancel can roll back the whole
+      // signup chain if the user bails after a payment decline (#132).
+      createdMemberIdRef.current = result.id;
 
       // 2. Create signed waiver if applicable
       if (
