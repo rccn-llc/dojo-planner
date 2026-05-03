@@ -2105,5 +2105,13 @@
       "membership_added": "Adhésion : {planName}",
       "done_button": "Terminé"
     }
+  },
+  "EditPaymentMethodModal": {
+    "title": "Modifier le mode de paiement",
+    "save_button": "Enregistrer",
+    "saving_button": "Enregistrement...",
+    "cancel_button": "Annuler",
+    "save_error": "Échec de l'enregistrement du mode de paiement. Veuillez réessayer.",
+    "card_iframe_unavailable": "La tokenisation de carte n'est pas disponible dans cet environnement."
   }
 }

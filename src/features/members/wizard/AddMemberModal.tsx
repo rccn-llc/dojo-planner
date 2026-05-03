@@ -57,6 +57,13 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
   const cardFirstSixRef = useRef<string | undefined>(undefined);
   const cardLastFourRef = useRef<string | undefined>(undefined);
 
+  // Tracks the just-created member's id between member.create and the payment
+  // call. On payment decline + cancel, this is what we pass to
+  // client.member.removeFully to roll back the half-finished signup (#132).
+  // We use a ref (not state) because handleCancel needs to read it
+  // synchronously after a chain of async setStates.
+  const createdMemberIdRef = useRef<string | undefined>(undefined);
+
   // Re-entrancy guard: flips synchronously on click to drop duplicate submissions
   // that fire before React flushes the disabled-button state.
   const submittingRef = useRef(false);
@@ -95,9 +102,23 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
   }, [isOpen]);
 
   const handleCancel = () => {
+    // #132 — if a member was created earlier in the flow and the user is now
+    // bailing (e.g. cancelled after payment decline), roll back the whole
+    // chain. Fire-and-forget; we don't block the dialog close on the network
+    // call. The endpoint is idempotent enough — if the rollback fails, the
+    // operator can hard-delete from the dashboard later.
+    const memberIdToRollBack = createdMemberIdRef.current;
+    if (memberIdToRollBack && wizard.data.paymentStatus === 'declined') {
+      void client.member.removeFully({ id: memberIdToRollBack }).catch((err) => {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[Add Member Wizard] Rollback failed:', err);
+        }
+      });
+    }
     cardTokenRef.current = undefined;
     cardFirstSixRef.current = undefined;
     cardLastFourRef.current = undefined;
+    createdMemberIdRef.current = undefined;
     submittingRef.current = false;
     wizard.reset();
     onCloseAction();
@@ -111,6 +132,7 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
     cardTokenRef.current = undefined;
     cardFirstSixRef.current = undefined;
     cardLastFourRef.current = undefined;
+    createdMemberIdRef.current = undefined;
     submittingRef.current = false;
     wizard.reset();
     onCloseAction();
@@ -279,6 +301,9 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
       });
 
       const result = await client.member.create(createPayload);
+      // Track the new member's id so handleCancel can roll back the whole
+      // signup chain if the user bails after a payment decline (#132).
+      createdMemberIdRef.current = result.id;
       console.info('[Add Member Wizard] Member created successfully:', {
         timestamp: new Date().toISOString(),
         result,

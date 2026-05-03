@@ -5,12 +5,12 @@ import { z } from 'zod';
 import { logger } from '@/libs/Logger';
 import { audit } from '@/services/AuditService';
 import { sendMemberConfirmationEmail } from '@/services/EmailService';
-import { addMemberMembership, changeMemberMembership, createMember, getAllMembershipPlans, getFamilyMembers, getHeadOfHouseholdMembers, getHOHForFamilyMember, getMemberPaymentMethods, getMembershipPlans, getMemberTransactions, linkFamilyMember, unlinkFamilyMember, updateMember, updateMemberContactInfo, updateMemberPhoto, updateMemberStatus } from '@/services/MembersService';
+import { addMemberMembership, changeMemberMembership, createMember, getAllMembershipPlans, getFamilyMembers, getHeadOfHouseholdMembers, getHOHForFamilyMember, getMemberPaymentMethods, getMembershipPlans, getMemberTransactions, linkFamilyMember, removeFully, unlinkFamilyMember, updateMember, updateMemberContactInfo, updateMemberPhoto, updateMemberStatus } from '@/services/MembersService';
 import { generatePdfFilename } from '@/services/WaiverPdfService';
 import { generateWaiverPdfBuffer } from '@/services/WaiverPdfService.server';
 import { AUDIT_ACTION, AUDIT_ENTITY_TYPE } from '@/types/Audit';
 import { ORG_ROLE } from '@/types/Auth';
-import { DeleteMemberValidation, EditMemberValidation, GetHOHForMemberValidation, GetHOHPaymentMethodsValidation, LinkFamilyMemberValidation, ListFamilyMembersValidation, MemberPaymentMethodsValidation, MemberTransactionsValidation, MemberValidation, SearchHOHValidation, SendConfirmationEmailValidation, UnlinkFamilyMemberValidation, UpdateMemberContactInfoValidation, UpdateMemberPhotoValidation, UpdateMemberTypeValidation } from '@/validations/MemberValidation';
+import { DeleteMemberValidation, EditMemberValidation, GetHOHForMemberValidation, GetHOHPaymentMethodsValidation, LinkFamilyMemberValidation, ListFamilyMembersValidation, MemberPaymentMethodsValidation, MemberTransactionsValidation, MemberValidation, RemoveFullyMemberValidation, SearchHOHValidation, SendConfirmationEmailValidation, UnlinkFamilyMemberValidation, UpdateMemberContactInfoValidation, UpdateMemberPhotoValidation, UpdateMemberTypeValidation } from '@/validations/MemberValidation';
 import { guardAuth, guardRole } from './AuthGuards';
 
 export const create = os
@@ -159,6 +159,54 @@ export const remove = os
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
       // Audit the failure
+      await audit(context, AUDIT_ACTION.MEMBER_REMOVE, AUDIT_ENTITY_TYPE.MEMBER, {
+        entityId: input.id,
+        status: 'failure',
+        error: errorMessage,
+      });
+
+      throw error;
+    }
+  });
+
+/**
+ * Hard-delete a member and every row that references them.
+ *
+ * Use case: payment-declined rollback in the Add Member wizard (#132). The
+ * operator chose "Cancel & Roll Back" instead of "Add Anyway" after a card
+ * decline. Unlike `remove` (which soft-archives and preserves history), this
+ * leaves no trace.
+ *
+ * Guarded by FRONT_DESK rather than ACADEMY_OWNER because this is part of
+ * the member-creation undo flow that any front-desk staff can trigger. The
+ * service-layer `removeFully` enforces org scope (no cross-tenant access).
+ */
+export const removeFullyMember = os
+  .input(RemoveFullyMemberValidation)
+  .handler(async ({ input }) => {
+    const context = await guardRole(ORG_ROLE.FRONT_DESK);
+
+    try {
+      const result = await removeFully(input.id, context.orgId);
+
+      if (!result.deleted) {
+        throw new ORPCError('Member not found', { status: 404 });
+      }
+
+      logger.info(`[Member.removeFully] Member rolled back`, {
+        memberId: input.id,
+        rowsRemoved: result.rowsRemoved,
+      });
+
+      await audit(context, AUDIT_ACTION.MEMBER_REMOVE, AUDIT_ENTITY_TYPE.MEMBER, {
+        entityId: input.id,
+        status: 'success',
+      });
+
+      return { rowsRemoved: result.rowsRemoved };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
       await audit(context, AUDIT_ACTION.MEMBER_REMOVE, AUDIT_ENTITY_TYPE.MEMBER, {
         entityId: input.id,
         status: 'failure',

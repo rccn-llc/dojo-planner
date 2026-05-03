@@ -9,6 +9,7 @@ import {
   MemberPaymentMethodsValidation,
   MemberTransactionsValidation,
   MemberValidation,
+  RemoveFullyMemberValidation,
   SearchHOHValidation,
   SendConfirmationEmailValidation,
   UnlinkFamilyMemberValidation,
@@ -167,6 +168,26 @@ describe('MemberValidation', () => {
       const invalidData = {};
 
       const result = DeleteMemberValidation.safeParse(invalidData);
+
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('RemoveFullyMemberValidation schema', () => {
+    it('accepts a non-empty id', () => {
+      const result = RemoveFullyMemberValidation.safeParse({ id: 'member-123' });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects an empty id', () => {
+      const result = RemoveFullyMemberValidation.safeParse({ id: '' });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects when id is missing', () => {
+      const result = RemoveFullyMemberValidation.safeParse({});
 
       expect(result.success).toBe(false);
     });

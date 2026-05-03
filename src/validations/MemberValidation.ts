@@ -32,6 +32,10 @@ export const DeleteMemberValidation = z.object({
   id: z.string(),
 });
 
+export const RemoveFullyMemberValidation = z.object({
+  id: z.string().min(1),
+});
+
 export const UpdateMemberContactInfoValidation = z.object({
   id: z.string(),
   email: z.string().email(),

@@ -1,8 +1,8 @@
 import type { TransactionData } from '@/services/TransactionsService';
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, or } from 'drizzle-orm';
 import { db } from '@/libs/DB';
-import { addressSchema, familyMemberSchema, memberMembershipSchema, memberSchema, membershipPlanSchema, paymentMethodSchema, transactionSchema } from '@/models/Schema';
+import { addressSchema, attendanceSchema, classEnrollmentSchema, couponUsageSchema, eventRegistrationSchema, familyMemberSchema, memberMembershipSchema, memberSchema, membershipPlanSchema, noteSchema, paymentMethodSchema, signedWaiverSchema, transactionSchema } from '@/models/Schema';
 
 export type MembershipPlanData = {
   id: string;
@@ -732,4 +732,134 @@ export async function getHOHForFamilyMember(familyMemberId: string): Promise<HOH
     .limit(1);
 
   return result[0] ?? null;
+}
+
+export type RemoveFullyResult = {
+  deleted: boolean;
+  rowsRemoved: {
+    signedWaiver: number;
+    paymentMethod: number;
+    transaction: number;
+    couponUsage: number;
+    classEnrollment: number;
+    eventRegistration: number;
+    attendance: number;
+    note: number;
+    memberMembership: number;
+    address: number;
+    familyMember: number;
+  };
+};
+
+/**
+ * Hard-delete a member and every row that references them, in FK-safe order,
+ * inside a single DB transaction.
+ *
+ * Use case: payment-declined rollback in the Add Member wizard (#132). The
+ * member was just created seconds ago; the operator chose "Cancel & Roll
+ * Back" instead of "Add Anyway". Unlike `softDeleteMember` (which sets
+ * status='archived' and preserves history), this leaves no trace — the
+ * member's whole signup-aftermath chain is gone.
+ *
+ * Scoped to the org for safety: returns `{ deleted: false }` if the member
+ * doesn't exist or doesn't belong to the org. Callers should check the
+ * return value to surface "member not found" errors distinctly from
+ * "permission denied".
+ */
+export async function removeFully(
+  memberId: string,
+  organizationId: string,
+): Promise<RemoveFullyResult> {
+  const existing = await db
+    .select({ id: memberSchema.id })
+    .from(memberSchema)
+    .where(and(
+      eq(memberSchema.id, memberId),
+      eq(memberSchema.organizationId, organizationId),
+    ))
+    .limit(1);
+  if (existing.length === 0) {
+    return {
+      deleted: false,
+      rowsRemoved: {
+        signedWaiver: 0,
+        paymentMethod: 0,
+        transaction: 0,
+        couponUsage: 0,
+        classEnrollment: 0,
+        eventRegistration: 0,
+        attendance: 0,
+        note: 0,
+        memberMembership: 0,
+        address: 0,
+        familyMember: 0,
+      },
+    };
+  }
+
+  return await db.transaction(async (tx) => {
+    // Delete in FK dependency order. Tables that reference member_membership
+    // (signed_waiver, transaction) come before member_membership. Tables that
+    // reference member directly come next. Member row is last.
+    const sw = await tx.delete(signedWaiverSchema)
+      .where(eq(signedWaiverSchema.memberId, memberId))
+      .returning({ id: signedWaiverSchema.id });
+    const pm = await tx.delete(paymentMethodSchema)
+      .where(eq(paymentMethodSchema.memberId, memberId))
+      .returning({ id: paymentMethodSchema.id });
+    const tr = await tx.delete(transactionSchema)
+      .where(eq(transactionSchema.memberId, memberId))
+      .returning({ id: transactionSchema.id });
+    const cu = await tx.delete(couponUsageSchema)
+      .where(eq(couponUsageSchema.memberId, memberId))
+      .returning({ id: couponUsageSchema.id });
+    const ce = await tx.delete(classEnrollmentSchema)
+      .where(eq(classEnrollmentSchema.memberId, memberId))
+      .returning({ id: classEnrollmentSchema.id });
+    const er = await tx.delete(eventRegistrationSchema)
+      .where(eq(eventRegistrationSchema.memberId, memberId))
+      .returning({ id: eventRegistrationSchema.id });
+    const at = await tx.delete(attendanceSchema)
+      .where(eq(attendanceSchema.memberId, memberId))
+      .returning({ id: attendanceSchema.id });
+    const no = await tx.delete(noteSchema)
+      .where(eq(noteSchema.memberId, memberId))
+      .returning({ id: noteSchema.id });
+    const mm = await tx.delete(memberMembershipSchema)
+      .where(eq(memberMembershipSchema.memberId, memberId))
+      .returning({ id: memberMembershipSchema.id });
+    const ad = await tx.delete(addressSchema)
+      .where(eq(addressSchema.memberId, memberId))
+      .returning({ id: addressSchema.id });
+    // family_member has TWO FKs to member (memberId + relatedMemberId); both
+    // must be cleaned up so we don't leave dangling references.
+    const fm = await tx.delete(familyMemberSchema)
+      .where(or(
+        eq(familyMemberSchema.memberId, memberId),
+        eq(familyMemberSchema.relatedMemberId, memberId),
+      ))
+      .returning({ memberId: familyMemberSchema.memberId });
+    await tx.delete(memberSchema)
+      .where(and(
+        eq(memberSchema.id, memberId),
+        eq(memberSchema.organizationId, organizationId),
+      ));
+
+    return {
+      deleted: true,
+      rowsRemoved: {
+        signedWaiver: sw.length,
+        paymentMethod: pm.length,
+        transaction: tr.length,
+        couponUsage: cu.length,
+        classEnrollment: ce.length,
+        eventRegistration: er.length,
+        attendance: at.length,
+        note: no.length,
+        memberMembership: mm.length,
+        address: ad.length,
+        familyMember: fm.length,
+      },
+    };
+  });
 }
