@@ -180,6 +180,26 @@ export const MembershipStep = ({
 
   const handleSelect = (planId: string) => {
     const selectedPlan = membershipPlans.find(p => p.id === planId);
+    // When the user picks a free-trial plan, clear any card/ACH data they may
+    // have entered for a previously-selected paid plan. The PaymentStep hides
+    // the form for trials, so leftover values would never get cleared by the
+    // form itself.
+    const trialClears = selectedPlan?.isTrial
+      ? {
+          paymentMethod: undefined,
+          cardToken: undefined,
+          cardFirstSix: undefined,
+          cardLastFour: undefined,
+          cardholderName: undefined,
+          cardNumber: undefined,
+          cardExpiry: undefined,
+          cardCvc: undefined,
+          achAccountHolder: undefined,
+          achRoutingNumber: undefined,
+          achAccountNumber: undefined,
+          achAccountType: undefined,
+        }
+      : {};
     onUpdate({
       membershipPlanId: planId,
       membershipPlanPrice: selectedPlan?.price,
@@ -188,6 +208,7 @@ export const MembershipStep = ({
       membershipPlanIsTrial: selectedPlan?.isTrial ?? undefined,
       membershipPlanContractLength: selectedPlan?.contractLength,
       membershipPlanSignupFee: selectedPlan?.signupFee,
+      ...trialClears,
     });
     setError(null);
   };

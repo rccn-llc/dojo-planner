@@ -190,8 +190,13 @@ export const FamilyPaymentStep = ({
     && data.achRoutingNumber
     && data.achAccountNumber;
 
-  // Can proceed: if HOH has card, always enabled; otherwise need valid payment form
-  const canProceed = hohHasCard || isCardFormValid || isAchFormValid;
+  // Free-trial plans skip payment collection entirely. Both flags must hold —
+  // a paid plan reduced to $0 by a coupon still wants card-on-file for the
+  // post-coupon recurring charge.
+  const isFreeTrial = !!data.membershipPlanIsTrial && finalPrice === 0;
+
+  // Can proceed: trial → always; HOH has card → always; otherwise need valid payment form
+  const canProceed = isFreeTrial || hohHasCard || isCardFormValid || isAchFormValid;
 
   const hasCouponApplied = data.appliedCoupon && discountAmount > 0;
 
@@ -229,69 +234,84 @@ export const FamilyPaymentStep = ({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">{t('title')}</h2>
-        <p className="text-sm text-muted-foreground">
-          {hohHasCard ? t('subtitle_with_card') : t('subtitle_no_card')}
-        </p>
+        {isFreeTrial
+          ? (
+              <>
+                <h2 className="text-lg font-semibold">{tPayment('trial_title')}</h2>
+                <p className="text-sm text-muted-foreground">
+                  {tPayment('trial_disclaimer', { duration: data.membershipPlanContractLength ?? '' })}
+                </p>
+              </>
+            )
+          : (
+              <>
+                <h2 className="text-lg font-semibold">{t('title')}</h2>
+                <p className="text-sm text-muted-foreground">
+                  {hohHasCard ? t('subtitle_with_card') : t('subtitle_no_card')}
+                </p>
+              </>
+            )}
       </div>
 
-      {/* Billing Summary */}
-      <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
-        <h3 className="text-sm font-semibold">{t('summary_label')}</h3>
-        <div className="space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">{t('member_label')}</span>
-            <span className="font-medium">
-              {data.firstName}
-              {' '}
-              {data.lastName}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">{t('plan_label')}</span>
-            <span className="font-medium">{data.membershipPlanName || '-'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">{t('amount_label')}</span>
-            <span className="font-medium">
-              {hasCouponApplied
-                ? (
-                    <>
-                      {paymentAmount}
-                      {' '}
-                      <span className="text-muted-foreground line-through">{formatPaymentAmount(originalPrice)}</span>
-                    </>
-                  )
-                : paymentAmount}
-              {frequencyLabel && `/${frequencyLabel}`}
-            </span>
-          </div>
-          <div className="border-t pt-2">
+      {/* Billing Summary — hidden on trial; nothing to bill */}
+      {!isFreeTrial && (
+        <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
+          <h3 className="text-sm font-semibold">{t('summary_label')}</h3>
+          <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">{t('hoh_label')}</span>
-              <span className="font-medium">{data.hohMemberName}</span>
+              <span className="text-muted-foreground">{t('member_label')}</span>
+              <span className="font-medium">
+                {data.firstName}
+                {' '}
+                {data.lastName}
+              </span>
             </div>
-            {hohHasCard && (
-              <div className="mt-1 flex justify-between">
-                <span className="text-muted-foreground">{t('payment_method_label')}</span>
-                <span className="flex items-center gap-1 font-medium">
-                  {data.hohPaymentMethodType === 'ach'
-                    ? <Landmark className="h-3 w-3" />
-                    : <CreditCard className="h-3 w-3" />}
-                  {t('payment_method_value', {
-                    hohName: data.hohMemberName || '',
-                    type: data.hohPaymentMethodType === 'ach' ? 'ACH' : 'Card',
-                    last4: data.hohPaymentMethodLast4 || '****',
-                  })}
-                </span>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">{t('plan_label')}</span>
+              <span className="font-medium">{data.membershipPlanName || '-'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">{t('amount_label')}</span>
+              <span className="font-medium">
+                {hasCouponApplied
+                  ? (
+                      <>
+                        {paymentAmount}
+                        {' '}
+                        <span className="text-muted-foreground line-through">{formatPaymentAmount(originalPrice)}</span>
+                      </>
+                    )
+                  : paymentAmount}
+                {frequencyLabel && `/${frequencyLabel}`}
+              </span>
+            </div>
+            <div className="border-t pt-2">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">{t('hoh_label')}</span>
+                <span className="font-medium">{data.hohMemberName}</span>
               </div>
-            )}
+              {hohHasCard && (
+                <div className="mt-1 flex justify-between">
+                  <span className="text-muted-foreground">{t('payment_method_label')}</span>
+                  <span className="flex items-center gap-1 font-medium">
+                    {data.hohPaymentMethodType === 'ach'
+                      ? <Landmark className="h-3 w-3" />
+                      : <CreditCard className="h-3 w-3" />}
+                    {t('payment_method_value', {
+                      hohName: data.hohMemberName || '',
+                      type: data.hohPaymentMethodType === 'ach' ? 'ACH' : 'Card',
+                      last4: data.hohPaymentMethodLast4 || '****',
+                    })}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Coupon Selection */}
-      {validCoupons.length > 0 && originalPrice > 0 && (
+      {/* Coupon Selection — hidden on trial */}
+      {!isFreeTrial && validCoupons.length > 0 && originalPrice > 0 && (
         <div>
           <label htmlFor="familyCouponSelect" className="block text-sm font-medium">
             {tPayment('coupon_label')}
@@ -340,8 +360,8 @@ export const FamilyPaymentStep = ({
         </div>
       )}
 
-      {/* Mode A: HOH has card — billing notice */}
-      {hohHasCard && (
+      {/* Mode A: HOH has card — billing notice (suppressed on trial) */}
+      {!isFreeTrial && hohHasCard && (
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/30">
           <p className="text-sm text-blue-700 dark:text-blue-300">
             {t('billing_notice', {
@@ -354,8 +374,8 @@ export const FamilyPaymentStep = ({
         </div>
       )}
 
-      {/* Mode B: HOH has no card — collect payment */}
-      {!hohHasCard && (
+      {/* Mode B: HOH has no card — collect payment (suppressed on trial) */}
+      {!isFreeTrial && !hohHasCard && (
         <>
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/30">
             <p className="text-sm text-amber-700 dark:text-amber-300">
@@ -652,9 +672,11 @@ export const FamilyPaymentStep = ({
                     {t('processing_button')}
                   </>
                 )
-              : paymentStatus === 'declined'
-                ? tPayment('continue_without_payment_button')
-                : t('confirm_button')}
+              : isFreeTrial
+                ? tPayment('continue_button')
+                : paymentStatus === 'declined'
+                  ? tPayment('continue_without_payment_button')
+                  : t('confirm_button')}
           </Button>
         </div>
       </div>

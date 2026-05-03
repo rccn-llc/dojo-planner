@@ -139,6 +139,11 @@ export const PaymentStep = ({
 
   const paymentAmount = formatPaymentAmount(finalPrice);
 
+  // Free-trial detection — both flags must agree. A paid plan with a coupon
+  // that brings price to $0 isn't a trial; it's a discounted plan and we
+  // still want to capture card details for the next billing cycle.
+  const isFreeTrial = !!data.membershipPlanIsTrial && finalPrice === 0;
+
   const handleInputChange = (field: string, value: string) => {
     // Reset payment status when user changes payment details after a decline
     // This allows them to retry with new information
@@ -222,7 +227,9 @@ export const PaymentStep = ({
     && data.achRoutingNumber
     && data.achAccountNumber;
 
-  const isFormValid = isCardFormValid || isAchFormValid;
+  // Free-trial plans bypass the card/ACH validation gate — there's no charge,
+  // so no payment data to collect. The Next button is always enabled.
+  const isFormValid = isFreeTrial ? true : (isCardFormValid || isAchFormValid);
 
   const getDeclineReasonMessage = (reason?: PaymentDeclineReason): string => {
     switch (reason) {
@@ -295,30 +302,39 @@ export const PaymentStep = ({
                 <p className="text-sm text-muted-foreground">{t('capture_only_description')}</p>
               </>
             )
-          : (
-              <>
-                <h2 className="text-lg font-semibold">
-                  {hasCouponApplied
-                    ? (
-                        <>
-                          {t('pay_amount', { amount: paymentAmount })}
-                          {' '}
-                          <span className="text-base font-normal text-muted-foreground line-through">
-                            {originalAmountText}
-                          </span>
-                        </>
-                      )
-                    : t('pay_amount', { amount: paymentAmount })}
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  {t('payment_description', {
-                    plan: planText,
-                    amount: paymentAmount,
-                    period: periodText,
-                  })}
-                </p>
-              </>
-            )}
+          : isFreeTrial
+            ? (
+                <>
+                  <h2 className="text-lg font-semibold">{t('trial_title')}</h2>
+                  <p className="text-sm text-muted-foreground">
+                    {t('trial_disclaimer', { duration: data.membershipPlanContractLength ?? '' })}
+                  </p>
+                </>
+              )
+            : (
+                <>
+                  <h2 className="text-lg font-semibold">
+                    {hasCouponApplied
+                      ? (
+                          <>
+                            {t('pay_amount', { amount: paymentAmount })}
+                            {' '}
+                            <span className="text-base font-normal text-muted-foreground line-through">
+                              {originalAmountText}
+                            </span>
+                          </>
+                        )
+                      : t('pay_amount', { amount: paymentAmount })}
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    {t('payment_description', {
+                      plan: planText,
+                      amount: paymentAmount,
+                      period: periodText,
+                    })}
+                  </p>
+                </>
+              )}
       </div>
 
       {/* Capture-only info notice */}
@@ -331,8 +347,8 @@ export const PaymentStep = ({
         </div>
       )}
 
-      {/* HOH Billing Notice (only when processing a payment, not capture-only) */}
-      {!captureOnly && memberType === 'head-of-household' && (
+      {/* HOH Billing Notice (only when processing a payment, not capture-only or free trial) */}
+      {!captureOnly && !isFreeTrial && memberType === 'head-of-household' && (
         <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/30">
           <Info className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
           <p className="text-sm text-blue-700 dark:text-blue-300">
@@ -341,8 +357,8 @@ export const PaymentStep = ({
         </div>
       )}
 
-      {/* Coupon Selection (hidden in capture-only mode) */}
-      {!captureOnly && validCoupons.length > 0 && originalPrice > 0 && (
+      {/* Coupon Selection (hidden in capture-only mode and on free trials) */}
+      {!captureOnly && !isFreeTrial && validCoupons.length > 0 && originalPrice > 0 && (
         <div>
           <label htmlFor="couponSelect" className="block text-sm font-medium">
             {t('coupon_label')}
@@ -376,8 +392,8 @@ export const PaymentStep = ({
         </div>
       )}
 
-      {/* Savings Alert (hidden in capture-only mode) */}
-      {!captureOnly && hasCouponApplied && (
+      {/* Savings Alert (hidden in capture-only mode and on free trials) */}
+      {!captureOnly && !isFreeTrial && hasCouponApplied && (
         <div className="flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950/30">
           <Tag className="mt-0.5 h-5 w-5 shrink-0 text-green-600 dark:text-green-400" />
           <div>
@@ -391,8 +407,8 @@ export const PaymentStep = ({
         </div>
       )}
 
-      {/* Billing Type Selection (hidden in capture-only mode) */}
-      {!captureOnly && isRecurringMembership && originalPrice > 0 && (
+      {/* Billing Type Selection (hidden in capture-only mode and on free trials) */}
+      {!captureOnly && !isFreeTrial && isRecurringMembership && originalPrice > 0 && (
         <div>
           <label className="mb-2 block text-sm font-medium">
             {t('billing_type_label')}
@@ -481,39 +497,41 @@ export const PaymentStep = ({
         </div>
       )}
 
-      {/* Payment Method Tabs */}
-      <div className="flex gap-3">
-        <button
-          type="button"
-          onClick={() => handlePaymentMethodChange('card')}
-          disabled={isLoading}
-          className={`flex flex-1 items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 transition-all ${
-            paymentMethod === 'card'
-              ? 'border-primary bg-primary/5'
-              : 'border-border bg-background hover:border-primary/50 hover:bg-accent/50'
-          } ${isLoading ? 'cursor-not-allowed opacity-50' : ''}`}
-        >
-          <CreditCard className="h-5 w-5" />
-          <span className="font-medium">{t('card_tab_label')}</span>
-        </button>
+      {/* Payment Method Tabs (hidden on free trials — no payment to collect) */}
+      {!isFreeTrial && (
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => handlePaymentMethodChange('card')}
+            disabled={isLoading}
+            className={`flex flex-1 items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 transition-all ${
+              paymentMethod === 'card'
+                ? 'border-primary bg-primary/5'
+                : 'border-border bg-background hover:border-primary/50 hover:bg-accent/50'
+            } ${isLoading ? 'cursor-not-allowed opacity-50' : ''}`}
+          >
+            <CreditCard className="h-5 w-5" />
+            <span className="font-medium">{t('card_tab_label')}</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => handlePaymentMethodChange('ach')}
-          disabled={isLoading}
-          className={`flex flex-1 items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 transition-all ${
-            paymentMethod === 'ach'
-              ? 'border-primary bg-primary/5'
-              : 'border-border bg-background hover:border-primary/50 hover:bg-accent/50'
-          } ${isLoading ? 'cursor-not-allowed opacity-50' : ''}`}
-        >
-          <Landmark className="h-5 w-5" />
-          <span className="font-medium">{t('ach_tab_label')}</span>
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={() => handlePaymentMethodChange('ach')}
+            disabled={isLoading}
+            className={`flex flex-1 items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 transition-all ${
+              paymentMethod === 'ach'
+                ? 'border-primary bg-primary/5'
+                : 'border-border bg-background hover:border-primary/50 hover:bg-accent/50'
+            } ${isLoading ? 'cursor-not-allowed opacity-50' : ''}`}
+          >
+            <Landmark className="h-5 w-5" />
+            <span className="font-medium">{t('ach_tab_label')}</span>
+          </button>
+        </div>
+      )}
 
-      {/* Card Payment Form */}
-      {paymentMethod === 'card' && (
+      {/* Card Payment Form (hidden on free trials — no payment to collect) */}
+      {!isFreeTrial && paymentMethod === 'card' && (
         <div className="space-y-4">
           <div>
             <label htmlFor="cardholderName" className="block text-sm font-medium">
@@ -632,8 +650,8 @@ export const PaymentStep = ({
         </div>
       )}
 
-      {/* ACH Payment Form */}
-      {paymentMethod === 'ach' && (
+      {/* ACH Payment Form (hidden on free trials — no payment to collect) */}
+      {!isFreeTrial && paymentMethod === 'ach' && (
         <div className="space-y-4">
           <div>
             <label htmlFor="achAccountHolder" className="block text-sm font-medium">
@@ -746,11 +764,13 @@ export const PaymentStep = ({
                     {t('processing_button')}
                   </>
                 )
-              : captureOnly
-                ? t('save_payment_method_button')
-                : paymentStatus === 'declined'
-                  ? t('continue_without_payment_button')
-                  : t('next_button')}
+              : isFreeTrial
+                ? t('continue_button')
+                : captureOnly
+                  ? t('save_payment_method_button')
+                  : paymentStatus === 'declined'
+                    ? t('continue_without_payment_button')
+                    : t('next_button')}
           </Button>
         </div>
       </div>
