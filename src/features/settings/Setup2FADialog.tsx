@@ -77,12 +77,33 @@ export function Setup2FADialog({ open, onOpenChange, onSuccess }: Setup2FADialog
     setError('');
     try {
       const result = await user?.verifyTOTP({ code });
-      if (result?.backupCodes) {
+      if (result?.backupCodes && result.backupCodes.length > 0) {
         setBackupCodes(result.backupCodes);
       }
       setStep('backup');
     } catch {
       setError(t('verify_error'));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // #165: when verifyTOTP didn't surface backup codes (some Clerk instances
+  // don't issue them on TOTP setup), generate them explicitly. This is the
+  // operator's fallback path — the inline error in the backup step shows a
+  // 'Generate' button that calls this.
+  const handleGenerateBackupCodes = async () => {
+    setIsLoading(true);
+    setError('');
+    try {
+      const result = await user?.createBackupCode();
+      if (result?.codes && result.codes.length > 0) {
+        setBackupCodes(result.codes);
+      } else {
+        setError(t('backup_codes_missing_error'));
+      }
+    } catch {
+      setError(t('backup_codes_missing_error'));
     } finally {
       setIsLoading(false);
     }
@@ -190,16 +211,32 @@ export function Setup2FADialog({ open, onOpenChange, onSuccess }: Setup2FADialog
               {t('backup_codes_description')}
             </p>
             <Alert variant="warning">{t('backup_codes_warning')}</Alert>
-            <div className="grid grid-cols-2 gap-2">
-              {backupCodes.map(backupCode => (
-                <code
-                  key={backupCode}
-                  className="rounded-md bg-muted px-3 py-2 text-center font-mono text-sm"
-                >
-                  {backupCode}
-                </code>
-              ))}
-            </div>
+            {backupCodes.length > 0
+              ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    {backupCodes.map(backupCode => (
+                      <code
+                        key={backupCode}
+                        className="rounded-md bg-muted px-3 py-2 text-center font-mono text-sm"
+                      >
+                        {backupCode}
+                      </code>
+                    ))}
+                  </div>
+                )
+              : (
+                  <div className="space-y-3">
+                    <Alert variant="error">{t('backup_codes_missing_error')}</Alert>
+                    <Button
+                      variant="outline"
+                      onClick={handleGenerateBackupCodes}
+                      disabled={isLoading}
+                      className="w-full"
+                    >
+                      {isLoading ? t('generating_button') : t('generate_backup_codes_button')}
+                    </Button>
+                  </div>
+                )}
           </div>
         )}
 
@@ -220,7 +257,7 @@ export function Setup2FADialog({ open, onOpenChange, onSuccess }: Setup2FADialog
 
           {step === 'backup' && (
             <div className="flex w-full justify-between">
-              <Button variant="outline" onClick={handleCopyAll}>
+              <Button variant="outline" onClick={handleCopyAll} disabled={backupCodes.length === 0}>
                 {copied
                   ? (
                       <>
@@ -235,7 +272,7 @@ export function Setup2FADialog({ open, onOpenChange, onSuccess }: Setup2FADialog
                       </>
                     )}
               </Button>
-              <Button onClick={handleDone}>
+              <Button onClick={handleDone} disabled={backupCodes.length === 0}>
                 {t('done_button')}
               </Button>
             </div>

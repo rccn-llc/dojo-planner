@@ -5,10 +5,12 @@ import { Setup2FADialog } from './Setup2FADialog';
 
 const mockCreateTOTP = vi.fn();
 const mockVerifyTOTP = vi.fn();
+const mockCreateBackupCode = vi.fn();
 
 const mockUser = {
   createTOTP: mockCreateTOTP,
   verifyTOTP: mockVerifyTOTP,
+  createBackupCode: mockCreateBackupCode,
   totpEnabled: false,
   reload: vi.fn(),
 };
@@ -41,6 +43,9 @@ vi.mock('next-intl', () => ({
       next_button: 'Next',
       setup_error: 'Failed to set up 2FA.',
       verify_error: 'Invalid code.',
+      backup_codes_missing_error: 'Backup codes were not returned. Generate them now.',
+      generate_backup_codes_button: 'Generate backup codes',
+      generating_button: 'Generating...',
     };
     return translations[key] || key;
   },
@@ -69,6 +74,12 @@ describe('Setup2FADialog', () => {
     mockVerifyTOTP.mockResolvedValue({
       verified: true,
       backupCodes: ['code-1', 'code-2', 'code-3', 'code-4'],
+    });
+    mockCreateBackupCode.mockResolvedValue({
+      id: 'bc-1',
+      codes: ['gen-1', 'gen-2', 'gen-3', 'gen-4'],
+      createdAt: null,
+      updatedAt: null,
     });
   });
 
@@ -203,5 +214,106 @@ describe('Setup2FADialog', () => {
     render(<Setup2FADialog {...defaultProps} open={false} />);
 
     expect(page.getByText('Set Up Two-Factor Authentication').elements().length).toBe(0);
+  });
+
+  // #165: Some Clerk instance configurations don't return backup codes from
+  // verifyTOTP. The backup step needs to surface that explicitly with a
+  // Generate button instead of rendering an empty grid.
+  describe('Missing backup codes fallback (#165)', () => {
+    it('shows the Generate button when verifyTOTP returns no backup codes', async () => {
+      mockVerifyTOTP.mockResolvedValueOnce({ verified: true, backupCodes: undefined });
+      render(<Setup2FADialog {...defaultProps} />);
+
+      await vi.waitFor(() => {
+        expect(mockCreateTOTP).toHaveBeenCalled();
+      });
+
+      await userEvent.click(page.getByRole('button', { name: /next/i }).element());
+      await userEvent.fill(page.getByPlaceholder('000000').element(), '123456');
+      await userEvent.click(page.getByRole('button', { name: /verify/i }).element());
+
+      await vi.waitFor(() => {
+        expect(page.getByText('Backup codes were not returned. Generate them now.')).toBeDefined();
+      });
+
+      expect(page.getByRole('button', { name: /generate backup codes/i })).toBeDefined();
+    });
+
+    it('disables Copy All and Done while no codes are present', async () => {
+      mockVerifyTOTP.mockResolvedValueOnce({ verified: true, backupCodes: [] });
+      render(<Setup2FADialog {...defaultProps} />);
+
+      await vi.waitFor(() => {
+        expect(mockCreateTOTP).toHaveBeenCalled();
+      });
+
+      await userEvent.click(page.getByRole('button', { name: /next/i }).element());
+      await userEvent.fill(page.getByPlaceholder('000000').element(), '123456');
+      await userEvent.click(page.getByRole('button', { name: /verify/i }).element());
+
+      await vi.waitFor(() => {
+        expect(page.getByRole('button', { name: /generate backup codes/i })).toBeDefined();
+      });
+
+      const copyButton = page.getByRole('button', { name: /copy all/i });
+      const doneButton = page.getByRole('button', { name: /done/i });
+
+      expect(copyButton.element().hasAttribute('disabled')).toBe(true);
+      expect(doneButton.element().hasAttribute('disabled')).toBe(true);
+    });
+
+    it('clicking Generate calls createBackupCode and renders the codes', async () => {
+      mockVerifyTOTP.mockResolvedValueOnce({ verified: true, backupCodes: undefined });
+      render(<Setup2FADialog {...defaultProps} />);
+
+      await vi.waitFor(() => {
+        expect(mockCreateTOTP).toHaveBeenCalled();
+      });
+
+      await userEvent.click(page.getByRole('button', { name: /next/i }).element());
+      await userEvent.fill(page.getByPlaceholder('000000').element(), '123456');
+      await userEvent.click(page.getByRole('button', { name: /verify/i }).element());
+
+      await vi.waitFor(() => {
+        expect(page.getByRole('button', { name: /generate backup codes/i })).toBeDefined();
+      });
+
+      await userEvent.click(page.getByRole('button', { name: /generate backup codes/i }).element());
+
+      await vi.waitFor(() => {
+        expect(mockCreateBackupCode).toHaveBeenCalled();
+      });
+
+      expect(page.getByText('gen-1')).toBeDefined();
+      expect(page.getByText('gen-4')).toBeDefined();
+    });
+
+    it('shows the missing-codes error when createBackupCode also returns nothing', async () => {
+      mockVerifyTOTP.mockResolvedValueOnce({ verified: true, backupCodes: undefined });
+      mockCreateBackupCode.mockResolvedValueOnce({ id: 'bc-2', codes: [], createdAt: null, updatedAt: null });
+      render(<Setup2FADialog {...defaultProps} />);
+
+      await vi.waitFor(() => {
+        expect(mockCreateTOTP).toHaveBeenCalled();
+      });
+
+      await userEvent.click(page.getByRole('button', { name: /next/i }).element());
+      await userEvent.fill(page.getByPlaceholder('000000').element(), '123456');
+      await userEvent.click(page.getByRole('button', { name: /verify/i }).element());
+
+      await vi.waitFor(() => {
+        expect(page.getByRole('button', { name: /generate backup codes/i })).toBeDefined();
+      });
+
+      await userEvent.click(page.getByRole('button', { name: /generate backup codes/i }).element());
+
+      await vi.waitFor(() => {
+        expect(mockCreateBackupCode).toHaveBeenCalled();
+      });
+
+      // The error alert should still be visible — same key, both pre and
+      // post-generate paths render it from the empty-codes branch.
+      expect(page.getByText('Backup codes were not returned. Generate them now.')).toBeDefined();
+    });
   });
 });
