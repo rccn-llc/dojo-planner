@@ -3,6 +3,9 @@
     "meta_title": "Dojo Planner",
     "meta_description": "An easy way to manage your academy."
   },
+  "Calendar": {
+    "open_picker_aria": "Open date picker"
+  },
   "Hero": {
     "title": "Dojo Planner",
     "primary_button": "Get Started"
@@ -2015,7 +2018,43 @@
     "delete_dialog_title": "Are you absolutely sure?",
     "delete_dialog_description": "This action cannot be undone. This will permanently delete the \"{eventName}\" event and remove the data from the servers.",
     "cancel_button": "Cancel",
-    "delete_confirm_button": "Delete"
+    "delete_confirm_button": "Delete",
+    "edit_details_aria": "Edit event details",
+    "edit_pricing_aria": "Edit event pricing",
+    "edit_sessions_aria": "Edit event sessions",
+    "edit_instructors_aria": "Edit event instructors",
+    "EditEventModal": {
+      "title": "Edit Event",
+      "tab_details": "Details",
+      "tab_pricing": "Pricing",
+      "tab_sessions": "Sessions",
+      "name_label": "Event Name",
+      "name_placeholder": "e.g. Black Belt Seminar",
+      "event_type_label": "Event Type",
+      "event_type_seminar": "Seminar",
+      "event_type_workshop": "Workshop",
+      "event_type_tournament": "Tournament",
+      "event_type_camp": "Camp",
+      "event_type_other": "Other",
+      "max_capacity_label": "Maximum Capacity",
+      "max_capacity_placeholder": "Leave blank for unlimited",
+      "description_label": "Description",
+      "description_placeholder": "What is this event about?",
+      "description_character_count": "{count} / {max}",
+      "tier_name_label": "Tier Name",
+      "tier_name_placeholder": "e.g. Regular, Early Bird",
+      "price_label": "Price",
+      "remove_tier_aria": "Remove pricing tier",
+      "add_tier_button": "Add Pricing Tier",
+      "session_date_label": "Date",
+      "session_start_label": "Starts",
+      "session_end_label": "Ends",
+      "remove_session_aria": "Remove session",
+      "add_session_button": "Add Session",
+      "cancel_button": "Cancel",
+      "save_button": "Save Changes",
+      "saving_button": "Saving..."
+    }
   },
   "MemberDetailAttendance": {
     "title": "Attendance History",

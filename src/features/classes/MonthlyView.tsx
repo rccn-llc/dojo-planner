@@ -9,6 +9,7 @@ import { ButtonGroupItem, ButtonGroupRoot } from '@/components/ui/button-group';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useClassesCache } from '@/hooks/useClassesCache';
 import { useEventsCache } from '@/hooks/useEventsCache';
+import { CalendarDateNav } from './CalendarDateNav';
 import { buildClassColorLegend, generateMonthlyEventScheduleFromData, generateMonthlyScheduleFromData, transformClassesToCardProps } from './classDataTransformers';
 import { ClassEventHoverCard } from './ClassEventHoverCard';
 import { ClassFilterBar } from './ClassFilterBar';
@@ -189,7 +190,11 @@ export function MonthlyView({ withFilters }: MonthlyViewProps = {}) {
           >
             ← Previous
           </button>
-          <h2 className="text-lg font-semibold text-foreground">{dateDisplay}</h2>
+          <CalendarDateNav
+            currentDate={currentDate}
+            onDateChangeAction={setCurrentDate}
+            display={dateDisplay}
+          />
           <button
             type="button"
             onClick={handleNext}
@@ -224,43 +229,51 @@ export function MonthlyView({ withFilters }: MonthlyViewProps = {}) {
           <tbody className="bg-background">
             {weeks.map(week => (
               <tr key={week.key} className="border-b border-border last:border-b-0">
-                {week.days.map(day => (
-                  <td
-                    key={day ?? `empty-${week.key}`}
-                    className={`h-20 border-r border-border p-1 align-top last:border-r-0 sm:h-24 sm:p-2 ${
-                      !day ? 'bg-muted' : ''
-                    }`}
-                  >
-                    {day && (
-                      <>
-                        <div className="mb-1 text-sm font-semibold text-foreground">{day}</div>
-                        <div className="flex flex-col gap-1">
-                          {monthlyEvents[day.toString()]?.slice(0, 3).map(event => (
-                            <ClassEventHoverCard
-                              key={`${event.classId}-${day}-${event.hour}-${event.minute}`}
-                              classId={event.classId}
-                              className={event.className}
-                              color={event.color}
-                              exception={event.exception}
-                              sourceView="monthly"
-                              isEvent={event.isEvent}
-                              eventId={event.eventId}
-                            >
-                              <span className="truncate">{event.className}</span>
-                            </ClassEventHoverCard>
-                          ))}
-                          {(monthlyEvents[day.toString()]?.length ?? 0) > 3 && (
-                            <div className="text-xs text-muted-foreground">
-                              +
-                              {monthlyEvents[day.toString()]!.length - 3}
-                              {' more'}
-                            </div>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </td>
-                ))}
+                {week.days.map((day) => {
+                  const today = new Date();
+                  const isToday = day !== null
+                    && today.getFullYear() === year
+                    && today.getMonth() === month
+                    && today.getDate() === day;
+                  return (
+                    <td
+                      key={day ?? `empty-${week.key}`}
+                      className={`h-20 border-r border-border p-1 align-top last:border-r-0 sm:h-24 sm:p-2 ${
+                        !day ? 'bg-muted' : isToday ? 'bg-blue-50 dark:bg-blue-950/40' : ''
+                      }`}
+                      aria-current={isToday ? 'date' : undefined}
+                    >
+                      {day && (
+                        <>
+                          <div className={`mb-1 text-sm font-semibold ${isToday ? 'text-primary' : 'text-foreground'}`}>{day}</div>
+                          <div className="flex flex-col gap-1">
+                            {monthlyEvents[day.toString()]?.slice(0, 3).map(event => (
+                              <ClassEventHoverCard
+                                key={`${event.classId}-${day}-${event.hour}-${event.minute}`}
+                                classId={event.classId}
+                                className={event.className}
+                                color={event.color}
+                                exception={event.exception}
+                                sourceView="monthly"
+                                isEvent={event.isEvent}
+                                eventId={event.eventId}
+                              >
+                                <span className="truncate">{event.className}</span>
+                              </ClassEventHoverCard>
+                            ))}
+                            {(monthlyEvents[day.toString()]?.length ?? 0) > 3 && (
+                              <div className="text-xs text-muted-foreground">
+                                +
+                                {monthlyEvents[day.toString()]!.length - 3}
+                                {' more'}
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </td>
+                  );
+                })}
               </tr>
             ))}
           </tbody>

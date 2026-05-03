@@ -19,9 +19,36 @@ import { EditClassBasicsModal } from '@/features/classes/details/EditClassBasics
 import { EditClassScheduleModal } from '@/features/classes/details/EditClassScheduleModal';
 import { EditClassSettingsModal } from '@/features/classes/details/EditClassSettingsModal';
 import { EditScheduleInstanceModal } from '@/features/classes/details/EditScheduleInstanceModal';
-import { useClassesCache } from '@/hooks/useClassesCache';
+import { invalidateClassesCache, useClassesCache } from '@/hooks/useClassesCache';
 import { useHasRole } from '@/hooks/useHasRole';
+import { client } from '@/libs/Orpc';
 import { ORG_ROLE } from '@/types/Auth';
+
+// Convert wizard 12-hour {hour, minute, AM/PM} → DB 24-hour "HH:MM".
+function exceptionTo24h(hour: number | undefined, minute: number | undefined, amPm: 'AM' | 'PM' | undefined): string | null {
+  if (hour === undefined || minute === undefined || amPm === undefined) {
+    return null;
+  }
+  let h = hour % 12;
+  if (amPm === 'PM') {
+    h += 12;
+  }
+  return `${h.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+}
+
+function add24hDuration(start: string | null, durationHours: number | undefined, durationMinutes: number | undefined): string | null {
+  if (start === null || durationHours === undefined || durationMinutes === undefined) {
+    return null;
+  }
+  const [hStr, mStr] = start.split(':');
+  let h = Number.parseInt(hStr ?? '0', 10);
+  let m = Number.parseInt(mStr ?? '0', 10);
+  m += durationMinutes;
+  h += durationHours + Math.floor(m / 60);
+  m %= 60;
+  h %= 24;
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+}
 
 export type ClassLevel = 'Beginner' | 'Intermediate' | 'Advanced' | 'All Levels';
 export type ClassType = 'Adults' | 'Kids' | 'Women' | 'Open' | 'Competition';
@@ -196,15 +223,26 @@ export default function ClassDetailPage({ params }: { params: Promise<PageParams
     setLastInitialId(initialClassData.id);
   }
 
-  // Handler for updating class data
+  // Handler for updating class data — currently only the local detail state
+  // is updated. The Edit Basics / Schedule / Settings modals don't post back
+  // to the server yet (out of scope for this PR; tracked separately).
   const handleUpdateClass = (updates: Partial<ClassDetailData>) => {
     if (classData) {
       setClassData({ ...classData, ...updates });
     }
   };
 
-  // Handler for deleting class
-  const handleDeleteClass = () => {
+  // Handler for deleting class — soft-deletes on the server then navigates.
+  const handleDeleteClass = async () => {
+    if (!classData) {
+      return;
+    }
+    try {
+      await client.classes.remove({ id: classData.id });
+      await invalidateClassesCache();
+    } catch (err) {
+      console.error('[Class Detail] Failed to delete class:', err);
+    }
     router.push(backToClassesUrl);
   };
 
@@ -214,30 +252,50 @@ export default function ClassDetailPage({ params }: { params: Promise<PageParams
     setIsEditInstanceOpen(true);
   };
 
-  // Handler for saving a schedule exception
-  const handleSaveException = (exception: ScheduleException) => {
+  // Persist a schedule exception to the database. Optimistically updates
+  // local state so the UI reflects the change immediately, then revalidates
+  // the cache so the calendar grid picks up the new row.
+  const handleSaveException = async (exception: ScheduleException) => {
     if (!classData) {
       return;
     }
 
     const existingIndex = classData.scheduleExceptions.findIndex(e => e.id === exception.id);
-    let updatedExceptions: ScheduleException[];
+    const updatedExceptions = existingIndex >= 0
+      ? classData.scheduleExceptions.map((e, i) => (i === existingIndex ? exception : e))
+      : [...classData.scheduleExceptions, exception];
+    setClassData({ ...classData, scheduleExceptions: updatedExceptions });
 
-    if (existingIndex >= 0) {
-      updatedExceptions = [...classData.scheduleExceptions];
-      updatedExceptions[existingIndex] = exception;
-    } else {
-      updatedExceptions = [...classData.scheduleExceptions, exception];
+    const newStartTime = exceptionTo24h(
+      exception.overrides?.timeHour,
+      exception.overrides?.timeMinute,
+      exception.overrides?.timeAmPm,
+    );
+    const newEndTime = add24hDuration(
+      newStartTime,
+      exception.overrides?.durationHours,
+      exception.overrides?.durationMinutes,
+    );
+
+    try {
+      await client.classes.upsertException({
+        classScheduleInstanceId: exception.scheduleInstanceId,
+        exceptionDate: new Date(`${exception.date}T00:00:00Z`),
+        exceptionType: exception.type,
+        newStartTime,
+        newEndTime,
+        newInstructorClerkId: exception.overrides?.staffMember || null,
+        reason: exception.note || null,
+      });
+      await invalidateClassesCache();
+    } catch (err) {
+      console.error('[Class Detail] Failed to save schedule exception:', err);
     }
-
-    setClassData({
-      ...classData,
-      scheduleExceptions: updatedExceptions,
-    });
   };
 
-  // Handler for deleting a schedule instance (creating a deletion exception)
-  const handleDeleteException = (exception: ScheduleException) => {
+  // Persist a "deleted" exception (cancellation of a recurring instance on a
+  // specific date). Same shape as save — type is just 'deleted'.
+  const handleDeleteException = async (exception: ScheduleException) => {
     if (!classData) {
       return;
     }
@@ -245,19 +303,25 @@ export default function ClassDetailPage({ params }: { params: Promise<PageParams
     const existingIndex = classData.scheduleExceptions.findIndex(
       e => e.scheduleInstanceId === exception.scheduleInstanceId && e.date === exception.date,
     );
-    let updatedExceptions: ScheduleException[];
+    const updatedExceptions = existingIndex >= 0
+      ? classData.scheduleExceptions.map((e, i) => (i === existingIndex ? exception : e))
+      : [...classData.scheduleExceptions, exception];
+    setClassData({ ...classData, scheduleExceptions: updatedExceptions });
 
-    if (existingIndex >= 0) {
-      updatedExceptions = [...classData.scheduleExceptions];
-      updatedExceptions[existingIndex] = exception;
-    } else {
-      updatedExceptions = [...classData.scheduleExceptions, exception];
+    try {
+      await client.classes.upsertException({
+        classScheduleInstanceId: exception.scheduleInstanceId,
+        exceptionDate: new Date(`${exception.date}T00:00:00Z`),
+        exceptionType: exception.type,
+        newStartTime: null,
+        newEndTime: null,
+        newInstructorClerkId: null,
+        reason: exception.note || null,
+      });
+      await invalidateClassesCache();
+    } catch (err) {
+      console.error('[Class Detail] Failed to save schedule exception:', err);
     }
-
-    setClassData({
-      ...classData,
-      scheduleExceptions: updatedExceptions,
-    });
   };
 
   if (loading) {

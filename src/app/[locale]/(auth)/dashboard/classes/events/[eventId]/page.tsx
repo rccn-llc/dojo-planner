@@ -23,7 +23,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useEventsCache } from '@/hooks/useEventsCache';
+import { EditEventModal } from '@/features/events/details/EditEventModal';
+import { invalidateEventsCache, useEventsCache } from '@/hooks/useEventsCache';
+import { client } from '@/libs/Orpc';
 import { formatPrice, getInitials } from './eventData';
 
 function formatSessionDate(date: Date): string {
@@ -94,15 +96,26 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
 
   // Modal states
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [editTab, setEditTab] = useState<'details' | 'pricing' | 'sessions' | null>(null);
 
   // Find event from cache and transform
-  const eventData = useMemo(() => {
-    const raw = events.find(e => e.id === resolvedParams.eventId);
-    return raw ? transformEventData(raw) : null;
-  }, [events, resolvedParams.eventId]);
+  const rawEvent = useMemo(
+    () => events.find(e => e.id === resolvedParams.eventId) ?? null,
+    [events, resolvedParams.eventId],
+  );
+  const eventData = useMemo(() => (rawEvent ? transformEventData(rawEvent) : null), [rawEvent]);
 
-  // Handler for deleting event
-  const handleDeleteEvent = () => {
+  // Handler for deleting event — soft-delete on the server then navigate.
+  const handleDeleteEvent = async () => {
+    if (!eventData) {
+      return;
+    }
+    try {
+      await client.events.remove({ id: eventData.id });
+      await invalidateEventsCache();
+    } catch (err) {
+      console.error('[Event Detail] Failed to delete event:', err);
+    }
     router.push(backToClassesUrl);
   };
 
@@ -194,7 +207,7 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
           <Card className="p-6">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-foreground">{t('details_card_title')}</h2>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" onClick={() => setEditTab('details')} aria-label={t('edit_details_aria')}>
                 <Edit className="h-4 w-4" />
               </Button>
             </div>
@@ -236,7 +249,7 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
           <Card className="p-6">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-foreground">{t('pricing_card_title')}</h2>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" onClick={() => setEditTab('pricing')} aria-label={t('edit_pricing_aria')}>
                 <Edit className="h-4 w-4" />
               </Button>
             </div>
@@ -282,7 +295,7 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
           <Card className="p-6">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-foreground">{t('sessions_card_title')}</h2>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" onClick={() => setEditTab('sessions')} aria-label={t('edit_sessions_aria')}>
                 <Edit className="h-4 w-4" />
               </Button>
             </div>
@@ -310,7 +323,7 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
           <Card className="p-6">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-foreground">{t('instructors_card_title')}</h2>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" onClick={() => setEditTab('sessions')} aria-label={t('edit_instructors_aria')}>
                 <Edit className="h-4 w-4" />
               </Button>
             </div>
@@ -345,6 +358,16 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
           {t('delete_button')}
         </Button>
       </div>
+
+      {/* Edit Modal — single modal with tabs, opened via the per-card Edit buttons */}
+      {rawEvent && (
+        <EditEventModal
+          isOpen={editTab !== null}
+          initialTab={editTab ?? 'details'}
+          event={rawEvent}
+          onCloseAction={() => setEditTab(null)}
+        />
+      )}
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>

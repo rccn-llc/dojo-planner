@@ -33,6 +33,8 @@ export const AUDIT_ACTION = {
   CLASS_SCHEDULE_UPDATE: 'classSchedule.update',
   CLASS_SCHEDULE_DELETE: 'classSchedule.delete',
   CLASS_SCHEDULE_EXCEPTION_CREATE: 'classScheduleException.create',
+  CLASS_SCHEDULE_EXCEPTION_UPDATE: 'classScheduleException.update',
+  CLASS_SCHEDULE_EXCEPTION_DELETE: 'classScheduleException.delete',
 
   // Event operations
   EVENT_CREATE: 'event.create',
