@@ -641,4 +641,92 @@ describe('MembershipStep', () => {
       expect(skipResetCall).toBeUndefined();
     });
   });
+
+  describe('Clearing card fields on trial selection (#129/#135/#139)', () => {
+    it('clears card and ACH fields when a trial plan is selected', async () => {
+      const dataWithCardData: AddMemberWizardData = {
+        ...mockData,
+        cardholderName: 'Old Name',
+        cardNumber: '4242424242424242',
+        cardExpiry: '12/30',
+        cardCvc: '123',
+        paymentMethod: 'card',
+      };
+      const onUpdate = vi.fn();
+
+      render(
+        <MembershipStep
+          data={dataWithCardData}
+          onUpdate={onUpdate}
+          onNext={mockHandlers.onNext}
+          onBack={mockHandlers.onBack}
+          onCancel={mockHandlers.onCancel}
+        />,
+      );
+
+      await expect.element(page.getByText('7-Day Free Trial')).toBeInTheDocument();
+
+      const trialButton = page.getByLabelText('Select 7-Day Free Trial membership plan');
+      await trialButton.click();
+
+      // The clearing call carries the trial-plan metadata + cleared card/ACH
+      // fields. Find the call where membershipPlanId === 'plan-3'.
+      const trialSelectCall = onUpdate.mock.calls.find(
+        (call) => {
+          const arg = call[0] as Record<string, unknown> | undefined;
+          return arg?.membershipPlanId === 'plan-3';
+        },
+      );
+
+      expect(trialSelectCall).toBeTruthy();
+
+      const arg = trialSelectCall![0] as Record<string, unknown>;
+
+      expect(arg.cardholderName).toBeUndefined();
+      expect(arg.cardNumber).toBeUndefined();
+      expect(arg.cardExpiry).toBeUndefined();
+      expect(arg.cardCvc).toBeUndefined();
+      expect(arg.paymentMethod).toBeUndefined();
+      expect(arg.achAccountHolder).toBeUndefined();
+      expect(arg.achRoutingNumber).toBeUndefined();
+      expect(arg.achAccountNumber).toBeUndefined();
+      // Trial metadata is still populated.
+      expect(arg.membershipPlanIsTrial).toBe(true);
+    });
+
+    it('does not include card-clear keys when a non-trial plan is selected', async () => {
+      const onUpdate = vi.fn();
+
+      render(
+        <MembershipStep
+          data={mockData}
+          onUpdate={onUpdate}
+          onNext={mockHandlers.onNext}
+          onBack={mockHandlers.onBack}
+          onCancel={mockHandlers.onCancel}
+        />,
+      );
+
+      await expect.element(page.getByText('12 Month Commitment (Gold)')).toBeInTheDocument();
+
+      const planButton = page.getByLabelText('Select 12 Month Commitment (Gold) membership plan');
+      await planButton.click();
+
+      const selectCall = onUpdate.mock.calls.find(
+        (call) => {
+          const arg = call[0] as Record<string, unknown> | undefined;
+          return arg?.membershipPlanId === 'plan-1';
+        },
+      );
+
+      expect(selectCall).toBeTruthy();
+
+      const arg = selectCall![0] as Record<string, unknown>;
+
+      // Non-trial select does NOT spread card-clear keys.
+      expect('cardholderName' in arg).toBe(false);
+      expect('paymentMethod' in arg).toBe(false);
+      expect('achAccountHolder' in arg).toBe(false);
+    });
+  });
 });

@@ -53,6 +53,9 @@ const translationKeys: Record<string, string> = {
   decline_reason_generic: 'Payment failed.',
   continue_without_payment_button: 'Add Member Anyway',
   try_again_button: 'Try Again',
+  trial_title: 'Free Trial — No Payment Today',
+  trial_disclaimer: 'No payment will be collected today. Your trial period is {duration}. Your academy will follow up before any charges.',
+  continue_button: 'Continue',
 };
 
 vi.mock('next-intl', () => ({
@@ -158,5 +161,51 @@ describe('FamilyPaymentStep — Try Again button (#131)', () => {
       paymentProcessed: false,
     });
     expect(onNextAction).not.toHaveBeenCalled();
+  });
+});
+
+// Free-trial plans (#129/#135/#139) skip card collection in the family flow
+// too — a HOH-with-card path also defers to the trial disclaimer because no
+// charge happens today.
+describe('FamilyPaymentStep — Free trial mode (#129/#135/#139)', () => {
+  const trialData: AddMemberWizardData = {
+    ...baseData,
+    membershipPlanPrice: 0,
+    membershipPlanIsTrial: true,
+    membershipPlanContractLength: '7 Days',
+    membershipPlanFrequency: 'None',
+    hohHasPaymentMethod: false,
+  };
+
+  it('renders the trial disclaimer in place of the billing summary', () => {
+    render(<FamilyPaymentStep {...baseProps} data={trialData} />);
+
+    expect(page.getByText('Free Trial — No Payment Today')).toBeTruthy();
+    expect(page.getByText(/Your trial period is 7 Days/)).toBeTruthy();
+    expect(document.querySelector('label[for="familyCardholderName"]')).toBeNull();
+  });
+
+  it('enables the Continue button with no card data and no HOH card', () => {
+    render(<FamilyPaymentStep {...baseProps} data={trialData} />);
+
+    const continueButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent === 'Continue') as HTMLButtonElement;
+
+    expect(continueButton).toBeTruthy();
+    expect(continueButton?.disabled).toBe(false);
+  });
+
+  it('renders disclaimer even when HOH has a card on file (no charge today)', () => {
+    const trialWithHohCard = { ...trialData, hohHasPaymentMethod: true };
+    render(<FamilyPaymentStep {...baseProps} data={trialWithHohCard} />);
+
+    expect(page.getByText('Free Trial — No Payment Today')).toBeTruthy();
+    // No "HOH will be billed" notice on a trial.
+    expect(document.body.textContent).not.toContain('HOH will be billed');
+  });
+
+  it('still renders the billing summary when membershipPlanIsTrial is false', () => {
+    render(<FamilyPaymentStep {...baseProps} />);
+
+    expect(page.getByText('Billing Summary')).toBeTruthy();
   });
 });

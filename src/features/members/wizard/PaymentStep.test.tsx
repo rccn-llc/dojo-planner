@@ -71,6 +71,9 @@ const translationKeys: Record<string, string> = {
   ach_account_type_placeholder: 'Select account type',
   ach_account_type_checking: 'Checking',
   ach_account_type_savings: 'Savings',
+  trial_title: 'Free Trial — No Payment Today',
+  trial_disclaimer: 'No payment will be collected today. Your trial period is {duration}. Your academy will follow up before any charges.',
+  continue_button: 'Continue',
 };
 
 // Mock coupon data for testing
@@ -2214,6 +2217,100 @@ describe('PaymentStep', () => {
         paymentProcessed: false,
       });
       expect(onNextAction).not.toHaveBeenCalled();
+    });
+  });
+
+  // Free-trial plans (#129 / #135 / #139) skip the card form entirely. These
+  // tests verify the disclaimer renders, the form is hidden, the Continue
+  // button is enabled with no card data, and the paid-plan path is unaffected.
+  describe('Free trial mode (#129/#135/#139)', () => {
+    const trialProps = {
+      ...defaultProps,
+      data: {
+        ...defaultProps.data,
+        membershipPlanId: 'trial-plan-id',
+        membershipPlanName: '7-Day Free Trial',
+        membershipPlanPrice: 0,
+        membershipPlanIsTrial: true,
+        membershipPlanContractLength: '7 Days',
+        membershipPlanFrequency: 'None',
+      } as AddMemberWizardData,
+    };
+
+    it('renders the trial disclaimer with the contract duration', () => {
+      render(<PaymentStep {...trialProps} />);
+
+      expect(page.getByText('Free Trial — No Payment Today')).toBeTruthy();
+      expect(page.getByText(/Your trial period is 7 Days/)).toBeTruthy();
+    });
+
+    it('does not render the card form fields on a trial', () => {
+      render(<PaymentStep {...trialProps} />);
+
+      expect(document.querySelector('input[id="cardholderName"]')).toBeNull();
+      expect(document.querySelector('input[id="cardNumber"]')).toBeNull();
+    });
+
+    it('does not render the payment method tabs on a trial', () => {
+      render(<PaymentStep {...trialProps} />);
+
+      const cardTab = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent === 'Debit / Credit Card');
+      const achTab = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent === 'ACH Bank Account');
+
+      expect(cardTab).toBeUndefined();
+      expect(achTab).toBeUndefined();
+    });
+
+    it('enables the Continue button with no card data filled in', () => {
+      render(<PaymentStep {...trialProps} />);
+
+      const continueButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent === 'Continue') as HTMLButtonElement;
+
+      expect(continueButton).toBeTruthy();
+      expect(continueButton?.disabled).toBe(false);
+    });
+
+    it('clicking Continue calls onNextAction without tokenization', async () => {
+      const onNextAction = vi.fn();
+      render(<PaymentStep {...trialProps} onNextAction={onNextAction} />);
+
+      const continueButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent === 'Continue') as HTMLButtonElement;
+      await userEvent.click(continueButton!);
+
+      expect(onNextAction).toHaveBeenCalled();
+      expect(mockTokenize).not.toHaveBeenCalled();
+    });
+
+    it('still renders the card form when membershipPlanIsTrial is false', () => {
+      const paidProps = {
+        ...trialProps,
+        data: {
+          ...trialProps.data,
+          membershipPlanIsTrial: false,
+          membershipPlanPrice: 150,
+        } as AddMemberWizardData,
+      };
+
+      render(<PaymentStep {...paidProps} />);
+
+      expect(page.getByLabelText(/Name on card/)).toBeTruthy();
+    });
+
+    it('treats a non-zero finalPrice as paid even when membershipPlanIsTrial is true', () => {
+      // Edge case: a trial flag with a non-zero price (e.g. coupon-driven) is
+      // not a real trial — the card form must remain visible.
+      const oddProps = {
+        ...trialProps,
+        data: {
+          ...trialProps.data,
+          membershipPlanPrice: 50,
+          membershipPlanIsTrial: true,
+        } as AddMemberWizardData,
+      };
+
+      render(<PaymentStep {...oddProps} />);
+
+      expect(page.getByLabelText(/Name on card/)).toBeTruthy();
     });
   });
 });
