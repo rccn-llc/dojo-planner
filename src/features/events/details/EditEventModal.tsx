@@ -3,7 +3,7 @@
 import type { EventData } from '@/hooks/useEventsCache';
 import { Plus, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -37,12 +37,14 @@ function normalizeEventType(raw: string): ApiEventType {
 export type EditEventModalTab = 'details' | 'pricing' | 'sessions';
 
 type SessionRow = {
+  id: string;
   sessionDate: string; // YYYY-MM-DD
   startTime: string; // HH:MM
   endTime: string; // HH:MM
 };
 
 type BillingRow = {
+  id: string;
   name: string;
   price: string; // string in form, parsed on save
 };
@@ -63,11 +65,51 @@ function dateToInputValue(date: Date): string {
 }
 
 function emptySession(): SessionRow {
-  return { sessionDate: '', startTime: '10:00', endTime: '12:00' };
+  return { id: crypto.randomUUID(), sessionDate: '', startTime: '10:00', endTime: '12:00' };
 }
 
 function emptyBilling(): BillingRow {
-  return { name: 'Regular', price: '0' };
+  return { id: crypto.randomUUID(), name: 'Regular', price: '0' };
+}
+
+type FormState = {
+  name: string;
+  description: string;
+  eventType: ApiEventType;
+  maxCapacity: string;
+  sessions: SessionRow[];
+  billing: BillingRow[];
+  tab: EditEventModalTab;
+  // Tracks the (eventId, initialTab) tuple this state was built for. Used
+  // during render to detect when the parent has reopened the modal with a
+  // different event/tab and we need to rebuild the form.
+  syncKey: string;
+};
+
+function buildFormState(event: EventData, initialTab: EditEventModalTab): FormState {
+  return {
+    name: event.name,
+    description: event.description ?? '',
+    eventType: normalizeEventType(event.eventType),
+    maxCapacity: event.maxCapacity !== null ? String(event.maxCapacity) : '',
+    sessions: event.sessions.length > 0
+      ? event.sessions.map(s => ({
+          id: crypto.randomUUID(),
+          sessionDate: dateToInputValue(new Date(s.sessionDate)),
+          startTime: s.startTime,
+          endTime: s.endTime,
+        }))
+      : [emptySession()],
+    billing: event.billing.length > 0
+      ? event.billing.map(b => ({
+          id: crypto.randomUUID(),
+          name: b.name,
+          price: String(b.price),
+        }))
+      : [emptyBilling()],
+    tab: initialTab,
+    syncKey: `${event.id}|${initialTab}`,
+  };
 }
 
 export function EditEventModal({
@@ -79,52 +121,31 @@ export function EditEventModal({
 }: EditEventModalProps) {
   const t = useTranslations('EventDetailPage.EditEventModal');
 
-  const [name, setName] = useState(event.name);
-  const [description, setDescription] = useState(event.description ?? '');
-  const [eventType, setEventType] = useState<ApiEventType>(normalizeEventType(event.eventType));
-  const [maxCapacity, setMaxCapacity] = useState<string>(
-    event.maxCapacity !== null ? String(event.maxCapacity) : '',
-  );
-  const [sessions, setSessions] = useState<SessionRow[]>([]);
-  const [billing, setBilling] = useState<BillingRow[]>([]);
-  const [tab, setTab] = useState<EditEventModalTab>(initialTab);
+  // Single state object so the parent reopening the modal with a different
+  // event or tab triggers exactly one re-sync (during render) instead of an
+  // 8-call useEffect cascade. See React docs on "deriving state from props".
+  const [form, setForm] = useState<FormState>(() => buildFormState(event, initialTab));
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Reset form when modal opens — important because the parent reuses this
-  // component across multiple edit-button entry points and the event prop
-  // may change between opens.
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-    setName(event.name);
-    setDescription(event.description ?? '');
-    setEventType(normalizeEventType(event.eventType));
-    setMaxCapacity(event.maxCapacity !== null ? String(event.maxCapacity) : '');
-    setSessions(
-      event.sessions.length > 0
-        ? event.sessions.map(s => ({
-            sessionDate: dateToInputValue(new Date(s.sessionDate)),
-            startTime: s.startTime,
-            endTime: s.endTime,
-          }))
-        : [emptySession()],
-    );
-    setBilling(
-      event.billing.length > 0
-        ? event.billing.map(b => ({ name: b.name, price: String(b.price) }))
-        : [emptyBilling()],
-    );
-    setTab(initialTab);
+  // Re-sync during render when the modal opens or the event/initialTab change.
+  // React explicitly supports calling setState during render to derive state
+  // from props — it bails out without scheduling an extra render.
+  const desiredSyncKey = `${event.id}|${initialTab}`;
+  if (isOpen && form.syncKey !== desiredSyncKey) {
+    setForm(buildFormState(event, initialTab));
     setError(null);
-  }, [isOpen, event, initialTab]);
+  }
 
-  const isNameValid = name.trim().length > 0;
+  const isNameValid = form.name.trim().length > 0;
   const isFormValid
     = isNameValid
-      && sessions.every(s => s.sessionDate && s.startTime && s.endTime)
-      && billing.every(b => b.name.trim() && !Number.isNaN(Number.parseFloat(b.price)));
+      && form.sessions.every(s => s.sessionDate && s.startTime && s.endTime)
+      && form.billing.every(b => b.name.trim() && !Number.isNaN(Number.parseFloat(b.price)));
+
+  const updateForm = <K extends keyof FormState>(key: K, value: FormState[K]) => {
+    setForm(prev => ({ ...prev, [key]: value }));
+  };
 
   const handleSubmit = async () => {
     setIsLoading(true);
@@ -133,18 +154,18 @@ export function EditEventModal({
     try {
       await client.events.update({
         id: event.id,
-        name: name.trim(),
-        description: description.trim() || null,
-        eventType,
-        maxCapacity: maxCapacity ? Number.parseInt(maxCapacity, 10) : null,
+        name: form.name.trim(),
+        description: form.description.trim() || null,
+        eventType: form.eventType,
+        maxCapacity: form.maxCapacity ? Number.parseInt(form.maxCapacity, 10) : null,
         isPublic: true,
         isActive: event.isActive ?? true,
-        sessions: sessions.map(s => ({
+        sessions: form.sessions.map(s => ({
           sessionDate: new Date(`${s.sessionDate}T00:00:00Z`),
           startTime: s.startTime,
           endTime: s.endTime,
         })),
-        billing: billing.map((b, idx) => ({
+        billing: form.billing.map((b, idx) => ({
           name: b.name.trim(),
           price: Number.parseFloat(b.price) || 0,
           memberOnly: false,
@@ -171,7 +192,7 @@ export function EditEventModal({
           <DialogTitle>{t('title')}</DialogTitle>
         </DialogHeader>
 
-        <Tabs value={tab} onValueChange={v => setTab(v as EditEventModalTab)} className="w-full">
+        <Tabs value={form.tab} onValueChange={v => updateForm('tab', v as EditEventModalTab)} className="w-full">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="details">{t('tab_details')}</TabsTrigger>
             <TabsTrigger value="pricing">{t('tab_pricing')}</TabsTrigger>
@@ -184,16 +205,16 @@ export function EditEventModal({
               <label className="text-sm font-medium" htmlFor="event-name">{t('name_label')}</label>
               <Input
                 id="event-name"
-                value={name}
-                onChange={e => setName(e.target.value)}
+                value={form.name}
+                onChange={e => updateForm('name', e.target.value)}
                 placeholder={t('name_placeholder')}
-                error={!isNameValid && name.length > 0}
+                error={!isNameValid && form.name.length > 0}
               />
             </div>
 
             <div className="space-y-1.5">
               <label className="text-sm font-medium" htmlFor="event-type">{t('event_type_label')}</label>
-              <Select value={eventType} onValueChange={v => setEventType(v as ApiEventType)}>
+              <Select value={form.eventType} onValueChange={v => updateForm('eventType', v as ApiEventType)}>
                 <SelectTrigger id="event-type">
                   <SelectValue />
                 </SelectTrigger>
@@ -213,8 +234,8 @@ export function EditEventModal({
                 id="event-capacity"
                 type="number"
                 min={1}
-                value={maxCapacity}
-                onChange={e => setMaxCapacity(e.target.value)}
+                value={form.maxCapacity}
+                onChange={e => updateForm('maxCapacity', e.target.value)}
                 placeholder={t('max_capacity_placeholder')}
               />
             </div>
@@ -223,13 +244,13 @@ export function EditEventModal({
               <label className="text-sm font-medium" htmlFor="event-description">{t('description_label')}</label>
               <Textarea
                 id="event-description"
-                value={description}
-                onChange={e => setDescription(e.target.value.slice(0, MAX_DESCRIPTION_LENGTH))}
+                value={form.description}
+                onChange={e => updateForm('description', e.target.value.slice(0, MAX_DESCRIPTION_LENGTH))}
                 rows={4}
                 placeholder={t('description_placeholder')}
               />
               <p className="text-xs text-muted-foreground">
-                {t('description_character_count', { count: description.length, max: MAX_DESCRIPTION_LENGTH })}
+                {t('description_character_count', { count: form.description.length, max: MAX_DESCRIPTION_LENGTH })}
               </p>
             </div>
           </TabsContent>
@@ -237,13 +258,13 @@ export function EditEventModal({
           {/* Pricing tab */}
           <TabsContent value="pricing" className="space-y-4 py-4">
             <div className="space-y-3">
-              {billing.map((b, idx) => (
-                <div key={idx} className="flex items-end gap-2">
+              {form.billing.map(b => (
+                <div key={b.id} className="flex items-end gap-2">
                   <div className="flex-1 space-y-1.5">
                     <label className="text-sm font-medium">{t('tier_name_label')}</label>
                     <Input
                       value={b.name}
-                      onChange={e => setBilling(prev => prev.map((row, i) => (i === idx ? { ...row, name: e.target.value } : row)))}
+                      onChange={e => updateForm('billing', form.billing.map(row => (row.id === b.id ? { ...row, name: e.target.value } : row)))}
                       placeholder={t('tier_name_placeholder')}
                     />
                   </div>
@@ -254,14 +275,14 @@ export function EditEventModal({
                       min={0}
                       step="0.01"
                       value={b.price}
-                      onChange={e => setBilling(prev => prev.map((row, i) => (i === idx ? { ...row, price: e.target.value } : row)))}
+                      onChange={e => updateForm('billing', form.billing.map(row => (row.id === b.id ? { ...row, price: e.target.value } : row)))}
                     />
                   </div>
                   <Button
                     variant="outline"
                     size="icon"
-                    onClick={() => setBilling(prev => prev.filter((_, i) => i !== idx))}
-                    disabled={billing.length <= 1}
+                    onClick={() => updateForm('billing', form.billing.filter(row => row.id !== b.id))}
+                    disabled={form.billing.length <= 1}
                     aria-label={t('remove_tier_aria')}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -270,7 +291,7 @@ export function EditEventModal({
               ))}
               <Button
                 variant="outline"
-                onClick={() => setBilling(prev => [...prev, emptyBilling()])}
+                onClick={() => updateForm('billing', [...form.billing, emptyBilling()])}
               >
                 <Plus className="mr-2 h-4 w-4" />
                 {t('add_tier_button')}
@@ -281,14 +302,14 @@ export function EditEventModal({
           {/* Sessions tab */}
           <TabsContent value="sessions" className="space-y-4 py-4">
             <div className="space-y-3">
-              {sessions.map((s, idx) => (
-                <div key={idx} className="flex items-end gap-2">
+              {form.sessions.map(s => (
+                <div key={s.id} className="flex items-end gap-2">
                   <div className="flex-1 space-y-1.5">
                     <label className="text-sm font-medium">{t('session_date_label')}</label>
                     <Input
                       type="date"
                       value={s.sessionDate}
-                      onChange={e => setSessions(prev => prev.map((row, i) => (i === idx ? { ...row, sessionDate: e.target.value } : row)))}
+                      onChange={e => updateForm('sessions', form.sessions.map(row => (row.id === s.id ? { ...row, sessionDate: e.target.value } : row)))}
                     />
                   </div>
                   <div className="w-28 space-y-1.5">
@@ -296,7 +317,7 @@ export function EditEventModal({
                     <Input
                       type="time"
                       value={s.startTime}
-                      onChange={e => setSessions(prev => prev.map((row, i) => (i === idx ? { ...row, startTime: e.target.value } : row)))}
+                      onChange={e => updateForm('sessions', form.sessions.map(row => (row.id === s.id ? { ...row, startTime: e.target.value } : row)))}
                     />
                   </div>
                   <div className="w-28 space-y-1.5">
@@ -304,14 +325,14 @@ export function EditEventModal({
                     <Input
                       type="time"
                       value={s.endTime}
-                      onChange={e => setSessions(prev => prev.map((row, i) => (i === idx ? { ...row, endTime: e.target.value } : row)))}
+                      onChange={e => updateForm('sessions', form.sessions.map(row => (row.id === s.id ? { ...row, endTime: e.target.value } : row)))}
                     />
                   </div>
                   <Button
                     variant="outline"
                     size="icon"
-                    onClick={() => setSessions(prev => prev.filter((_, i) => i !== idx))}
-                    disabled={sessions.length <= 1}
+                    onClick={() => updateForm('sessions', form.sessions.filter(row => row.id !== s.id))}
+                    disabled={form.sessions.length <= 1}
                     aria-label={t('remove_session_aria')}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -320,7 +341,7 @@ export function EditEventModal({
               ))}
               <Button
                 variant="outline"
-                onClick={() => setSessions(prev => [...prev, emptySession()])}
+                onClick={() => updateForm('sessions', [...form.sessions, emptySession()])}
               >
                 <Plus className="mr-2 h-4 w-4" />
                 {t('add_session_button')}
