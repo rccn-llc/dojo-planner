@@ -1,5 +1,6 @@
 'use client';
 
+import type { DayOfWeek } from '@/hooks/useAddClassWizard';
 import type { ClassCardProps, ScheduleItem } from '@/templates/ClassCard';
 import type { EventCardProps, EventSession as EventCardSession } from '@/templates/EventCard';
 import { useOrganization } from '@clerk/nextjs';
@@ -8,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useAddClassWizard } from '@/hooks/useAddClassWizard';
 import { useTagsCache } from '@/hooks/useTagsCache';
+import { client } from '@/libs/Orpc';
 import { ClassBasicsStep } from './ClassBasicsStep';
 import { ClassScheduleStep } from './ClassScheduleStep';
 import { ClassSuccessStep } from './ClassSuccessStep';
@@ -42,6 +44,46 @@ const MOCK_STAFF: Record<string, { name: string; photoUrl: string }> = {
   'professor-ivan': { name: 'Professor Ivan', photoUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ivan' },
 };
 
+const DAY_OF_WEEK_INDEX: Record<DayOfWeek, number> = {
+  Sunday: 0,
+  Monday: 1,
+  Tuesday: 2,
+  Wednesday: 3,
+  Thursday: 4,
+  Friday: 5,
+  Saturday: 6,
+};
+
+// Convert wizard's 12-hour {hour, minute, AM/PM} to 24-hour "HH:MM".
+function to24h(hour: number, minute: number, amPm: 'AM' | 'PM'): string {
+  let h = hour % 12;
+  if (amPm === 'PM') {
+    h += 12;
+  }
+  return `${h.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+}
+
+// Add hours+minutes to a "HH:MM" string, returning a "HH:MM" string. Used to
+// derive endTime from startTime + duration.
+function addDuration(start: string, durationHours: number, durationMinutes: number): string {
+  const [hStr, mStr] = start.split(':');
+  let h = Number.parseInt(hStr ?? '0', 10);
+  let m = Number.parseInt(mStr ?? '0', 10);
+  m += durationMinutes;
+  h += durationHours + Math.floor(m / 60);
+  m %= 60;
+  h %= 24;
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+}
+
+const EVENT_TYPE_TO_API: Record<string, 'seminar' | 'workshop' | 'tournament' | 'camp' | 'other'> = {
+  'Seminar': 'seminar',
+  'Workshop': 'workshop',
+  'Guest Instructor': 'other',
+  'Tournament': 'tournament',
+  'Other': 'other',
+};
+
 export const AddClassModal = ({ isOpen, onCloseAction, onClassCreated, onEventCreated }: AddClassModalProps) => {
   const router = useRouter();
   const wizard = useAddClassWizard();
@@ -72,17 +114,64 @@ export const AddClassModal = ({ isOpen, onCloseAction, onClassCreated, onEventCr
 
       const isEvent = wizard.data.itemType === 'event';
 
-      // Log creation (mock)
-      console.info(`[Add Class/Event Wizard] Starting ${isEvent ? 'event' : 'class'} creation:`, {
-        timestamp: new Date().toISOString(),
-        wizardData: wizard.data,
-      });
-
-      // Mock API call delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-
       if (isEvent) {
-        // Create event object
+        // Build the API payload from the wizard's 12-hour-with-AM/PM shape.
+        const sessions = wizard.data.eventSchedule.sessions.map((s) => {
+          const start = to24h(s.timeHour, s.timeMinute, s.timeAmPm);
+          const end = addDuration(start, s.durationHours, s.durationMinutes);
+          return {
+            sessionDate: new Date(s.date),
+            startTime: start,
+            endTime: end,
+            primaryInstructorClerkId: s.staffMember || null,
+            room: wizard.data.eventSchedule.location || null,
+          };
+        });
+
+        const billing = wizard.data.eventBilling.hasFee && wizard.data.eventBilling.price !== null
+          ? [{
+              name: 'Regular',
+              price: wizard.data.eventBilling.price,
+              memberOnly: false,
+              sortOrder: 0,
+              ...(wizard.data.eventBilling.hasEarlyBird
+                && wizard.data.eventBilling.earlyBirdPrice !== null
+                && wizard.data.eventBilling.earlyBirdDeadline
+                ? { validUntil: new Date(wizard.data.eventBilling.earlyBirdDeadline) }
+                : {}),
+            }]
+          : [];
+        if (wizard.data.eventBilling.hasFee
+          && wizard.data.eventBilling.hasEarlyBird
+          && wizard.data.eventBilling.earlyBirdPrice !== null) {
+          billing.push({
+            name: 'Early Bird',
+            price: wizard.data.eventBilling.earlyBirdPrice,
+            memberOnly: false,
+            sortOrder: 1,
+            ...(wizard.data.eventBilling.earlyBirdDeadline
+              ? { validUntil: new Date(wizard.data.eventBilling.earlyBirdDeadline) }
+              : {}),
+          });
+        }
+
+        const apiEventType = EVENT_TYPE_TO_API[wizard.data.eventType || 'Other'] ?? 'other';
+
+        const result = await client.events.create({
+          name: wizard.data.eventName,
+          description: wizard.data.eventDescription || null,
+          eventType: apiEventType,
+          maxCapacity: wizard.data.eventMaxCapacity ?? null,
+          isPublic: true,
+          isActive: true,
+          sessions,
+          billing,
+          tagIds: wizard.data.tags,
+        });
+
+        // Build the EventCardProps from the wizard data for the success-step
+        // preview. The server has the canonical id; everything else is what
+        // the user just entered, formatted for display.
         const formatEventSessions = (): EventCardSession[] => {
           return wizard.data.eventSchedule.sessions.map((session) => {
             const hour = session.timeHour;
@@ -91,15 +180,12 @@ export const AddClassModal = ({ isOpen, onCloseAction, onClassCreated, onEventCr
             const endMinute = (session.timeMinute + session.durationMinutes) % 60;
             const endAmPm = session.timeAmPm === 'AM' && endHour >= 12 ? 'PM' : session.timeAmPm;
             const displayEndHour = endHour > 12 ? endHour - 12 : endHour;
-
-            // Format the date for display
             const dateObj = new Date(session.date);
             const formattedDate = dateObj.toLocaleDateString('en-US', {
               month: 'long',
               day: 'numeric',
               year: 'numeric',
             });
-
             return {
               date: formattedDate,
               time: `${hour}:${minute} ${session.timeAmPm} - ${displayEndHour}:${endMinute.toString().padStart(2, '0')} ${endAmPm}`,
@@ -107,25 +193,19 @@ export const AddClassModal = ({ isOpen, onCloseAction, onClassCreated, onEventCr
           });
         };
 
-        // Get unique staff members from all sessions
         const uniqueStaffIds = [...new Set(wizard.data.eventSchedule.sessions.flatMap(s => [s.staffMember, s.assistantStaff].filter(Boolean)))];
         const eventInstructors = uniqueStaffIds
           .map(id => MOCK_STAFF[id])
           .filter((staff): staff is { name: string; photoUrl: string } => staff !== undefined);
 
-        // Format dates for display
         const formatDate = (dateStr: string) => {
           const dateObj = new Date(dateStr);
-          return dateObj.toLocaleDateString('en-US', {
-            month: 'long',
-            day: 'numeric',
-            year: 'numeric',
-          });
+          return dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
         };
 
         const newEvent: EventCardProps = {
-          id: `event-${Date.now()}`,
-          name: wizard.data.eventName,
+          id: result.event.id,
+          name: result.event.name,
           description: wizard.data.eventDescription,
           eventType: wizard.data.eventType || 'Other',
           startDate: formatDate(wizard.data.eventSchedule.startDate),
@@ -136,20 +216,35 @@ export const AddClassModal = ({ isOpen, onCloseAction, onClassCreated, onEventCr
           price: wizard.data.eventBilling.hasFee ? wizard.data.eventBilling.price : null,
         };
 
-        console.info('[Add Class/Event Wizard] Event created successfully:', {
-          timestamp: new Date().toISOString(),
-          newEvent,
-        });
-
-        // Notify parent about the new event
         if (onEventCreated) {
           onEventCreated(newEvent);
         }
       } else {
-        // Create the mock class object
+        const schedule = wizard.data.schedule.instances.map((i) => {
+          const start = to24h(i.timeHour, i.timeMinute, i.timeAmPm);
+          const end = addDuration(start, i.durationHours, i.durationMinutes);
+          return {
+            dayOfWeek: DAY_OF_WEEK_INDEX[i.dayOfWeek],
+            startTime: start,
+            endTime: end,
+            primaryInstructorClerkId: i.staffMember || null,
+            room: wizard.data.schedule.location || null,
+          };
+        });
+
+        const result = await client.classes.create({
+          name: wizard.data.className,
+          description: wizard.data.description || null,
+          color: wizard.data.calendarColor || null,
+          maxCapacity: wizard.data.maximumCapacity ?? null,
+          minAge: wizard.data.minimumAge ?? null,
+          isActive: true,
+          schedule,
+          tagIds: wizard.data.tags,
+        });
+
         const formatSchedule = (): ScheduleItem[] => {
-          const instances = wizard.data.schedule.instances;
-          return instances.map((instance) => {
+          return wizard.data.schedule.instances.map((instance) => {
             const hour = instance.timeHour;
             const minute = instance.timeMinute.toString().padStart(2, '0');
             const endHour = hour + instance.durationHours + Math.floor((instance.timeMinute + instance.durationMinutes) / 60);
@@ -163,43 +258,35 @@ export const AddClassModal = ({ isOpen, onCloseAction, onClassCreated, onEventCr
           });
         };
 
-        // Get unique staff members from all instances
         const uniqueStaffIds = [...new Set(wizard.data.schedule.instances.flatMap(i => [i.staffMember, i.assistantStaff].filter(Boolean)))];
         const classInstructors = uniqueStaffIds
           .map(id => MOCK_STAFF[id])
           .filter((staff): staff is { name: string; photoUrl: string } => staff !== undefined);
 
         const newClass: ClassCardProps = {
-          id: `class-${Date.now()}`,
-          name: wizard.data.className,
+          id: result.class.id,
+          name: result.class.name,
           description: wizard.data.description,
-          level: 'All Levels', // Default for new classes
+          level: 'All Levels',
           type: MOCK_PROGRAMS[wizard.data.program]?.split(' ')[0] || 'Adults',
-          style: 'Gi', // Default
+          style: 'Gi',
           schedule: formatSchedule(),
-          location: 'Current Location', // Uses the selected location from app context
+          location: wizard.data.schedule.location || 'Current Location',
           instructors: classInstructors,
         };
 
-        console.info('[Add Class/Event Wizard] Class created successfully:', {
-          timestamp: new Date().toISOString(),
-          newClass,
-        });
-
-        // Notify parent about the new class
         if (onClassCreated) {
           onClassCreated(newClass);
         }
       }
 
-      // Move to success step
       wizard.setStep('success');
     } catch (err) {
       console.error('[Add Class/Event Wizard] Failed to create:', {
         timestamp: new Date().toISOString(),
         error: err instanceof Error ? err.message : String(err),
       });
-      wizard.setError('Failed to create. Please try again.');
+      wizard.setError(err instanceof Error ? err.message : 'Failed to create. Please try again.');
     } finally {
       wizard.setIsLoading(false);
     }

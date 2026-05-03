@@ -9,6 +9,7 @@ import { ButtonGroupItem, ButtonGroupRoot } from '@/components/ui/button-group';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useClassesCache } from '@/hooks/useClassesCache';
 import { useEventsCache } from '@/hooks/useEventsCache';
+import { CalendarDateNav } from './CalendarDateNav';
 import { buildClassColorLegend, generateWeeklyEventScheduleFromData, generateWeeklyScheduleFromData, transformClassesToCardProps } from './classDataTransformers';
 import { ClassEventHoverCard } from './ClassEventHoverCard';
 import { ClassFilterBar } from './ClassFilterBar';
@@ -199,7 +200,11 @@ export function WeeklyView({ withFilters }: WeeklyViewProps = {}) {
           >
             ← Previous
           </button>
-          <h2 className="text-lg font-semibold text-foreground">{dateDisplay}</h2>
+          <CalendarDateNav
+            currentDate={currentDate}
+            onDateChangeAction={setCurrentDate}
+            display={dateDisplay}
+          />
           <button
             type="button"
             onClick={handleNext}
@@ -223,10 +228,18 @@ export function WeeklyView({ withFilters }: WeeklyViewProps = {}) {
               {Array.from({ length: 7 }).map((_, i) => {
                 const date = new Date(weekStart);
                 date.setDate(weekStart.getDate() + i);
+                const today = new Date();
+                const isToday
+                  = date.getFullYear() === today.getFullYear()
+                    && date.getMonth() === today.getMonth()
+                    && date.getDate() === today.getDate();
                 return (
                   <th
                     key={date.toISOString()}
-                    className="border-r border-border p-2 text-center text-xs font-semibold text-foreground last:border-r-0 sm:text-sm"
+                    className={`border-r border-border p-2 text-center text-xs font-semibold last:border-r-0 sm:text-sm ${
+                      isToday ? 'bg-blue-50 text-primary dark:bg-blue-950/40' : 'text-foreground'
+                    }`}
+                    aria-current={isToday ? 'date' : undefined}
                   >
                     <div>{DAYS_OF_WEEK[i]}</div>
                     <div>{date.getDate()}</div>

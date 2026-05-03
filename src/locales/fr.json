@@ -3,6 +3,9 @@
     "meta_title": "Dojo Planner",
     "meta_description": "Un moyen facile de gérer votre académie."
   },
+  "Calendar": {
+    "open_picker_aria": "Ouvrir le sélecteur de date"
+  },
   "Hero": {
     "title": "Dojo Planner",
     "primary_button": "Démarrer"
@@ -2020,7 +2023,43 @@
     "delete_dialog_title": "Êtes-vous absolument sûr ?",
     "delete_dialog_description": "Cette action est irréversible. L'événement \"{eventName}\" sera supprimé définitivement des serveurs.",
     "cancel_button": "Annuler",
-    "delete_confirm_button": "Supprimer"
+    "delete_confirm_button": "Supprimer",
+    "edit_details_aria": "Modifier les détails de l'événement",
+    "edit_pricing_aria": "Modifier les tarifs de l'événement",
+    "edit_sessions_aria": "Modifier les séances de l'événement",
+    "edit_instructors_aria": "Modifier les instructeurs de l'événement",
+    "EditEventModal": {
+      "title": "Modifier l'événement",
+      "tab_details": "Détails",
+      "tab_pricing": "Tarifs",
+      "tab_sessions": "Séances",
+      "name_label": "Nom de l'événement",
+      "name_placeholder": "ex. Séminaire Ceinture Noire",
+      "event_type_label": "Type d'événement",
+      "event_type_seminar": "Séminaire",
+      "event_type_workshop": "Atelier",
+      "event_type_tournament": "Tournoi",
+      "event_type_camp": "Stage",
+      "event_type_other": "Autre",
+      "max_capacity_label": "Capacité maximale",
+      "max_capacity_placeholder": "Laisser vide pour illimité",
+      "description_label": "Description",
+      "description_placeholder": "De quoi s'agit-il ?",
+      "description_character_count": "{count} / {max}",
+      "tier_name_label": "Nom du tarif",
+      "tier_name_placeholder": "ex. Standard, Lève-tôt",
+      "price_label": "Prix",
+      "remove_tier_aria": "Supprimer le tarif",
+      "add_tier_button": "Ajouter un tarif",
+      "session_date_label": "Date",
+      "session_start_label": "Début",
+      "session_end_label": "Fin",
+      "remove_session_aria": "Supprimer la séance",
+      "add_session_button": "Ajouter une séance",
+      "cancel_button": "Annuler",
+      "save_button": "Enregistrer",
+      "saving_button": "Enregistrement..."
+    }
   },
   "MemberDetailAttendance": {
     "title": "Historique de présence",
