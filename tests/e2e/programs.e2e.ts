@@ -155,11 +155,15 @@ test.describe('Programs Management', () => {
   test('should filter programs by status', async ({ page }) => {
     await navigateTo(page, '/dashboard/programs');
 
-    // Status filter should be available
+    // Wait for the page to finish hydrating — the page now reads from a real
+    // cache, so the Select trigger isn't mounted until the first list resolves.
+    await expect(page.getByRole('heading', { name: /programs management/i })).toBeVisible();
     await expect(page.getByText('All Statuses')).toBeVisible();
 
-    // Status filter is a Shadcn Select — click trigger then exact match option
-    await page.getByText('All Statuses').click();
+    // Click the Select trigger (combobox role, not the inner placeholder span)
+    // so the click reliably opens the dropdown without re-render flake.
+    await page.getByRole('combobox').click();
+
     await page.getByRole('option', { name: 'Active', exact: true }).click();
 
     // The heading should still be visible (page didn't break)
