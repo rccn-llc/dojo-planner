@@ -14,6 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { invalidateClassesCache, useClassesCache } from '@/hooks/useClassesCache';
 import { invalidateEventsCache, useEventsCache } from '@/hooks/useEventsCache';
 import { useHasRole } from '@/hooks/useHasRole';
+import { useOrganizationLocation } from '@/hooks/useOrganizationLocation';
 import { ClassCard } from '@/templates/ClassCard';
 import { EventCard } from '@/templates/EventCard';
 import { StatsCards } from '@/templates/StatsCards';
@@ -38,10 +39,12 @@ export function ClassesPage() {
   // Fetch data from database with caching
   const { classes: rawClasses, loading: classesLoading } = useClassesCache(organization?.id);
   const { events: rawEvents, loading: eventsLoading } = useEventsCache(organization?.id);
+  const { location: orgLocation } = useOrganizationLocation();
+  const locationLabel = orgLocation.address ?? '';
 
   // Transform database data to card props format
-  const classes = useMemo(() => transformClassesToCardProps(rawClasses), [rawClasses]);
-  const events = useMemo(() => transformEventsToCardProps(rawEvents), [rawEvents]);
+  const classes = useMemo(() => transformClassesToCardProps(rawClasses, locationLabel), [rawClasses, locationLabel]);
+  const events = useMemo(() => transformEventsToCardProps(rawEvents, locationLabel), [rawEvents, locationLabel]);
 
   const loading = classesLoading || eventsLoading;
 

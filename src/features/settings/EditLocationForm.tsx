@@ -40,7 +40,8 @@ type EditLocationFormProps = {
     phone: string;
     email: string;
   };
-  onSave: (data: { name: string; address: string; phone: string; email: string }) => void;
+  onSave: (data: { name: string; address: string; phone: string; email: string }) => void | Promise<void>;
+  errorMessage?: string | null;
 };
 
 type FormErrors = {
@@ -50,7 +51,7 @@ type FormErrors = {
   email?: string;
 };
 
-export function EditLocationForm({ onCancel, onSuccess, initialData, onSave }: EditLocationFormProps) {
+export function EditLocationForm({ onCancel, onSuccess, initialData, onSave, errorMessage }: EditLocationFormProps) {
   const t = useTranslations('LocationSettings.EditLocationModal');
   const tCommon = useTranslations('MyProfile');
 
@@ -97,15 +98,16 @@ export function EditLocationForm({ onCancel, onSuccess, initialData, onSave }: E
     setErrors({});
 
     try {
-      // Sanitize all inputs before saving
       const sanitizedData = {
         name: sanitizeInput(name),
         address: sanitizeInput(address),
         phone: sanitizePhone(phone),
         email: sanitizeEmail(email),
       };
-      onSave(sanitizedData);
+      await onSave(sanitizedData);
       onSuccess();
+    } catch {
+      // Save failed; parent surfaces the error via errorMessage prop
     } finally {
       setIsLoading(false);
     }
@@ -177,6 +179,9 @@ export function EditLocationForm({ onCancel, onSuccess, initialData, onSave }: E
           )}
         </div>
       </div>
+      {errorMessage && (
+        <p className="text-sm text-red-500">{errorMessage}</p>
+      )}
       <div className="flex justify-between pt-2">
         <Button
           type="button"

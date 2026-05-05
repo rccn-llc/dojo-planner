@@ -48,7 +48,8 @@ src/
 │   ├── Classes.ts         # Classes list & tags
 │   ├── Events.ts          # Events list
 │   ├── Tags.ts            # Tags (class, membership, all)
-│   ├── Coupons.ts         # Coupons list & active
+│   ├── Coupons.ts         # Coupons list & active, total savings aggregation
+│   ├── Organization.ts    # Per-org location settings (getLocation, updateLocation)
 │   ├── Transactions.ts    # Transaction listing with filters
 │   ├── Dashboard.ts       # Membership stats, financial stats, chart data
 │   ├── Reports.ts         # Report values, chart data, dynamic insights
@@ -61,10 +62,10 @@ src/
 │   ├── CatalogService.ts  # Catalog items, variants, categories, images
 │   ├── ClassesService.ts  # Class & schedule queries
 │   ├── ClerkRolesService.ts # Clerk Backend API
-│   ├── CouponsService.ts  # Coupon queries
+│   ├── CouponsService.ts  # Coupon queries + organization-wide total savings aggregation
 │   ├── EventsService.ts   # Event queries
 │   ├── MembersService.ts  # Member operations
-│   ├── OrganizationService.ts # Org & Stripe customer storage
+│   ├── OrganizationService.ts # Org & Stripe customer storage + per-org location settings (name, address, phone, email)
 │   ├── TagsService.ts     # Tag queries with usage counts
 │   ├── TransactionsService.ts # Transaction listing with member joins
 │   ├── DashboardService.ts # Membership stats, financial stats, member average & earnings chart data
@@ -154,6 +155,7 @@ docs/                      # Documentation
 | `/dashboard/subscription-expired` | `subscription-expired/page.tsx` | Subscription expired — re-subscribe prompt |
 | `/dashboard/preferences` | `preferences/page.tsx` | User preferences |
 | `/dashboard/security` | `security/page.tsx` | Security settings |
+| `/dashboard/location-settings` | `location-settings/page.tsx` | Per-org location settings (name, address, phone, email) — backed by `organization.location*` columns |
 
 ### Auth Routes
 
@@ -614,7 +616,7 @@ await deleteUserWithOrganization();
 **Schema:** `src/models/Schema.ts`
 
 **Key Tables:**
-- `organization` - Multi-tenant orgs with Stripe IDs + IQPro SaaS subscription fields (iqproCustomerId, iqproSubscriptionId, iqproSubscriptionPlanId, iqproBillingCycle, iqproSubscriptionStatus, iqproCurrentPeriodEnd, iqproPaymentMethodId)
+- `organization` - Multi-tenant orgs with Stripe IDs + IQPro SaaS subscription fields (iqproCustomerId, iqproSubscriptionId, iqproSubscriptionPlanId, iqproBillingCycle, iqproSubscriptionStatus, iqproCurrentPeriodEnd, iqproPaymentMethodId) + location settings (locationName, locationAddress, locationPhone, locationEmail — all nullable, set via the location-settings page)
 - `member` - Member records with dateOfBirth, optional `clerkUserId` for kiosk auth, optional `iqproCustomerId`
 - `membership_plan` - Pricing tiers
 - `member_membership` - Member-plan associations with startDate, endDate, firstPaymentDate, nextPaymentDate, optional `iqproSubscriptionId`
@@ -1016,6 +1018,9 @@ AUDIT_ACTION.PAYMENT_METHOD_REGISTER;
 AUDIT_ACTION.SAAS_SUBSCRIPTION_CREATE;
 AUDIT_ACTION.SAAS_SUBSCRIPTION_CHANGE;
 AUDIT_ACTION.SAAS_SUBSCRIPTION_CANCEL;
+
+// Organization operations
+AUDIT_ACTION.ORGANIZATION_LOCATION_UPDATE;
 
 // Family member operations
 AUDIT_ACTION.FAMILY_MEMBER_LINK;

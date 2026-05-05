@@ -8,6 +8,7 @@ import { useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useClassesCache } from '@/hooks/useClassesCache';
+import { useOrganizationLocation } from '@/hooks/useOrganizationLocation';
 import { transformClassesToCardProps } from './classDataTransformers';
 
 type ClassEventHoverCardProps = {
@@ -84,9 +85,11 @@ export function ClassEventHoverCard({
   const router = useRouter();
   const { organization } = useOrganization();
   const { classes: rawClasses } = useClassesCache(organization?.id);
+  const { location: orgLocation } = useOrganizationLocation();
+  const locationLabel = orgLocation.address ?? '';
 
   // Transform and find the class data (only for classes, not events)
-  const classes = useMemo(() => transformClassesToCardProps(rawClasses), [rawClasses]);
+  const classes = useMemo(() => transformClassesToCardProps(rawClasses, locationLabel), [rawClasses, locationLabel]);
   const classData = isEvent ? undefined : classes.find(c => c.id === classId);
 
   const handleClick = () => {

@@ -23,7 +23,8 @@ type EditLocationModalProps = {
     address: string;
     phone: string;
     email: string;
-  }) => void;
+  }) => void | Promise<void>;
+  errorMessage?: string | null;
 };
 
 export function EditLocationModal({
@@ -34,6 +35,7 @@ export function EditLocationModal({
   phone: initialPhone,
   email: initialEmail,
   onSave,
+  errorMessage,
 }: EditLocationModalProps) {
   const t = useTranslations('LocationSettings.EditLocationModal');
 
@@ -61,15 +63,11 @@ export function EditLocationModal({
 
   const handleSubmit = async () => {
     setIsLoading(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500));
-    onSave({
-      name,
-      address,
-      phone,
-      email,
-    });
-    setIsLoading(false);
+    try {
+      await onSave({ name, address, phone, email });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleCancel = () => {
@@ -162,6 +160,10 @@ export function EditLocationModal({
               <p className="text-xs text-destructive">{t('email_error')}</p>
             )}
           </div>
+
+          {errorMessage && (
+            <p className="text-sm text-destructive">{errorMessage}</p>
+          )}
 
           {/* Action Buttons */}
           <div className="flex justify-end gap-3 pt-4">

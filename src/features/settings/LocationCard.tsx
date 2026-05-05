@@ -7,48 +7,37 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useOrganizationLocation } from '@/hooks/useOrganizationLocation';
+import { client } from '@/libs/Orpc';
 import { EditLocationForm } from './EditLocationForm';
-
-type LocationData = {
-  id: string;
-  name: string;
-  address: string;
-  phone: string;
-  email: string;
-};
-
-// Test data marker - for development/testing purposes only
-const mockLocation: LocationData = {
-  id: 'downtown-hq',
-  name: 'Downtown HQ',
-  address: '123 Main St. San Francisco. CA',
-  phone: '(415) 555-0123',
-  email: 'downtown@example.com',
-};
 
 type LocationCardProps = {
   isLoading?: boolean;
 };
 
-export function LocationCard({ isLoading = false }: LocationCardProps) {
+export function LocationCard({ isLoading: forcedLoading = false }: LocationCardProps) {
   const t = useTranslations('LocationSettings');
   const tProfile = useTranslations('MyProfile');
+  const { location, loading: fetchLoading, refetch } = useOrganizationLocation();
   const [isEditing, setIsEditing] = useState(false);
-  const [location, setLocation] = useState<LocationData>(mockLocation);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  const handleSaveLocation = (data: {
+  const isLoading = forcedLoading || fetchLoading;
+
+  const handleSaveLocation = async (data: {
     name: string;
     address: string;
     phone: string;
     email: string;
   }) => {
-    setLocation(prev => ({
-      ...prev,
-      name: data.name,
-      address: data.address,
-      phone: data.phone,
-      email: data.email,
-    }));
+    setSaveError(null);
+    try {
+      await client.organization.updateLocation(data);
+      await refetch();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save location');
+      throw err;
+    }
   };
 
   const handleEditSuccess = () => {
@@ -80,14 +69,18 @@ export function LocationCard({ isLoading = false }: LocationCardProps) {
             <div className="mt-4">
               <EditLocationForm
                 initialData={{
-                  name: location.name,
-                  address: location.address,
-                  phone: location.phone,
-                  email: location.email,
+                  name: location.name ?? '',
+                  address: location.address ?? '',
+                  phone: location.phone ?? '',
+                  email: location.email ?? '',
                 }}
-                onCancel={() => setIsEditing(false)}
+                onCancel={() => {
+                  setIsEditing(false);
+                  setSaveError(null);
+                }}
                 onSuccess={handleEditSuccess}
                 onSave={handleSaveLocation}
+                errorMessage={saveError}
               />
             </div>
           )

@@ -18,13 +18,14 @@ import {
   variantUpdate,
 } from './Catalog';
 import { tags as classTags, create as createClass, list as listClasses, remove as removeClass, removeException as removeClassException, update as updateClass, upsertException as upsertClassException } from './Classes';
-import { create as createCoupon, listActive as listActiveCoupons, list as listCoupons, remove as removeCoupon, update as updateCoupon } from './Coupons';
+import { create as createCoupon, getTotalSavings as getCouponTotalSavings, listActive as listActiveCoupons, list as listCoupons, remove as removeCoupon, update as updateCoupon } from './Coupons';
 import { earningsChart, financialStats, memberAverageChart, membershipStats } from './Dashboard';
 import { create as createEvent, list as listEvents, remove as removeEvent, update as updateEvent } from './Events';
 import { addMembership, changeMembership, create as createMember, getHOHForMember, getHOHPaymentMethods, linkFamily, listAllMembershipPlans, listFamily, listMembershipPlans, listMemberTransactions, listPaymentMethods, removeFullyMember, remove as removeMember, restore as restoreMember, searchHOH, sendConfirmationEmail, unlinkFamily, updateLastAccessed, update as updateMember, updateContactInfo as updateMemberContactInfo, updatePhoto as updateMemberPhoto, updateMemberType } from './Member';
 import { list as listMembers } from './Members';
 import { create as createMembershipPlan, remove as removeMembershipPlan, update as updateMembershipPlan } from './MembershipPlans';
 import { create as createNoteHandler, list as listNotes, remove as removeNoteHandler, update as updateNoteHandler } from './Notes';
+import { getLocation as getOrganizationLocation, updateLocation as updateOrganizationLocation } from './Organization';
 import { getTokenizationIframeConfig, processPayment, registerPaymentMethod } from './Payment';
 import { create as createProgram, list as listPrograms, remove as removeProgram, update as updateProgram } from './Programs';
 import { chartData as reportChartData, currentValues as reportCurrentValues, insights as reportInsights } from './Reports';
@@ -137,6 +138,7 @@ export const router = {
     create: createCoupon,
     update: updateCoupon,
     remove: removeCoupon,
+    getTotalSavings: getCouponTotalSavings,
   },
   membershipPlans: {
     create: createMembershipPlan,
@@ -154,6 +156,10 @@ export const router = {
     create: createNoteHandler,
     update: updateNoteHandler,
     remove: removeNoteHandler,
+  },
+  organization: {
+    getLocation: getOrganizationLocation,
+    updateLocation: updateOrganizationLocation,
   },
   catalog: {
     list: listCatalogItems,
