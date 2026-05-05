@@ -88,7 +88,7 @@ function getAvatarUrl(name: string): string {
 /**
  * Transform database ClassData to ClassCardProps
  */
-export function transformClassToCardProps(classData: ClassData): ClassCardProps {
+export function transformClassToCardProps(classData: ClassData, location: string = ''): ClassCardProps {
   // For now, we don't have instructor data from Clerk, so we use placeholders
   // In a full implementation, you would fetch instructor details from Clerk API
   const instructors = classData.schedule
@@ -112,7 +112,7 @@ export function transformClassToCardProps(classData: ClassData): ClassCardProps 
     type: extractType(classData.tags),
     style: extractStyle(classData.tags),
     schedule: transformSchedule(classData.schedule),
-    location: 'Downtown HQ', // Would come from organization settings
+    location,
     instructors,
   };
 }
@@ -120,7 +120,7 @@ export function transformClassToCardProps(classData: ClassData): ClassCardProps 
 /**
  * Transform database EventData to EventCardProps
  */
-export function transformEventToCardProps(eventData: EventData): EventCardProps {
+export function transformEventToCardProps(eventData: EventData, location: string = ''): EventCardProps {
   // Get date range from sessions
   const sortedSessions = [...eventData.sessions].sort(
     (a, b) => new Date(a.sessionDate).getTime() - new Date(b.sessionDate).getTime(),
@@ -170,7 +170,7 @@ export function transformEventToCardProps(eventData: EventData): EventCardProps 
     startDate,
     endDate,
     sessions,
-    location: 'Downtown HQ',
+    location,
     instructors,
     price: lowestPrice,
   };
@@ -179,19 +179,19 @@ export function transformEventToCardProps(eventData: EventData): EventCardProps 
 /**
  * Transform array of classes
  */
-export function transformClassesToCardProps(classes: ClassData[]): ClassCardProps[] {
+export function transformClassesToCardProps(classes: ClassData[], location: string = ''): ClassCardProps[] {
   return classes
     .filter(c => c.isActive !== false)
-    .map(transformClassToCardProps);
+    .map(c => transformClassToCardProps(c, location));
 }
 
 /**
  * Transform array of events
  */
-export function transformEventsToCardProps(events: EventData[]): EventCardProps[] {
+export function transformEventsToCardProps(events: EventData[], location: string = ''): EventCardProps[] {
   return events
     .filter(e => e.isActive !== false)
-    .map(transformEventToCardProps);
+    .map(e => transformEventToCardProps(e, location));
 }
 
 // =============================================================================

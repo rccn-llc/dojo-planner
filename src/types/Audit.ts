@@ -123,6 +123,9 @@ export const AUDIT_ACTION = {
   SAAS_SUBSCRIPTION_CHANGE: 'saasSubscription.change',
   SAAS_SUBSCRIPTION_CANCEL: 'saasSubscription.cancel',
 
+  // Organization operations
+  ORGANIZATION_LOCATION_UPDATE: 'organizationLocation.update',
+
   // Note operations
   NOTE_CREATE: 'note.create',
   NOTE_UPDATE: 'note.update',

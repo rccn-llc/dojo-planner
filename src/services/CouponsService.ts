@@ -295,3 +295,18 @@ export async function deleteCoupon(couponId: string, organizationId: string): Pr
     .where(and(eq(couponSchema.id, couponId), eq(couponSchema.organizationId, organizationId)));
   return true;
 }
+
+/**
+ * Sum of every coupon redemption's actual discount within an organization.
+ * Joins through `coupon` because `coupon_usage` has no organizationId.
+ */
+export async function getOrganizationTotalSavings(organizationId: string): Promise<number> {
+  const [row] = await db
+    .select({
+      total: sql<number>`COALESCE(SUM(${couponUsageSchema.discountApplied}), 0)`,
+    })
+    .from(couponUsageSchema)
+    .innerJoin(couponSchema, eq(couponUsageSchema.couponId, couponSchema.id))
+    .where(eq(couponSchema.organizationId, organizationId));
+  return Number(row?.total ?? 0);
+}

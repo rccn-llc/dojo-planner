@@ -19,6 +19,7 @@ vi.mock('@/models/Schema', () => ({
   },
   couponUsageSchema: {
     couponId: 'coupon_id',
+    discountApplied: 'discount_applied',
   },
 }));
 
@@ -284,5 +285,60 @@ describe('CouponsService.deleteCoupon', () => {
 
     await expect(deleteCoupon('cpn-1', 'org-1')).rejects.toBeInstanceOf(CouponHasUsagesError);
     expect(dbMock.delete).not.toHaveBeenCalled();
+  });
+});
+
+describe('CouponsService.getOrganizationTotalSavings', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns the summed discountApplied joined through coupon for the org', async () => {
+    const where = vi.fn(() => Promise.resolve([{ total: 137.5 }]));
+    const innerJoin = vi.fn(() => ({ where }));
+    const from = vi.fn(() => ({ innerJoin }));
+    dbMock.select.mockReturnValueOnce({ from });
+
+    const { getOrganizationTotalSavings } = await import('./CouponsService');
+    const total = await getOrganizationTotalSavings('org-1');
+
+    expect(total).toBe(137.5);
+    expect(from).toHaveBeenCalled();
+    expect(innerJoin).toHaveBeenCalled();
+    expect(where).toHaveBeenCalled();
+  });
+
+  it('returns 0 when there are no redemptions (COALESCE result)', async () => {
+    const where = vi.fn(() => Promise.resolve([{ total: 0 }]));
+    dbMock.select.mockReturnValueOnce({
+      from: () => ({ innerJoin: () => ({ where }) }),
+    });
+
+    const { getOrganizationTotalSavings } = await import('./CouponsService');
+    const total = await getOrganizationTotalSavings('org-empty');
+
+    expect(total).toBe(0);
+  });
+
+  it('returns 0 when the query returns an empty result', async () => {
+    dbMock.select.mockReturnValueOnce({
+      from: () => ({ innerJoin: () => ({ where: () => Promise.resolve([]) }) }),
+    });
+
+    const { getOrganizationTotalSavings } = await import('./CouponsService');
+    const total = await getOrganizationTotalSavings('org-empty');
+
+    expect(total).toBe(0);
+  });
+
+  it('coerces numeric strings to numbers (postgres SUM can return text)', async () => {
+    dbMock.select.mockReturnValueOnce({
+      from: () => ({ innerJoin: () => ({ where: () => Promise.resolve([{ total: '99.99' }]) }) }),
+    });
+
+    const { getOrganizationTotalSavings } = await import('./CouponsService');
+    const total = await getOrganizationTotalSavings('org-1');
+
+    expect(total).toBe(99.99);
   });
 });

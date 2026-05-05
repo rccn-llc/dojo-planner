@@ -7,6 +7,7 @@ import {
   deleteCoupon,
   getActiveCoupons,
   getOrganizationCoupons,
+  getOrganizationTotalSavings,
   updateCoupon,
 } from '@/services/CouponsService';
 import { AUDIT_ACTION, AUDIT_ENTITY_TYPE } from '@/types/Audit';
@@ -32,6 +33,14 @@ export const listActive = os.handler(async () => {
   const coupons = await getActiveCoupons(orgId);
 
   return { coupons };
+});
+
+export const getTotalSavings = os.handler(async () => {
+  const { orgId } = await guardRole(ORG_ROLE.ACADEMY_OWNER);
+
+  const totalSavings = await getOrganizationTotalSavings(orgId);
+
+  return { totalSavings };
 });
 
 export const create = os

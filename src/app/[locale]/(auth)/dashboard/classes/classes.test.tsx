@@ -73,6 +73,15 @@ vi.mock('@/hooks/useEventsCache', () => ({
   invalidateEventsCache: vi.fn(),
 }));
 
+vi.mock('@/hooks/useOrganizationLocation', () => ({
+  useOrganizationLocation: () => ({
+    location: { name: 'Main Dojo', address: 'Downtown HQ', phone: null, email: null },
+    loading: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
+}));
+
 // Mock the tags cache for ClassTagsManagement
 vi.mock('@/hooks/useTagsCache', () => ({
   useTagsCache: () => ({

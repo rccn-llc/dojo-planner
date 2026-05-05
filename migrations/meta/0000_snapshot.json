@@ -3693,6 +3693,30 @@
           "primaryKey": false,
           "notNull": false
         },
+        "location_name": {
+          "name": "location_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_address": {
+          "name": "location_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_phone": {
+          "name": "location_phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_email": {
+          "name": "location_email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "updated_at": {
           "name": "updated_at",
           "type": "timestamp",

@@ -53,3 +53,60 @@ export const updateStripeSubscription = (
     })
     .where(eq(organizationSchema.stripeCustomerId, customerId));
 };
+
+export type OrganizationLocation = {
+  name: string | null;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+};
+
+export const getOrganizationLocation = async (
+  orgId: string,
+): Promise<OrganizationLocation> => {
+  const row = await db.query.organizationSchema.findFirst({
+    where: eq(organizationSchema.id, orgId),
+    columns: {
+      locationName: true,
+      locationAddress: true,
+      locationPhone: true,
+      locationEmail: true,
+    },
+  });
+  return {
+    name: row?.locationName ?? null,
+    address: row?.locationAddress ?? null,
+    phone: row?.locationPhone ?? null,
+    email: row?.locationEmail ?? null,
+  };
+};
+
+export const updateOrganizationLocation = async (
+  orgId: string,
+  input: { name: string; address: string; phone: string; email: string },
+): Promise<OrganizationLocation> => {
+  await db
+    .insert(organizationSchema)
+    .values({
+      id: orgId,
+      locationName: input.name,
+      locationAddress: input.address,
+      locationPhone: input.phone,
+      locationEmail: input.email,
+    })
+    .onConflictDoUpdate({
+      target: organizationSchema.id,
+      set: {
+        locationName: input.name,
+        locationAddress: input.address,
+        locationPhone: input.phone,
+        locationEmail: input.email,
+      },
+    });
+  return {
+    name: input.name,
+    address: input.address,
+    phone: input.phone,
+    email: input.email,
+  };
+};

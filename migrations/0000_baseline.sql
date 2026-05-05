@@ -388,6 +388,10 @@ CREATE TABLE "organization" (
 	"iqpro_subscription_status" text,
 	"iqpro_current_period_end" bigint,
 	"iqpro_payment_method_id" text,
+	"location_name" text,
+	"location_address" text,
+	"location_phone" text,
+	"location_email" text,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL
 );

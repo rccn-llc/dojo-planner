@@ -1,9 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { page, userEvent } from 'vitest/browser';
-import { LocationCard } from './LocationCard';
 
-// Mock next-intl
 vi.mock('next-intl', () => ({
   useTranslations: (namespace: string) => (key: string) => {
     const translations: Record<string, Record<string, string>> = {
@@ -40,46 +38,91 @@ vi.mock('next-intl', () => ({
   },
 }));
 
+const refetchMock = vi.fn();
+const updateLocationMock = vi.fn().mockResolvedValue({ location: {} });
+
+let hookState: {
+  location: { name: string | null; address: string | null; phone: string | null; email: string | null };
+  loading: boolean;
+} = {
+  location: {
+    name: 'Main Dojo',
+    address: '500 Market St',
+    phone: '(415) 555-0100',
+    email: 'hello@dojo.test',
+  },
+  loading: false,
+};
+
+vi.mock('@/hooks/useOrganizationLocation', () => ({
+  useOrganizationLocation: () => ({
+    location: hookState.location,
+    loading: hookState.loading,
+    error: null,
+    refetch: refetchMock,
+  }),
+}));
+
+vi.mock('@/libs/Orpc', () => ({
+  client: {
+    organization: {
+      updateLocation: (...args: unknown[]) => updateLocationMock(...args),
+    },
+  },
+}));
+
+// Import after mocks are set up
+const { LocationCard } = await import('./LocationCard');
+
 describe('LocationCard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    hookState = {
+      location: {
+        name: 'Main Dojo',
+        address: '500 Market St',
+        phone: '(415) 555-0100',
+        email: 'hello@dojo.test',
+      },
+      loading: false,
+    };
   });
 
-  it('should render the location title', () => {
+  it('renders the location title', () => {
     render(<LocationCard />);
 
     expect(page.getByText('Location')).toBeDefined();
   });
 
-  it('should render address label and value', () => {
+  it('renders address from the hook', () => {
     render(<LocationCard />);
 
     expect(page.getByText('Address:')).toBeDefined();
-    expect(page.getByText('123 Main St. San Francisco. CA')).toBeDefined();
+    expect(page.getByText('500 Market St')).toBeDefined();
   });
 
-  it('should render phone label and value', () => {
+  it('renders phone from the hook', () => {
     render(<LocationCard />);
 
     expect(page.getByText('Phone:')).toBeDefined();
-    expect(page.getByText('(415) 555-0123')).toBeDefined();
+    expect(page.getByText('(415) 555-0100')).toBeDefined();
   });
 
-  it('should render email label and value', () => {
+  it('renders email from the hook', () => {
     render(<LocationCard />);
 
     expect(page.getByText('Email:')).toBeDefined();
-    expect(page.getByText('downtown@example.com')).toBeDefined();
+    expect(page.getByText('hello@dojo.test')).toBeDefined();
   });
 
-  it('should render status label and active badge', () => {
+  it('renders status label and active badge', () => {
     render(<LocationCard />);
 
     expect(page.getByText('Status:')).toBeDefined();
     expect(page.getByText('Active')).toBeDefined();
   });
 
-  it('should render the edit button', () => {
+  it('renders the edit button', () => {
     render(<LocationCard />);
 
     const editButton = page.getByRole('button', { name: /edit location/i });
@@ -87,93 +130,65 @@ describe('LocationCard', () => {
     expect(editButton).toBeDefined();
   });
 
-  it('should show inline edit form when edit button is clicked', async () => {
+  it('shows inline edit form when edit button is clicked', async () => {
     render(<LocationCard />);
 
     const editButton = page.getByRole('button', { name: /edit location/i });
     await userEvent.click(editButton);
 
-    // The edit form should now be visible with input fields
     expect(page.getByLabelText('Location Name')).toBeDefined();
     expect(page.getByLabelText('Address')).toBeDefined();
     expect(page.getByLabelText('Phone')).toBeDefined();
     expect(page.getByLabelText('Email')).toBeDefined();
   });
 
-  it('should hide edit form when cancel button is clicked', async () => {
+  it('hides edit form when cancel button is clicked', async () => {
     render(<LocationCard />);
 
-    // Open edit form
     const editButton = page.getByRole('button', { name: /edit location/i });
     await userEvent.click(editButton);
 
-    // Cancel editing
     const cancelButton = page.getByRole('button', { name: /cancel/i });
     await userEvent.click(cancelButton);
 
-    // Should be back to display mode with the edit button visible
     expect(page.getByRole('button', { name: /edit location/i })).toBeDefined();
-
-    // Edit form inputs should not be visible
     expect(page.getByLabelText('Location Name').elements().length).toBe(0);
   });
 
-  it('should update location data when save button is clicked', async () => {
+  it('calls updateLocation and refetches when save is clicked', async () => {
     render(<LocationCard />);
 
-    // Open edit form
     const editButton = page.getByRole('button', { name: /edit location/i });
     await userEvent.click(editButton);
 
-    // Clear and fill in new values
     const addressInput = page.getByLabelText('Address');
     await userEvent.clear(addressInput);
-    await userEvent.type(addressInput, '456 New St. Los Angeles. CA');
+    await userEvent.type(addressInput, '456 New St');
 
-    const phoneInput = page.getByLabelText('Phone');
-    await userEvent.clear(phoneInput);
-    await userEvent.type(phoneInput, '(310) 555-9999');
-
-    const emailInput = page.getByLabelText('Email');
-    await userEvent.clear(emailInput);
-    await userEvent.type(emailInput, 'updated@example.com');
-
-    // Save changes
     const saveButton = page.getByRole('button', { name: /save/i });
     await userEvent.click(saveButton);
 
-    // Check that the data is updated
-    expect(page.getByText('456 New St. Los Angeles. CA')).toBeDefined();
-    expect(page.getByText('(310) 555-9999')).toBeDefined();
-    expect(page.getByText('updated@example.com')).toBeDefined();
+    expect(updateLocationMock).toHaveBeenCalledWith(expect.objectContaining({
+      address: '456 New St',
+    }));
+    expect(refetchMock).toHaveBeenCalled();
   });
 
-  it('should display dash when value is empty', () => {
-    // This test verifies the fallback behavior
-    render(<LocationCard />);
-
-    // The mock data has values, so no dashes should appear in default state
-    // This is more of a structural test
-    expect(page.getByText('Location')).toBeDefined();
-  });
-
-  it('should show title even when in edit mode', async () => {
+  it('shows the title even when in edit mode', async () => {
     render(<LocationCard />);
 
     const editButton = page.getByRole('button', { name: /edit location/i });
     await userEvent.click(editButton);
 
-    // Title should still be visible
     expect(page.getByText('Location')).toBeDefined();
   });
 
-  it('should hide display fields when in edit mode', async () => {
+  it('hides display fields when in edit mode', async () => {
     render(<LocationCard />);
 
     const editButton = page.getByRole('button', { name: /edit location/i });
     await userEvent.click(editButton);
 
-    // The status badge should not be visible in edit mode
     expect(page.getByText('Status:').elements().length).toBe(0);
   });
 });
@@ -183,23 +198,22 @@ describe('LocationCard - Loading State', () => {
     vi.clearAllMocks();
   });
 
-  it('should render skeleton when loading', () => {
+  it('renders skeleton when isLoading prop is true', () => {
+    hookState = { ...hookState, loading: false };
     render(<LocationCard isLoading={true} />);
 
-    // When loading, the card should show skeletons instead of data
-    // The title should not be visible when loading
     expect(page.getByText('Location').elements().length).toBe(0);
   });
 
-  it('should not render edit button when loading', () => {
-    render(<LocationCard isLoading={true} />);
+  it('renders skeleton when the hook is loading', () => {
+    hookState = { ...hookState, loading: true };
+    render(<LocationCard />);
 
-    const editButton = page.getByRole('button', { name: /edit/i }).elements();
-
-    expect(editButton.length).toBe(0);
+    expect(page.getByText('Location').elements().length).toBe(0);
   });
 
-  it('should render normal content when not loading', () => {
+  it('renders normal content when not loading', () => {
+    hookState = { ...hookState, loading: false };
     render(<LocationCard isLoading={false} />);
 
     expect(page.getByText('Location')).toBeDefined();

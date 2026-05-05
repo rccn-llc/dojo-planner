@@ -15,6 +15,7 @@ vi.mock('@/services/CouponsService', async () => {
     createCoupon: vi.fn(),
     updateCoupon: vi.fn(),
     deleteCoupon: vi.fn(),
+    getOrganizationTotalSavings: vi.fn(),
   };
 });
 
@@ -192,5 +193,37 @@ describe('Coupons Router mutations', () => {
 
       await expect(callHandler(remove, { id: 'cpn-1' })).rejects.toBeInstanceOf(ORPCError);
     });
+  });
+});
+
+describe('Coupons Router getTotalSavings', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns the org total savings under ACADEMY_OWNER guard', async () => {
+    const { guardRole } = await import('./AuthGuards');
+    const { getOrganizationTotalSavings } = await import('@/services/CouponsService');
+    vi.mocked(guardRole).mockResolvedValue(academyOwnerContext);
+    vi.mocked(getOrganizationTotalSavings).mockResolvedValue(425.5);
+
+    const { getTotalSavings } = await import('./Coupons');
+    const result = await callHandler(getTotalSavings);
+
+    expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
+    expect(getOrganizationTotalSavings).toHaveBeenCalledWith('org-1');
+    expect(result).toEqual({ totalSavings: 425.5 });
+  });
+
+  it('returns zero when there are no redemptions', async () => {
+    const { guardRole } = await import('./AuthGuards');
+    const { getOrganizationTotalSavings } = await import('@/services/CouponsService');
+    vi.mocked(guardRole).mockResolvedValue(academyOwnerContext);
+    vi.mocked(getOrganizationTotalSavings).mockResolvedValue(0);
+
+    const { getTotalSavings } = await import('./Coupons');
+    const result = await callHandler(getTotalSavings);
+
+    expect(result).toEqual({ totalSavings: 0 });
   });
 });

@@ -1,6 +1,14 @@
 import type { ClassData } from '@/services/ClassesService';
+import type { EventData } from '@/services/EventsService';
 import { describe, expect, it } from 'vitest';
-import { generateMonthlyScheduleFromData, generateWeeklyScheduleFromData } from './classDataTransformers';
+import {
+  generateMonthlyScheduleFromData,
+  generateWeeklyScheduleFromData,
+  transformClassesToCardProps,
+  transformClassToCardProps,
+  transformEventsToCardProps,
+  transformEventToCardProps,
+} from './classDataTransformers';
 
 // =============================================================================
 // TEST HELPERS
@@ -293,5 +301,62 @@ describe('generateMonthlyScheduleFromData', () => {
     for (let day = 1; day <= 28; day++) {
       expect(events[day.toString()]).toHaveLength(0);
     }
+  });
+});
+
+// =============================================================================
+// LOCATION THREADING
+// =============================================================================
+
+const baseEvent: EventData = {
+  id: 'evt-1',
+  name: 'Spring Seminar',
+  description: 'desc',
+  isActive: true,
+  eventType: 'seminar',
+  sessions: [],
+  billing: [],
+} as unknown as EventData;
+
+describe('location threading', () => {
+  it('transformClassToCardProps uses the passed-in location', () => {
+    const cls = makeClass({
+      id: 'c1',
+      name: 'Class',
+      schedule: [{ id: 's1', dayOfWeek: 1, startTime: '09:00', endTime: '10:00', instructorClerkId: null }],
+    });
+
+    expect(transformClassToCardProps(cls, '500 Market St').location).toBe('500 Market St');
+  });
+
+  it('transformClassToCardProps defaults to empty string when location omitted', () => {
+    const cls = makeClass({ id: 'c1', name: 'Class', schedule: [] });
+
+    expect(transformClassToCardProps(cls).location).toBe('');
+  });
+
+  it('transformClassesToCardProps threads location into every transformed item', () => {
+    const cls1 = makeClass({ id: 'c1', name: 'A', schedule: [] });
+    const cls2 = makeClass({ id: 'c2', name: 'B', schedule: [] });
+    const result = transformClassesToCardProps([cls1, cls2], '1 Pine Ave');
+
+    expect(result).toHaveLength(2);
+    expect(result.every(c => c.location === '1 Pine Ave')).toBe(true);
+  });
+
+  it('transformEventToCardProps uses the passed-in location', () => {
+    expect(transformEventToCardProps(baseEvent, '500 Market St').location).toBe('500 Market St');
+  });
+
+  it('transformEventToCardProps defaults to empty string when location omitted', () => {
+    expect(transformEventToCardProps(baseEvent).location).toBe('');
+  });
+
+  it('transformEventsToCardProps threads location into every transformed event', () => {
+    const events = [baseEvent, { ...baseEvent, id: 'evt-2' }];
+    const result = transformEventsToCardProps(events, '1 Pine Ave');
+
+    expect(result).toHaveLength(2);
+    expect(result.every(e => e.location === '1 Pine Ave')).toBe(true);
   });
 });

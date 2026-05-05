@@ -9,6 +9,7 @@ import { ButtonGroupItem, ButtonGroupRoot } from '@/components/ui/button-group';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useClassesCache } from '@/hooks/useClassesCache';
 import { useEventsCache } from '@/hooks/useEventsCache';
+import { useOrganizationLocation } from '@/hooks/useOrganizationLocation';
 import { CalendarDateNav } from './CalendarDateNav';
 import { buildClassColorLegend, generateWeeklyEventScheduleFromData, generateWeeklyScheduleFromData, transformClassesToCardProps } from './classDataTransformers';
 import { ClassEventHoverCard } from './ClassEventHoverCard';
@@ -25,6 +26,8 @@ export function WeeklyView({ withFilters }: WeeklyViewProps = {}) {
   const { organization } = useOrganization();
   const { classes: rawClasses, loading: classesLoading } = useClassesCache(organization?.id);
   const { events: rawEvents, loading: eventsLoading } = useEventsCache(organization?.id);
+  const { location: orgLocation } = useOrganizationLocation();
+  const locationLabel = orgLocation.address ?? '';
   const loading = classesLoading || eventsLoading;
 
   const [currentDate, setCurrentDate] = useState(() => new Date());
@@ -35,7 +38,7 @@ export function WeeklyView({ withFilters }: WeeklyViewProps = {}) {
   });
 
   // Transform database data to card props for filtering
-  const classes = useMemo(() => transformClassesToCardProps(rawClasses), [rawClasses]);
+  const classes = useMemo(() => transformClassesToCardProps(rawClasses, locationLabel), [rawClasses, locationLabel]);
 
   // Use parent filters if provided, otherwise use local filters
   const filters = withFilters || localFilters;

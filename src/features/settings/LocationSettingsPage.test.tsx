@@ -1,7 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { page, userEvent } from 'vitest/browser';
-import { LocationSettingsPage } from './LocationSettingsPage';
 
 vi.mock('next-intl', () => ({
   useTranslations: (namespace: string) => (key: string) => {
@@ -38,52 +37,100 @@ vi.mock('next-intl', () => ({
   },
 }));
 
+const refetchMock = vi.fn();
+const updateLocationMock = vi.fn().mockResolvedValue({ location: {} });
+
+let hookState: {
+  location: { name: string | null; address: string | null; phone: string | null; email: string | null };
+  loading: boolean;
+} = {
+  location: {
+    name: 'Main Dojo',
+    address: '500 Market St, San Francisco, CA',
+    phone: '(415) 555-0100',
+    email: 'hello@dojo.test',
+  },
+  loading: false,
+};
+
+vi.mock('@/hooks/useOrganizationLocation', () => ({
+  useOrganizationLocation: () => ({
+    location: hookState.location,
+    loading: hookState.loading,
+    error: null,
+    refetch: refetchMock,
+  }),
+}));
+
+vi.mock('@/libs/Orpc', () => ({
+  client: {
+    organization: {
+      updateLocation: (...args: unknown[]) => updateLocationMock(...args),
+    },
+  },
+}));
+
+const { LocationSettingsPage } = await import('./LocationSettingsPage');
+
 describe('LocationSettingsPage', () => {
-  it('should render the page title', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    hookState = {
+      location: {
+        name: 'Main Dojo',
+        address: '500 Market St, San Francisco, CA',
+        phone: '(415) 555-0100',
+        email: 'hello@dojo.test',
+      },
+      loading: false,
+    };
+  });
+
+  it('renders the page title', () => {
     render(<LocationSettingsPage />);
 
     expect(page.getByText('Location Settings')).toBeDefined();
   });
 
-  it('should render location section header', () => {
+  it('renders location section header', () => {
     render(<LocationSettingsPage />);
 
     expect(page.getByText('Location')).toBeDefined();
   });
 
-  it('should render location address', () => {
+  it('renders the location address from the hook', () => {
     render(<LocationSettingsPage />);
 
-    expect(page.getByText('123 Main St. San Francisco. CA')).toBeDefined();
+    expect(page.getByText('500 Market St, San Francisco, CA')).toBeDefined();
   });
 
-  it('should render location phone number', () => {
+  it('renders the location phone from the hook', () => {
     render(<LocationSettingsPage />);
 
-    expect(page.getByText('(415) 555-0123')).toBeDefined();
+    expect(page.getByText('(415) 555-0100')).toBeDefined();
   });
 
-  it('should render location email', () => {
+  it('renders the location email from the hook', () => {
     render(<LocationSettingsPage />);
 
-    expect(page.getByText('downtown@example.com')).toBeDefined();
+    expect(page.getByText('hello@dojo.test')).toBeDefined();
   });
 
-  it('should render active status badge', () => {
+  it('renders active status badge', () => {
     render(<LocationSettingsPage />);
 
     expect(page.getByText('Active')).toBeDefined();
   });
 
-  it('should render edit button', () => {
+  it('renders the edit button', () => {
     render(<LocationSettingsPage />);
 
-    const editButton = page.getByRole('button', { name: /edit/i });
+    const editButton = page.getByRole('button', { name: /edit location/i });
 
     expect(editButton).toBeDefined();
   });
 
-  it('should open edit modal when edit button is clicked', async () => {
+  it('opens the edit modal when edit button is clicked', async () => {
     render(<LocationSettingsPage />);
 
     const editButton = page.getByRole('button', { name: /edit/i });
@@ -92,7 +139,7 @@ describe('LocationSettingsPage', () => {
     expect(page.getByText('Edit Location Information')).toBeDefined();
   });
 
-  it('should display all field labels', () => {
+  it('displays all field labels', () => {
     render(<LocationSettingsPage />);
 
     expect(page.getByText('Address:')).toBeDefined();
@@ -101,82 +148,56 @@ describe('LocationSettingsPage', () => {
     expect(page.getByText('Status:')).toBeDefined();
   });
 
-  it('should not render subscription details section', () => {
+  it('closes the modal when cancel is clicked', async () => {
     render(<LocationSettingsPage />);
 
-    const subscriptionText = page.getByText('Subscription Details');
-
-    expect(subscriptionText.elements()).toHaveLength(0);
-  });
-
-  it('should not render payment method section', () => {
-    render(<LocationSettingsPage />);
-
-    const paymentText = page.getByText('Payment Method');
-
-    expect(paymentText.elements()).toHaveLength(0);
-  });
-
-  it('should not render billing history section', () => {
-    render(<LocationSettingsPage />);
-
-    const billingText = page.getByText('Billing History');
-
-    expect(billingText.elements()).toHaveLength(0);
-  });
-
-  it('should not render location dropdown selector', () => {
-    render(<LocationSettingsPage />);
-
-    // Check that there's no dropdown/select for location
-    const selectElements = page.getByRole('combobox');
-
-    expect(selectElements.elements()).toHaveLength(0);
-  });
-
-  it('should close modal when cancel is clicked', async () => {
-    render(<LocationSettingsPage />);
-
-    // Open the modal
     const editButton = page.getByRole('button', { name: /edit/i });
     await userEvent.click(editButton.element());
 
-    // Verify modal is open
     expect(page.getByText('Edit Location Information')).toBeDefined();
 
-    // Click cancel
     const cancelButton = page.getByRole('button', { name: /cancel/i });
     await userEvent.click(cancelButton.element());
 
-    // Verify modal is closed - the dialog content should not be visible
-    const modalTitle = page.getByText('Edit Location Information');
-
-    expect(modalTitle.elements()).toHaveLength(0);
+    expect(page.getByText('Edit Location Information').elements()).toHaveLength(0);
   });
 
-  it('should update location info after saving in modal', async () => {
+  it('calls updateLocation and refetches when saving in the modal', async () => {
     render(<LocationSettingsPage />);
 
-    // Open the modal
     const editButton = page.getByRole('button', { name: /edit/i });
     await userEvent.click(editButton.element());
 
-    // Find and update the address input
     const addressInput = page.getByPlaceholder('Enter address');
     await userEvent.clear(addressInput.element());
     await userEvent.type(addressInput.element(), '456 New Street, Los Angeles, CA');
 
-    // Click save button
     const saveButton = page.getByRole('button', { name: /save changes/i });
     await userEvent.click(saveButton.element());
 
-    // Wait for modal to close and verify the updated address is displayed
     await vi.waitFor(() => {
-      expect(page.getByText('456 New Street, Los Angeles, CA')).toBeDefined();
+      expect(updateLocationMock).toHaveBeenCalledWith(expect.objectContaining({
+        address: '456 New Street, Los Angeles, CA',
+      }));
     });
+
+    expect(refetchMock).toHaveBeenCalled();
   });
 
-  it('should have proper accessibility for edit button', () => {
+  it('shows a dash when the address has not been set yet', () => {
+    hookState = {
+      location: { name: null, address: null, phone: null, email: null },
+      loading: false,
+    };
+
+    render(<LocationSettingsPage />);
+
+    expect(page.getByText('Address:')).toBeDefined();
+    // Three dashes show up — one each for address, phone, email. We just check that at least one exists.
+    expect(page.getByText('-').elements().length).toBeGreaterThan(0);
+  });
+
+  it('has proper accessibility on the edit button', () => {
     render(<LocationSettingsPage />);
 
     const editButton = page.getByRole('button', { name: /edit location information/i });

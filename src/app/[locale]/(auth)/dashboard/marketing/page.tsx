@@ -4,7 +4,7 @@ import type { Coupon, CouponFilters, CouponFormData } from '@/features/marketing
 import { useOrganization } from '@clerk/nextjs';
 import { ArrowDownAZ, ArrowUpZA, Edit, Plus, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Pagination } from '@/components/ui/pagination/Pagination';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -116,6 +116,28 @@ export default function MarketingPage() {
   const t = useTranslations('MarketingPage');
   const { organization } = useOrganization();
   const { coupons: rawCoupons, loading } = useCouponsCache(organization?.id);
+  const [totalSavings, setTotalSavings] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!organization?.id) {
+      return;
+    }
+    let cancelled = false;
+    client.coupons.getTotalSavings()
+      .then((result) => {
+        if (!cancelled) {
+          setTotalSavings(result.totalSavings);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setTotalSavings(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [organization?.id, rawCoupons.length]);
 
   // Transform database coupons to UI format
   const coupons = useMemo(() => transformCouponsToUi(rawCoupons), [rawCoupons]);
@@ -254,9 +276,11 @@ export default function MarketingPage() {
   const stats = useMemo(() => ({
     totalCoupons: coupons.length,
     activeCoupons: coupons.filter(c => c.status === 'Active').length,
-    totalSavings: 'N/A', // Would need transaction data to calculate
+    totalSavings: totalSavings === null
+      ? '—'
+      : `$${totalSavings.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
     timesUsed: totalUsage,
-  }), [coupons, totalUsage]);
+  }), [coupons, totalUsage, totalSavings]);
 
   const statsData = useMemo(() => [
     { id: 'total', label: t('total_coupons_label'), value: stats.totalCoupons },
