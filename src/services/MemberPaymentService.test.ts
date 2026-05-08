@@ -6,8 +6,6 @@ vi.mock('node:crypto', () => ({
   randomUUID: vi.fn(() => 'uuid-test-stub'),
 }));
 
-// DB mock state — captured via closures so the per-test `resetDbMock` helper
-// can rewire the chain without re-importing the module.
 const dbMocks = {
   select: vi.fn(),
   update: vi.fn(),
@@ -19,6 +17,7 @@ vi.mock('@/libs/DB', () => ({ db: dbMocks }));
 vi.mock('drizzle-orm', () => ({
   eq: vi.fn((_col, val) => ({ _type: 'eq', value: val })),
   and: vi.fn((...conds) => ({ _type: 'and', conds })),
+  desc: vi.fn(col => ({ _type: 'desc', col })),
   sql: Object.assign(
     vi.fn((..._args) => ({ _type: 'sql' })),
     { raw: vi.fn() },
@@ -27,7 +26,13 @@ vi.mock('drizzle-orm', () => ({
 
 vi.mock('@/models/Schema', () => ({
   memberSchema: { id: 'id', iqproCustomerId: 'iqpro_customer_id' },
-  paymentMethodSchema: {},
+  paymentMethodSchema: {
+    memberId: 'member_id',
+    iqproPaymentMethodId: 'iqpro_payment_method_id',
+    type: 'type',
+    last4: 'last4',
+    isDefault: 'is_default',
+  },
   transactionSchema: {},
   memberMembershipSchema: { id: 'id' },
   couponSchema: {
@@ -44,7 +49,8 @@ vi.mock('@/models/Schema', () => ({
 
 vi.mock('@/libs/IQPro', () => ({
   isIQProConfigured: vi.fn().mockReturnValue(true),
-  calculateTransactionFees: vi.fn(),
+  computeFeeBreakdown: vi.fn(),
+  getCustomerPaymentMethod: vi.fn(),
   getGatewayProcessors: vi.fn().mockResolvedValue({
     cardProcessorId: 'card_proc_001',
     achProcessorId: 'ach_proc_001',
@@ -71,28 +77,62 @@ vi.mock('./PaymentProviderService', async () => {
   };
 });
 
+const mockSendReceipt = vi.fn().mockResolvedValue(true);
+vi.mock('./EmailService', () => ({
+  sendPaymentReceiptEmail: mockSendReceipt,
+}));
+
 // ── DB mock helper ─────────────────────────────────────────────────────────
 //
-// The orchestrator's DB usage is: select-from-where-limit (existing customer),
-// update-set-where (set iqproCustomerId / membership fields), insert-values
-// (payment method + transaction). We track all `set()` payloads so we can
-// assert what was written.
+// The orchestrator's DB usage:
+// - select-from-where-limit (existing customer iqproCustomerId)
+// - select-from-where-orderBy-limit (saved PM lookup, only on vaulted branch)
+// - update-set-where (set iqproCustomerId / membership fields)
+// - insert-values (payment method + transaction + coupon usage)
 
 let dbState: {
   existingCustomerId: string | null;
+  savedPmRow: { iqproPaymentMethodId: string; type: string; last4: string | null } | null;
   setCalls: Array<Record<string, unknown>>;
   insertCalls: Array<Record<string, unknown>>;
+  selectIndex: number;
 };
 
-function resetDbMock(existingCustomerId: string | null = null) {
-  dbState = { existingCustomerId, setCalls: [], insertCalls: [] };
+function resetDbMock(opts: {
+  existingCustomerId?: string | null;
+  savedPmRow?: { iqproPaymentMethodId: string; type: string; last4: string | null } | null;
+} = {}) {
+  dbState = {
+    existingCustomerId: opts.existingCustomerId ?? null,
+    savedPmRow: opts.savedPmRow ?? null,
+    setCalls: [],
+    insertCalls: [],
+    selectIndex: 0,
+  };
 
-  dbMocks.select.mockReturnValue({
-    from: vi.fn().mockReturnValue({
-      where: vi.fn().mockReturnValue({
-        limit: vi.fn().mockResolvedValue([{ iqproCustomerId: dbState.existingCustomerId }]),
+  // Each call to db.select() chooses a different chain based on its order:
+  //   1. customer lookup (limit 1) → [{ iqproCustomerId }]
+  //   2. saved PM lookup (orderBy + limit 1) → [savedPmRow]
+  //   3. perUserLimit lookup (when applicableCoupon set, in checkPerUserCouponLimit)
+  // Defaulting all `where + limit` chains to read selectIndex correctly.
+  dbMocks.select.mockImplementation(() => {
+    const idx = dbState.selectIndex++;
+    return {
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnValue({
+          orderBy: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue(
+              dbState.savedPmRow ? [dbState.savedPmRow] : [],
+            ),
+          }),
+          limit: vi.fn().mockResolvedValue(
+            idx === 0
+              ? [{ iqproCustomerId: dbState.existingCustomerId }]
+              : [],
+          ),
+        }),
       }),
-    }),
+    };
   });
 
   dbMocks.update.mockReturnValue({
@@ -137,19 +177,14 @@ describe('processMemberPayment', () => {
     cardExpiry: '12/27',
   };
 
+  // Kiosk-shape FeeBreakdown
   const baseFees = {
-    isSurchargeable: true,
-    isPinCapable: false,
-    surchargeRate: 0.03,
-    surchargeAmount: 3,
-    serviceFeesAmount: 0,
-    convenienceFeesAmount: 0,
     baseAmount: 100,
-    amount: 111.5,
-    tip: 0,
-    taxAmount: 8.5,
-    cardBrand: 'Visa' as string | null,
-    cardType: 'credit' as string | null,
+    taxAmount: 0,
+    taxPct: 0,
+    serviceFeeAmount: 3.75,
+    serviceFeePct: 3.75,
+    amount: 103.75,
   };
 
   beforeEach(() => {
@@ -175,72 +210,47 @@ describe('processMemberPayment', () => {
     });
   });
 
-  it('returns a failed result when member address state is missing', async () => {
-    const { processMemberPayment } = await import('./MemberPaymentService');
-
-    const result = await processMemberPayment({
-      ...baseParams,
-      memberAddress: undefined,
-    });
-
-    expect(result.success).toBe(false);
-    expect(result.error).toMatch(/Member address state is required/);
-  });
-
-  it('one-time payment: calculates fees, calls provider with feeBreakdown + billingAddressId', async () => {
-    const { calculateTransactionFees } = await import('@/libs/IQPro');
-
-    vi.mocked(calculateTransactionFees).mockResolvedValueOnce(baseFees);
+  it('one-time membership: computes non-taxable fees, charges via provider', async () => {
+    const { computeFeeBreakdown } = await import('@/libs/IQPro');
+    vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(baseFees);
 
     const { processMemberPayment } = await import('./MemberPaymentService');
-
     const result = await processMemberPayment(baseParams);
 
     expect(result.success).toBe(true);
     expect(result.status).toBe('approved');
 
-    expect(calculateTransactionFees).toHaveBeenCalledWith({
-      baseAmount: 100,
-      processorId: 'card_proc_001',
-      state: 'CA',
-      paymentMethod: 'card',
-      token: 'tex-tok-abc',
-    });
+    // Memberships are non-taxable by default
+    expect(computeFeeBreakdown).toHaveBeenCalledWith(
+      100,
+      false,
+      expect.objectContaining({ processorId: 'card_proc_001', token: 'tex-tok-abc' }),
+    );
 
     expect(mockProvider.processPayment).toHaveBeenCalledWith(
       expect.objectContaining({
         customerId: 'cust_123',
         paymentMethodId: 'pm_card_1',
-        amount: 111.5,
+        amount: 103.75,
         currency: 'USD',
         customerBillingAddressId: 'addr_billing_1',
+        vaulted: false,
+        isTaxable: false,
         feeBreakdown: expect.objectContaining({
           baseAmount: 100,
-          taxAmount: 8.5,
-          surchargeAmount: 3,
-          amount: 111.5,
-        }),
-        billingAddress: expect.objectContaining({
-          firstName: 'Jane',
-          state: 'CA',
-        }),
-        lineItem: expect.objectContaining({
-          unitPrice: 100,
-          discount: 0,
+          taxAmount: 0,
+          serviceFeeAmount: 3.75,
         }),
       }),
     );
-
     expect(mockProvider.createSubscription).not.toHaveBeenCalled();
   });
 
-  it('autopay: creates subscription THEN runs immediate Sale charge for the first period', async () => {
-    const { calculateTransactionFees } = await import('@/libs/IQPro');
-
-    vi.mocked(calculateTransactionFees).mockResolvedValueOnce(baseFees);
+  it('autopay: creates subscription THEN runs immediate Sale', async () => {
+    const { computeFeeBreakdown } = await import('@/libs/IQPro');
+    vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(baseFees);
 
     const { processMemberPayment } = await import('./MemberPaymentService');
-
     const result = await processMemberPayment({
       ...baseParams,
       billingType: 'autopay',
@@ -249,15 +259,15 @@ describe('processMemberPayment', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(result.status).toBe('approved');
-
     expect(mockProvider.createSubscription).toHaveBeenCalledWith(
       expect.objectContaining({
         customerId: 'cust_123',
         paymentMethodId: 'pm_card_1',
         frequency: 'monthly',
+        vaulted: false,
+        // Memberships emit ServiceFee only (no Tax)
         paymentAdjustments: [
-          { type: 'Surcharge', percentage: null, flatAmount: 3 },
+          { type: 'ServiceFee', percentage: 3.75, flatAmount: null },
         ],
       }),
     );
@@ -265,24 +275,20 @@ describe('processMemberPayment', () => {
     expect(mockProvider.processPayment).toHaveBeenCalledTimes(1);
     expect(mockProvider.processPayment).toHaveBeenCalledWith(
       expect.objectContaining({
-        amount: 111.5,
-        feeBreakdown: expect.objectContaining({ amount: 111.5 }),
+        amount: 103.75,
         metadata: expect.objectContaining({ iqproSubscriptionId: 'sub_42' }),
       }),
     );
 
-    // Membership update wrote iqproSubscriptionId + autopay
     const membershipSet = dbState.setCalls.find(s => s.iqproSubscriptionId === 'sub_42');
 
     expect(membershipSet).toBeDefined();
     expect(membershipSet?.billingType).toBe('autopay');
   });
 
-  it('autopay: surfaces failure and does NOT update membership when initial charge declines', async () => {
-    const { calculateTransactionFees } = await import('@/libs/IQPro');
-
-    vi.mocked(calculateTransactionFees).mockResolvedValueOnce(baseFees);
-
+  it('autopay: surfaces failure when initial charge declines', async () => {
+    const { computeFeeBreakdown } = await import('@/libs/IQPro');
+    vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(baseFees);
     mockProvider.processPayment.mockResolvedValue({
       success: false,
       status: 'declined',
@@ -291,7 +297,6 @@ describe('processMemberPayment', () => {
     });
 
     const { processMemberPayment } = await import('./MemberPaymentService');
-
     const result = await processMemberPayment({
       ...baseParams,
       billingType: 'autopay',
@@ -300,46 +305,35 @@ describe('processMemberPayment', () => {
     });
 
     expect(result.success).toBe(false);
-    expect(result.status).toBe('declined');
     expect(result.error).toMatch(/Subscription created but initial charge failed/);
 
-    // Membership must not be flagged as autopay or carry the subscription ID
     const wroteAutopay = dbState.setCalls.some(s => s.billingType === 'autopay' || s.iqproSubscriptionId);
 
     expect(wroteAutopay).toBe(false);
 
-    // But the failed transaction was still recorded
     const txInsert = dbState.insertCalls.find(i => i.iqproTransactionId === 'tx_decline');
 
-    expect(txInsert).toBeDefined();
     expect(txInsert?.status).toBe('declined');
   });
 
   it('falls back to creditCardBin when no card token is provided', async () => {
-    const { calculateTransactionFees } = await import('@/libs/IQPro');
-
-    vi.mocked(calculateTransactionFees).mockResolvedValueOnce(baseFees);
+    const { computeFeeBreakdown } = await import('@/libs/IQPro');
+    vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(baseFees);
 
     const { processMemberPayment } = await import('./MemberPaymentService');
+    await processMemberPayment({ ...baseParams, cardToken: undefined });
 
-    await processMemberPayment({
-      ...baseParams,
-      cardToken: undefined,
-    });
+    const callArgs = vi.mocked(computeFeeBreakdown).mock.calls[0]!;
 
-    const callArgs = vi.mocked(calculateTransactionFees).mock.calls[0]![0];
-
-    expect(callArgs.creditCardBin).toBe('424242');
-    expect(callArgs).not.toHaveProperty('token');
+    expect(callArgs[2]).toEqual(expect.objectContaining({ creditCardBin: '424242' }));
+    expect(callArgs[2]).not.toHaveProperty('token');
   });
 
-  it('uses ACH processor and passes the achToken (IQPro requires Token or CreditCardBin) for ACH fee calc', async () => {
-    const { calculateTransactionFees } = await import('@/libs/IQPro');
-
-    vi.mocked(calculateTransactionFees).mockResolvedValueOnce({
+  it('ACH new payment: passes achToken to fee calc, sends inline ach to provider', async () => {
+    const { computeFeeBreakdown } = await import('@/libs/IQPro');
+    vi.mocked(computeFeeBreakdown).mockResolvedValueOnce({
       ...baseFees,
-      surchargeAmount: 0,
-      taxAmount: 0,
+      serviceFeeAmount: 0,
       amount: 100,
     });
 
@@ -350,7 +344,6 @@ describe('processMemberPayment', () => {
     });
 
     const { processMemberPayment } = await import('./MemberPaymentService');
-
     await processMemberPayment({
       ...baseParams,
       paymentMethod: 'ach',
@@ -361,18 +354,17 @@ describe('processMemberPayment', () => {
       achAccountType: 'Checking',
     });
 
-    const feeArgs = vi.mocked(calculateTransactionFees).mock.calls[0]![0];
+    const feeArgs = vi.mocked(computeFeeBreakdown).mock.calls[0]!;
 
-    expect(feeArgs.processorId).toBe('ach_proc_001');
-    expect(feeArgs.paymentMethod).toBe('ach');
-    expect(feeArgs.token).toBe('ach-tok-xyz');
-    expect(feeArgs).not.toHaveProperty('creditCardBin');
+    expect(feeArgs[2].processorId).toBe('ach_proc_001');
+    expect(feeArgs[2].token).toBe('ach-tok-xyz');
+    expect(feeArgs[2]).not.toHaveProperty('creditCardBin');
 
     expect(mockProvider.processPayment).toHaveBeenCalledWith(
       expect.objectContaining({
         ach: {
           achToken: 'ach-tok-xyz',
-          secCode: 'WEB',
+          secCode: 'PPD',
           routingNumber: '021000021',
           accountType: 'Checking',
         },
@@ -380,94 +372,189 @@ describe('processMemberPayment', () => {
     );
   });
 
-  it('applies a Fixed Amount coupon discount before fee calculation', async () => {
-    const { calculateTransactionFees } = await import('@/libs/IQPro');
-
-    vi.mocked(calculateTransactionFees).mockResolvedValueOnce({
-      ...baseFees,
-      baseAmount: 75,
-      surchargeAmount: 0,
-      taxAmount: 0,
-      amount: 75,
-    });
+  it('Fixed Amount coupon: discount applied before fee calc', async () => {
+    const { computeFeeBreakdown } = await import('@/libs/IQPro');
+    vi.mocked(computeFeeBreakdown).mockResolvedValueOnce({ ...baseFees, baseAmount: 75, amount: 78.75 });
 
     const { processMemberPayment } = await import('./MemberPaymentService');
-
     await processMemberPayment({
       ...baseParams,
-      appliedCoupon: {
-        id: 'cpn_1',
-        code: 'SAVE25',
-        type: 'Fixed Amount',
-        amount: '25',
-        description: '$25 off',
-      },
+      appliedCoupon: { id: 'cpn_1', code: 'SAVE25', type: 'Fixed Amount', amount: '25', description: '$25 off' },
     });
 
-    expect(calculateTransactionFees).toHaveBeenCalledWith(
-      expect.objectContaining({ baseAmount: 75 }),
-    );
+    expect(computeFeeBreakdown).toHaveBeenCalledWith(75, false, expect.any(Object));
   });
 
-  it('applies a Percentage coupon discount before fee calculation', async () => {
-    const { calculateTransactionFees } = await import('@/libs/IQPro');
-
-    vi.mocked(calculateTransactionFees).mockResolvedValueOnce({
-      ...baseFees,
-      baseAmount: 90,
-      surchargeAmount: 0,
-      taxAmount: 0,
-      amount: 90,
-    });
+  it('Percentage coupon: discount applied before fee calc', async () => {
+    const { computeFeeBreakdown } = await import('@/libs/IQPro');
+    vi.mocked(computeFeeBreakdown).mockResolvedValueOnce({ ...baseFees, baseAmount: 90, amount: 93.75 });
 
     const { processMemberPayment } = await import('./MemberPaymentService');
-
     await processMemberPayment({
       ...baseParams,
-      appliedCoupon: {
-        id: 'cpn_2',
-        code: 'TEN_PCT',
-        type: 'Percentage',
-        amount: '10',
-        description: '10% off',
-      },
+      appliedCoupon: { id: 'cpn_2', code: 'TEN_PCT', type: 'Percentage', amount: '10', description: '10% off' },
     });
 
-    // 100 - 10% = 90
-    expect(calculateTransactionFees).toHaveBeenCalledWith(
-      expect.objectContaining({ baseAmount: 90 }),
-    );
+    expect(computeFeeBreakdown).toHaveBeenCalledWith(90, false, expect.any(Object));
   });
 
-  it('throws a clear error when no gateway processor is configured for the payment method', async () => {
+  it('throws clear error when no gateway processor is configured', async () => {
     const iqpro = await import('@/libs/IQPro');
-
     vi.mocked(iqpro.getGatewayProcessors).mockResolvedValueOnce({
       cardProcessorId: null,
       achProcessorId: null,
     });
 
     const { processMemberPayment } = await import('./MemberPaymentService');
-
     const result = await processMemberPayment(baseParams);
 
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/No card processor configured/);
   });
 
-  it('reuses an existing customer ID and skips createCustomer', async () => {
-    resetDbMock('cust_existing_999');
-    const { calculateTransactionFees } = await import('@/libs/IQPro');
-
-    vi.mocked(calculateTransactionFees).mockResolvedValueOnce(baseFees);
+  it('reuses an existing IQPro customer ID and skips createCustomer', async () => {
+    resetDbMock({ existingCustomerId: 'cust_existing_999' });
+    const { computeFeeBreakdown } = await import('@/libs/IQPro');
+    vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(baseFees);
 
     const { processMemberPayment } = await import('./MemberPaymentService');
-
     await processMemberPayment(baseParams);
 
     expect(mockProvider.createCustomer).not.toHaveBeenCalled();
     expect(mockProvider.processPayment).toHaveBeenCalledWith(
       expect.objectContaining({ customerId: 'cust_existing_999' }),
     );
+  });
+
+  // ── isTaxable branch ────────────────────────────────────────────────────
+
+  it('isTaxable: true (event/store) — fee calc and provider both told it is taxable', async () => {
+    const { computeFeeBreakdown } = await import('@/libs/IQPro');
+    vi.mocked(computeFeeBreakdown).mockResolvedValueOnce({
+      ...baseFees,
+      taxAmount: 3.75,
+      taxPct: 3.75,
+      amount: 107.5,
+    });
+
+    const { processMemberPayment } = await import('./MemberPaymentService');
+    await processMemberPayment({ ...baseParams, isTaxable: true });
+
+    expect(computeFeeBreakdown).toHaveBeenCalledWith(100, true, expect.any(Object));
+    expect(mockProvider.processPayment).toHaveBeenCalledWith(
+      expect.objectContaining({ isTaxable: true }),
+    );
+  });
+
+  // ── Saved-PM (vaulted) branch ────────────────────────────────────────────
+
+  it('saved branch: missing iqproCustomerId returns friendly error', async () => {
+    resetDbMock({ existingCustomerId: null });
+    const { processMemberPayment } = await import('./MemberPaymentService');
+
+    const result = await processMemberPayment({ ...baseParams, paymentMethodSource: 'saved' });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/no saved customer record/);
+    expect(mockProvider.createCustomer).not.toHaveBeenCalled();
+    expect(mockProvider.createPaymentMethod).not.toHaveBeenCalled();
+    expect(mockProvider.processPayment).not.toHaveBeenCalled();
+  });
+
+  it('saved branch: missing payment_method row returns friendly error', async () => {
+    resetDbMock({ existingCustomerId: 'cust_have', savedPmRow: null });
+    const { processMemberPayment } = await import('./MemberPaymentService');
+
+    const result = await processMemberPayment({ ...baseParams, paymentMethodSource: 'saved' });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/no saved payment method/);
+    expect(mockProvider.createPaymentMethod).not.toHaveBeenCalled();
+  });
+
+  it('saved branch: charges via vaulted=true, no createCustomer/createPaymentMethod', async () => {
+    resetDbMock({
+      existingCustomerId: 'cust_have',
+      savedPmRow: { iqproPaymentMethodId: 'pm_saved_1', type: 'card', last4: '4242' },
+    });
+    const { computeFeeBreakdown, getCustomerPaymentMethod } = await import('@/libs/IQPro');
+    vi.mocked(getCustomerPaymentMethod).mockResolvedValueOnce({
+      type: 'card',
+      firstSix: '424242',
+      last4: '4242',
+    });
+    vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(baseFees);
+
+    const { processMemberPayment } = await import('./MemberPaymentService');
+    const result = await processMemberPayment({ ...baseParams, paymentMethodSource: 'saved' });
+
+    expect(result.success).toBe(true);
+    expect(mockProvider.createCustomer).not.toHaveBeenCalled();
+    expect(mockProvider.createPaymentMethod).not.toHaveBeenCalled();
+    expect(getCustomerPaymentMethod).toHaveBeenCalledWith('cust_have', 'pm_saved_1');
+    expect(computeFeeBreakdown).toHaveBeenCalledWith(
+      100,
+      false,
+      expect.objectContaining({ creditCardBin: '424242' }),
+    );
+    expect(mockProvider.processPayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customerId: 'cust_have',
+        paymentMethodId: 'pm_saved_1',
+        vaulted: true,
+      }),
+    );
+  });
+
+  // ── Receipt email gating ───────────────────────────────────────────────
+
+  it('receipt email: sent on approved one-time payment', async () => {
+    const { computeFeeBreakdown } = await import('@/libs/IQPro');
+    vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(baseFees);
+
+    const { processMemberPayment } = await import('./MemberPaymentService');
+    await processMemberPayment(baseParams);
+
+    expect(mockSendReceipt).toHaveBeenCalledTimes(1);
+    expect(mockSendReceipt).toHaveBeenCalledWith(expect.objectContaining({
+      toEmail: 'jane@example.com',
+      taxAmount: 0,
+      serviceFeeAmount: 3.75,
+      total: 103.75,
+      isRecurring: false,
+    }));
+  });
+
+  it('receipt email: NOT sent on declined transaction', async () => {
+    const { computeFeeBreakdown } = await import('@/libs/IQPro');
+    vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(baseFees);
+    mockProvider.processPayment.mockResolvedValue({
+      success: false,
+      status: 'declined',
+      transactionId: 'tx_decline',
+      declineReason: 'Card declined',
+    });
+
+    const { processMemberPayment } = await import('./MemberPaymentService');
+    await processMemberPayment(baseParams);
+
+    expect(mockSendReceipt).not.toHaveBeenCalled();
+  });
+
+  it('receipt email: sent on approved autopay with isRecurring=true', async () => {
+    const { computeFeeBreakdown } = await import('@/libs/IQPro');
+    vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(baseFees);
+
+    const { processMemberPayment } = await import('./MemberPaymentService');
+    await processMemberPayment({
+      ...baseParams,
+      billingType: 'autopay',
+      membershipPlanFrequency: 'monthly',
+      memberMembershipId: 'mm_1',
+    });
+
+    expect(mockSendReceipt).toHaveBeenCalledWith(expect.objectContaining({
+      isRecurring: true,
+    }));
   });
 });

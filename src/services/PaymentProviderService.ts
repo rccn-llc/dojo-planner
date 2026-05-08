@@ -64,17 +64,18 @@ export type CreatePaymentMethodResult = {
 };
 
 /**
- * Server-authoritative fee breakdown returned by IQPro's `calculatefees`
- * endpoint. Passed into `processPayment` and `createSubscription` so the
- * `remit` block on the transaction reconciles exactly with what IQPro will
- * charge (base + tax + surcharge + service fees + convenience fees).
+ * Server-authoritative fee breakdown produced by `computeFeeBreakdown` in
+ * libs/IQPro.ts. Tax is computed locally (TAX_STATE_PCT, taxable transactions
+ * only); service fee is computed by IQPro's /calculatefees endpoint. Passed
+ * into `processPayment` and `createSubscription` so the `remit` block + Tax /
+ * ServiceFee paymentAdjustments reconcile exactly with what IQPro will charge.
  */
 export type FeeBreakdown = {
   baseAmount: number;
   taxAmount: number;
-  surchargeAmount: number;
-  serviceFeesAmount: number;
-  convenienceFeesAmount: number;
+  taxPct: number;
+  serviceFeeAmount: number;
+  serviceFeePct: number;
   amount: number;
 };
 
@@ -105,7 +106,12 @@ export type ProcessPaymentParams = {
   currency: string;
   description: string;
   metadata?: Record<string, string>;
-  /** ACH-specific fields — included in the transaction payload per IQPro docs */
+  /**
+   * ACH inline-charge fields. When provided AND `vaulted` is false, the IQPro
+   * provider sends `paymentMethod.ach` (inline) instead of `paymentMethod.customer`
+   * — mirrors kiosk behavior: ACH is vaulted upstream for the customer record
+   * but the charge itself uses the inline ACH sub-object per Basys ACH docs.
+   */
   ach?: {
     achToken: string;
     secCode: string;
@@ -113,18 +119,29 @@ export type ProcessPaymentParams = {
     accountType: string;
   };
   /**
-   * Optional fee breakdown from IQPro's `calculatefees` endpoint. When
-   * provided, the IQPro provider builds a full `remit` block with tax and
-   * payment adjustments. When omitted, falls back to a minimal `remit`
-   * derived from `amount`.
+   * Required fee breakdown from `computeFeeBreakdown`. Drives the `remit`
+   * block, Tax/ServiceFee paymentAdjustments, and line-item taxPct.
    */
-  feeBreakdown?: FeeBreakdown;
+  feeBreakdown: FeeBreakdown;
   /** IQPro `customerAddressId` to attach to the transaction's customer ref. */
   customerBillingAddressId?: string;
   /** Single line item describing what's being charged. */
   lineItem?: TransactionLineItem;
   /** Buyer billing address — used in the transaction's `address[]` block. */
   billingAddress?: TransactionBillingAddress;
+  /**
+   * When true, the transaction's `paymentMethod` block uses the customer-ref
+   * shape `{ customer: { customerId, customerPaymentMethodId } }` — no inline
+   * card/ach, no top-level address[]. Use for charging a member's existing
+   * vaulted payment method.
+   */
+  vaulted?: boolean;
+  /**
+   * When true, the transaction is taxable: emits a `Tax` paymentAdjustment,
+   * sets `remit.taxAmount: null` + `remit.isTaxExempt: false`, and sets
+   * `lineItems[].localTaxPercent` to the configured rate. Default false.
+   */
+  isTaxable?: boolean;
 };
 
 export type PaymentResult = {
@@ -159,15 +176,22 @@ export type CreateSubscriptionParams = {
   };
 
   /**
-   * Optional payment adjustments (Surcharge / ServiceFees / ConvenienceFees)
-   * from a fee-breakdown calculation. Attached to the subscription so each
-   * recurring invoice carries the same fees as the initial sale.
+   * Optional payment adjustments (Tax / ServiceFee) from a fee-breakdown
+   * calculation. Attached to the subscription so each recurring invoice
+   * carries the same fees as the initial sale.
    */
   paymentAdjustments?: Array<{
     type: string;
     percentage?: number | null;
     flatAmount?: number | null;
   }>;
+  /**
+   * When true, the subscription charges an existing vaulted payment method.
+   * No payload-shape change required (the `paymentMethod.customerPaymentMethodId`
+   * field works for any saved PM regardless of how it was created), but the
+   * flag is propagated for clarity and future-proofing.
+   */
+  vaulted?: boolean;
 };
 
 export type SubscriptionResult = {

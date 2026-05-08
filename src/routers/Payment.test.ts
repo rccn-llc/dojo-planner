@@ -80,11 +80,11 @@ describe('Payment Router', () => {
         mockContext,
         AUDIT_ACTION.PAYMENT_PROCESS,
         AUDIT_ENTITY_TYPE.TRANSACTION,
-        {
+        expect.objectContaining({
           entityId: 'test-txn-789',
           status: 'success',
           error: undefined,
-        },
+        }),
       );
       expect(result).toEqual(mockResult);
     });
@@ -113,11 +113,11 @@ describe('Payment Router', () => {
         mockContext,
         AUDIT_ACTION.PAYMENT_PROCESS,
         AUDIT_ENTITY_TYPE.TRANSACTION,
-        {
+        expect.objectContaining({
           entityId: 'test-txn-declined',
           status: 'failure',
           error: 'Card declined',
-        },
+        }),
       );
     });
 

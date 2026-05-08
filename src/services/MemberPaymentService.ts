@@ -20,16 +20,18 @@ import type {
 import type { AppliedCoupon, BillingType, PaymentMethod } from '@/hooks/useAddMemberWizard';
 import { randomUUID } from 'node:crypto';
 
-import { and, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { db } from '@/libs/DB';
 import {
-  calculateTransactionFees,
+  computeFeeBreakdown,
+  getCustomerPaymentMethod,
   getGatewayProcessors,
   isIQProConfigured,
 } from '@/libs/IQPro';
 import { logger } from '@/libs/Logger';
 import { couponSchema, couponUsageSchema, memberMembershipSchema, memberSchema, paymentMethodSchema, transactionSchema } from '@/models/Schema';
 
+import { sendPaymentReceiptEmail } from './EmailService';
 import { getPaymentProvider, isPaymentEnabled } from './PaymentProviderService';
 
 // ===== Public types =====
@@ -76,6 +78,22 @@ export type ProcessMemberPaymentParams = {
   memberMembershipId?: string;
 
   appliedCoupon?: AppliedCoupon | null;
+
+  /**
+   * 'new' (default) → standard flow: create or reuse customer, register a
+   * fresh payment method from the supplied card/ACH fields, then charge.
+   * 'saved' → vaulted-charge flow: reuse the member's existing IQPro customer
+   * + saved payment method (looked up from the local DB). No card/ACH fields
+   * are consumed in this mode. Used for HOH-pays-for-family and event/seminar
+   * purchases where the member already has a card on file.
+   */
+  paymentMethodSource?: 'new' | 'saved';
+
+  /**
+   * Whether this transaction is taxable. Defaults false (memberships).
+   * Events / seminars / store charges should set true.
+   */
+  isTaxable?: boolean;
 };
 
 export type ProcessMemberPaymentResult = {
@@ -156,119 +174,195 @@ export async function processMemberPayment(
   }
 
   const provider = await getPaymentProvider();
+  const paymentMethodSource = params.paymentMethodSource ?? 'new';
+  const isTaxable = !!params.isTaxable;
+  const vaulted = paymentMethodSource === 'saved';
 
   try {
-    // Tax state is required by IQPro's calculatefees endpoint. Source it from
-    // the member's billing address. (The org table has no address column today;
-    // when we add per-org tax-state metadata, look that up first and fall back
-    // to the member address.)
-    const taxState = params.memberAddress?.state;
-    if (!taxState) {
-      throw new Error('Member address state is required to calculate IQPro fees.');
-    }
-    // ── Step 1: Get or create customer ──────────────────────────────
-    const existing = await db
-      .select({ iqproCustomerId: memberSchema.iqproCustomerId })
-      .from(memberSchema)
-      .where(eq(memberSchema.id, params.memberId))
-      .limit(1);
-
-    let customerId = existing[0]?.iqproCustomerId ?? null;
+    // ── Step 1: Resolve customer + payment method ───────────────────
+    let customerId: string;
+    let paymentMethodId: string;
     let billingAddressId: string | undefined;
+    let achData: { achToken: string; secCode: string; routingNumber: string; accountType: string } | undefined;
+    // The token/BIN we pass to /calculatefees. For new card we use the TokenEx
+    // token; for new ACH we use the freshly-vaulted achToken; for saved we
+    // pull both from the saved PM.
+    let feeToken: string | undefined;
+    let feeBin: string | undefined;
+    // Effective payment method type — for vaulted charges, comes from the
+    // saved PM; for new charges, from params.paymentMethod.
+    let effectivePaymentMethod: PaymentMethod = params.paymentMethod;
+    let last4ForReceipt: string | undefined;
 
-    if (!customerId) {
-      const created = await provider.createCustomer({
-        organizationId: params.organizationId,
+    if (vaulted) {
+      // Vaulted-charge branch: look up the member's IQPro customer + saved PM.
+      const memberRow = await db
+        .select({ iqproCustomerId: memberSchema.iqproCustomerId })
+        .from(memberSchema)
+        .where(eq(memberSchema.id, params.memberId))
+        .limit(1);
+      const savedCustomerId = memberRow[0]?.iqproCustomerId;
+      if (!savedCustomerId) {
+        return {
+          success: false,
+          status: 'declined',
+          error: 'Member has no saved customer record.',
+        };
+      }
+
+      const pmRow = await db
+        .select({
+          iqproPaymentMethodId: paymentMethodSchema.iqproPaymentMethodId,
+          type: paymentMethodSchema.type,
+          last4: paymentMethodSchema.last4,
+        })
+        .from(paymentMethodSchema)
+        .where(and(
+          eq(paymentMethodSchema.memberId, params.memberId),
+          sql`${paymentMethodSchema.iqproPaymentMethodId} IS NOT NULL`,
+        ))
+        .orderBy(desc(paymentMethodSchema.isDefault))
+        .limit(1);
+      const savedPm = pmRow[0];
+      if (!savedPm?.iqproPaymentMethodId) {
+        return {
+          success: false,
+          status: 'declined',
+          error: 'Member has no saved payment method.',
+        };
+      }
+
+      customerId = savedCustomerId;
+      paymentMethodId = savedPm.iqproPaymentMethodId;
+      effectivePaymentMethod = savedPm.type === 'bank_transfer' ? 'ach' : 'card';
+      last4ForReceipt = savedPm.last4 ?? undefined;
+
+      // Fetch the BIN (for card) or achToken (for ACH) from IQPro so
+      // /calculatefees has a valid identifier. The endpoint requires exactly
+      // one of token or creditCardBin.
+      const remoteInfo = await getCustomerPaymentMethod(customerId, paymentMethodId);
+      if (remoteInfo) {
+        if (remoteInfo.type === 'card' && remoteInfo.firstSix) {
+          feeBin = remoteInfo.firstSix;
+        } else if (remoteInfo.type === 'ach' && remoteInfo.achToken) {
+          feeToken = remoteInfo.achToken;
+        }
+      }
+      if (!feeToken && !feeBin) {
+        // Last resort: pass nothing and let IQPro reject; this surfaces a
+        // clear error to the operator rather than charging without fee preview.
+        logger.warn('[MemberPayment] Saved PM has no BIN/achToken — fee preview will fail', {
+          memberId: params.memberId,
+          customerId,
+          paymentMethodId,
+        });
+      }
+
+      logger.info('[MemberPayment] Charging vaulted payment method', {
         memberId: params.memberId,
-        email: params.memberEmail,
-        firstName: params.memberFirstName,
-        lastName: params.memberLastName,
-        phone: params.memberPhone,
-        address: params.memberAddress,
+        customerId,
+        paymentMethodId,
+        type: effectivePaymentMethod,
       });
-      customerId = created.customerId;
-      billingAddressId = created.billingAddressId;
+    } else {
+      // Standard flow: create or reuse customer, then register a fresh PM.
+      const existing = await db
+        .select({ iqproCustomerId: memberSchema.iqproCustomerId })
+        .from(memberSchema)
+        .where(eq(memberSchema.id, params.memberId))
+        .limit(1);
 
-      await db
-        .update(memberSchema)
-        .set({ iqproCustomerId: customerId })
-        .where(eq(memberSchema.id, params.memberId));
+      let resolvedCustomerId = existing[0]?.iqproCustomerId ?? null;
 
-      logger.info('[MemberPayment] Created customer', { customerId, billingAddressId });
+      if (!resolvedCustomerId) {
+        const created = await provider.createCustomer({
+          organizationId: params.organizationId,
+          memberId: params.memberId,
+          email: params.memberEmail,
+          firstName: params.memberFirstName,
+          lastName: params.memberLastName,
+          phone: params.memberPhone,
+          address: params.memberAddress,
+        });
+        resolvedCustomerId = created.customerId;
+        billingAddressId = created.billingAddressId;
+
+        await db
+          .update(memberSchema)
+          .set({ iqproCustomerId: resolvedCustomerId })
+          .where(eq(memberSchema.id, params.memberId));
+
+        logger.info('[MemberPayment] Created customer', {
+          customerId: resolvedCustomerId,
+          billingAddressId,
+        });
+      }
+      customerId = resolvedCustomerId;
+
+      const pmResult = await provider.createPaymentMethod({
+        customerId,
+        paymentMethod: params.paymentMethod,
+        cardholderName: params.cardholderName,
+        cardNumber: params.cardNumber,
+        cardToken: params.cardToken,
+        cardFirstSix: params.cardFirstSix,
+        cardLastFour: params.cardLastFour,
+        cardExpiry: params.cardExpiry,
+        cardCvc: params.cardCvc,
+        achAccountHolder: params.achAccountHolder,
+        achRoutingNumber: params.achRoutingNumber,
+        achAccountNumber: params.achAccountNumber,
+        achAccountType: params.achAccountType,
+      });
+
+      const paymentMethodDbId = randomUUID();
+      await db.insert(paymentMethodSchema).values({
+        id: paymentMethodDbId,
+        memberId: params.memberId,
+        iqproPaymentMethodId: pmResult.paymentMethodId,
+        type: params.paymentMethod,
+        last4: pmResult.last4,
+        isDefault: true,
+      });
+      logger.info('[MemberPayment] Payment method saved', { paymentMethodDbId });
+
+      paymentMethodId = pmResult.paymentMethodId;
+      last4ForReceipt = pmResult.last4;
+      feeToken = params.paymentMethod === 'card' ? params.cardToken : pmResult.achToken;
+      feeBin = params.paymentMethod === 'card' && !params.cardToken ? params.cardFirstSix : undefined;
+      if (params.paymentMethod === 'ach' && pmResult.achToken) {
+        achData = {
+          achToken: pmResult.achToken,
+          secCode: 'PPD',
+          routingNumber: params.achRoutingNumber!,
+          accountType: params.achAccountType ?? 'Checking',
+        };
+      }
     }
 
-    // ── Step 2: Create payment method ───────────────────────────────
-    const pmResult = await provider.createPaymentMethod({
-      customerId,
-      paymentMethod: params.paymentMethod,
-      cardholderName: params.cardholderName,
-      cardNumber: params.cardNumber,
-      cardToken: params.cardToken,
-      cardFirstSix: params.cardFirstSix,
-      cardLastFour: params.cardLastFour,
-      cardExpiry: params.cardExpiry,
-      cardCvc: params.cardCvc,
-      achAccountHolder: params.achAccountHolder,
-      achRoutingNumber: params.achRoutingNumber,
-      achAccountNumber: params.achAccountNumber,
-      achAccountType: params.achAccountType,
-    });
-
-    const paymentMethodDbId = randomUUID();
-    await db.insert(paymentMethodSchema).values({
-      id: paymentMethodDbId,
-      memberId: params.memberId,
-      iqproPaymentMethodId: pmResult.paymentMethodId,
-      type: params.paymentMethod,
-      last4: pmResult.last4,
-      isDefault: true,
-    });
-
-    logger.info('[MemberPayment] Payment method saved', { paymentMethodDbId });
-
-    // ── Step 3: Calculate authoritative fees ────────────────────────
+    // ── Step 2: Calculate authoritative fees (kiosk shape) ──────────
     const processors = await getGatewayProcessors();
-    const processorId = params.paymentMethod === 'card'
+    const processorId = effectivePaymentMethod === 'card'
       ? processors.cardProcessorId
       : processors.achProcessorId;
-
     if (!processorId) {
-      throw new Error(`No ${params.paymentMethod} processor configured for this gateway.`);
+      throw new Error(`No ${effectivePaymentMethod} processor configured for this gateway.`);
     }
 
     const couponDiscount = computeCouponDiscount(params.amount, params.appliedCoupon);
     const baseAmount = Math.max(0, Math.round((params.amount - couponDiscount) * 100) / 100);
 
-    // IQPro's calculatefees endpoint requires exactly one of `token` or
-    // `creditCardBin` regardless of payment method. For card we use the
-    // TokenEx token (or fall back to the BIN). For ACH we pass the vault
-    // achToken from the payment method we just created — without it the
-    // endpoint returns 400 "Exactly one of Token/CreditCardBin must be provided".
-    const feeToken = params.paymentMethod === 'card'
-      ? params.cardToken
-      : pmResult.achToken;
-    const feeBin = params.paymentMethod === 'card' && !params.cardToken
-      ? params.cardFirstSix
-      : undefined;
-
-    const serverFees = await calculateTransactionFees({
+    const feeBreakdown: FeeBreakdown = await computeFeeBreakdown(
       baseAmount,
-      processorId,
-      state: taxState,
-      paymentMethod: params.paymentMethod,
-      ...(feeToken && { token: feeToken }),
-      ...(!feeToken && feeBin && { creditCardBin: feeBin }),
-    });
+      isTaxable,
+      {
+        processorId,
+        ...(feeToken && { token: feeToken }),
+        ...(!feeToken && feeBin && { creditCardBin: feeBin }),
+      },
+    );
 
-    const feeBreakdown: FeeBreakdown = {
-      baseAmount: serverFees.baseAmount,
-      taxAmount: serverFees.taxAmount,
-      surchargeAmount: serverFees.surchargeAmount,
-      serviceFeesAmount: serverFees.serviceFeesAmount,
-      convenienceFeesAmount: serverFees.convenienceFeesAmount,
-      amount: serverFees.amount,
-    };
-
+    const taxState = params.memberAddress?.state ?? 'N/A';
     const billingAddress: TransactionBillingAddress = {
       firstName: params.memberFirstName,
       lastName: params.memberLastName,
@@ -289,33 +383,27 @@ export async function processMemberPayment(
       discount: couponDiscount,
     };
 
-    // ── Step 4: Route by billing type ───────────────────────────────
+    // ── Step 3: Route by billing type ───────────────────────────────
     const frequency = params.membershipPlanFrequency?.toLowerCase();
     const isAutopay
       = params.billingType === 'autopay'
         && (frequency === 'monthly' || frequency === 'annual');
-
-    const achData = params.paymentMethod === 'ach' && pmResult.achToken
-      ? {
-          achToken: pmResult.achToken,
-          secCode: 'WEB',
-          routingNumber: params.achRoutingNumber!,
-          accountType: params.achAccountType ?? 'Checking',
-        }
-      : undefined;
 
     if (isAutopay) {
       return await handleAutopay({
         provider,
         params,
         customerId,
-        paymentMethodId: pmResult.paymentMethodId,
+        paymentMethodId,
         frequency: frequency as 'monthly' | 'annual',
         feeBreakdown,
         billingAddressId,
         billingAddress,
         lineItem,
         achData,
+        vaulted,
+        isTaxable,
+        last4ForReceipt,
       });
     }
 
@@ -323,12 +411,15 @@ export async function processMemberPayment(
       provider,
       params,
       customerId,
-      paymentMethodId: pmResult.paymentMethodId,
+      paymentMethodId,
       feeBreakdown,
       billingAddressId,
       billingAddress,
       lineItem,
       achData,
+      vaulted,
+      isTaxable,
+      last4ForReceipt,
     });
   } catch (error) {
     logger.error('[MemberPayment] Payment processing failed', { error });
@@ -442,18 +533,79 @@ function computeCouponDiscount(amount: number, coupon?: AppliedCoupon | null): n
   return 0;
 }
 
-function buildPaymentAdjustments(feeBreakdown: FeeBreakdown) {
-  const adjustments: Array<{ type: string; percentage: number | null; flatAmount: number }> = [];
-  if (feeBreakdown.surchargeAmount > 0) {
-    adjustments.push({ type: 'Surcharge', percentage: null, flatAmount: feeBreakdown.surchargeAmount });
+/**
+ * Build the paymentAdjustments list for a subscription. Mirrors kiosk's
+ * shape: ServiceFee is always present (percentage), Tax is added only when
+ * taxable. Tax must be flatAmount, ServiceFee must be percentage — IQPro
+ * rejects the inverse for either.
+ */
+function buildPaymentAdjustments(
+  feeBreakdown: FeeBreakdown,
+  isTaxable: boolean,
+): Array<{ type: string; percentage: number | null; flatAmount: number | null }> {
+  const adjustments: Array<{ type: string; percentage: number | null; flatAmount: number | null }> = [];
+  if (isTaxable && feeBreakdown.taxAmount > 0) {
+    adjustments.push({ type: 'Tax', percentage: null, flatAmount: feeBreakdown.taxAmount });
   }
-  if (feeBreakdown.serviceFeesAmount > 0) {
-    adjustments.push({ type: 'ServiceFees', percentage: null, flatAmount: feeBreakdown.serviceFeesAmount });
-  }
-  if (feeBreakdown.convenienceFeesAmount > 0) {
-    adjustments.push({ type: 'ConvenienceFees', percentage: null, flatAmount: feeBreakdown.convenienceFeesAmount });
-  }
+  adjustments.push({ type: 'ServiceFee', percentage: feeBreakdown.serviceFeePct, flatAmount: null });
   return adjustments;
+}
+
+/**
+ * Build the receipt-email line items from a member-payment context. For
+ * memberships, this is a single line: plan name + frequency + price.
+ */
+function buildReceiptLineItems(params: ProcessMemberPaymentParams): Array<{
+  name: string;
+  description?: string;
+  quantity: number;
+  unitPrice: number;
+  discount?: number;
+}> {
+  const couponDiscount = computeCouponDiscount(params.amount, params.appliedCoupon);
+  return [
+    {
+      name: params.description,
+      description: params.description,
+      quantity: 1,
+      unitPrice: params.amount,
+      discount: couponDiscount,
+    },
+  ];
+}
+
+/**
+ * Fire-and-forget receipt email sender. Caller awaits the .catch() to
+ * suppress unhandled rejection warnings; the actual await is never blocking.
+ */
+function fireReceiptEmail(args: {
+  toEmail: string;
+  firstName: string;
+  lastName: string;
+  params: ProcessMemberPaymentParams;
+  feeBreakdown: FeeBreakdown;
+  transactionId?: string;
+  isRecurring: boolean;
+}): void {
+  const couponDiscount = computeCouponDiscount(args.params.amount, args.params.appliedCoupon);
+  const lineItems = buildReceiptLineItems(args.params);
+  sendPaymentReceiptEmail({
+    toEmail: args.toEmail,
+    firstName: args.firstName,
+    lastName: args.lastName,
+    lineItems,
+    subtotal: args.params.amount,
+    discountAmount: couponDiscount,
+    taxAmount: args.feeBreakdown.taxAmount,
+    taxPct: args.feeBreakdown.taxPct,
+    serviceFeeAmount: args.feeBreakdown.serviceFeeAmount,
+    serviceFeePct: args.feeBreakdown.serviceFeePct,
+    total: args.feeBreakdown.amount,
+    transactionId: args.transactionId,
+    isRecurring: args.isRecurring,
+  }).catch((error) => {
+    logger.error('[MemberPayment] Receipt email failed (non-fatal)', { error });
+  });
 }
 
 type AutopayParams = {
@@ -467,10 +619,13 @@ type AutopayParams = {
   billingAddress: TransactionBillingAddress;
   lineItem: TransactionLineItem;
   achData?: { achToken: string; secCode: string; routingNumber: string; accountType: string };
+  vaulted: boolean;
+  isTaxable: boolean;
+  last4ForReceipt?: string;
 };
 
 async function handleAutopay(args: AutopayParams): Promise<ProcessMemberPaymentResult> {
-  const { provider, params, customerId, paymentMethodId, frequency, feeBreakdown, billingAddressId, billingAddress, lineItem, achData } = args;
+  const { provider, params, customerId, paymentMethodId, frequency, feeBreakdown, billingAddressId, billingAddress, lineItem, achData, vaulted, isTaxable } = args;
 
   const subResult = await provider.createSubscription({
     customerId,
@@ -484,7 +639,8 @@ async function handleAutopay(args: AutopayParams): Promise<ProcessMemberPaymentR
     email: params.memberEmail,
     phone: params.memberPhone,
     address: params.memberAddress,
-    paymentAdjustments: buildPaymentAdjustments(feeBreakdown),
+    paymentAdjustments: buildPaymentAdjustments(feeBreakdown, isTaxable),
+    vaulted,
     metadata: {
       organizationId: params.organizationId,
       memberId: params.memberId,
@@ -511,6 +667,8 @@ async function handleAutopay(args: AutopayParams): Promise<ProcessMemberPaymentR
     billingAddress,
     lineItem,
     ach: achData,
+    vaulted,
+    isTaxable,
     metadata: {
       organizationId: params.organizationId,
       memberId: params.memberId,
@@ -590,6 +748,17 @@ async function handleAutopay(args: AutopayParams): Promise<ProcessMemberPaymentR
       : 0,
   });
 
+  // Itemized receipt — fire-and-forget, only sent on approved.
+  fireReceiptEmail({
+    toEmail: params.memberEmail,
+    firstName: params.memberFirstName,
+    lastName: params.memberLastName,
+    params,
+    feeBreakdown,
+    transactionId: initialCharge.transactionId,
+    isRecurring: true,
+  });
+
   logger.info('[MemberPayment] Autopay subscription + initial charge complete', {
     subscriptionId: subResult.subscriptionId,
     transactionId: txId,
@@ -612,10 +781,13 @@ type OneTimeParams = {
   billingAddress: TransactionBillingAddress;
   lineItem: TransactionLineItem;
   achData?: { achToken: string; secCode: string; routingNumber: string; accountType: string };
+  vaulted: boolean;
+  isTaxable: boolean;
+  last4ForReceipt?: string;
 };
 
 async function handleOneTimePayment(args: OneTimeParams): Promise<ProcessMemberPaymentResult> {
-  const { provider, params, customerId, paymentMethodId, feeBreakdown, billingAddressId, billingAddress, lineItem, achData } = args;
+  const { provider, params, customerId, paymentMethodId, feeBreakdown, billingAddressId, billingAddress, lineItem, achData, vaulted, isTaxable } = args;
 
   const payResult = await provider.processPayment({
     customerId,
@@ -628,6 +800,8 @@ async function handleOneTimePayment(args: OneTimeParams): Promise<ProcessMemberP
     billingAddress,
     lineItem,
     ach: achData,
+    vaulted,
+    isTaxable,
     metadata: {
       organizationId: params.organizationId,
       memberId: params.memberId,
@@ -670,6 +844,17 @@ async function handleOneTimePayment(args: OneTimeParams): Promise<ProcessMemberP
       memberId: params.memberId,
       transactionId: txId,
       couponDiscount: computeCouponDiscount(params.amount, params.appliedCoupon),
+    });
+
+    // Itemized receipt — fire-and-forget, only sent on approved.
+    fireReceiptEmail({
+      toEmail: params.memberEmail,
+      firstName: params.memberFirstName,
+      lastName: params.memberLastName,
+      params,
+      feeBreakdown,
+      transactionId: payResult.transactionId,
+      isRecurring: false,
     });
   }
 

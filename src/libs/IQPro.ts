@@ -408,46 +408,72 @@ export async function getGatewayProcessors(): Promise<GatewayProcessors> {
   return cachedProcessors;
 }
 
+// ===== Tax + service fee config =====
+
+/**
+ * Sales-tax percentage applied to TAXABLE transactions (events, store).
+ * Memberships and other non-taxable charges return 0. Sourced from
+ * TAX_STATE_PCT env var as a stand-in for a per-organization DB column.
+ */
+function getTaxStatePct(): number {
+  const fromEnv = Env.TAX_STATE_PCT?.trim();
+  if (!fromEnv) {
+    throw new Error('TAX_STATE_PCT is not set. Add it to .env.local (e.g. TAX_STATE_PCT=3.75).');
+  }
+  const parsed = Number.parseFloat(fromEnv);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error(`TAX_STATE_PCT must be a non-negative number, got "${fromEnv}"`);
+  }
+  return parsed;
+}
+
+/**
+ * Service fee percentage applied to EVERY transaction. Passed to IQPro as a
+ * paymentAdjustment of type "ServiceFee" (percentage, not flatAmount — IQPro
+ * rejects flatAmount on ServiceFee adjustments). The flat amount is computed
+ * by IQPro's /calculatefees endpoint per Basys team guidance.
+ */
+function getServiceFeePct(): number {
+  const fromEnv = Env.SERVICE_FEE_PCT?.trim();
+  if (!fromEnv) {
+    throw new Error('SERVICE_FEE_PCT is not set. Add it to .env.local (e.g. SERVICE_FEE_PCT=3.75).');
+  }
+  const parsed = Number.parseFloat(fromEnv);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error(`SERVICE_FEE_PCT must be a non-negative number, got "${fromEnv}"`);
+  }
+  return parsed;
+}
+
 // ===== Fee calculation =====
 
-export type CalculateFeesParams = {
-  baseAmount: number;
-  processorId: string;
-  state: string;
-  paymentMethod: 'card' | 'ach';
-  creditCardBin?: string;
-  token?: string;
-  paymentAdjustments?: Array<{
-    type: string;
-    percentage?: number | null;
-    flatAmount?: number | null;
-  }>;
+function roundCents(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+export type ComputedFeeBreakdown = {
+  baseAmount: number; // subtotal - discount (amount fees are calculated on)
+  taxAmount: number; // taxable transactions only; 0 for memberships
+  taxPct: number; // the rate that was applied (0 if non-taxable)
+  serviceFeeAmount: number; // from IQPro /calculatefees (not computed locally)
+  serviceFeePct: number; // the rate that was requested
+  amount: number; // final total charged = base + tax + serviceFee
 };
 
-export type CalculateFeesResult = {
-  isSurchargeable: boolean;
-  isPinCapable: boolean;
-  surchargeRate: number;
-  surchargeAmount: number;
-  serviceFeesAmount: number;
-  convenienceFeesAmount: number;
+type CalculateServiceFeeParams = {
   baseAmount: number;
-  amount: number;
-  tip: number;
-  taxAmount: number;
-  cardBrand: string | null;
-  cardType: string | null;
+  processorId: string;
+  token?: string;
+  creditCardBin?: string;
 };
 
 /**
- * Server-authoritative fee calculation. Returns the canonical surcharge,
- * service-fee, convenience-fee, and tax amounts for a given base amount and
- * payment method. Used to build the `remit` block on a transaction so amounts
- * and adjustments reconcile exactly with what IQPro will charge.
+ * Call IQPro's POST /transaction/calculatefees to get the service fee amount
+ * for a given base. We send a single paymentAdjustment of type "ServiceFee"
+ * with the configured percentage; IQPro returns the computed flat amount in
+ * `serviceFeesAmount`.
  */
-export async function calculateTransactionFees(
-  params: CalculateFeesParams,
-): Promise<CalculateFeesResult> {
+async function fetchServiceFeeAmount(params: CalculateServiceFeeParams): Promise<number> {
   const gatewayId = Env.IQPRO_GATEWAY_ID!;
   const body: Record<string, unknown> = {
     baseAmount: params.baseAmount,
@@ -455,26 +481,182 @@ export async function calculateTransactionFees(
     taxAmount: 0,
     processorId: params.processorId,
     transactionType: 'Sale',
-    state: params.state,
+    paymentAdjustments: [
+      { type: 'ServiceFee', percentage: getServiceFeePct(), flatAmount: null },
+    ],
   };
-
-  // IQPro accepts exactly one of token or creditCardBin, never both. Prefer
-  // token when available — it identifies the specific card, whereas BIN only
-  // identifies the issuing range.
+  // IQPro accepts exactly one of token or creditCardBin.
   if (params.token) {
     body.token = params.token;
   } else if (params.creditCardBin) {
     body.creditCardBin = params.creditCardBin;
   }
-  if (params.paymentAdjustments && params.paymentAdjustments.length > 0) {
-    body.paymentAdjustments = params.paymentAdjustments;
-  }
 
-  const res = await iqproPost<{ data?: CalculateFeesResult }>(
+  const res = await iqproPost<{ data?: { serviceFeesAmount?: number } }>(
     `/api/gateway/${gatewayId}/transaction/calculatefees`,
     body,
   );
-  return (res.data ?? res) as CalculateFeesResult;
+  const data = (res.data ?? res) as { serviceFeesAmount?: number };
+  return roundCents(data.serviceFeesAmount ?? 0);
+}
+
+/**
+ * Compute the full fee breakdown for a transaction.
+ * - Tax is computed locally (taxable only; 0 for memberships).
+ * - Service fee amount is computed by IQPro via /calculatefees, using the
+ *   configured ServiceFee percentage. A processor ID + token-or-BIN are required.
+ */
+export async function computeFeeBreakdown(
+  baseAmount: number,
+  isTaxable: boolean,
+  serviceFeeLookup: Omit<CalculateServiceFeeParams, 'baseAmount'>,
+): Promise<ComputedFeeBreakdown> {
+  const base = roundCents(baseAmount);
+  const taxPct = isTaxable ? getTaxStatePct() : 0;
+  const serviceFeePct = getServiceFeePct();
+  const taxAmount = roundCents(base * (taxPct / 100));
+  const serviceFeeAmount = await fetchServiceFeeAmount({ ...serviceFeeLookup, baseAmount: base });
+  const amount = roundCents(base + taxAmount + serviceFeeAmount);
+  return {
+    baseAmount: base,
+    taxAmount,
+    taxPct,
+    serviceFeeAmount,
+    serviceFeePct,
+    amount,
+  };
+}
+
+/**
+ * Build the paymentAdjustments entry for the service fee.
+ *
+ * IQPro requires ServiceFee adjustments to be expressed as a percentage only —
+ * passing a flatAmount with type: "ServiceFee" fails validation with
+ * "ServiceFee must be expressed as a percentage". The gateway computes the
+ * flat amount itself from the percentage.
+ *
+ * We still call /calculatefees upstream to preview the exact flat amount
+ * (and surface it in our UI/receipts), but on the /transaction call we only
+ * send the percentage.
+ */
+export function buildServiceFeeAdjustment(breakdown: ComputedFeeBreakdown): {
+  type: string;
+  percentage: number;
+  flatAmount: null;
+} {
+  return {
+    type: 'ServiceFee',
+    percentage: breakdown.serviceFeePct,
+    flatAmount: null,
+  };
+}
+
+/**
+ * Build the paymentAdjustments entry for sales tax. Used for TAXABLE
+ * transactions only. Per Basys team guidance, tax is expressed solely via this
+ * paymentAdjustment (not via remit.taxAmount) so it shows up distinctly in
+ * reporting.
+ *
+ * IQPro requires Tax adjustments to be expressed as a flat amount only —
+ * passing a percentage with type: "Tax" fails validation with
+ * "Tax must be expressed as a flat amount".
+ */
+export function buildTaxAdjustment(breakdown: ComputedFeeBreakdown): {
+  type: string;
+  percentage: null;
+  flatAmount: number;
+} {
+  return {
+    type: 'Tax',
+    percentage: null,
+    flatAmount: breakdown.taxAmount,
+  };
+}
+
+// ===== Transaction response parsing =====
+
+/**
+ * Parse an IQPro transaction response into an approval status. IQPro returns
+ * `status: "Captured" | "Settled" | "Authorized" | "Declined" | "Failed" |
+ * "PendingSettlement"` etc. Anything not in the approved set is treated as
+ * declined for safety — we never want to treat an ambiguous status as approved.
+ */
+export function mapTransactionStatus(txData: Record<string, unknown>): 'approved' | 'declined' {
+  const raw = ((txData.status ?? '') as string).toLowerCase();
+  if (raw === 'captured' || raw === 'settled' || raw === 'authorized' || raw === 'pendingsettlement') {
+    return 'approved';
+  }
+  return 'declined';
+}
+
+/**
+ * Throws if the transaction was not approved. The thrown Error's message
+ * includes IQPro's processorResponseText when available so decline reasons
+ * bubble up cleanly to the client.
+ */
+export function assertTransactionApproved(txData: Record<string, unknown>): void {
+  if (mapTransactionStatus(txData) === 'approved') {
+    return;
+  }
+  const reason = (
+    txData.processorResponseText
+    ?? txData.processorResponseMessage
+    ?? txData.response
+    ?? 'Transaction declined'
+  ) as string;
+  throw new Error(reason);
+}
+
+// ===== Saved payment method lookup =====
+
+export type SavedPaymentMethodInfo = {
+  type: 'card' | 'ach';
+  firstSix?: string;
+  last4?: string;
+  achToken?: string;
+};
+
+/**
+ * Fetch a single saved payment method's details (BIN + last4 for card, achToken
+ * for ACH) by querying the customer record. Used for vaulted-charge fee
+ * calculation, since IQPro's /calculatefees endpoint requires a token or BIN
+ * to derive the surcharge / service fee.
+ */
+export async function getCustomerPaymentMethod(
+  customerId: string,
+  paymentMethodId: string,
+): Promise<SavedPaymentMethodInfo | null> {
+  if (!isIQProConfigured()) {
+    return null;
+  }
+  const gatewayId = Env.IQPRO_GATEWAY_ID!;
+  const res = await iqproGet<{ data?: Record<string, unknown> }>(
+    `/api/gateway/${gatewayId}/customer/${customerId}`,
+  );
+  const data = (res.data ?? res) as Record<string, unknown>;
+  const paymentMethods = (data.paymentMethods ?? []) as Array<Record<string, unknown>>;
+  const pm = paymentMethods.find((p) => {
+    const id = (p.customerPaymentMethodId ?? p.paymentMethodId ?? p.id) as string | undefined;
+    return id === paymentMethodId;
+  });
+  if (!pm) {
+    return null;
+  }
+  const card = pm.card as Record<string, unknown> | undefined;
+  const ach = pm.ach as Record<string, unknown> | undefined;
+  if (card) {
+    const masked = ((card.maskedNumber ?? card.maskedCard ?? '') as string) || '';
+    const firstSix = masked.length >= 6 ? masked.slice(0, 6) : undefined;
+    const last4 = masked.length >= 4 ? masked.slice(-4) : undefined;
+    return { type: 'card', firstSix, last4 };
+  }
+  if (ach) {
+    const accountMasked = ((ach.accountNumber ?? ach.maskedAccount ?? '') as string) || '';
+    const last4 = accountMasked.length >= 4 ? accountMasked.slice(-4) : undefined;
+    const achToken = (ach.achToken ?? ach.token ?? ach.achId) as string | undefined;
+    return { type: 'ach', last4, achToken };
+  }
+  return null;
 }
 
 // Exported for testing – reset cached OAuth token

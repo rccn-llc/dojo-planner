@@ -35,6 +35,8 @@ export const processPayment = os
         memberId: input.memberId,
         amount: input.amount,
         billingType: input.billingType,
+        paymentMethodSource: input.paymentMethodSource,
+        isTaxable: input.isTaxable,
       });
 
       const result = await processMemberPayment({
@@ -46,6 +48,10 @@ export const processPayment = os
         entityId: result.transactionId,
         status: result.success ? 'success' : 'failure',
         error: result.error,
+        changes: {
+          paymentMethodSource: { before: undefined, after: input.paymentMethodSource ?? 'new' },
+          isTaxable: { before: undefined, after: input.isTaxable ?? false },
+        },
       });
 
       if (!result.success) {

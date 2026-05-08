@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { DateOfBirthInput } from '@/components/ui/date-picker';
 import {
   Dialog,
   DialogContent,
@@ -47,18 +48,6 @@ const isValidEmail = (email: string): boolean => {
   return EMAIL_REGEX.test(email);
 };
 
-function dateToInputValue(date: Date | undefined): string {
-  if (!date) {
-    return '';
-  }
-  // Anchor on local timezone so a date picked in the UI persists as the same
-  // calendar day rather than shifting based on UTC offset.
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
 export function EditContactInfoModal({
   isOpen,
   onClose,
@@ -73,7 +62,7 @@ export function EditContactInfoModal({
 
   const [email, setEmail] = useState(initialEmail);
   const [phone, setPhone] = useState(initialPhone);
-  const [dateOfBirth, setDateOfBirth] = useState<string>(() => dateToInputValue(initialDateOfBirth));
+  const [dateOfBirth, setDateOfBirth] = useState<Date | undefined>(initialDateOfBirth);
   const [address, setAddress] = useState<Address>({
     street: initialAddress?.street || '',
     apartment: initialAddress?.apartment || '',
@@ -123,7 +112,7 @@ export function EditContactInfoModal({
         id: memberId,
         email,
         phone: phone || null,
-        ...(dateOfBirth.trim() ? { dateOfBirth: new Date(dateOfBirth) } : {}),
+        ...(dateOfBirth ? { dateOfBirth } : {}),
         address: addressPayload,
       });
 
@@ -142,7 +131,7 @@ export function EditContactInfoModal({
   const handleCancel = () => {
     setEmail(initialEmail);
     setPhone(initialPhone);
-    setDateOfBirth(dateToInputValue(initialDateOfBirth));
+    setDateOfBirth(initialDateOfBirth);
     setAddress({
       street: initialAddress?.street || '',
       apartment: initialAddress?.apartment || '',
@@ -205,12 +194,11 @@ export function EditContactInfoModal({
               <label htmlFor="edit-contact-dob" className="text-sm font-medium text-foreground">
                 {t('date_of_birth_label')}
               </label>
-              <Input
+              <DateOfBirthInput
                 id="edit-contact-dob"
-                type="date"
-                placeholder={t('date_of_birth_placeholder')}
                 value={dateOfBirth}
-                onChange={e => setDateOfBirth(e.target.value)}
+                onChange={setDateOfBirth}
+                data-testid="edit-contact-dob-input"
               />
             </div>
 

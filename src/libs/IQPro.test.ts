@@ -13,6 +13,8 @@ vi.mock('./Env', () => ({
     IQPRO_OAUTH_URL: 'https://sandbox.oauth.example.com/token',
     IQPRO_BASE_URL: 'https://sandbox.api.basyspro.com',
     IQPRO_GATEWAY_ID: 'test-gateway-id',
+    TAX_STATE_PCT: '3.75',
+    SERVICE_FEE_PCT: '3.75',
   },
 }));
 
@@ -232,6 +234,8 @@ describe('tokenizeAch', () => {
         IQPRO_OAUTH_URL: 'https://sandbox.oauth.example.com/token',
         IQPRO_BASE_URL: 'https://sandbox.api.basyspro.com',
         IQPRO_GATEWAY_ID: 'test-gateway-id',
+        TAX_STATE_PCT: '3.75',
+        SERVICE_FEE_PCT: '3.75',
       },
     }));
   });
@@ -359,13 +363,177 @@ describe('iqproPut', () => {
   });
 });
 
-describe('calculateTransactionFees', () => {
+describe('computeFeeBreakdown', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
   });
 
-  it('sends token (not BIN) when both could be supplied', async () => {
+  it('non-taxable (membership) returns 0 tax + IQPro service fee', async () => {
+    const mod = await import('./IQPro');
+    mod.resetOAuthToken();
+
+    mockOAuthOk();
+    // /calculatefees response — IQPro returns the flat service-fee amount
+    mockFetch.mockResolvedValueOnce(new Response(
+      JSON.stringify({ data: { serviceFeesAmount: 3.75 } }),
+      { status: 200 },
+    ));
+
+    const result = await mod.computeFeeBreakdown(100, /* isTaxable */ false, {
+      processorId: 'proc_1',
+      token: 'tok_xyz',
+    });
+
+    expect(result.baseAmount).toBe(100);
+    expect(result.taxAmount).toBe(0);
+    expect(result.taxPct).toBe(0);
+    expect(result.serviceFeeAmount).toBe(3.75);
+    expect(result.serviceFeePct).toBe(3.75);
+    expect(result.amount).toBe(103.75);
+
+    // Verify the /calculatefees request body — sends ServiceFee adjustment
+    // with percentage (not flatAmount, IQPro requirement) and the token.
+    const feesCall = mockFetch.mock.calls.find(c => (c[0] as string).includes('/calculatefees'))!;
+    const body = JSON.parse(feesCall[1].body);
+
+    expect(body.baseAmount).toBe(100);
+    expect(body.processorId).toBe('proc_1');
+    expect(body.transactionType).toBe('Sale');
+    expect(body.taxAmount).toBe(0);
+    expect(body.token).toBe('tok_xyz');
+    expect(body.creditCardBin).toBeUndefined();
+    expect(body.paymentAdjustments).toEqual([
+      { type: 'ServiceFee', percentage: 3.75, flatAmount: null },
+    ]);
+  });
+
+  it('taxable (event/store) computes tax locally + IQPro service fee', async () => {
+    const mod = await import('./IQPro');
+    mod.resetOAuthToken();
+
+    mockOAuthOk();
+    mockFetch.mockResolvedValueOnce(new Response(
+      JSON.stringify({ data: { serviceFeesAmount: 3.75 } }),
+      { status: 200 },
+    ));
+
+    const result = await mod.computeFeeBreakdown(100, /* isTaxable */ true, {
+      processorId: 'proc_1',
+      creditCardBin: '424242',
+    });
+
+    expect(result.baseAmount).toBe(100);
+    expect(result.taxAmount).toBe(3.75); // 100 * 3.75%
+    expect(result.taxPct).toBe(3.75);
+    expect(result.serviceFeeAmount).toBe(3.75);
+    expect(result.amount).toBe(107.5); // 100 + 3.75 + 3.75
+  });
+
+  it('falls back to creditCardBin when token is not provided', async () => {
+    const mod = await import('./IQPro');
+    mod.resetOAuthToken();
+
+    mockOAuthOk();
+    mockFetch.mockResolvedValueOnce(new Response(
+      JSON.stringify({ data: { serviceFeesAmount: 0 } }),
+      { status: 200 },
+    ));
+
+    await mod.computeFeeBreakdown(50, false, {
+      processorId: 'proc_1',
+      creditCardBin: '424242',
+    });
+
+    const feesCall = mockFetch.mock.calls.find(c => (c[0] as string).includes('/calculatefees'))!;
+    const body = JSON.parse(feesCall[1].body);
+
+    expect(body.creditCardBin).toBe('424242');
+    expect(body.token).toBeUndefined();
+  });
+});
+
+describe('buildServiceFeeAdjustment / buildTaxAdjustment', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.resetModules();
+  });
+
+  it('buildServiceFeeAdjustment uses percentage, not flatAmount', async () => {
+    const mod = await import('./IQPro');
+    const adj = mod.buildServiceFeeAdjustment({
+      baseAmount: 100,
+      taxAmount: 0,
+      taxPct: 0,
+      serviceFeeAmount: 3.75,
+      serviceFeePct: 3.75,
+      amount: 103.75,
+    });
+
+    // IQPro rejects flatAmount on ServiceFee adjustments
+    expect(adj).toEqual({ type: 'ServiceFee', percentage: 3.75, flatAmount: null });
+  });
+
+  it('buildTaxAdjustment uses flatAmount, not percentage', async () => {
+    const mod = await import('./IQPro');
+    const adj = mod.buildTaxAdjustment({
+      baseAmount: 100,
+      taxAmount: 3.75,
+      taxPct: 3.75,
+      serviceFeeAmount: 0,
+      serviceFeePct: 0,
+      amount: 103.75,
+    });
+
+    // IQPro rejects percentage on Tax adjustments
+    expect(adj).toEqual({ type: 'Tax', percentage: null, flatAmount: 3.75 });
+  });
+});
+
+describe('mapTransactionStatus / assertTransactionApproved', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.resetModules();
+  });
+
+  it.each([
+    ['Captured', 'approved'],
+    ['Settled', 'approved'],
+    ['Authorized', 'approved'],
+    ['PendingSettlement', 'approved'],
+    ['Declined', 'declined'],
+    ['Failed', 'declined'],
+    ['', 'declined'],
+    ['unknown', 'declined'],
+  ])('maps status %s -> %s', async (raw, expected) => {
+    const mod = await import('./IQPro');
+
+    expect(mod.mapTransactionStatus({ status: raw })).toBe(expected);
+  });
+
+  it('assertTransactionApproved throws with processorResponseText on decline', async () => {
+    const mod = await import('./IQPro');
+
+    expect(() => mod.assertTransactionApproved({
+      status: 'Declined',
+      processorResponseText: 'Insufficient funds',
+    })).toThrow('Insufficient funds');
+  });
+
+  it('assertTransactionApproved is a no-op on approved', async () => {
+    const mod = await import('./IQPro');
+
+    expect(() => mod.assertTransactionApproved({ status: 'Captured' })).not.toThrow();
+  });
+});
+
+describe('getCustomerPaymentMethod', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.resetModules();
+  });
+
+  it('extracts BIN + last4 from a saved card', async () => {
     const mod = await import('./IQPro');
     mod.resetOAuthToken();
 
@@ -373,70 +541,62 @@ describe('calculateTransactionFees', () => {
     mockFetch.mockResolvedValueOnce(new Response(
       JSON.stringify({
         data: {
-          baseAmount: 100,
-          taxAmount: 8.5,
-          surchargeAmount: 3,
-          serviceFeesAmount: 0,
-          convenienceFeesAmount: 0,
-          amount: 111.5,
-          isSurchargeable: true,
-          isPinCapable: false,
-          surchargeRate: 0.03,
-          tip: 0,
-          cardBrand: 'Visa',
-          cardType: 'credit',
+          paymentMethods: [
+            {
+              customerPaymentMethodId: 'pm_1',
+              card: { maskedNumber: '424242******4242' },
+            },
+            { customerPaymentMethodId: 'pm_2', card: { maskedNumber: '555555******5555' } },
+          ],
         },
       }),
       { status: 200 },
     ));
 
-    const result = await mod.calculateTransactionFees({
-      baseAmount: 100,
-      processorId: 'proc_1',
-      state: 'CA',
-      paymentMethod: 'card',
-      token: 'tok_xyz',
-      creditCardBin: '424242',
-    });
+    const info = await mod.getCustomerPaymentMethod('cust_1', 'pm_2');
 
-    expect(result.amount).toBe(111.5);
-    expect(result.surchargeAmount).toBe(3);
-
-    const feesCall = mockFetch.mock.calls.find(c => (c[0] as string).includes('/calculatefees'))!;
-    const body = JSON.parse(feesCall[1].body);
-
-    // token preferred over BIN
-    expect(body.token).toBe('tok_xyz');
-    expect(body.creditCardBin).toBeUndefined();
-    expect(body.state).toBe('CA');
-    expect(body.processorId).toBe('proc_1');
-    expect(body.transactionType).toBe('Sale');
-    expect(body.addTaxToTotal).toBe(true);
+    expect(info).toEqual({ type: 'card', firstSix: '555555', last4: '5555' });
   });
 
-  it('falls back to BIN when no token is provided', async () => {
+  it('extracts achToken from a saved ACH PM', async () => {
     const mod = await import('./IQPro');
     mod.resetOAuthToken();
 
     mockOAuthOk();
     mockFetch.mockResolvedValueOnce(new Response(
-      JSON.stringify({ data: { baseAmount: 50, taxAmount: 0, surchargeAmount: 0, serviceFeesAmount: 0, convenienceFeesAmount: 0, amount: 50, isSurchargeable: false, isPinCapable: false, surchargeRate: 0, tip: 0, cardBrand: null, cardType: null } }),
+      JSON.stringify({
+        data: {
+          paymentMethods: [
+            {
+              customerPaymentMethodId: 'pm_ach',
+              ach: { achToken: 'ach-tok-xyz', accountNumber: 'XXXX1234' },
+            },
+          ],
+        },
+      }),
       { status: 200 },
     ));
 
-    await mod.calculateTransactionFees({
-      baseAmount: 50,
-      processorId: 'proc_1',
-      state: 'CA',
-      paymentMethod: 'card',
-      creditCardBin: '424242',
-    });
+    const info = await mod.getCustomerPaymentMethod('cust_1', 'pm_ach');
 
-    const feesCall = mockFetch.mock.calls.find(c => (c[0] as string).includes('/calculatefees'))!;
-    const body = JSON.parse(feesCall[1].body);
+    expect(info?.type).toBe('ach');
+    expect(info?.achToken).toBe('ach-tok-xyz');
+    expect(info?.last4).toBe('1234');
+  });
 
-    expect(body.token).toBeUndefined();
-    expect(body.creditCardBin).toBe('424242');
+  it('returns null when paymentMethodId is not found', async () => {
+    const mod = await import('./IQPro');
+    mod.resetOAuthToken();
+
+    mockOAuthOk();
+    mockFetch.mockResolvedValueOnce(new Response(
+      JSON.stringify({ data: { paymentMethods: [] } }),
+      { status: 200 },
+    ));
+
+    const info = await mod.getCustomerPaymentMethod('cust_1', 'pm_missing');
+
+    expect(info).toBeNull();
   });
 });
 
@@ -499,6 +659,8 @@ describe('getGatewayProcessors', () => {
         IQPRO_OAUTH_URL: 'https://sandbox.oauth.example.com/token',
         IQPRO_BASE_URL: 'https://sandbox.api.basyspro.com',
         IQPRO_GATEWAY_ID: 'test-gateway-id',
+        TAX_STATE_PCT: '3.75',
+        SERVICE_FEE_PCT: '3.75',
       },
     }));
   });
