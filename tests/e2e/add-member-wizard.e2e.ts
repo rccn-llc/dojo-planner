@@ -100,13 +100,12 @@ async function fillDetailsStep(page: Page): Promise<MemberDetails> {
 
   const dialog = page.getByRole('dialog');
 
-  // Date of birth — opens the Shadcn Popover + Calendar (#128 fix replaced
-  // the native <input type="date">). We don't need a specific date for the
-  // wizard flow tests; just pick any visible enabled day in the default
-  // month (which the component sets to ~30 years ago — well into adult).
-  await page.getByLabel('Pick date of birth').click();
-  // Calendar opens in a portaled popover; click the first day cell button.
-  await page.getByRole('gridcell').getByRole('button').first().click();
+  // Date of birth — typed MM/DD/YYYY input (DateOfBirthInput component
+  // supports both keyboard entry and a calendar popover; typing is faster
+  // and avoids popover timing flakiness). Use a date well into adult age.
+  await page.getByLabel('Pick date of birth').fill('06/15/1990');
+  // Blur the input so the parent's onBlur fires and the date is committed.
+  await page.getByLabel('Pick date of birth').press('Tab');
 
   // Address fields
   await page.getByPlaceholder('123 Main St').fill('100 Test Ave');
