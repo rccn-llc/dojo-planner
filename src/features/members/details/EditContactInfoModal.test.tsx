@@ -139,7 +139,7 @@ describe('EditContactInfoModal', () => {
   });
 
   describe('Date of Birth', () => {
-    it('renders the DOB input prefilled with the initial value (YYYY-MM-DD)', () => {
+    it('renders the DOB input prefilled with the initial value (MM/DD/YYYY)', () => {
       const props = {
         ...mockProps,
         initialDateOfBirth: new Date(1990, 0, 15),
@@ -149,7 +149,7 @@ describe('EditContactInfoModal', () => {
       const dobInput = document.querySelector('#edit-contact-dob') as HTMLInputElement;
 
       expect(dobInput).not.toBeNull();
-      expect(dobInput.value).toBe('1990-01-15');
+      expect(dobInput.value).toBe('01/15/1990');
     });
 
     it('renders the DOB input empty when no initial value is provided', () => {

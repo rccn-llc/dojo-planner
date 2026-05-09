@@ -52,6 +52,17 @@ export const ProcessPaymentValidation = z.object({
     })
     .nullable()
     .optional(),
+
+  // 'new' (default): create / reuse customer + register a fresh PM from
+  // card/ACH fields, then charge.
+  // 'saved': charge the member's existing IQPro vaulted payment method —
+  // server resolves customerId + paymentMethodId from member.iqproCustomerId
+  // and the local payment_method table (no IQPro IDs cross the wire).
+  paymentMethodSource: z.enum(['new', 'saved']).optional().default('new'),
+
+  // Whether this transaction is taxable. Memberships → false; events /
+  // seminars / store → true. Drives the IQPro remit + Tax paymentAdjustment.
+  isTaxable: z.boolean().optional().default(false),
 });
 
 export const RegisterPaymentMethodValidation = z.object({

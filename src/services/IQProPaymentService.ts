@@ -162,7 +162,7 @@ export class IQProPaymentProvider implements IPaymentProvider {
     const tokenResult = await tokenizeAch({
       accountNumber: params.achAccountNumber!,
       routingNumber: params.achRoutingNumber!,
-      secCode: 'WEB',
+      secCode: 'PPD',
       achAccountType: accountType,
     });
 
@@ -171,7 +171,7 @@ export class IQProPaymentProvider implements IPaymentProvider {
       {
         ach: {
           token: tokenResult.achToken,
-          secCode: 'WEB',
+          secCode: 'PPD',
           routingNumber: params.achRoutingNumber,
           accountType,
           checkNumber: null,
@@ -207,89 +207,117 @@ export class IQProPaymentProvider implements IPaymentProvider {
 
   async processPayment(params: ProcessPaymentParams): Promise<PaymentResult> {
     const gatewayId = Env.IQPRO_GATEWAY_ID!;
+    const isAch = !!params.ach;
+    const vaulted = !!params.vaulted;
+    const isTaxable = !!params.isTaxable;
 
     logger.info('[IQPro] Processing payment', {
       customerId: params.customerId,
       amount: params.amount,
-      method: params.ach ? 'ach' : 'card',
-      hasFeeBreakdown: !!params.feeBreakdown,
+      method: isAch ? 'ach' : 'card',
+      vaulted,
+      isTaxable,
     });
 
     try {
-      // Build the payment adjustments list from the fee breakdown (surcharge /
-      // service fees / convenience fees). Only non-zero values are included —
-      // IQPro validates these.
+      const fb = params.feeBreakdown;
+
+      // ── paymentAdjustments (mirrors kiosk shapes byte-for-byte) ────────────
+      // ServiceFee: percentage only — IQPro rejects flatAmount on ServiceFee.
+      // Tax: flatAmount only — IQPro rejects percentage on Tax.
       const paymentAdjustments: Array<Record<string, unknown>> = [];
-      if (params.feeBreakdown) {
-        if (params.feeBreakdown.surchargeAmount > 0) {
-          paymentAdjustments.push({ type: 'Surcharge', percentage: null, flatAmount: params.feeBreakdown.surchargeAmount });
-        }
-        if (params.feeBreakdown.serviceFeesAmount > 0) {
-          paymentAdjustments.push({ type: 'ServiceFees', percentage: null, flatAmount: params.feeBreakdown.serviceFeesAmount });
-        }
-        if (params.feeBreakdown.convenienceFeesAmount > 0) {
-          paymentAdjustments.push({ type: 'ConvenienceFees', percentage: null, flatAmount: params.feeBreakdown.convenienceFeesAmount });
-        }
+      if (isTaxable && fb.taxAmount > 0) {
+        paymentAdjustments.push({
+          type: 'Tax',
+          percentage: null,
+          flatAmount: fb.taxAmount,
+        });
       }
+      paymentAdjustments.push({
+        type: 'ServiceFee',
+        percentage: fb.serviceFeePct,
+        flatAmount: null,
+      });
 
-      // Remit block — dollars, not cents. When a fee breakdown is present we
-      // use its canonical baseAmount/taxAmount; otherwise fall back to the
-      // raw amount (this path is only hit when the orchestrator didn't
-      // calculate fees, e.g. for subscription-driven internal calls).
-      const remit: Record<string, unknown> = params.feeBreakdown
-        ? {
-            baseAmount: params.feeBreakdown.baseAmount,
-            taxAmount: params.feeBreakdown.taxAmount,
-            // IQPro rejects isTaxExempt=false with zero tax.
-            isTaxExempt: params.feeBreakdown.taxAmount <= 0,
-            currencyCode: params.currency,
-            addTaxToTotal: true,
-            ...(paymentAdjustments.length > 0 && { paymentAdjustments }),
-          }
-        : {
-            baseAmount: params.amount,
-            taxAmount: 0,
-            isTaxExempt: true,
-            currencyCode: params.currency,
-            addTaxToTotal: true,
-          };
-
-      // paymentMethod reference — IQPro rejects a transaction that sends
-      // both `customer` and `card`/`ach` blocks ("Only one payment method
-      // is allowed"). Since the card/ACH is already vaulted, the customer
-      // reference alone is enough.
-      const paymentMethodBlock: Record<string, unknown> = {
-        customer: {
-          customerId: params.customerId,
-          customerPaymentMethodId: params.paymentMethodId,
-          ...(params.customerBillingAddressId && { customerBillingAddressId: params.customerBillingAddressId }),
-        },
+      // ── remit block ────────────────────────────────────────────────────────
+      // Taxable: taxAmount: null + isTaxExempt: false (Tax expressed via the
+      //   Tax paymentAdjustment per Basys guidance). IQPro rejects taxAmount +
+      //   Tax adjustment together.
+      // Non-taxable (memberships): taxAmount: 0 + isTaxExempt: true.
+      const remit: Record<string, unknown> = {
+        baseAmount: fb.baseAmount,
+        taxAmount: isTaxable ? null : 0,
+        isTaxExempt: !isTaxable,
+        currencyCode: params.currency,
+        addTaxToTotal: true,
+        paymentAdjustments,
       };
 
-      // Billing address block. When the orchestrator didn't supply one, fall
-      // back to a minimal record that still satisfies IQPro's required fields.
-      const addressBlock = params.billingAddress
+      // ── paymentMethod block (mirrors kiosk's buildTxPaymentMethod) ─────────
+      // Vaulted: customer ref only (no customerBillingAddressId).
+      // Non-vaulted ACH: inline ach block per Basys ACH docs (customer record
+      //   was vaulted upstream, but the charge uses inline ACH).
+      // Non-vaulted card: customer ref with optional customerBillingAddressId.
+      let paymentMethodBlock: Record<string, unknown>;
+      if (vaulted) {
+        paymentMethodBlock = {
+          customer: {
+            customerId: params.customerId,
+            customerPaymentMethodId: params.paymentMethodId,
+          },
+        };
+      } else if (isAch && params.ach) {
+        paymentMethodBlock = {
+          ach: {
+            achToken: params.ach.achToken,
+            secCode: params.ach.secCode,
+            routingNumber: params.ach.routingNumber,
+            accountType: params.ach.accountType,
+            checkNumber: null,
+            accountHolderAuth: { dlState: null, dlNumber: null },
+          },
+        };
+      } else {
+        paymentMethodBlock = {
+          customer: {
+            customerId: params.customerId,
+            customerPaymentMethodId: params.paymentMethodId,
+            ...(params.customerBillingAddressId && {
+              customerBillingAddressId: params.customerBillingAddressId,
+            }),
+          },
+        };
+      }
+
+      // ── address[] block ────────────────────────────────────────────────────
+      // Vaulted charges: omit entirely — IQPro already has the address tied
+      // to the saved PM, and a half-filled buyer form would override it.
+      const addressBlock = !vaulted && params.billingAddress
         ? [
             {
               isPhysical: true,
               isBilling: true,
               isShipping: false,
-              firstName: params.billingAddress.firstName,
-              lastName: params.billingAddress.lastName,
-              email: params.billingAddress.email,
+              firstName: params.billingAddress.firstName || null,
+              lastName: params.billingAddress.lastName || null,
+              company: null,
+              email: params.billingAddress.email || null,
               phone: sanitizePhone(params.billingAddress.phone) ?? null,
               addressLine1: params.billingAddress.addressLine1 ?? null,
               addressLine2: params.billingAddress.addressLine2 ?? null,
               city: params.billingAddress.city ?? null,
-              state: params.billingAddress.state,
+              state: params.billingAddress.state || null,
               postalCode: params.billingAddress.postalCode ?? null,
               country: normalizeCountry(params.billingAddress.country),
             },
           ]
         : undefined;
 
-      // Line items. Default to a single "payment" line when the caller didn't
-      // provide one, so the transaction still reconciles.
+      // ── line items ─────────────────────────────────────────────────────────
+      // localTaxPercent: when taxable, set to the configured rate so IQPro's
+      // per-line-item tax check passes ("Remit.IsTaxExempt must be true when
+      // all line items have zero tax"). IQPro charges tax via the Tax
+      // paymentAdjustment, not from this percent.
       const lineItem = params.lineItem ?? {
         name: params.description,
         description: params.description,
@@ -305,7 +333,7 @@ export class IQProPaymentProvider implements IPaymentProvider {
           discount: lineItem.discount,
           freightAmount: 0,
           unitOfMeasureId: 1,
-          localTaxPercent: 0,
+          localTaxPercent: isTaxable ? fb.taxPct : 0,
           nationalTaxPercent: 0,
         },
       ];

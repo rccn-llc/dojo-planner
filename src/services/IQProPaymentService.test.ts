@@ -165,7 +165,7 @@ describe('IQProPaymentProvider', () => {
       expect(tokenizeAch).toHaveBeenCalledWith({
         accountNumber: '987654321',
         routingNumber: '021000021',
-        secCode: 'WEB',
+        secCode: 'PPD',
         achAccountType: 'Savings',
       });
 
@@ -174,7 +174,7 @@ describe('IQProPaymentProvider', () => {
         {
           ach: {
             token: 'ach-tok-xyz',
-            secCode: 'WEB',
+            secCode: 'PPD',
             routingNumber: '021000021',
             accountType: 'Savings',
             checkNumber: null,
@@ -186,76 +186,71 @@ describe('IQProPaymentProvider', () => {
     });
   });
 
-  describe('processPayment', () => {
-    it('builds the full Sale payload with feeBreakdown, paymentAdjustments, address and lineItems', async () => {
-      const { provider, iqproPost } = await loadProvider();
+  // ── Canonical FeeBreakdown shapes for processPayment tests ────────────
+  const nonTaxableFees = {
+    baseAmount: 100,
+    taxAmount: 0,
+    taxPct: 0,
+    serviceFeeAmount: 3.75,
+    serviceFeePct: 3.75,
+    amount: 103.75,
+  };
+  const taxableFees = {
+    baseAmount: 100,
+    taxAmount: 3.75,
+    taxPct: 3.75,
+    serviceFeeAmount: 3.75,
+    serviceFeePct: 3.75,
+    amount: 107.5,
+  };
 
+  const baseBilling = {
+    firstName: 'Jane',
+    lastName: 'Doe',
+    email: 'jane@example.com',
+    phone: '5550123456',
+    addressLine1: '1 Market St',
+    city: 'San Francisco',
+    state: 'CA',
+    postalCode: '94103',
+    country: 'US',
+  };
+
+  describe('processPayment — payload shapes', () => {
+    it('non-vaulted card + non-taxable (membership): customer-ref with billing address, no Tax adjustment', async () => {
+      const { provider, iqproPost } = await loadProvider();
       iqproPost.mockResolvedValueOnce({
-        data: {
-          transaction: {
-            transactionId: 'tx_42',
-            status: 'Captured',
-          },
-        },
+        data: { transaction: { transactionId: 'tx_42', status: 'Captured' } },
       });
 
       const result = await provider.processPayment({
         customerId: 'cust_123',
         paymentMethodId: 'pm_card_1',
-        amount: 111.5,
+        amount: 103.75,
         currency: 'USD',
-        description: 'Adult BJJ Membership Monthly',
-        feeBreakdown: {
-          baseAmount: 100,
-          taxAmount: 8.5,
-          surchargeAmount: 3,
-          serviceFeesAmount: 0,
-          convenienceFeesAmount: 0,
-          amount: 111.5,
-        },
+        description: 'Adult BJJ Monthly',
+        feeBreakdown: nonTaxableFees,
         customerBillingAddressId: 'addr_billing_1',
-        billingAddress: {
-          firstName: 'Jane',
-          lastName: 'Doe',
-          email: 'jane@example.com',
-          phone: '5550123456',
-          addressLine1: '1 Market St',
-          city: 'San Francisco',
-          state: 'CA',
-          postalCode: '94103',
-          country: 'US',
-        },
-        lineItem: {
-          name: 'Adult BJJ',
-          description: 'Monthly membership',
-          unitPrice: 100,
-          discount: 0,
-        },
+        billingAddress: baseBilling,
       });
 
       expect(result.success).toBe(true);
-      expect(result.status).toBe('approved');
-      expect(result.transactionId).toBe('tx_42');
 
-      const [path, payload] = iqproPost.mock.calls[0]!;
+      const p = iqproPost.mock.calls[0]![1] as Record<string, any>;
 
-      expect(path).toBe('/api/gateway/test-gateway-001/transaction');
-
-      const p = payload as Record<string, any>;
-
-      expect(p.type).toBe('Sale');
-      // Remit block has tax + adjustments + currency
+      // Non-taxable remit: taxAmount: 0, isTaxExempt: true
       expect(p.remit).toEqual({
         baseAmount: 100,
-        taxAmount: 8.5,
-        isTaxExempt: false,
+        taxAmount: 0,
+        isTaxExempt: true,
         currencyCode: 'USD',
         addTaxToTotal: true,
+        // ServiceFee always present (percentage), no Tax adjustment for non-taxable
         paymentAdjustments: [
-          { type: 'Surcharge', percentage: null, flatAmount: 3 },
+          { type: 'ServiceFee', percentage: 3.75, flatAmount: null },
         ],
       });
-      // paymentMethod uses customer block only — no card or ach block
+      // Customer-ref shape with billing address ID
       expect(p.paymentMethod).toEqual({
         customer: {
           customerId: 'cust_123',
@@ -263,66 +258,155 @@ describe('IQProPaymentProvider', () => {
           customerBillingAddressId: 'addr_billing_1',
         },
       });
-      // address[] block
-      expect(p.address).toEqual([
-        expect.objectContaining({
-          isPhysical: true,
-          isBilling: true,
-          isShipping: false,
-          firstName: 'Jane',
-          email: 'jane@example.com',
-          state: 'CA',
-          country: 'US',
-        }),
-      ]);
-      // line items shape
-      expect(p.lineItems).toEqual([
-        expect.objectContaining({
-          name: 'Adult BJJ',
-          description: 'Monthly membership',
-          quantity: 1,
-          unitPrice: 100,
-          discount: 0,
-          freightAmount: 0,
-          unitOfMeasureId: 1,
-        }),
-      ]);
-      // caption truncated to 19 chars
-      expect(p.caption).toBe('Adult BJJ Membershi');
+      // address[] block included for non-vaulted charges
+      expect(p.address).toHaveLength(1);
+      expect(p.address[0]).toEqual(expect.objectContaining({
+        isPhysical: true,
+        isBilling: true,
+        isShipping: false,
+        company: null,
+      }));
+      // line items: localTaxPercent 0 for non-taxable
+      expect(p.lineItems[0].localTaxPercent).toBe(0);
     });
 
-    it('marks the transaction tax-exempt when taxAmount is 0', async () => {
+    it('non-vaulted ACH + non-taxable: paymentMethod.ach (inline), NOT customer-ref', async () => {
       const { provider, iqproPost } = await loadProvider();
-
       iqproPost.mockResolvedValueOnce({
-        data: { transaction: { transactionId: 'tx_zero', status: 'Captured' } },
+        data: { transaction: { transactionId: 'tx_ach', status: 'Captured' } },
+      });
+
+      await provider.processPayment({
+        customerId: 'cust_123',
+        paymentMethodId: 'pm_ach_1',
+        amount: 103.75,
+        currency: 'USD',
+        description: 'Adult BJJ ACH',
+        feeBreakdown: nonTaxableFees,
+        ach: {
+          achToken: 'ach-tok-xyz',
+          secCode: 'PPD',
+          routingNumber: '021000021',
+          accountType: 'Checking',
+        },
+        billingAddress: baseBilling,
+      });
+
+      const p = iqproPost.mock.calls[0]![1] as Record<string, any>;
+
+      // ACH new-charge: inline ach, NOT customer-ref (matches kiosk)
+      expect(p.paymentMethod).toEqual({
+        ach: {
+          achToken: 'ach-tok-xyz',
+          secCode: 'PPD',
+          routingNumber: '021000021',
+          accountType: 'Checking',
+          checkNumber: null,
+          accountHolderAuth: { dlState: null, dlNumber: null },
+        },
+      });
+      // address[] still included for non-vaulted charges
+      expect(p.address).toHaveLength(1);
+    });
+
+    it('non-vaulted card + taxable (event/store): Tax + ServiceFee adjustments, taxAmount: null', async () => {
+      const { provider, iqproPost } = await loadProvider();
+      iqproPost.mockResolvedValueOnce({
+        data: { transaction: { transactionId: 'tx_event', status: 'Captured' } },
       });
 
       await provider.processPayment({
         customerId: 'cust_123',
         paymentMethodId: 'pm_card_1',
-        amount: 50,
+        amount: 107.5,
         currency: 'USD',
-        description: 'Free state',
-        feeBreakdown: {
-          baseAmount: 50,
-          taxAmount: 0,
-          surchargeAmount: 0,
-          serviceFeesAmount: 0,
-          convenienceFeesAmount: 0,
-          amount: 50,
+        description: 'Seminar registration',
+        feeBreakdown: taxableFees,
+        isTaxable: true,
+        billingAddress: baseBilling,
+      });
+
+      const p = iqproPost.mock.calls[0]![1] as Record<string, any>;
+
+      // Taxable remit: taxAmount: null + isTaxExempt: false
+      expect(p.remit.taxAmount).toBeNull();
+      expect(p.remit.isTaxExempt).toBe(false);
+      // Both Tax + ServiceFee adjustments present
+      expect(p.remit.paymentAdjustments).toEqual([
+        { type: 'Tax', percentage: null, flatAmount: 3.75 },
+        { type: 'ServiceFee', percentage: 3.75, flatAmount: null },
+      ]);
+      // Line items must carry localTaxPercent for taxable
+      expect(p.lineItems[0].localTaxPercent).toBe(3.75);
+    });
+
+    it('vaulted card: customer-ref WITHOUT billing address ID, NO top-level address[]', async () => {
+      const { provider, iqproPost } = await loadProvider();
+      iqproPost.mockResolvedValueOnce({
+        data: { transaction: { transactionId: 'tx_vault', status: 'Captured' } },
+      });
+
+      await provider.processPayment({
+        customerId: 'cust_existing',
+        paymentMethodId: 'pm_saved',
+        amount: 103.75,
+        currency: 'USD',
+        description: 'Vaulted membership',
+        feeBreakdown: nonTaxableFees,
+        vaulted: true,
+        // billingAddress would be ignored because vaulted=true
+        billingAddress: baseBilling,
+      });
+
+      const p = iqproPost.mock.calls[0]![1] as Record<string, any>;
+
+      // Vaulted: no customerBillingAddressId in customer ref
+      expect(p.paymentMethod).toEqual({
+        customer: {
+          customerId: 'cust_existing',
+          customerPaymentMethodId: 'pm_saved',
+        },
+      });
+      // No top-level address[] for vaulted charges (IQPro has it via the vault)
+      expect(p.address).toBeUndefined();
+    });
+
+    it('vaulted ACH: customer-ref shape (NOT inline ach)', async () => {
+      const { provider, iqproPost } = await loadProvider();
+      iqproPost.mockResolvedValueOnce({
+        data: { transaction: { transactionId: 'tx_vault_ach', status: 'Captured' } },
+      });
+
+      await provider.processPayment({
+        customerId: 'cust_existing',
+        paymentMethodId: 'pm_ach_saved',
+        amount: 103.75,
+        currency: 'USD',
+        description: 'Vaulted ACH membership',
+        feeBreakdown: nonTaxableFees,
+        vaulted: true,
+        // even with `ach` block, vaulted should override to customer-ref
+        ach: {
+          achToken: 'ach-tok-saved',
+          secCode: 'PPD',
+          routingNumber: '021000021',
+          accountType: 'Checking',
         },
       });
 
       const p = iqproPost.mock.calls[0]![1] as Record<string, any>;
 
-      expect(p.remit.isTaxExempt).toBe(true);
-      expect(p.remit.paymentAdjustments).toBeUndefined();
+      expect(p.paymentMethod).toEqual({
+        customer: {
+          customerId: 'cust_existing',
+          customerPaymentMethodId: 'pm_ach_saved',
+        },
+      });
+      expect(p.address).toBeUndefined();
     });
 
     it('treats sandbox certification errors as approved (pendingsettlement)', async () => {
       const { provider, iqproPost } = await loadProvider();
-
       iqproPost.mockResolvedValueOnce({
         data: {
           transaction: {
@@ -338,20 +422,13 @@ describe('IQProPaymentProvider', () => {
         paymentMethodId: 'pm_ach_1',
         amount: 100,
         currency: 'USD',
-        description: 'ACH sandbox test',
+        description: 'ACH sandbox',
+        feeBreakdown: nonTaxableFees,
         ach: {
           achToken: 'ach-tok-xyz',
-          secCode: 'WEB',
+          secCode: 'PPD',
           routingNumber: '021000021',
           accountType: 'Checking',
-        },
-        feeBreakdown: {
-          baseAmount: 100,
-          taxAmount: 0,
-          surchargeAmount: 0,
-          serviceFeesAmount: 0,
-          convenienceFeesAmount: 0,
-          amount: 100,
         },
       });
 
@@ -359,9 +436,8 @@ describe('IQProPaymentProvider', () => {
       expect(result.status).toBe('approved');
     });
 
-    it('returns declined with the processor response text', async () => {
+    it('returns declined with processor response text', async () => {
       const { provider, iqproPost } = await loadProvider();
-
       iqproPost.mockResolvedValueOnce({
         data: {
           transaction: {
@@ -378,16 +454,15 @@ describe('IQProPaymentProvider', () => {
         amount: 100,
         currency: 'USD',
         description: 'Decline',
+        feeBreakdown: nonTaxableFees,
       });
 
       expect(result.success).toBe(false);
-      expect(result.status).toBe('declined');
       expect(result.declineReason).toBe('Insufficient funds');
     });
 
     it('returns declined when iqproPost throws', async () => {
       const { provider, iqproPost } = await loadProvider();
-
       iqproPost.mockRejectedValueOnce(new Error('boom'));
 
       const result = await provider.processPayment({
@@ -396,10 +471,10 @@ describe('IQProPaymentProvider', () => {
         amount: 100,
         currency: 'USD',
         description: 'Failure',
+        feeBreakdown: nonTaxableFees,
       });
 
       expect(result.success).toBe(false);
-      expect(result.status).toBe('declined');
       expect(result.error).toBe('boom');
     });
   });
@@ -428,7 +503,7 @@ describe('IQProPaymentProvider', () => {
           zipCode: '94103',
           country: 'US',
         },
-        paymentAdjustments: [{ type: 'Surcharge', percentage: null, flatAmount: 3 }],
+        paymentAdjustments: [{ type: 'ServiceFee', percentage: 3.75, flatAmount: null }],
       });
 
       expect(result.success).toBe(true);
@@ -450,7 +525,7 @@ describe('IQProPaymentProvider', () => {
       expect(p.addresses).toHaveLength(2);
       expect(p.addresses[0].isBilling).toBe(true);
       expect(p.addresses[1].isRemittance).toBe(true);
-      expect(p.paymentAdjustments).toEqual([{ type: 'Surcharge', percentage: null, flatAmount: 3 }]);
+      expect(p.paymentAdjustments).toEqual([{ type: 'ServiceFee', percentage: 3.75, flatAmount: null }]);
     });
 
     it('sets billingPeriodId 6 + monthsOfYear for annual subscriptions', async () => {

@@ -360,6 +360,9 @@ export const AddFamilyMembersModal = ({
             paymentMethod: wizard.data.hohHasPaymentMethod
               ? (wizard.data.hohPaymentMethodType || 'card')
               : (wizard.data.paymentMethod || 'card'),
+            // 'saved' tells the server to charge HOH's existing IQPro PM
+            // without re-collecting card data.
+            paymentMethodSource: wizard.data.hohHasPaymentMethod ? 'saved' : 'new',
             billingType: 'autopay',
             amount: finalPrice,
             description: wizard.data.membershipPlanName

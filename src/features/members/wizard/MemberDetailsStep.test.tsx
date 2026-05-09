@@ -350,7 +350,7 @@ describe('MemberDetailsStep', () => {
       expect(document.querySelector('input[type="date"]')).toBeNull();
     });
 
-    it('shows the formatted date on the trigger when DOB is set', () => {
+    it('shows the date as MM/DD/YYYY in the typed input when DOB is set', () => {
       const dataWithDob: AddMemberWizardData = {
         ...mockData,
         dateOfBirth: new Date('1990-06-15T00:00:00'),
@@ -366,10 +366,9 @@ describe('MemberDetailsStep', () => {
         />,
       );
 
-      const trigger = page.getByLabelText('Pick date of birth').element() as HTMLButtonElement;
+      const input = page.getByLabelText('Pick date of birth').element() as HTMLInputElement;
 
-      // toLocaleDateString formatting includes the year.
-      expect(trigger.textContent).toContain('1990');
+      expect(input.value).toBe('06/15/1990');
     });
   });
 });

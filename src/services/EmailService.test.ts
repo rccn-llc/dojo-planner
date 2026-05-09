@@ -237,4 +237,131 @@ describe('EmailService', () => {
       );
     });
   });
+
+  describe('sendPaymentReceiptEmail', () => {
+    const baseReceipt = {
+      toEmail: 'jane@example.com',
+      firstName: 'Jane',
+      lastName: 'Doe',
+      lineItems: [
+        { name: 'Adult BJJ', description: 'Monthly membership', quantity: 1, unitPrice: 100, discount: 0 },
+      ],
+      subtotal: 100,
+      discountAmount: 0,
+      taxAmount: 0,
+      taxPct: 0,
+      serviceFeeAmount: 3.75,
+      serviceFeePct: 3.75,
+      total: 103.75,
+      transactionId: 'tx-001',
+    };
+
+    it('returns false when email is not configured', async () => {
+      const { sendPaymentReceiptEmail } = await import('./EmailService');
+      const result = await sendPaymentReceiptEmail(baseReceipt);
+
+      expect(result).toBe(false);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it('sends with itemized HTML when configured', async () => {
+      process.env.RESEND_API_KEY = 'test_resend_key_not_real'; // nosecret
+      mockSend.mockResolvedValue({ id: 'email-id' });
+      const { sendPaymentReceiptEmail } = await import('./EmailService');
+
+      const result = await sendPaymentReceiptEmail(baseReceipt);
+
+      expect(result).toBe(true);
+
+      const sendArgs = mockSend.mock.calls[0]![0];
+
+      expect(sendArgs.to).toBe('jane@example.com');
+      expect(sendArgs.subject).toBe('Your payment receipt');
+      expect(sendArgs.html).toContain('Adult BJJ');
+      expect(sendArgs.html).toContain('Monthly membership');
+      expect(sendArgs.html).toContain('Service fee (3.75%)');
+      expect(sendArgs.html).toContain('$103.75');
+      expect(sendArgs.html).toContain('Transaction ID: tx-001');
+    });
+
+    it('hides the tax row when taxAmount is 0 (memberships)', async () => {
+      process.env.RESEND_API_KEY = 'test_resend_key_not_real'; // nosecret
+      mockSend.mockResolvedValue({ id: 'email-id' });
+      const { sendPaymentReceiptEmail } = await import('./EmailService');
+
+      await sendPaymentReceiptEmail({ ...baseReceipt, taxAmount: 0, taxPct: 0 });
+      const html = mockSend.mock.calls[0]![0].html as string;
+
+      expect(html).not.toContain('Tax (');
+    });
+
+    it('shows the tax row when taxAmount > 0 (events/store)', async () => {
+      process.env.RESEND_API_KEY = 'test_resend_key_not_real'; // nosecret
+      mockSend.mockResolvedValue({ id: 'email-id' });
+      const { sendPaymentReceiptEmail } = await import('./EmailService');
+
+      await sendPaymentReceiptEmail({
+        ...baseReceipt,
+        taxAmount: 3.75,
+        taxPct: 3.75,
+        total: 107.5,
+      });
+      const html = mockSend.mock.calls[0]![0].html as string;
+
+      expect(html).toContain('Tax (3.75%)');
+      expect(html).toContain('$3.75');
+    });
+
+    it('shows the discount row when discountAmount > 0', async () => {
+      process.env.RESEND_API_KEY = 'test_resend_key_not_real'; // nosecret
+      mockSend.mockResolvedValue({ id: 'email-id' });
+      const { sendPaymentReceiptEmail } = await import('./EmailService');
+
+      await sendPaymentReceiptEmail({ ...baseReceipt, discountAmount: 25 });
+      const html = mockSend.mock.calls[0]![0].html as string;
+
+      expect(html).toContain('Discount');
+      expect(html).toContain('-$25.00');
+    });
+
+    it('adds the recurring billing note when isRecurring is true', async () => {
+      process.env.RESEND_API_KEY = 'test_resend_key_not_real'; // nosecret
+      mockSend.mockResolvedValue({ id: 'email-id' });
+      const { sendPaymentReceiptEmail } = await import('./EmailService');
+
+      await sendPaymentReceiptEmail({ ...baseReceipt, isRecurring: true });
+      const html = mockSend.mock.calls[0]![0].html as string;
+
+      expect(html).toContain('Future billing cycles');
+    });
+
+    it('attaches a waiver PDF when provided', async () => {
+      process.env.RESEND_API_KEY = 'test_resend_key_not_real'; // nosecret
+      mockSend.mockResolvedValue({ id: 'email-id' });
+      const { sendPaymentReceiptEmail } = await import('./EmailService');
+
+      const pdfBuffer = Buffer.from('fake-pdf-content');
+      await sendPaymentReceiptEmail({
+        ...baseReceipt,
+        waiverPdfBuffer: pdfBuffer,
+        waiverPdfFilename: 'waiver.pdf',
+      });
+
+      const sendArgs = mockSend.mock.calls[0]![0];
+
+      expect(sendArgs.attachments).toEqual([
+        { filename: 'waiver.pdf', content: pdfBuffer },
+      ]);
+    });
+
+    it('returns false when Resend send throws', async () => {
+      process.env.RESEND_API_KEY = 'test_resend_key_not_real'; // nosecret
+      mockSend.mockRejectedValue(new Error('Resend down'));
+      const { sendPaymentReceiptEmail } = await import('./EmailService');
+
+      const result = await sendPaymentReceiptEmail(baseReceipt);
+
+      expect(result).toBe(false);
+    });
+  });
 });

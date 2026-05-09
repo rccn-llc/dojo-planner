@@ -18,6 +18,7 @@ vi.mock('@/libs/DB', () => ({ db: dbMocks }));
 vi.mock('drizzle-orm', () => ({
   eq: vi.fn((_col, val) => ({ _type: 'eq', value: val })),
   and: vi.fn((...conds) => ({ _type: 'and', conds })),
+  desc: vi.fn(col => ({ _type: 'desc', col })),
   sql: Object.assign(
     vi.fn((..._args) => ({ _type: 'sql' })),
     { raw: vi.fn() },
@@ -48,11 +49,16 @@ vi.mock('@/models/Schema', () => ({
 
 vi.mock('@/libs/IQPro', () => ({
   isIQProConfigured: vi.fn().mockReturnValue(true),
-  calculateTransactionFees: vi.fn(),
+  computeFeeBreakdown: vi.fn(),
+  getCustomerPaymentMethod: vi.fn(),
   getGatewayProcessors: vi.fn().mockResolvedValue({
     cardProcessorId: 'card_proc_001',
     achProcessorId: 'ach_proc_001',
   }),
+}));
+
+vi.mock('./EmailService', () => ({
+  sendPaymentReceiptEmail: vi.fn().mockResolvedValue(true),
 }));
 
 vi.mock('@/libs/Logger', () => ({

@@ -410,6 +410,32 @@ Unlike card tokenization (client-side iframe), ACH tokenization is a server-side
 3. One-time: process transaction → save to `transaction` table
 4. Autopay: create subscription → save `iqproSubscriptionId` on membership
 
+**Vaulted-charge flow (`paymentMethodSource: 'saved'`):**
+
+Members with an existing IQPro customer + saved payment method can be charged without re-collecting card data. Used by:
+- HOH paying for family member memberships / classes
+- The kiosk app charging a known member for events / seminars
+
+Pass `paymentMethodSource: 'saved'` (with `memberId` only — no IQPro IDs cross the wire) on `payment.process`. The server resolves `member.iqproCustomerId` and the saved `payment_method` row, fetches BIN/achToken from IQPro for fee preview via `getCustomerPaymentMethod`, and skips create-customer + register-PM. Returns a friendly error if either record is missing.
+
+**Transaction payload shapes (mirrored byte-for-byte from kiosk):**
+
+| Branch | `paymentMethod` block | `address[]` | Notes |
+|--------|----------------------|-------------|-------|
+| Vaulted (card or ACH) | `{ customer: { customerId, customerPaymentMethodId } }` | omitted | IQPro already has the address linked to the saved PM |
+| New card | `{ customer: { customerId, customerPaymentMethodId, customerBillingAddressId } }` | full block | |
+| New ACH | `{ ach: { achToken, secCode: 'PPD', routingNumber, accountType, checkNumber: null, accountHolderAuth: { dlState: null, dlNumber: null } } }` | full block | Inline ACH, NOT customer-ref. ACH is vaulted upstream for the customer record but the charge uses the inline sub-object per Basys docs |
+
+**Tax + service fees (`isTaxable` flag):**
+
+- `isTaxable: true` (events / seminars / store): emits a `Tax` paymentAdjustment (`{ type: 'Tax', percentage: null, flatAmount }`), sets `remit.taxAmount: null` + `remit.isTaxExempt: false`, sets `lineItems[].localTaxPercent: TAX_STATE_PCT`. IQPro rejects passing both `remit.taxAmount` and a Tax adjustment.
+- `isTaxable: false` (memberships, default): no Tax adjustment, `remit.taxAmount: 0`, `remit.isTaxExempt: true`, line-item tax 0.
+- ServiceFee adjustment is always present: `{ type: 'ServiceFee', percentage: SERVICE_FEE_PCT, flatAmount: null }`. IQPro requires ServiceFee be percentage-only — passing `flatAmount` fails validation.
+
+**Receipt email:**
+
+After every approved transaction (one-time or autopay-initial-charge), `sendPaymentReceiptEmail` fires fire-and-forget with line items, subtotal, discount, tax, service fee, total, and transaction ID. The tax row is hidden when `taxAmount === 0`. Never sent on declined or processing.
+
 **Subscription API Requirements (IQPro InsertSubscription):**
 
 The IQPro subscription API has strict requirements validated against the sandbox:
@@ -882,6 +908,8 @@ IQPRO_OAUTH_URL
 IQPRO_BASE_URL
 IQPRO_GATEWAY_ID
 IQPRO_WEBHOOK_SECRET
+TAX_STATE_PCT=3.75       # Sales-tax % applied to TAXABLE transactions (events, store). Memberships are non-taxable.
+SERVICE_FEE_PCT=3.75     # Service fee % applied to EVERY transaction. Sent to IQPro as a ServiceFee paymentAdjustment (percentage, not flatAmount).
 ```
 
 **Optional (Email — Resend):**
