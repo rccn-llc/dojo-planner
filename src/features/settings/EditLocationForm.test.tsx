@@ -8,9 +8,6 @@ vi.mock('next-intl', () => ({
   useTranslations: (namespace: string) => (key: string) => {
     const translations: Record<string, Record<string, string>> = {
       'LocationSettings.EditLocationModal': {
-        name_label: 'Location Name',
-        name_placeholder: 'Enter location name',
-        name_error: 'Please enter a location name.',
         address_label: 'Address',
         address_placeholder: 'Enter address',
         address_error: 'Please enter an address.',
@@ -38,10 +35,10 @@ describe('EditLocationForm', () => {
 
   // Test fixtures - not real credentials
   const initialData = {
-    name: 'Downtown HQ',
     address: '123 Main St',
     phone: '(415) 555-0123', // pragma: allowlist secret
     email: 'test@example.com', // pragma: allowlist secret
+    taxRate: 3.75,
   };
 
   beforeEach(() => {
@@ -58,7 +55,6 @@ describe('EditLocationForm', () => {
       />,
     );
 
-    expect(page.getByText('Location Name')).toBeDefined();
     expect(page.getByText('Address')).toBeDefined();
     expect(page.getByText('Phone')).toBeDefined();
     expect(page.getByText('Email')).toBeDefined();
@@ -74,7 +70,6 @@ describe('EditLocationForm', () => {
       />,
     );
 
-    expect(page.getByLabelText('Location Name').element()).toHaveProperty('value', 'Downtown HQ');
     expect(page.getByLabelText('Address').element()).toHaveProperty('value', '123 Main St');
     expect(page.getByLabelText('Phone').element()).toHaveProperty('value', '(415) 555-0123');
     expect(page.getByLabelText('Email').element()).toHaveProperty('value', 'test@example.com');
@@ -108,26 +103,6 @@ describe('EditLocationForm', () => {
     await userEvent.click(cancelButton);
 
     expect(mockOnCancel).toHaveBeenCalled();
-  });
-
-  it('should validate required name field', async () => {
-    render(
-      <EditLocationForm
-        onCancel={mockOnCancel}
-        onSuccess={mockOnSuccess}
-        onSave={mockOnSave}
-        initialData={initialData}
-      />,
-    );
-
-    const nameInput = page.getByLabelText('Location Name');
-    await userEvent.clear(nameInput);
-
-    const saveButton = page.getByRole('button', { name: /save/i });
-    await userEvent.click(saveButton);
-
-    expect(page.getByText('Please enter a location name.')).toBeDefined();
-    expect(mockOnSave).not.toHaveBeenCalled();
   });
 
   it('should validate required address field', async () => {
@@ -225,10 +200,10 @@ describe('EditLocationForm', () => {
     await userEvent.click(saveButton);
 
     expect(mockOnSave).toHaveBeenCalledWith({
-      name: 'Downtown HQ',
       address: '123 Main St',
       phone: '(415) 555-0123',
       email: 'test@example.com',
+      taxRate: 3.75,
     });
     expect(mockOnSuccess).toHaveBeenCalled();
   });
@@ -240,10 +215,10 @@ describe('EditLocationForm', () => {
         onSuccess={mockOnSuccess}
         onSave={mockOnSave}
         initialData={{
-          name: 'Test <script>',
           address: '123 Main <div>',
           phone: '(415) 555-0123abc',
           email: 'TEST@EXAMPLE.COM',
+          taxRate: 0,
         }}
       />,
     );
@@ -252,28 +227,11 @@ describe('EditLocationForm', () => {
     await userEvent.click(saveButton);
 
     expect(mockOnSave).toHaveBeenCalledWith({
-      name: 'Test script',
       address: '123 Main div',
       phone: '(415) 555-0123',
       email: 'test@example.com',
+      taxRate: 0,
     });
-  });
-
-  it('should update name field when user types', async () => {
-    render(
-      <EditLocationForm
-        onCancel={mockOnCancel}
-        onSuccess={mockOnSuccess}
-        onSave={mockOnSave}
-        initialData={initialData}
-      />,
-    );
-
-    const nameInput = page.getByLabelText('Location Name');
-    await userEvent.clear(nameInput);
-    await userEvent.type(nameInput, 'New Location');
-
-    expect(nameInput.element()).toHaveProperty('value', 'New Location');
   });
 
   it('should update address field when user types', async () => {
@@ -334,10 +292,10 @@ describe('EditLocationForm', () => {
         onSuccess={mockOnSuccess}
         onSave={mockOnSave}
         initialData={{
-          name: '',
           address: '',
           phone: '',
           email: '',
+          taxRate: 0,
         }}
       />,
     );
@@ -345,7 +303,6 @@ describe('EditLocationForm', () => {
     const saveButton = page.getByRole('button', { name: /save/i });
     await userEvent.click(saveButton);
 
-    expect(page.getByText('Please enter a location name.')).toBeDefined();
     expect(page.getByText('Please enter an address.')).toBeDefined();
     expect(page.getByText('Please enter a phone number.')).toBeDefined();
     expect(page.getByText('Please enter a valid email.')).toBeDefined();

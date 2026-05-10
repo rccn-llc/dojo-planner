@@ -7,9 +7,6 @@ vi.mock('next-intl', () => ({
   useTranslations: () => (key: string) => {
     const translations: Record<string, string> = {
       title: 'Edit Location Information',
-      name_label: 'Location Name',
-      name_placeholder: 'Enter location name',
-      name_error: 'Please enter a location name.',
       address_label: 'Address',
       address_placeholder: 'Enter address',
       address_error: 'Please enter an address.',
@@ -19,6 +16,10 @@ vi.mock('next-intl', () => ({
       email_label: 'Email',
       email_placeholder: 'location@example.com',
       email_error: 'Please enter a valid email address.',
+      tax_rate_label: 'Tax Rate',
+      tax_rate_placeholder: '0.00',
+      tax_rate_helper: 'Applied to taxable items (events, merchandise). Memberships are not taxed.',
+      tax_rate_error: 'Tax rate must be between 0 and 100.',
       cancel_button: 'Cancel',
       save_button: 'Save Changes',
       saving_button: 'Saving...',
@@ -30,10 +31,10 @@ vi.mock('next-intl', () => ({
 const defaultProps = {
   isOpen: true,
   onClose: vi.fn(),
-  name: 'Downtown HQ',
   address: '123 Main St. San Francisco. CA',
   phone: '(415) 555-0123',
   email: 'downtown@example.com',
+  taxRate: 3.75,
   onSave: vi.fn(),
 };
 
@@ -51,7 +52,6 @@ describe('EditLocationModal', () => {
   it('should render all form field labels', () => {
     render(<EditLocationModal {...defaultProps} />);
 
-    expect(page.getByText('Location Name')).toBeDefined();
     expect(page.getByText('Address')).toBeDefined();
     expect(page.getByText('Phone')).toBeDefined();
     expect(page.getByText('Email')).toBeDefined();
@@ -60,12 +60,10 @@ describe('EditLocationModal', () => {
   it('should display initial values in form fields', () => {
     render(<EditLocationModal {...defaultProps} />);
 
-    const nameInput = page.getByPlaceholder('Enter location name');
     const addressInput = page.getByPlaceholder('Enter address');
     const phoneInput = page.getByPlaceholder('(555) 123-4567');
     const emailInput = page.getByPlaceholder('location@example.com');
 
-    expect(nameInput.element()).toHaveProperty('value', 'Downtown HQ');
     expect(addressInput.element()).toHaveProperty('value', '123 Main St. San Francisco. CA');
     expect(phoneInput.element()).toHaveProperty('value', '(415) 555-0123');
     expect(emailInput.element()).toHaveProperty('value', 'downtown@example.com');
@@ -86,16 +84,6 @@ describe('EditLocationModal', () => {
     await userEvent.click(cancelButton.element());
 
     expect(onClose).toHaveBeenCalled();
-  });
-
-  it('should show error when name field is empty on blur', async () => {
-    render(<EditLocationModal {...defaultProps} />);
-
-    const nameInput = page.getByPlaceholder('Enter location name');
-    await userEvent.clear(nameInput.element());
-    await userEvent.click(page.getByText('Address').element()); // Blur by clicking elsewhere
-
-    expect(page.getByText('Please enter a location name.')).toBeDefined();
   });
 
   it('should show error when address field is empty on blur', async () => {
@@ -132,8 +120,8 @@ describe('EditLocationModal', () => {
   it('should disable save button when form is invalid', async () => {
     render(<EditLocationModal {...defaultProps} />);
 
-    const nameInput = page.getByPlaceholder('Enter location name');
-    await userEvent.clear(nameInput.element());
+    const addressInput = page.getByPlaceholder('Enter address');
+    await userEvent.clear(addressInput.element());
 
     const saveButton = page.getByRole('button', { name: /save changes/i });
 
@@ -152,19 +140,19 @@ describe('EditLocationModal', () => {
     const onSave = vi.fn();
     render(<EditLocationModal {...defaultProps} onSave={onSave} />);
 
-    const nameInput = page.getByPlaceholder('Enter location name');
-    await userEvent.clear(nameInput.element());
-    await userEvent.type(nameInput.element(), 'New Location Name');
+    const addressInput = page.getByPlaceholder('Enter address');
+    await userEvent.clear(addressInput.element());
+    await userEvent.type(addressInput.element(), '789 Updated Ave');
 
     const saveButton = page.getByRole('button', { name: /save changes/i });
     await userEvent.click(saveButton.element());
 
     await vi.waitFor(() => {
       expect(onSave).toHaveBeenCalledWith({
-        name: 'New Location Name',
-        address: '123 Main St. San Francisco. CA',
+        address: '789 Updated Ave',
         phone: '(415) 555-0123',
         email: 'downtown@example.com',
+        taxRate: 3.75,
       });
     });
   });
@@ -181,9 +169,9 @@ describe('EditLocationModal', () => {
     render(<EditLocationModal {...defaultProps} />);
 
     // Modify a field
-    const nameInput = page.getByPlaceholder('Enter location name');
-    await userEvent.clear(nameInput.element());
-    await userEvent.type(nameInput.element(), 'Modified Name');
+    const addressInput = page.getByPlaceholder('Enter address');
+    await userEvent.clear(addressInput.element());
+    await userEvent.type(addressInput.element(), 'Modified Address');
 
     // Click cancel to close the modal (which should reset the form)
     const cancelButton = page.getByRole('button', { name: /cancel/i });
@@ -198,13 +186,9 @@ describe('EditLocationModal', () => {
     render(<EditLocationModal {...defaultProps} onSave={onSave} />);
 
     // Update all fields
-    const nameInput = page.getByPlaceholder('Enter location name');
     const addressInput = page.getByPlaceholder('Enter address');
     const phoneInput = page.getByPlaceholder('(555) 123-4567');
     const emailInput = page.getByPlaceholder('location@example.com');
-
-    await userEvent.clear(nameInput.element());
-    await userEvent.type(nameInput.element(), 'New Location');
 
     await userEvent.clear(addressInput.element());
     await userEvent.type(addressInput.element(), '456 New St');
@@ -220,10 +204,10 @@ describe('EditLocationModal', () => {
 
     await vi.waitFor(() => {
       expect(onSave).toHaveBeenCalledWith({
-        name: 'New Location',
         address: '456 New St',
         phone: '(555) 999-8888',
         email: 'new@example.com',
+        taxRate: 3.75,
       });
     });
   });

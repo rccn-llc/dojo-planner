@@ -2,17 +2,17 @@ import { useCallback, useEffect, useState } from 'react';
 import { client } from '@/libs/Orpc';
 
 export type OrganizationLocation = {
-  name: string | null;
   address: string | null;
   phone: string | null;
   email: string | null;
+  taxRate: number;
 };
 
 const EMPTY_LOCATION: OrganizationLocation = {
-  name: null,
   address: null,
   phone: null,
   email: null,
+  taxRate: 0,
 };
 
 export function useOrganizationLocation() {

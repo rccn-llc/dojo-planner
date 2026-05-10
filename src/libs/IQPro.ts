@@ -408,24 +408,7 @@ export async function getGatewayProcessors(): Promise<GatewayProcessors> {
   return cachedProcessors;
 }
 
-// ===== Tax + service fee config =====
-
-/**
- * Sales-tax percentage applied to TAXABLE transactions (events, store).
- * Memberships and other non-taxable charges return 0. Sourced from
- * TAX_STATE_PCT env var as a stand-in for a per-organization DB column.
- */
-function getTaxStatePct(): number {
-  const fromEnv = Env.TAX_STATE_PCT?.trim();
-  if (!fromEnv) {
-    throw new Error('TAX_STATE_PCT is not set. Add it to .env.local (e.g. TAX_STATE_PCT=3.75).');
-  }
-  const parsed = Number.parseFloat(fromEnv);
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    throw new Error(`TAX_STATE_PCT must be a non-negative number, got "${fromEnv}"`);
-  }
-  return parsed;
-}
+// ===== Service fee config =====
 
 /**
  * Service fee percentage applied to EVERY transaction. Passed to IQPro as a
@@ -502,17 +485,19 @@ async function fetchServiceFeeAmount(params: CalculateServiceFeeParams): Promise
 
 /**
  * Compute the full fee breakdown for a transaction.
- * - Tax is computed locally (taxable only; 0 for memberships).
+ * - Tax is computed locally (taxable only; 0 for memberships). The caller
+ *   supplies the org-specific tax rate via `taxStatePct`.
  * - Service fee amount is computed by IQPro via /calculatefees, using the
  *   configured ServiceFee percentage. A processor ID + token-or-BIN are required.
  */
 export async function computeFeeBreakdown(
   baseAmount: number,
   isTaxable: boolean,
+  taxStatePct: number,
   serviceFeeLookup: Omit<CalculateServiceFeeParams, 'baseAmount'>,
 ): Promise<ComputedFeeBreakdown> {
   const base = roundCents(baseAmount);
-  const taxPct = isTaxable ? getTaxStatePct() : 0;
+  const taxPct = isTaxable ? taxStatePct : 0;
   const serviceFeePct = getServiceFeePct();
   const taxAmount = roundCents(base * (taxPct / 100));
   const serviceFeeAmount = await fetchServiceFeeAmount({ ...serviceFeeLookup, baseAmount: base });

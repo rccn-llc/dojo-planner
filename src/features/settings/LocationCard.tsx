@@ -25,10 +25,10 @@ export function LocationCard({ isLoading: forcedLoading = false }: LocationCardP
   const isLoading = forcedLoading || fetchLoading;
 
   const handleSaveLocation = async (data: {
-    name: string;
     address: string;
     phone: string;
     email: string;
+    taxRate: number;
   }) => {
     setSaveError(null);
     try {
@@ -69,10 +69,10 @@ export function LocationCard({ isLoading: forcedLoading = false }: LocationCardP
             <div className="mt-4">
               <EditLocationForm
                 initialData={{
-                  name: location.name ?? '',
                   address: location.address ?? '',
                   phone: location.phone ?? '',
                   email: location.email ?? '',
+                  taxRate: location.taxRate ?? 0,
                 }}
                 onCancel={() => {
                   setIsEditing(false);
@@ -98,6 +98,10 @@ export function LocationCard({ isLoading: forcedLoading = false }: LocationCardP
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">{t('email_label')}</label>
                   <p className="mt-1 text-foreground">{location.email || '-'}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">{t('tax_rate_label')}</label>
+                  <p className="mt-1 text-foreground">{`${(location.taxRate ?? 0).toFixed(2)}%`}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">{t('status_label')}</label>

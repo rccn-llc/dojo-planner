@@ -13,7 +13,6 @@ vi.mock('./Env', () => ({
     IQPRO_OAUTH_URL: 'https://sandbox.oauth.example.com/token',
     IQPRO_BASE_URL: 'https://sandbox.api.basyspro.com',
     IQPRO_GATEWAY_ID: 'test-gateway-id',
-    TAX_STATE_PCT: '3.75',
     SERVICE_FEE_PCT: '3.75',
   },
 }));
@@ -380,7 +379,7 @@ describe('computeFeeBreakdown', () => {
       { status: 200 },
     ));
 
-    const result = await mod.computeFeeBreakdown(100, /* isTaxable */ false, {
+    const result = await mod.computeFeeBreakdown(100, /* isTaxable */ false, /* taxStatePct */ 3.75, {
       processorId: 'proc_1',
       token: 'tok_xyz',
     });
@@ -418,7 +417,7 @@ describe('computeFeeBreakdown', () => {
       { status: 200 },
     ));
 
-    const result = await mod.computeFeeBreakdown(100, /* isTaxable */ true, {
+    const result = await mod.computeFeeBreakdown(100, /* isTaxable */ true, /* taxStatePct */ 3.75, {
       processorId: 'proc_1',
       creditCardBin: '424242',
     });
@@ -428,6 +427,46 @@ describe('computeFeeBreakdown', () => {
     expect(result.taxPct).toBe(3.75);
     expect(result.serviceFeeAmount).toBe(3.75);
     expect(result.amount).toBe(107.5); // 100 + 3.75 + 3.75
+  });
+
+  it('taxable with 0 tax rate yields no tax (default for new orgs)', async () => {
+    const mod = await import('./IQPro');
+    mod.resetOAuthToken();
+
+    mockOAuthOk();
+    mockFetch.mockResolvedValueOnce(new Response(
+      JSON.stringify({ data: { serviceFeesAmount: 3.75 } }),
+      { status: 200 },
+    ));
+
+    const result = await mod.computeFeeBreakdown(100, /* isTaxable */ true, /* taxStatePct */ 0, {
+      processorId: 'proc_1',
+      token: 'tok_xyz',
+    });
+
+    expect(result.taxAmount).toBe(0);
+    expect(result.taxPct).toBe(0);
+    expect(result.amount).toBe(103.75);
+  });
+
+  it('taxable with custom tax rate (e.g. 5.25%) computes correctly', async () => {
+    const mod = await import('./IQPro');
+    mod.resetOAuthToken();
+
+    mockOAuthOk();
+    mockFetch.mockResolvedValueOnce(new Response(
+      JSON.stringify({ data: { serviceFeesAmount: 3.75 } }),
+      { status: 200 },
+    ));
+
+    const result = await mod.computeFeeBreakdown(100, /* isTaxable */ true, /* taxStatePct */ 5.25, {
+      processorId: 'proc_1',
+      token: 'tok_xyz',
+    });
+
+    expect(result.taxAmount).toBe(5.25);
+    expect(result.taxPct).toBe(5.25);
+    expect(result.amount).toBe(109); // 100 + 5.25 + 3.75
   });
 
   it('falls back to creditCardBin when token is not provided', async () => {
@@ -440,7 +479,7 @@ describe('computeFeeBreakdown', () => {
       { status: 200 },
     ));
 
-    await mod.computeFeeBreakdown(50, false, {
+    await mod.computeFeeBreakdown(50, false, 0, {
       processorId: 'proc_1',
       creditCardBin: '424242',
     });

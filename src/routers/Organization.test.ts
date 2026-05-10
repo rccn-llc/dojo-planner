@@ -33,17 +33,17 @@ function callHandler(handler: unknown, input?: unknown) {
 }
 
 const fakeLocation = {
-  name: 'Main Dojo',
   address: '500 Market St',
   phone: '555-0100',
   email: 'hello@dojo.test',
+  taxRate: 3.75,
 };
 
 const validUpdateInput = {
-  name: 'Main Dojo',
   address: '500 Market St',
   phone: '555-0100',
   email: 'hello@dojo.test',
+  taxRate: 3.75,
 };
 
 describe('Organization Router', () => {

@@ -230,10 +230,16 @@ describe('AppSidebar - Component Rendering', () => {
   it('should NOT render Settings section (hidden)', () => {
     render(<AppSidebar />);
 
-    // Settings section should be hidden
+    // Settings section should be hidden (only Preferences lived there now, also hidden)
     expect(page.getByText('Settings').elements().length).toBe(0);
-    expect(page.getByText('Location').elements().length).toBe(0);
     expect(page.getByText('Preferences').elements().length).toBe(0);
+  });
+
+  it('should render Location item under Academy as visible last item', () => {
+    render(<AppSidebar />);
+
+    // Location Settings now lives under Academy (no role passed = manager by default)
+    expect(page.getByText('Location')).toBeDefined();
   });
 
   it('should render Log Out option', () => {
@@ -285,6 +291,8 @@ describe('AppSidebar - Role-based visibility', () => {
     expect(page.getByText('Roles')).toBeDefined();
 
     expect(page.getByText('Staff')).toBeDefined();
+
+    expect(page.getByText('Location')).toBeDefined();
   });
 
   it('should show all items for academy owner role', () => {
@@ -299,6 +307,8 @@ describe('AppSidebar - Role-based visibility', () => {
     expect(page.getByText('Roles')).toBeDefined();
 
     expect(page.getByText('Staff')).toBeDefined();
+
+    expect(page.getByText('Location')).toBeDefined();
   });
 
   it('should hide management items for front desk role', () => {
@@ -329,6 +339,8 @@ describe('AppSidebar - Role-based visibility', () => {
     expect(page.getByText('Roles').elements().length).toBe(0);
 
     expect(page.getByText('Staff').elements().length).toBe(0);
+
+    expect(page.getByText('Location').elements().length).toBe(0);
   });
 
   it('should always show log out for any role', () => {

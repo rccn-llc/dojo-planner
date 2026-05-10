@@ -12,10 +12,10 @@ import { client } from '@/libs/Orpc';
 import { EditLocationModal } from './EditLocationModal';
 
 type LocationFormData = {
-  name: string;
   address: string;
   phone: string;
   email: string;
+  taxRate: number;
 };
 
 export function LocationSettingsPage() {
@@ -66,6 +66,12 @@ export function LocationSettingsPage() {
               : <p className="mt-1 text-foreground">{location.email || '-'}</p>}
           </div>
           <div>
+            <label className="text-sm text-muted-foreground">{t('tax_rate_label')}</label>
+            {loading
+              ? <Skeleton className="mt-1 h-5 w-20" />
+              : <p className="mt-1 text-foreground">{`${(location.taxRate ?? 0).toFixed(2)}%`}</p>}
+          </div>
+          <div>
             <label className="text-sm text-muted-foreground">{t('status_label')}</label>
             <p className="mt-1">
               <Badge>{t('active_status')}</Badge>
@@ -93,10 +99,10 @@ export function LocationSettingsPage() {
           setIsEditModalOpen(false);
           setSaveError(null);
         }}
-        name={location.name ?? ''}
         address={location.address ?? ''}
         phone={location.phone ?? ''}
         email={location.email ?? ''}
+        taxRate={location.taxRate ?? 0}
         onSave={handleSaveLocation}
         errorMessage={saveError}
       />

@@ -65,7 +65,7 @@ src/
 │   ├── CouponsService.ts  # Coupon queries + organization-wide total savings aggregation
 │   ├── EventsService.ts   # Event queries
 │   ├── MembersService.ts  # Member operations
-│   ├── OrganizationService.ts # Org & Stripe customer storage + per-org location settings (name, address, phone, email)
+│   ├── OrganizationService.ts # Org & Stripe customer storage + per-org location settings (name, address, phone, email, tax rate)
 │   ├── TagsService.ts     # Tag queries with usage counts
 │   ├── TransactionsService.ts # Transaction listing with member joins
 │   ├── DashboardService.ts # Membership stats, financial stats, member average & earnings chart data
@@ -155,7 +155,7 @@ docs/                      # Documentation
 | `/dashboard/subscription-expired` | `subscription-expired/page.tsx` | Subscription expired — re-subscribe prompt |
 | `/dashboard/preferences` | `preferences/page.tsx` | User preferences |
 | `/dashboard/security` | `security/page.tsx` | Security settings |
-| `/dashboard/location-settings` | `location-settings/page.tsx` | Per-org location settings (name, address, phone, email) — backed by `organization.location*` columns |
+| `/dashboard/location-settings` | `location-settings/page.tsx` | Per-org location settings (name, address, phone, email, tax rate) — backed by `organization.location*` columns |
 
 ### Auth Routes
 
@@ -428,7 +428,7 @@ Pass `paymentMethodSource: 'saved'` (with `memberId` only — no IQPro IDs cross
 
 **Tax + service fees (`isTaxable` flag):**
 
-- `isTaxable: true` (events / seminars / store): emits a `Tax` paymentAdjustment (`{ type: 'Tax', percentage: null, flatAmount }`), sets `remit.taxAmount: null` + `remit.isTaxExempt: false`, sets `lineItems[].localTaxPercent: TAX_STATE_PCT`. IQPro rejects passing both `remit.taxAmount` and a Tax adjustment.
+- `isTaxable: true` (events / seminars / store): emits a `Tax` paymentAdjustment (`{ type: 'Tax', percentage: null, flatAmount }`), sets `remit.taxAmount: null` + `remit.isTaxExempt: false`, sets `lineItems[].localTaxPercent` to the org-specific tax rate (`organization.location_tax_rate`, default 0). IQPro rejects passing both `remit.taxAmount` and a Tax adjustment.
 - `isTaxable: false` (memberships, default): no Tax adjustment, `remit.taxAmount: 0`, `remit.isTaxExempt: true`, line-item tax 0.
 - ServiceFee adjustment is always present: `{ type: 'ServiceFee', percentage: SERVICE_FEE_PCT, flatAmount: null }`. IQPro requires ServiceFee be percentage-only — passing `flatAmount` fails validation.
 
@@ -642,7 +642,7 @@ await deleteUserWithOrganization();
 **Schema:** `src/models/Schema.ts`
 
 **Key Tables:**
-- `organization` - Multi-tenant orgs with Stripe IDs + IQPro SaaS subscription fields (iqproCustomerId, iqproSubscriptionId, iqproSubscriptionPlanId, iqproBillingCycle, iqproSubscriptionStatus, iqproCurrentPeriodEnd, iqproPaymentMethodId) + location settings (locationName, locationAddress, locationPhone, locationEmail — all nullable, set via the location-settings page)
+- `organization` - Multi-tenant orgs with Stripe IDs + IQPro SaaS subscription fields (iqproCustomerId, iqproSubscriptionId, iqproSubscriptionPlanId, iqproBillingCycle, iqproSubscriptionStatus, iqproCurrentPeriodEnd, iqproPaymentMethodId) + location settings (locationName, locationAddress, locationPhone, locationEmail — nullable, set via the location-settings page; `locationTaxRate` real defaulting to 0, applied to taxable transactions)
 - `member` - Member records with dateOfBirth, optional `clerkUserId` for kiosk auth, optional `iqproCustomerId`
 - `membership_plan` - Pricing tiers
 - `member_membership` - Member-plan associations with startDate, endDate, firstPaymentDate, nextPaymentDate, optional `iqproSubscriptionId`
@@ -908,8 +908,10 @@ IQPRO_OAUTH_URL
 IQPRO_BASE_URL
 IQPRO_GATEWAY_ID
 IQPRO_WEBHOOK_SECRET
-TAX_STATE_PCT=3.75       # Sales-tax % applied to TAXABLE transactions (events, store). Memberships are non-taxable.
 SERVICE_FEE_PCT=3.75     # Service fee % applied to EVERY transaction. Sent to IQPro as a ServiceFee paymentAdjustment (percentage, not flatAmount).
+# Note: Sales-tax % is per-organization (see Location Settings page → tax_rate).
+# It is stored in `organization.location_tax_rate` (default 0) and applied to TAXABLE
+# transactions (events, store) only. Memberships are non-taxable.
 ```
 
 **Optional (Email — Resend):**

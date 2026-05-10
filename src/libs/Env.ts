@@ -19,9 +19,6 @@ export const Env = createEnv({
     IQPRO_BASE_URL: z.string().url().optional(),
     IQPRO_GATEWAY_ID: z.string().min(1).optional(),
     IQPRO_WEBHOOK_SECRET: z.string().min(1).optional(),
-    // Sales-tax % applied to taxable transactions (events, store). Memberships
-    // are non-taxable. String so the env-var stays readable; parsed at call time.
-    TAX_STATE_PCT: z.string().optional(),
     // Service fee % applied to every transaction (membership + taxable).
     // Passed to IQPro as a paymentAdjustment of type "ServiceFee" (percentage,
     // not flatAmount — IQPro rejects flatAmount on ServiceFee adjustments).
@@ -56,7 +53,6 @@ export const Env = createEnv({
     IQPRO_BASE_URL: process.env.IQPRO_BASE_URL,
     IQPRO_GATEWAY_ID: process.env.IQPRO_GATEWAY_ID,
     IQPRO_WEBHOOK_SECRET: process.env.IQPRO_WEBHOOK_SECRET,
-    TAX_STATE_PCT: process.env.TAX_STATE_PCT,
     SERVICE_FEE_PCT: process.env.SERVICE_FEE_PCT,
     RESEND_API_KEY: process.env.RESEND_API_KEY,
     RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL,
