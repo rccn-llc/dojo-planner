@@ -35,39 +35,35 @@ type EditLocationFormProps = {
   onCancel: () => void;
   onSuccess: () => void;
   initialData: {
-    name: string;
     address: string;
     phone: string;
     email: string;
+    taxRate: number;
   };
-  onSave: (data: { name: string; address: string; phone: string; email: string }) => void | Promise<void>;
+  onSave: (data: { address: string; phone: string; email: string; taxRate: number }) => void | Promise<void>;
   errorMessage?: string | null;
 };
 
 type FormErrors = {
-  name?: string;
   address?: string;
   phone?: string;
   email?: string;
+  taxRate?: string;
 };
 
 export function EditLocationForm({ onCancel, onSuccess, initialData, onSave, errorMessage }: EditLocationFormProps) {
   const t = useTranslations('LocationSettings.EditLocationModal');
   const tCommon = useTranslations('MyProfile');
 
-  const [name, setName] = useState(initialData.name);
   const [address, setAddress] = useState(initialData.address);
   const [phone, setPhone] = useState(initialData.phone);
   const [email, setEmail] = useState(initialData.email);
+  const [taxRate, setTaxRate] = useState(initialData.taxRate.toFixed(2));
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
-
-    if (!name.trim()) {
-      newErrors.name = t('name_error');
-    }
 
     if (!address.trim()) {
       newErrors.address = t('address_error');
@@ -81,6 +77,11 @@ export function EditLocationForm({ onCancel, onSuccess, initialData, onSave, err
       newErrors.email = t('email_error');
     } else if (!/^[^\s@]+@[^\s@][^\s.@]*\.[^\s@]+$/.test(email)) {
       newErrors.email = t('email_error');
+    }
+
+    const parsedTaxRate = Number.parseFloat(taxRate);
+    if (taxRate.trim() === '' || !Number.isFinite(parsedTaxRate) || parsedTaxRate < 0 || parsedTaxRate > 100) {
+      newErrors.taxRate = t('tax_rate_error');
     }
 
     setErrors(newErrors);
@@ -99,10 +100,10 @@ export function EditLocationForm({ onCancel, onSuccess, initialData, onSave, err
 
     try {
       const sanitizedData = {
-        name: sanitizeInput(name),
         address: sanitizeInput(address),
         phone: sanitizePhone(phone),
         email: sanitizeEmail(email),
+        taxRate: Math.round(Number.parseFloat(taxRate) * 100) / 100,
       };
       await onSave(sanitizedData);
       onSuccess();
@@ -116,21 +117,6 @@ export function EditLocationForm({ onCancel, onSuccess, initialData, onSave, err
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div>
-          <Label htmlFor="edit-location-name">{t('name_label')}</Label>
-          <Input
-            id="edit-location-name"
-            placeholder={t('name_placeholder')}
-            className="mt-2"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            error={!!errors.name}
-            disabled={isLoading}
-          />
-          {errors.name && (
-            <p className="mt-1 text-sm text-red-500">{errors.name}</p>
-          )}
-        </div>
         <div className="sm:col-span-2">
           <Label htmlFor="edit-location-address">{t('address_label')}</Label>
           <Textarea
@@ -176,6 +162,29 @@ export function EditLocationForm({ onCancel, onSuccess, initialData, onSave, err
           />
           {errors.email && (
             <p className="mt-1 text-sm text-red-500">{errors.email}</p>
+          )}
+        </div>
+        <div>
+          <Label htmlFor="edit-location-tax-rate">{t('tax_rate_label')}</Label>
+          <div className="relative mt-2">
+            <Input
+              id="edit-location-tax-rate"
+              type="number"
+              step="0.01"
+              min="0"
+              max="100"
+              placeholder={t('tax_rate_placeholder')}
+              className="pr-8"
+              value={taxRate}
+              onChange={e => setTaxRate(e.target.value)}
+              error={!!errors.taxRate}
+              disabled={isLoading}
+            />
+            <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">{t('tax_rate_helper')}</p>
+          {errors.taxRate && (
+            <p className="mt-1 text-sm text-red-500">{errors.taxRate}</p>
           )}
         </div>
       </div>

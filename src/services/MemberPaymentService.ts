@@ -32,6 +32,7 @@ import { logger } from '@/libs/Logger';
 import { couponSchema, couponUsageSchema, memberMembershipSchema, memberSchema, paymentMethodSchema, transactionSchema } from '@/models/Schema';
 
 import { sendPaymentReceiptEmail } from './EmailService';
+import { getOrganizationTaxRate } from './OrganizationService';
 import { getPaymentProvider, isPaymentEnabled } from './PaymentProviderService';
 
 // ===== Public types =====
@@ -352,9 +353,12 @@ export async function processMemberPayment(
     const couponDiscount = computeCouponDiscount(params.amount, params.appliedCoupon);
     const baseAmount = Math.max(0, Math.round((params.amount - couponDiscount) * 100) / 100);
 
+    const taxStatePct = isTaxable ? await getOrganizationTaxRate(params.organizationId) : 0;
+
     const feeBreakdown: FeeBreakdown = await computeFeeBreakdown(
       baseAmount,
       isTaxable,
+      taxStatePct,
       {
         processorId,
         ...(feeToken && { token: feeToken }),

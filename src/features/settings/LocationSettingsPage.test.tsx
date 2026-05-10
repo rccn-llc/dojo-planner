@@ -16,9 +16,6 @@ vi.mock('next-intl', () => ({
       },
       'LocationSettings.EditLocationModal': {
         title: 'Edit Location Information',
-        name_label: 'Location Name',
-        name_placeholder: 'Enter location name',
-        name_error: 'Please enter a location name.',
         address_label: 'Address',
         address_placeholder: 'Enter address',
         address_error: 'Please enter an address.',
@@ -41,14 +38,14 @@ const refetchMock = vi.fn();
 const updateLocationMock = vi.fn().mockResolvedValue({ location: {} });
 
 let hookState: {
-  location: { name: string | null; address: string | null; phone: string | null; email: string | null };
+  location: { address: string | null; phone: string | null; email: string | null; taxRate: number };
   loading: boolean;
 } = {
   location: {
-    name: 'Main Dojo',
     address: '500 Market St, San Francisco, CA',
     phone: '(415) 555-0100',
     email: 'hello@dojo.test',
+    taxRate: 3.75,
   },
   loading: false,
 };
@@ -77,10 +74,10 @@ describe('LocationSettingsPage', () => {
     vi.clearAllMocks();
     hookState = {
       location: {
-        name: 'Main Dojo',
         address: '500 Market St, San Francisco, CA',
         phone: '(415) 555-0100',
         email: 'hello@dojo.test',
+        taxRate: 3.75,
       },
       loading: false,
     };
@@ -186,7 +183,7 @@ describe('LocationSettingsPage', () => {
 
   it('shows a dash when the address has not been set yet', () => {
     hookState = {
-      location: { name: null, address: null, phone: null, email: null },
+      location: { address: null, phone: null, email: null, taxRate: 0 },
       loading: false,
     };
 
@@ -195,6 +192,24 @@ describe('LocationSettingsPage', () => {
     expect(page.getByText('Address:')).toBeDefined();
     // Three dashes show up — one each for address, phone, email. We just check that at least one exists.
     expect(page.getByText('-').elements().length).toBeGreaterThan(0);
+  });
+
+  it('renders the tax rate from the hook formatted as a percentage', () => {
+    render(<LocationSettingsPage />);
+
+    expect(page.getByText('Tax Rate:')).toBeDefined();
+    expect(page.getByText('3.75%')).toBeDefined();
+  });
+
+  it('renders 0.00% when no tax rate has been set', () => {
+    hookState = {
+      location: { address: null, phone: null, email: null, taxRate: 0 },
+      loading: false,
+    };
+
+    render(<LocationSettingsPage />);
+
+    expect(page.getByText('0.00%')).toBeDefined();
   });
 
   it('has proper accessibility on the edit button', () => {

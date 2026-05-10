@@ -65,10 +65,11 @@ export type CreatePaymentMethodResult = {
 
 /**
  * Server-authoritative fee breakdown produced by `computeFeeBreakdown` in
- * libs/IQPro.ts. Tax is computed locally (TAX_STATE_PCT, taxable transactions
- * only); service fee is computed by IQPro's /calculatefees endpoint. Passed
- * into `processPayment` and `createSubscription` so the `remit` block + Tax /
- * ServiceFee paymentAdjustments reconcile exactly with what IQPro will charge.
+ * libs/IQPro.ts. Tax is computed locally from the org's per-tenant tax rate
+ * (organization.location_tax_rate, taxable transactions only); service fee is
+ * computed by IQPro's /calculatefees endpoint. Passed into `processPayment`
+ * and `createSubscription` so the `remit` block + Tax / ServiceFee
+ * paymentAdjustments reconcile exactly with what IQPro will charge.
  */
 export type FeeBreakdown = {
   baseAmount: number;

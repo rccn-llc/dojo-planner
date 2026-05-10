@@ -3693,12 +3693,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "location_name": {
-          "name": "location_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "location_address": {
           "name": "location_address",
           "type": "text",
@@ -3716,6 +3710,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "location_tax_rate": {
+          "name": "location_tax_rate",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
         },
         "updated_at": {
           "name": "updated_at",

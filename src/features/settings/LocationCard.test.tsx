@@ -14,9 +14,6 @@ vi.mock('next-intl', () => ({
         active_status: 'Active',
       },
       'LocationSettings.EditLocationModal': {
-        name_label: 'Location Name',
-        name_placeholder: 'Enter location name',
-        name_error: 'Please enter a location name.',
         address_label: 'Address',
         address_placeholder: 'Enter address',
         address_error: 'Please enter an address.',
@@ -42,14 +39,14 @@ const refetchMock = vi.fn();
 const updateLocationMock = vi.fn().mockResolvedValue({ location: {} });
 
 let hookState: {
-  location: { name: string | null; address: string | null; phone: string | null; email: string | null };
+  location: { address: string | null; phone: string | null; email: string | null; taxRate: number };
   loading: boolean;
 } = {
   location: {
-    name: 'Main Dojo',
     address: '500 Market St',
     phone: '(415) 555-0100',
     email: 'hello@dojo.test',
+    taxRate: 3.75,
   },
   loading: false,
 };
@@ -79,10 +76,10 @@ describe('LocationCard', () => {
     vi.clearAllMocks();
     hookState = {
       location: {
-        name: 'Main Dojo',
         address: '500 Market St',
         phone: '(415) 555-0100',
         email: 'hello@dojo.test',
+        taxRate: 3.75,
       },
       loading: false,
     };

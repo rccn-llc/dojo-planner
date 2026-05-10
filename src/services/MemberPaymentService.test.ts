@@ -57,6 +57,10 @@ vi.mock('@/libs/IQPro', () => ({
   }),
 }));
 
+vi.mock('./OrganizationService', () => ({
+  getOrganizationTaxRate: vi.fn().mockResolvedValue(3.75),
+}));
+
 vi.mock('@/libs/Logger', () => ({
   logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
 }));
@@ -220,10 +224,11 @@ describe('processMemberPayment', () => {
     expect(result.success).toBe(true);
     expect(result.status).toBe('approved');
 
-    // Memberships are non-taxable by default
+    // Memberships are non-taxable by default; taxStatePct passed as 0
     expect(computeFeeBreakdown).toHaveBeenCalledWith(
       100,
       false,
+      0,
       expect.objectContaining({ processorId: 'card_proc_001', token: 'tex-tok-abc' }),
     );
 
@@ -325,8 +330,8 @@ describe('processMemberPayment', () => {
 
     const callArgs = vi.mocked(computeFeeBreakdown).mock.calls[0]!;
 
-    expect(callArgs[2]).toEqual(expect.objectContaining({ creditCardBin: '424242' }));
-    expect(callArgs[2]).not.toHaveProperty('token');
+    expect(callArgs[3]).toEqual(expect.objectContaining({ creditCardBin: '424242' }));
+    expect(callArgs[3]).not.toHaveProperty('token');
   });
 
   it('ACH new payment: passes achToken to fee calc, sends inline ach to provider', async () => {
@@ -356,9 +361,9 @@ describe('processMemberPayment', () => {
 
     const feeArgs = vi.mocked(computeFeeBreakdown).mock.calls[0]!;
 
-    expect(feeArgs[2].processorId).toBe('ach_proc_001');
-    expect(feeArgs[2].token).toBe('ach-tok-xyz');
-    expect(feeArgs[2]).not.toHaveProperty('creditCardBin');
+    expect(feeArgs[3].processorId).toBe('ach_proc_001');
+    expect(feeArgs[3].token).toBe('ach-tok-xyz');
+    expect(feeArgs[3]).not.toHaveProperty('creditCardBin');
 
     expect(mockProvider.processPayment).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -382,7 +387,7 @@ describe('processMemberPayment', () => {
       appliedCoupon: { id: 'cpn_1', code: 'SAVE25', type: 'Fixed Amount', amount: '25', description: '$25 off' },
     });
 
-    expect(computeFeeBreakdown).toHaveBeenCalledWith(75, false, expect.any(Object));
+    expect(computeFeeBreakdown).toHaveBeenCalledWith(75, false, 0, expect.any(Object));
   });
 
   it('Percentage coupon: discount applied before fee calc', async () => {
@@ -395,7 +400,7 @@ describe('processMemberPayment', () => {
       appliedCoupon: { id: 'cpn_2', code: 'TEN_PCT', type: 'Percentage', amount: '10', description: '10% off' },
     });
 
-    expect(computeFeeBreakdown).toHaveBeenCalledWith(90, false, expect.any(Object));
+    expect(computeFeeBreakdown).toHaveBeenCalledWith(90, false, 0, expect.any(Object));
   });
 
   it('throws clear error when no gateway processor is configured', async () => {
@@ -440,10 +445,37 @@ describe('processMemberPayment', () => {
     const { processMemberPayment } = await import('./MemberPaymentService');
     await processMemberPayment({ ...baseParams, isTaxable: true });
 
-    expect(computeFeeBreakdown).toHaveBeenCalledWith(100, true, expect.any(Object));
+    // taxStatePct (3.75 from getOrganizationTaxRate mock) is threaded through as 3rd arg
+    expect(computeFeeBreakdown).toHaveBeenCalledWith(100, true, 3.75, expect.any(Object));
     expect(mockProvider.processPayment).toHaveBeenCalledWith(
       expect.objectContaining({ isTaxable: true }),
     );
+  });
+
+  it('isTaxable: true — calls getOrganizationTaxRate with the org ID', async () => {
+    const { getOrganizationTaxRate } = await import('./OrganizationService');
+    const { computeFeeBreakdown } = await import('@/libs/IQPro');
+    vi.mocked(computeFeeBreakdown).mockResolvedValueOnce({ ...baseFees, taxAmount: 5.25, taxPct: 5.25, amount: 109 });
+    vi.mocked(getOrganizationTaxRate).mockResolvedValueOnce(5.25);
+
+    const { processMemberPayment } = await import('./MemberPaymentService');
+    await processMemberPayment({ ...baseParams, isTaxable: true });
+
+    expect(getOrganizationTaxRate).toHaveBeenCalledWith('org_x');
+    expect(computeFeeBreakdown).toHaveBeenCalledWith(100, true, 5.25, expect.any(Object));
+  });
+
+  it('isTaxable: false — does not call getOrganizationTaxRate', async () => {
+    const { getOrganizationTaxRate } = await import('./OrganizationService');
+    const { computeFeeBreakdown } = await import('@/libs/IQPro');
+    vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(baseFees);
+    vi.mocked(getOrganizationTaxRate).mockClear();
+
+    const { processMemberPayment } = await import('./MemberPaymentService');
+    await processMemberPayment({ ...baseParams, isTaxable: false });
+
+    expect(getOrganizationTaxRate).not.toHaveBeenCalled();
+    expect(computeFeeBreakdown).toHaveBeenCalledWith(100, false, 0, expect.any(Object));
   });
 
   // ── Saved-PM (vaulted) branch ────────────────────────────────────────────
@@ -495,6 +527,7 @@ describe('processMemberPayment', () => {
     expect(computeFeeBreakdown).toHaveBeenCalledWith(
       100,
       false,
+      0,
       expect.objectContaining({ creditCardBin: '424242' }),
     );
     expect(mockProvider.processPayment).toHaveBeenCalledWith(

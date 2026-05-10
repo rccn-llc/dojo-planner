@@ -55,10 +55,10 @@ export const updateStripeSubscription = (
 };
 
 export type OrganizationLocation = {
-  name: string | null;
   address: string | null;
   phone: string | null;
   email: string | null;
+  taxRate: number;
 };
 
 export const getOrganizationLocation = async (
@@ -67,46 +67,54 @@ export const getOrganizationLocation = async (
   const row = await db.query.organizationSchema.findFirst({
     where: eq(organizationSchema.id, orgId),
     columns: {
-      locationName: true,
       locationAddress: true,
       locationPhone: true,
       locationEmail: true,
+      locationTaxRate: true,
     },
   });
   return {
-    name: row?.locationName ?? null,
     address: row?.locationAddress ?? null,
     phone: row?.locationPhone ?? null,
     email: row?.locationEmail ?? null,
+    taxRate: row?.locationTaxRate ?? 0,
   };
 };
 
 export const updateOrganizationLocation = async (
   orgId: string,
-  input: { name: string; address: string; phone: string; email: string },
+  input: { address: string; phone: string; email: string; taxRate: number },
 ): Promise<OrganizationLocation> => {
   await db
     .insert(organizationSchema)
     .values({
       id: orgId,
-      locationName: input.name,
       locationAddress: input.address,
       locationPhone: input.phone,
       locationEmail: input.email,
+      locationTaxRate: input.taxRate,
     })
     .onConflictDoUpdate({
       target: organizationSchema.id,
       set: {
-        locationName: input.name,
         locationAddress: input.address,
         locationPhone: input.phone,
         locationEmail: input.email,
+        locationTaxRate: input.taxRate,
       },
     });
   return {
-    name: input.name,
     address: input.address,
     phone: input.phone,
     email: input.email,
+    taxRate: input.taxRate,
   };
+};
+
+export const getOrganizationTaxRate = async (orgId: string): Promise<number> => {
+  const row = await db.query.organizationSchema.findFirst({
+    where: eq(organizationSchema.id, orgId),
+    columns: { locationTaxRate: true },
+  });
+  return row?.locationTaxRate ?? 0;
 };

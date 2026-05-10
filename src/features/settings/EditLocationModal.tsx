@@ -14,15 +14,15 @@ import { Input } from '@/components/ui/input';
 type EditLocationModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  name: string;
   address: string;
   phone: string;
   email: string;
+  taxRate: number;
   onSave: (data: {
-    name: string;
     address: string;
     phone: string;
     email: string;
+    taxRate: number;
   }) => void | Promise<void>;
   errorMessage?: string | null;
 };
@@ -30,19 +30,19 @@ type EditLocationModalProps = {
 export function EditLocationModal({
   isOpen,
   onClose,
-  name: initialName,
   address: initialAddress,
   phone: initialPhone,
   email: initialEmail,
+  taxRate: initialTaxRate,
   onSave,
   errorMessage,
 }: EditLocationModalProps) {
   const t = useTranslations('LocationSettings.EditLocationModal');
 
-  const [name, setName] = useState(initialName);
   const [address, setAddress] = useState(initialAddress);
   const [phone, setPhone] = useState(initialPhone);
   const [email, setEmail] = useState(initialEmail);
+  const [taxRate, setTaxRate] = useState(initialTaxRate.toFixed(2));
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(false);
 
@@ -50,31 +50,42 @@ export function EditLocationModal({
     setTouched(prev => ({ ...prev, [field]: true }));
   };
 
-  const isNameInvalid = touched.name && !name.trim();
+  const parsedTaxRate = Number.parseFloat(taxRate);
+  const isTaxRateValid = taxRate.trim() !== ''
+    && Number.isFinite(parsedTaxRate)
+    && parsedTaxRate >= 0
+    && parsedTaxRate <= 100;
+
   const isAddressInvalid = touched.address && !address.trim();
   const isPhoneInvalid = touched.phone && !phone.trim();
   const isEmailInvalid = touched.email && (!email.trim() || !/^[^\s@]+@[^\s@][^\s.@]*\.[^\s@]+$/.test(email));
+  const isTaxRateInvalid = touched.taxRate && !isTaxRateValid;
 
-  const isFormValid = name.trim() !== ''
-    && address.trim() !== ''
+  const isFormValid = address.trim() !== ''
     && phone.trim() !== ''
     && email.trim() !== ''
-    && /^[^\s@]+@[^\s@][^\s.@]*\.[^\s@]+$/.test(email);
+    && /^[^\s@]+@[^\s@][^\s.@]*\.[^\s@]+$/.test(email)
+    && isTaxRateValid;
 
   const handleSubmit = async () => {
     setIsLoading(true);
     try {
-      await onSave({ name, address, phone, email });
+      await onSave({
+        address,
+        phone,
+        email,
+        taxRate: Math.round(parsedTaxRate * 100) / 100,
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleCancel = () => {
-    setName(initialName);
     setAddress(initialAddress);
     setPhone(initialPhone);
     setEmail(initialEmail);
+    setTaxRate(initialTaxRate.toFixed(2));
     setTouched({});
     onClose();
   };
@@ -82,10 +93,10 @@ export function EditLocationModal({
   // Reset state when modal opens with new data
   const handleOpenChange = (open: boolean) => {
     if (open) {
-      setName(initialName);
       setAddress(initialAddress);
       setPhone(initialPhone);
       setEmail(initialEmail);
+      setTaxRate(initialTaxRate.toFixed(2));
       setTouched({});
     } else {
       handleCancel();
@@ -100,21 +111,6 @@ export function EditLocationModal({
         </DialogHeader>
 
         <div className="space-y-6 py-4">
-          {/* Location Name */}
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">{t('name_label')}</label>
-            <Input
-              placeholder={t('name_placeholder')}
-              value={name}
-              onChange={e => setName(e.target.value)}
-              onBlur={() => handleInputBlur('name')}
-              error={isNameInvalid}
-            />
-            {isNameInvalid && (
-              <p className="text-xs text-destructive">{t('name_error')}</p>
-            )}
-          </div>
-
           {/* Address */}
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">{t('address_label')}</label>
@@ -158,6 +154,30 @@ export function EditLocationModal({
             />
             {isEmailInvalid && (
               <p className="text-xs text-destructive">{t('email_error')}</p>
+            )}
+          </div>
+
+          {/* Tax Rate */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">{t('tax_rate_label')}</label>
+            <div className="relative">
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                placeholder={t('tax_rate_placeholder')}
+                className="pr-8"
+                value={taxRate}
+                onChange={e => setTaxRate(e.target.value)}
+                onBlur={() => handleInputBlur('taxRate')}
+                error={isTaxRateInvalid}
+              />
+              <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+            </div>
+            <p className="text-xs text-muted-foreground">{t('tax_rate_helper')}</p>
+            {isTaxRateInvalid && (
+              <p className="text-xs text-destructive">{t('tax_rate_error')}</p>
             )}
           </div>
 

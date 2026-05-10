@@ -41,10 +41,10 @@ export const organizationSchema = pgTable(
       { mode: 'number' },
     ),
     iqproPaymentMethodId: text('iqpro_payment_method_id'),
-    locationName: text('location_name'),
     locationAddress: text('location_address'),
     locationPhone: text('location_phone'),
     locationEmail: text('location_email'),
+    locationTaxRate: real('location_tax_rate').default(0).notNull(),
     updatedAt: timestamp('updated_at', { mode: 'date' })
       .defaultNow()
       .$onUpdate(() => new Date())
