@@ -1,7 +1,7 @@
 'use client';
 
 import { useClerk } from '@clerk/nextjs';
-import { BarChart3, BookMarked, Briefcase, Building, CircleUser, FileSignature, Home, LogOut, Mail, Map, Megaphone, Package, Settings, Users, Users2 } from 'lucide-react';
+import { BarChart3, BookMarked, Briefcase, Building, CircleUser, FileSignature, FileText, Home, LogOut, Mail, Map, Megaphone, Package, Settings, Shield, Users, Users2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { Badge } from '@/components/ui/badge';
 import { Sidebar, SidebarContent, SidebarHeader, SidebarRail } from '@/components/ui/sidebar';
@@ -138,13 +138,30 @@ export const AppSidebar = ({ userRole, ...props }: AppSidebarProps) => {
           label=""
           items={[
             {
+              title: t('terms_of_use'),
+              url: '/terms',
+              icon: FileText,
+              external: true,
+            },
+            {
+              title: t('privacy_policy'),
+              url: '/privacy',
+              icon: Shield,
+              external: true,
+            },
+          ]}
+          className="mt-auto"
+        />
+        <AppSidebarNav
+          label=""
+          items={[
+            {
               title: t('log_out'),
               url: '/dashboard/logout',
               icon: LogOut,
               onClick: () => signOut({ redirectUrl: '/' }),
             },
           ]}
-          className="mt-auto"
         />
       </SidebarContent>
       <SidebarRail />

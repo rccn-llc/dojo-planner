@@ -2,6 +2,7 @@
 
 import type { LucideIcon } from 'lucide-react';
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
+import { ExternalLink } from 'lucide-react';
 import { useLocale } from 'next-intl';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -22,6 +23,7 @@ export const AppSidebarNav = (props: {
     onClick?: () => void | Promise<void>;
     disabled?: boolean;
     hidden?: boolean;
+    external?: boolean;
   }[];
 } & ComponentPropsWithoutRef<typeof SidebarGroup>) => {
   const { toggleSidebar, isMobile } = useSidebar();
@@ -91,10 +93,19 @@ export const AppSidebarNav = (props: {
                               }
                             }}
                           >
-                            <Link href={item.disabled ? '#' : item.url} className="flex w-full items-center justify-between">
+                            <Link
+                              href={item.disabled ? '#' : item.url}
+                              className="flex w-full items-center justify-between"
+                              {...(item.external && { target: '_blank', rel: 'noopener noreferrer' })}
+                            >
                               <div className="flex items-center gap-2">
                                 <item.icon size={16} />
-                                <span>{item.title}</span>
+                                <span className="inline-flex items-center gap-1">
+                                  {item.title}
+                                  {item.external && (
+                                    <ExternalLink size={10} className="opacity-60" aria-hidden="true" />
+                                  )}
+                                </span>
                               </div>
                               {item.badge && (
                                 <span className="pointer-events-none">
