@@ -4,10 +4,18 @@
  * All calls go directly through `fetch` with an OAuth bearer token — no SDK
  * dependency. Every request and response is logged in full so vague IQPro
  * 4xx errors can be diagnosed from Better Stack without re-running the call.
+ *
+ * Configuration is passed in as an `IQProConfig` object (one per organization
+ * for customer payments, one platform-wide config for SaaS billing). The
+ * resolver lives in `IQProConfigService` — keeping the lib free of DB imports
+ * makes it trivial to mock and avoids circular dependencies.
  */
 
+import type { IQProConfig } from '@/services/IQProConfigService';
 import { Env } from './Env';
 import { logger } from './Logger';
+
+export type { IQProConfig };
 
 // ===== Tokenization config types =====
 
@@ -20,38 +28,32 @@ export type TokenizationIframeConfig = {
   iframeScriptUrl: string;
 };
 
-/**
- * Check if IQPro payment processing is configured.
- * Returns false if any required env var is missing.
- */
-export function isIQProConfigured(): boolean {
-  return !!(
-    Env.IQPRO_CLIENT_ID
-    && Env.IQPRO_CLIENT_SECRET
-    && Env.IQPRO_SCOPE
-    && Env.IQPRO_OAUTH_URL
-    && Env.IQPRO_BASE_URL
-    && Env.IQPRO_GATEWAY_ID
-  );
-}
+// ===== OAuth token cache =====
+//
+// Keyed by clientId — the same credentials produce the same token regardless
+// of which org requested it, so deduplication is safe. (oauthUrl and scope are
+// platform-wide env vars and don't vary.) Lazy eviction on access; hard cap of
+// 100 entries with the soonest-to-expire entry dropped on overflow.
 
-// ===== OAuth token (cached per process) =====
+type CachedToken = { token: string; expiresAt: number };
+const oauthTokenCache = new Map<string, CachedToken>();
+const TOKEN_CACHE_MAX = 100;
 
-let cachedOAuthToken: { token: string; expiresAt: number } | null = null;
-
-async function getOAuthToken(): Promise<string> {
-  if (cachedOAuthToken && Date.now() < cachedOAuthToken.expiresAt) {
-    return cachedOAuthToken.token;
+async function getOAuthToken(config: IQProConfig): Promise<string> {
+  const key = config.clientId;
+  const cached = oauthTokenCache.get(key);
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.token;
   }
 
-  const res = await fetch(Env.IQPRO_OAUTH_URL!, {
+  const res = await fetch(config.oauthUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       grant_type: 'client_credentials',
-      client_id: Env.IQPRO_CLIENT_ID!,
-      client_secret: Env.IQPRO_CLIENT_SECRET!,
-      scope: Env.IQPRO_SCOPE!,
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+      scope: config.scope,
     }),
   });
 
@@ -61,35 +63,44 @@ async function getOAuthToken(): Promise<string> {
 
   const data = await res.json();
   const expiresIn = (data.expires_in ?? 3600) as number;
-
-  cachedOAuthToken = {
+  const entry: CachedToken = {
     token: data.access_token as string,
-    // Expire 60s early to avoid edge-case clock issues
     expiresAt: Date.now() + (expiresIn - 60) * 1000,
   };
 
-  return cachedOAuthToken.token;
+  if (oauthTokenCache.size >= TOKEN_CACHE_MAX) {
+    let oldestKey: string | undefined;
+    let oldestExpiry = Infinity;
+    for (const [k, v] of oauthTokenCache) {
+      if (v.expiresAt < oldestExpiry) {
+        oldestExpiry = v.expiresAt;
+        oldestKey = k;
+      }
+    }
+    if (oldestKey !== undefined) {
+      oauthTokenCache.delete(oldestKey);
+    }
+  }
+  oauthTokenCache.set(key, entry);
+
+  return entry.token;
 }
 
 // ===== REST helpers =====
 
-/**
- * Authenticated POST to the IQPro gateway API.
- * Logs the full request body and full response body (or error body).
- */
 export async function iqproPost<T = Record<string, unknown>>(
+  config: IQProConfig,
   path: string,
   body: unknown,
 ): Promise<T> {
-  const token = await getOAuthToken();
-  const baseUrl = Env.IQPRO_BASE_URL!;
+  const token = await getOAuthToken(config);
 
   logger.info('[IQPro] POST request', {
     path,
     body: JSON.stringify(body, null, 2),
   });
 
-  const res = await fetch(`${baseUrl}${path}`, {
+  const res = await fetch(`${config.baseUrl}${path}`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -118,23 +129,19 @@ export async function iqproPost<T = Record<string, unknown>>(
   return text ? (JSON.parse(text) as T) : ({} as T);
 }
 
-/**
- * Authenticated PUT to the IQPro gateway API.
- * Logs the full request body and full response body (or error body).
- */
 export async function iqproPut<T = Record<string, unknown>>(
+  config: IQProConfig,
   path: string,
   body: unknown,
 ): Promise<T> {
-  const token = await getOAuthToken();
-  const baseUrl = Env.IQPRO_BASE_URL!;
+  const token = await getOAuthToken(config);
 
   logger.info('[IQPro] PUT request', {
     path,
     body: JSON.stringify(body, null, 2),
   });
 
-  const res = await fetch(`${baseUrl}${path}`, {
+  const res = await fetch(`${config.baseUrl}${path}`, {
     method: 'PUT',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -163,19 +170,15 @@ export async function iqproPut<T = Record<string, unknown>>(
   return text ? (JSON.parse(text) as T) : ({} as T);
 }
 
-/**
- * Authenticated GET to the IQPro gateway API.
- * Logs the path and full response body (or error body).
- */
 export async function iqproGet<T = Record<string, unknown>>(
+  config: IQProConfig,
   path: string,
 ): Promise<T> {
-  const token = await getOAuthToken();
-  const baseUrl = Env.IQPRO_BASE_URL!;
+  const token = await getOAuthToken(config);
 
   logger.info('[IQPro] GET request', { path });
 
-  const res = await fetch(`${baseUrl}${path}`, {
+  const res = await fetch(`${config.baseUrl}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 
@@ -201,20 +204,12 @@ export async function iqproGet<T = Record<string, unknown>>(
 
 // ===== Tokenization config =====
 
-/**
- * Fetch the tokenization iframe configuration from the IQPro API.
- * Returns null if IQPro is not configured.
- */
-export async function getTokenizationConfig(clientOrigin: string): Promise<TokenizationIframeConfig | null> {
-  if (!isIQProConfigured()) {
-    return null;
-  }
-
-  const token = await getOAuthToken();
-  const baseUrl = Env.IQPRO_BASE_URL!;
-  const gatewayId = Env.IQPRO_GATEWAY_ID!;
-
-  const url = `${baseUrl}/api/v1/gateway/${gatewayId}/tokenization/configuration`;
+export async function getTokenizationConfig(
+  config: IQProConfig,
+  clientOrigin: string,
+): Promise<TokenizationIframeConfig> {
+  const token = await getOAuthToken(config);
+  const url = `${config.baseUrl}/api/v1/gateway/${config.gatewayId}/tokenization/configuration`;
 
   const res = await fetch(url, {
     headers: {
@@ -234,8 +229,6 @@ export async function getTokenizationConfig(clientOrigin: string): Promise<Token
 
   const json = await res.json();
 
-  // The iqProV2 config may live under iframeConfiguration or mobileConfiguration
-  // depending on gateway setup. Both contain the same TokenEx fields.
   const iframeConfig
     = json?.data?.iframeConfiguration?.iqProV2
       ?? json?.data?.mobileConfiguration?.iqProV2;
@@ -247,8 +240,7 @@ export async function getTokenizationConfig(clientOrigin: string): Promise<Token
     throw new Error('Tokenization config missing iframe configuration');
   }
 
-  // Derive iframe script URL from base URL (sandbox vs production)
-  const isSandbox = baseUrl.includes('sandbox');
+  const isSandbox = config.baseUrl.includes('sandbox');
   const iframeScriptUrl = isSandbox
     ? 'https://sandbox.api.basyspro.com/Iframe/iframe/iframe-v3.js'
     : 'https://api.basyspro.com/Iframe/iframe/iframe-v3.js';
@@ -278,18 +270,12 @@ export type TokenizeAchResult = {
   achToken: string;
 };
 
-/**
- * Tokenize an ACH account number via the IQPro Vault API.
- * Returns an achToken that can be used in place of the raw account number.
- */
-export async function tokenizeAch(params: TokenizeAchParams): Promise<TokenizeAchResult> {
-  if (!isIQProConfigured()) {
-    throw new Error('IQPro is not configured');
-  }
-
-  const token = await getOAuthToken();
-  // The vault API lives at the domain root, not under the /iqsaas/v1 path prefix
-  const vaultBaseUrl = new URL(Env.IQPRO_BASE_URL!).origin;
+export async function tokenizeAch(
+  config: IQProConfig,
+  params: TokenizeAchParams,
+): Promise<TokenizeAchResult> {
+  const token = await getOAuthToken(config);
+  const vaultBaseUrl = new URL(config.baseUrl).origin;
   const requestBody = {
     accountNumber: params.accountNumber,
     routingNumber: params.routingNumber,
@@ -328,7 +314,6 @@ export async function tokenizeAch(params: TokenizeAchParams): Promise<TokenizeAc
   });
 
   const json = text ? JSON.parse(text) : {};
-  // The vault API returns { data: { achId, maskedAccount } }
   const achToken = (json?.data?.achId ?? json?.achToken ?? json?.data?.achToken ?? json?.token) as string | undefined;
 
   if (!achToken) {
@@ -349,28 +334,19 @@ export type GatewayProcessors = {
   achProcessorId: string | null;
 };
 
-let cachedProcessors: GatewayProcessors | null = null;
+const processorsCache = new Map<string, GatewayProcessors>();
 
-/**
- * Fetch the default card and ACH processor IDs for the configured gateway.
- * Results are cached for the lifetime of the process.
- */
-export async function getGatewayProcessors(): Promise<GatewayProcessors> {
-  if (cachedProcessors) {
-    return cachedProcessors;
+export async function getGatewayProcessors(config: IQProConfig): Promise<GatewayProcessors> {
+  const cached = processorsCache.get(config.gatewayId);
+  if (cached) {
+    return cached;
   }
 
-  if (!isIQProConfigured()) {
-    return { cardProcessorId: null, achProcessorId: null };
-  }
+  const token = await getOAuthToken(config);
 
-  const token = await getOAuthToken();
-  const baseUrl = Env.IQPRO_BASE_URL!;
-  const gatewayId = Env.IQPRO_GATEWAY_ID!;
+  logger.info('[IQPro] Gateway config request', { gatewayId: config.gatewayId });
 
-  logger.info('[IQPro] Gateway config request', { gatewayId });
-
-  const res = await fetch(`${baseUrl}/api/gateway/${gatewayId}`, {
+  const res = await fetch(`${config.baseUrl}/api/gateway/${config.gatewayId}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 
@@ -399,23 +375,18 @@ export async function getGatewayProcessors(): Promise<GatewayProcessors> {
   const defaultCard = processors.find(p => p.isDefaultCard);
   const defaultAch = processors.find(p => p.isDefaultAch);
 
-  cachedProcessors = {
+  const result: GatewayProcessors = {
     cardProcessorId: defaultCard?.processorId ?? null,
     achProcessorId: defaultAch?.processorId ?? null,
   };
+  processorsCache.set(config.gatewayId, result);
 
-  logger.info('[IQPro] Gateway processors loaded', cachedProcessors);
-  return cachedProcessors;
+  logger.info('[IQPro] Gateway processors loaded', result);
+  return result;
 }
 
 // ===== Service fee config =====
 
-/**
- * Service fee percentage applied to EVERY transaction. Passed to IQPro as a
- * paymentAdjustment of type "ServiceFee" (percentage, not flatAmount — IQPro
- * rejects flatAmount on ServiceFee adjustments). The flat amount is computed
- * by IQPro's /calculatefees endpoint per Basys team guidance.
- */
 function getServiceFeePct(): number {
   const fromEnv = Env.SERVICE_FEE_PCT?.trim();
   if (!fromEnv) {
@@ -435,12 +406,12 @@ function roundCents(n: number): number {
 }
 
 export type ComputedFeeBreakdown = {
-  baseAmount: number; // subtotal - discount (amount fees are calculated on)
-  taxAmount: number; // taxable transactions only; 0 for memberships
-  taxPct: number; // the rate that was applied (0 if non-taxable)
-  serviceFeeAmount: number; // from IQPro /calculatefees (not computed locally)
-  serviceFeePct: number; // the rate that was requested
-  amount: number; // final total charged = base + tax + serviceFee
+  baseAmount: number;
+  taxAmount: number;
+  taxPct: number;
+  serviceFeeAmount: number;
+  serviceFeePct: number;
+  amount: number;
 };
 
 type CalculateServiceFeeParams = {
@@ -450,14 +421,10 @@ type CalculateServiceFeeParams = {
   creditCardBin?: string;
 };
 
-/**
- * Call IQPro's POST /transaction/calculatefees to get the service fee amount
- * for a given base. We send a single paymentAdjustment of type "ServiceFee"
- * with the configured percentage; IQPro returns the computed flat amount in
- * `serviceFeesAmount`.
- */
-async function fetchServiceFeeAmount(params: CalculateServiceFeeParams): Promise<number> {
-  const gatewayId = Env.IQPRO_GATEWAY_ID!;
+async function fetchServiceFeeAmount(
+  config: IQProConfig,
+  params: CalculateServiceFeeParams,
+): Promise<number> {
   const body: Record<string, unknown> = {
     baseAmount: params.baseAmount,
     addTaxToTotal: true,
@@ -468,7 +435,6 @@ async function fetchServiceFeeAmount(params: CalculateServiceFeeParams): Promise
       { type: 'ServiceFee', percentage: getServiceFeePct(), flatAmount: null },
     ],
   };
-  // IQPro accepts exactly one of token or creditCardBin.
   if (params.token) {
     body.token = params.token;
   } else if (params.creditCardBin) {
@@ -476,21 +442,16 @@ async function fetchServiceFeeAmount(params: CalculateServiceFeeParams): Promise
   }
 
   const res = await iqproPost<{ data?: { serviceFeesAmount?: number } }>(
-    `/api/gateway/${gatewayId}/transaction/calculatefees`,
+    config,
+    `/api/gateway/${config.gatewayId}/transaction/calculatefees`,
     body,
   );
   const data = (res.data ?? res) as { serviceFeesAmount?: number };
   return roundCents(data.serviceFeesAmount ?? 0);
 }
 
-/**
- * Compute the full fee breakdown for a transaction.
- * - Tax is computed locally (taxable only; 0 for memberships). The caller
- *   supplies the org-specific tax rate via `taxStatePct`.
- * - Service fee amount is computed by IQPro via /calculatefees, using the
- *   configured ServiceFee percentage. A processor ID + token-or-BIN are required.
- */
 export async function computeFeeBreakdown(
+  config: IQProConfig,
   baseAmount: number,
   isTaxable: boolean,
   taxStatePct: number,
@@ -500,7 +461,7 @@ export async function computeFeeBreakdown(
   const taxPct = isTaxable ? taxStatePct : 0;
   const serviceFeePct = getServiceFeePct();
   const taxAmount = roundCents(base * (taxPct / 100));
-  const serviceFeeAmount = await fetchServiceFeeAmount({ ...serviceFeeLookup, baseAmount: base });
+  const serviceFeeAmount = await fetchServiceFeeAmount(config, { ...serviceFeeLookup, baseAmount: base });
   const amount = roundCents(base + taxAmount + serviceFeeAmount);
   return {
     baseAmount: base,
@@ -512,18 +473,6 @@ export async function computeFeeBreakdown(
   };
 }
 
-/**
- * Build the paymentAdjustments entry for the service fee.
- *
- * IQPro requires ServiceFee adjustments to be expressed as a percentage only —
- * passing a flatAmount with type: "ServiceFee" fails validation with
- * "ServiceFee must be expressed as a percentage". The gateway computes the
- * flat amount itself from the percentage.
- *
- * We still call /calculatefees upstream to preview the exact flat amount
- * (and surface it in our UI/receipts), but on the /transaction call we only
- * send the percentage.
- */
 export function buildServiceFeeAdjustment(breakdown: ComputedFeeBreakdown): {
   type: string;
   percentage: number;
@@ -536,16 +485,6 @@ export function buildServiceFeeAdjustment(breakdown: ComputedFeeBreakdown): {
   };
 }
 
-/**
- * Build the paymentAdjustments entry for sales tax. Used for TAXABLE
- * transactions only. Per Basys team guidance, tax is expressed solely via this
- * paymentAdjustment (not via remit.taxAmount) so it shows up distinctly in
- * reporting.
- *
- * IQPro requires Tax adjustments to be expressed as a flat amount only —
- * passing a percentage with type: "Tax" fails validation with
- * "Tax must be expressed as a flat amount".
- */
 export function buildTaxAdjustment(breakdown: ComputedFeeBreakdown): {
   type: string;
   percentage: null;
@@ -560,12 +499,6 @@ export function buildTaxAdjustment(breakdown: ComputedFeeBreakdown): {
 
 // ===== Transaction response parsing =====
 
-/**
- * Parse an IQPro transaction response into an approval status. IQPro returns
- * `status: "Captured" | "Settled" | "Authorized" | "Declined" | "Failed" |
- * "PendingSettlement"` etc. Anything not in the approved set is treated as
- * declined for safety — we never want to treat an ambiguous status as approved.
- */
 export function mapTransactionStatus(txData: Record<string, unknown>): 'approved' | 'declined' {
   const raw = ((txData.status ?? '') as string).toLowerCase();
   if (raw === 'captured' || raw === 'settled' || raw === 'authorized' || raw === 'pendingsettlement') {
@@ -574,11 +507,6 @@ export function mapTransactionStatus(txData: Record<string, unknown>): 'approved
   return 'declined';
 }
 
-/**
- * Throws if the transaction was not approved. The thrown Error's message
- * includes IQPro's processorResponseText when available so decline reasons
- * bubble up cleanly to the client.
- */
 export function assertTransactionApproved(txData: Record<string, unknown>): void {
   if (mapTransactionStatus(txData) === 'approved') {
     return;
@@ -601,22 +529,14 @@ export type SavedPaymentMethodInfo = {
   achToken?: string;
 };
 
-/**
- * Fetch a single saved payment method's details (BIN + last4 for card, achToken
- * for ACH) by querying the customer record. Used for vaulted-charge fee
- * calculation, since IQPro's /calculatefees endpoint requires a token or BIN
- * to derive the surcharge / service fee.
- */
 export async function getCustomerPaymentMethod(
+  config: IQProConfig,
   customerId: string,
   paymentMethodId: string,
 ): Promise<SavedPaymentMethodInfo | null> {
-  if (!isIQProConfigured()) {
-    return null;
-  }
-  const gatewayId = Env.IQPRO_GATEWAY_ID!;
   const res = await iqproGet<{ data?: Record<string, unknown> }>(
-    `/api/gateway/${gatewayId}/customer/${customerId}`,
+    config,
+    `/api/gateway/${config.gatewayId}/customer/${customerId}`,
   );
   const data = (res.data ?? res) as Record<string, unknown>;
   const paymentMethods = (data.paymentMethods ?? []) as Array<Record<string, unknown>>;
@@ -644,12 +564,12 @@ export async function getCustomerPaymentMethod(
   return null;
 }
 
-// Exported for testing – reset cached OAuth token
-export function resetOAuthToken(): void {
-  cachedOAuthToken = null;
+// ===== Test helpers =====
+
+export function resetOAuthTokenCache(): void {
+  oauthTokenCache.clear();
 }
 
-// Exported for testing – reset cached gateway processors
-export function resetGatewayProcessors(): void {
-  cachedProcessors = null;
+export function resetGatewayProcessorsCache(): void {
+  processorsCache.clear();
 }

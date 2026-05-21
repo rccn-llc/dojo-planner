@@ -7,8 +7,7 @@
  */
 
 import type { BillingType, PaymentMethod } from '@/hooks/useAddMemberWizard';
-
-import { isIQProConfigured } from '@/libs/IQPro';
+import type { IQProConfig } from '@/libs/IQPro';
 
 // ===== Provider-agnostic types =====
 
@@ -202,32 +201,27 @@ export type SubscriptionResult = {
 };
 
 // ===== Provider interface =====
+//
+// Each method receives an `IQProConfig` so the provider can target the right
+// merchant gateway for the call (per-org for customer payments, platform for
+// SaaS billing). Resolved by the caller and passed in.
 
 export type IPaymentProvider = {
-  createCustomer: (params: CreateCustomerParams) => Promise<CreateCustomerResult>;
-  createPaymentMethod: (params: CreatePaymentMethodParams) => Promise<CreatePaymentMethodResult>;
-  processPayment: (params: ProcessPaymentParams) => Promise<PaymentResult>;
-  createSubscription: (params: CreateSubscriptionParams) => Promise<SubscriptionResult>;
+  createCustomer: (config: IQProConfig, params: CreateCustomerParams) => Promise<CreateCustomerResult>;
+  createPaymentMethod: (config: IQProConfig, params: CreatePaymentMethodParams) => Promise<CreatePaymentMethodResult>;
+  processPayment: (config: IQProConfig, params: ProcessPaymentParams) => Promise<PaymentResult>;
+  createSubscription: (config: IQProConfig, params: CreateSubscriptionParams) => Promise<SubscriptionResult>;
 };
 
 // ===== Factory =====
 
-export function isPaymentEnabled(): boolean {
-  return isIQProConfigured();
-}
-
 let cachedProvider: IPaymentProvider | null = null;
 
 export async function getPaymentProvider(): Promise<IPaymentProvider> {
-  if (!isPaymentEnabled()) {
-    throw new Error('Payment processing is not configured. Set IQPRO_* environment variables.');
-  }
-
   if (!cachedProvider) {
     const { IQProPaymentProvider } = await import('./IQProPaymentService');
     cachedProvider = new IQProPaymentProvider();
   }
-
   return cachedProvider;
 }
 

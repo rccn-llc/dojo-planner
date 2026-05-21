@@ -45,6 +45,10 @@ export const organizationSchema = pgTable(
     locationPhone: text('location_phone'),
     locationEmail: text('location_email'),
     locationTaxRate: real('location_tax_rate').default(0).notNull(),
+    // Per-org IQPro merchant credentials (override of IQPRO_* env vars)
+    iqproConfigClientId: text('iqpro_config_client_id'),
+    iqproConfigClientSecretEncrypted: text('iqpro_config_client_secret_enc'),
+    iqproConfigGatewayId: text('iqpro_config_gateway_id'),
     updatedAt: timestamp('updated_at', { mode: 'date' })
       .defaultNow()
       .$onUpdate(() => new Date())
@@ -56,6 +60,20 @@ export const organizationSchema = pgTable(
     uniqueIndex('iqpro_customer_id_idx').on(table.iqproCustomerId),
   ],
 );
+
+// Singleton row holding platform-level IQPro credentials used for
+// dojo-planner's own SaaS billing (charging customer orgs for the product).
+// The CHECK constraint id = 'singleton' enforces a single row.
+export const platformConfigSchema = pgTable('platform_config', {
+  id: text('id').primaryKey().default('singleton'),
+  iqproSaasClientId: text('iqpro_saas_client_id'),
+  iqproSaasClientSecretEncrypted: text('iqpro_saas_client_secret_enc'),
+  iqproSaasGatewayId: text('iqpro_saas_gateway_id'),
+  updatedAt: timestamp('updated_at', { mode: 'date' })
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
 
 // Training programs (e.g., Adult BJJ, Kids, Competition)
 export const programSchema = pgTable(

@@ -25,7 +25,7 @@ import type {
   SubscriptionResult,
 } from './PaymentProviderService';
 
-import { Env } from '@/libs/Env';
+import type { IQProConfig } from '@/libs/IQPro';
 import { getGatewayProcessors, iqproGet, iqproPost, tokenizeAch } from '@/libs/IQPro';
 import { logger } from '@/libs/Logger';
 
@@ -49,12 +49,13 @@ function normalizeCountry(country?: string): string {
 }
 
 export class IQProPaymentProvider implements IPaymentProvider {
-  async createCustomer(params: CreateCustomerParams): Promise<CreateCustomerResult> {
-    const gatewayId = Env.IQPRO_GATEWAY_ID!;
+  async createCustomer(config: IQProConfig, params: CreateCustomerParams): Promise<CreateCustomerResult> {
+    const gatewayId = config.gatewayId;
 
     logger.info('[IQPro] Creating customer', { memberId: params.memberId });
 
     const customerRes = await iqproPost<{ data?: Record<string, unknown> }>(
+      config,
       `/api/gateway/${gatewayId}/customer`,
       {
         name: `${params.firstName} ${params.lastName}`,
@@ -87,6 +88,7 @@ export class IQProPaymentProvider implements IPaymentProvider {
     let billingAddressId: string | undefined;
     if (params.address) {
       const detailRes = await iqproGet<{ data?: Record<string, unknown> }>(
+        config,
         `/api/gateway/${gatewayId}/customer/${customerId}`,
       );
       const detailData = (detailRes.data ?? detailRes) as Record<string, unknown>;
@@ -99,8 +101,8 @@ export class IQProPaymentProvider implements IPaymentProvider {
     return { customerId, billingAddressId };
   }
 
-  async createPaymentMethod(params: CreatePaymentMethodParams): Promise<CreatePaymentMethodResult> {
-    const gatewayId = Env.IQPRO_GATEWAY_ID!;
+  async createPaymentMethod(config: IQProConfig, params: CreatePaymentMethodParams): Promise<CreatePaymentMethodResult> {
+    const gatewayId = config.gatewayId;
 
     logger.info('[IQPro] Creating payment method', {
       customerId: params.customerId,
@@ -125,6 +127,7 @@ export class IQProPaymentProvider implements IPaymentProvider {
       const maskedCard = `${params.cardFirstSix}******${params.cardLastFour}`;
 
       const pmRes = await iqproPost<{ data?: Record<string, unknown> }>(
+        config,
         `/api/gateway/${gatewayId}/customer/${params.customerId}/payment`,
         {
           card: {
@@ -159,7 +162,7 @@ export class IQProPaymentProvider implements IPaymentProvider {
     // ACH — tokenize account number via Vault API, then create payment method.
     const accountType = params.achAccountType ?? 'Checking';
 
-    const tokenResult = await tokenizeAch({
+    const tokenResult = await tokenizeAch(config, {
       accountNumber: params.achAccountNumber!,
       routingNumber: params.achRoutingNumber!,
       secCode: 'PPD',
@@ -167,6 +170,7 @@ export class IQProPaymentProvider implements IPaymentProvider {
     });
 
     const pmRes = await iqproPost<{ data?: Record<string, unknown> }>(
+      config,
       `/api/gateway/${gatewayId}/customer/${params.customerId}/payment`,
       {
         ach: {
@@ -205,8 +209,8 @@ export class IQProPaymentProvider implements IPaymentProvider {
     };
   }
 
-  async processPayment(params: ProcessPaymentParams): Promise<PaymentResult> {
-    const gatewayId = Env.IQPRO_GATEWAY_ID!;
+  async processPayment(config: IQProConfig, params: ProcessPaymentParams): Promise<PaymentResult> {
+    const gatewayId = config.gatewayId;
     const isAch = !!params.ach;
     const vaulted = !!params.vaulted;
     const isTaxable = !!params.isTaxable;
@@ -348,6 +352,7 @@ export class IQProPaymentProvider implements IPaymentProvider {
       };
 
       const txRes = await iqproPost<{ data?: Record<string, unknown> }>(
+        config,
         `/api/gateway/${gatewayId}/transaction`,
         txPayload,
       );
@@ -360,7 +365,7 @@ export class IQProPaymentProvider implements IPaymentProvider {
       // Sandbox tolerance: Basys's sandbox ACH processor rejects the standard
       // test routing/account numbers with a certification-error message.
       // Treat that as a successful pendingsettlement so ACH dev flows work.
-      const isSandbox = Env.IQPRO_BASE_URL?.includes('sandbox') ?? false;
+      const isSandbox = config.baseUrl.includes('sandbox');
       const isCertError = responseText?.includes('not a valid transaction for certification') ?? false;
 
       const transactionId = (txData.transactionId ?? txData.id ?? '') as string;
@@ -401,9 +406,9 @@ export class IQProPaymentProvider implements IPaymentProvider {
     }
   }
 
-  async createSubscription(params: CreateSubscriptionParams): Promise<SubscriptionResult> {
-    const gatewayId = Env.IQPRO_GATEWAY_ID!;
-    const processors = await getGatewayProcessors();
+  async createSubscription(config: IQProConfig, params: CreateSubscriptionParams): Promise<SubscriptionResult> {
+    const gatewayId = config.gatewayId;
+    const processors = await getGatewayProcessors(config);
 
     logger.info('[IQPro] Creating subscription', {
       customerId: params.customerId,
@@ -499,6 +504,7 @@ export class IQProPaymentProvider implements IPaymentProvider {
       };
 
       const res = await iqproPost<{ data?: Record<string, unknown> }>(
+        config,
         `/api/gateway/${gatewayId}/subscription`,
         subscriptionPayload,
       );

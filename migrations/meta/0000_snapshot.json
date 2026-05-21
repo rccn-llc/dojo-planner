@@ -3718,6 +3718,24 @@
           "notNull": true,
           "default": 0
         },
+        "iqpro_config_client_id": {
+          "name": "iqpro_config_client_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "iqpro_config_client_secret_enc": {
+          "name": "iqpro_config_client_secret_enc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "iqpro_config_gateway_id": {
+          "name": "iqpro_config_gateway_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "updated_at": {
           "name": "updated_at",
           "type": "timestamp",
@@ -3770,6 +3788,56 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.platform_config": {
+      "name": "platform_config",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "'singleton'"
+        },
+        "iqpro_saas_client_id": {
+          "name": "iqpro_saas_client_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "iqpro_saas_client_secret_enc": {
+          "name": "iqpro_saas_client_secret_enc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "iqpro_saas_gateway_id": {
+          "name": "iqpro_saas_gateway_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "platform_config_singleton": {
+          "name": "platform_config_singleton",
+          "value": "\"id\" = 'singleton'"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.payment_method": {

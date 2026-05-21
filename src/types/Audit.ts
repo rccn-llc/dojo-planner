@@ -126,6 +126,10 @@ export const AUDIT_ACTION = {
   // Organization operations
   ORGANIZATION_LOCATION_UPDATE: 'organizationLocation.update',
 
+  // IQPro merchant configuration
+  IQPRO_CONFIG_UPDATE: 'iqproConfig.update',
+  PLATFORM_IQPRO_CONFIG_UPDATE: 'platformIqproConfig.update',
+
   // Note operations
   NOTE_CREATE: 'note.create',
   NOTE_UPDATE: 'note.update',

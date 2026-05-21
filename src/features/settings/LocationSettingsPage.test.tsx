@@ -36,6 +36,13 @@ vi.mock('next-intl', () => ({
 
 const refetchMock = vi.fn();
 const updateLocationMock = vi.fn().mockResolvedValue({ location: {} });
+const getPaymentConfigMock = vi.fn().mockResolvedValue({
+  clientId: 'env-client-id',
+  gatewayId: 'env-gateway-id',
+  hasSecret: true,
+  source: 'env',
+});
+const updatePaymentConfigMock = vi.fn().mockResolvedValue({ success: true });
 
 let hookState: {
   location: { address: string | null; phone: string | null; email: string | null; taxRate: number };
@@ -64,6 +71,10 @@ vi.mock('@/libs/Orpc', () => ({
     organization: {
       updateLocation: (...args: unknown[]) => updateLocationMock(...args),
     },
+    paymentSettings: {
+      getConfig: (...args: unknown[]) => getPaymentConfigMock(...args),
+      updateConfig: (...args: unknown[]) => updatePaymentConfigMock(...args),
+    },
   },
 }));
 
@@ -81,6 +92,36 @@ describe('LocationSettingsPage', () => {
       },
       loading: false,
     };
+  });
+
+  describe('IQPro card role gating', () => {
+    it('hides the IQPro card entirely for non-management roles (e.g. front_desk)', async () => {
+      render(<LocationSettingsPage userRole="org:front_desk" />);
+
+      expect(page.getByText('IQPro Payment Gateway').elements()).toHaveLength(0);
+      // Front-desk shouldn't even fetch the config.
+      expect(getPaymentConfigMock).not.toHaveBeenCalled();
+    });
+
+    it('shows the IQPro card for academy_owner but HIDES the edit button', async () => {
+      render(<LocationSettingsPage userRole="org:academy_owner" />);
+
+      expect(page.getByText('IQPro Payment Gateway')).toBeDefined();
+      expect(page.getByRole('button', { name: /edit iqpro/i }).elements()).toHaveLength(0);
+    });
+
+    it('shows the IQPro card AND the edit button for admin', async () => {
+      render(<LocationSettingsPage userRole="org:admin" />);
+
+      expect(page.getByText('IQPro Payment Gateway')).toBeDefined();
+      expect(page.getByRole('button', { name: /edit iqpro/i })).toBeDefined();
+    });
+
+    it('hides the card when no role is provided (defensive default)', () => {
+      render(<LocationSettingsPage />);
+
+      expect(page.getByText('IQPro Payment Gateway').elements()).toHaveLength(0);
+    });
   });
 
   it('renders the page title', () => {
@@ -130,7 +171,7 @@ describe('LocationSettingsPage', () => {
   it('opens the edit modal when edit button is clicked', async () => {
     render(<LocationSettingsPage />);
 
-    const editButton = page.getByRole('button', { name: /edit/i });
+    const editButton = page.getByRole('button', { name: /edit location information/i });
     await userEvent.click(editButton.element());
 
     expect(page.getByText('Edit Location Information')).toBeDefined();
@@ -148,7 +189,7 @@ describe('LocationSettingsPage', () => {
   it('closes the modal when cancel is clicked', async () => {
     render(<LocationSettingsPage />);
 
-    const editButton = page.getByRole('button', { name: /edit/i });
+    const editButton = page.getByRole('button', { name: /edit location information/i });
     await userEvent.click(editButton.element());
 
     expect(page.getByText('Edit Location Information')).toBeDefined();
@@ -162,7 +203,7 @@ describe('LocationSettingsPage', () => {
   it('calls updateLocation and refetches when saving in the modal', async () => {
     render(<LocationSettingsPage />);
 
-    const editButton = page.getByRole('button', { name: /edit/i });
+    const editButton = page.getByRole('button', { name: /edit location information/i });
     await userEvent.click(editButton.element());
 
     const addressInput = page.getByPlaceholder('Enter address');

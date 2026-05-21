@@ -48,7 +48,6 @@ vi.mock('@/models/Schema', () => ({
 }));
 
 vi.mock('@/libs/IQPro', () => ({
-  isIQProConfigured: vi.fn().mockReturnValue(true),
   computeFeeBreakdown: vi.fn(),
   getCustomerPaymentMethod: vi.fn(),
   getGatewayProcessors: vi.fn().mockResolvedValue({
@@ -56,6 +55,16 @@ vi.mock('@/libs/IQPro', () => ({
     achProcessorId: 'ach_proc_001',
   }),
 }));
+
+const testConfig = {
+  clientId: 'test-client-id',
+  clientSecret: 'test-client-secret',
+  gatewayId: 'test-gateway-001',
+  scope: 'test-scope',
+  oauthUrl: 'https://sandbox.oauth.example.com/token',
+  baseUrl: 'https://sandbox.api.basyspro.com',
+  source: 'env' as const,
+};
 
 vi.mock('./OrganizationService', () => ({
   getOrganizationTaxRate: vi.fn().mockResolvedValue(3.75),
@@ -76,7 +85,6 @@ vi.mock('./PaymentProviderService', async () => {
   const actual = await vi.importActual<typeof import('./PaymentProviderService')>('./PaymentProviderService');
   return {
     ...actual,
-    isPaymentEnabled: vi.fn().mockReturnValue(true),
     getPaymentProvider: vi.fn().mockResolvedValue(mockProvider),
   };
 });
@@ -219,13 +227,14 @@ describe('processMemberPayment', () => {
     vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(baseFees);
 
     const { processMemberPayment } = await import('./MemberPaymentService');
-    const result = await processMemberPayment(baseParams);
+    const result = await processMemberPayment(testConfig, baseParams);
 
     expect(result.success).toBe(true);
     expect(result.status).toBe('approved');
 
     // Memberships are non-taxable by default; taxStatePct passed as 0
     expect(computeFeeBreakdown).toHaveBeenCalledWith(
+      testConfig,
       100,
       false,
       0,
@@ -233,6 +242,7 @@ describe('processMemberPayment', () => {
     );
 
     expect(mockProvider.processPayment).toHaveBeenCalledWith(
+      testConfig,
       expect.objectContaining({
         customerId: 'cust_123',
         paymentMethodId: 'pm_card_1',
@@ -256,7 +266,7 @@ describe('processMemberPayment', () => {
     vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(baseFees);
 
     const { processMemberPayment } = await import('./MemberPaymentService');
-    const result = await processMemberPayment({
+    const result = await processMemberPayment(testConfig, {
       ...baseParams,
       billingType: 'autopay',
       membershipPlanFrequency: 'monthly',
@@ -265,6 +275,7 @@ describe('processMemberPayment', () => {
 
     expect(result.success).toBe(true);
     expect(mockProvider.createSubscription).toHaveBeenCalledWith(
+      testConfig,
       expect.objectContaining({
         customerId: 'cust_123',
         paymentMethodId: 'pm_card_1',
@@ -279,6 +290,7 @@ describe('processMemberPayment', () => {
 
     expect(mockProvider.processPayment).toHaveBeenCalledTimes(1);
     expect(mockProvider.processPayment).toHaveBeenCalledWith(
+      testConfig,
       expect.objectContaining({
         amount: 103.75,
         metadata: expect.objectContaining({ iqproSubscriptionId: 'sub_42' }),
@@ -302,7 +314,7 @@ describe('processMemberPayment', () => {
     });
 
     const { processMemberPayment } = await import('./MemberPaymentService');
-    const result = await processMemberPayment({
+    const result = await processMemberPayment(testConfig, {
       ...baseParams,
       billingType: 'autopay',
       membershipPlanFrequency: 'monthly',
@@ -326,12 +338,12 @@ describe('processMemberPayment', () => {
     vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(baseFees);
 
     const { processMemberPayment } = await import('./MemberPaymentService');
-    await processMemberPayment({ ...baseParams, cardToken: undefined });
+    await processMemberPayment(testConfig, { ...baseParams, cardToken: undefined });
 
     const callArgs = vi.mocked(computeFeeBreakdown).mock.calls[0]!;
 
-    expect(callArgs[3]).toEqual(expect.objectContaining({ creditCardBin: '424242' }));
-    expect(callArgs[3]).not.toHaveProperty('token');
+    expect(callArgs[4]).toEqual(expect.objectContaining({ creditCardBin: '424242' }));
+    expect(callArgs[4]).not.toHaveProperty('token');
   });
 
   it('ACH new payment: passes achToken to fee calc, sends inline ach to provider', async () => {
@@ -349,7 +361,7 @@ describe('processMemberPayment', () => {
     });
 
     const { processMemberPayment } = await import('./MemberPaymentService');
-    await processMemberPayment({
+    await processMemberPayment(testConfig, {
       ...baseParams,
       paymentMethod: 'ach',
       cardToken: undefined,
@@ -361,11 +373,12 @@ describe('processMemberPayment', () => {
 
     const feeArgs = vi.mocked(computeFeeBreakdown).mock.calls[0]!;
 
-    expect(feeArgs[3].processorId).toBe('ach_proc_001');
-    expect(feeArgs[3].token).toBe('ach-tok-xyz');
-    expect(feeArgs[3]).not.toHaveProperty('creditCardBin');
+    expect(feeArgs[4].processorId).toBe('ach_proc_001');
+    expect(feeArgs[4].token).toBe('ach-tok-xyz');
+    expect(feeArgs[4]).not.toHaveProperty('creditCardBin');
 
     expect(mockProvider.processPayment).toHaveBeenCalledWith(
+      testConfig,
       expect.objectContaining({
         ach: {
           achToken: 'ach-tok-xyz',
@@ -382,12 +395,12 @@ describe('processMemberPayment', () => {
     vi.mocked(computeFeeBreakdown).mockResolvedValueOnce({ ...baseFees, baseAmount: 75, amount: 78.75 });
 
     const { processMemberPayment } = await import('./MemberPaymentService');
-    await processMemberPayment({
+    await processMemberPayment(testConfig, {
       ...baseParams,
       appliedCoupon: { id: 'cpn_1', code: 'SAVE25', type: 'Fixed Amount', amount: '25', description: '$25 off' },
     });
 
-    expect(computeFeeBreakdown).toHaveBeenCalledWith(75, false, 0, expect.any(Object));
+    expect(computeFeeBreakdown).toHaveBeenCalledWith(testConfig, 75, false, 0, expect.any(Object));
   });
 
   it('Percentage coupon: discount applied before fee calc', async () => {
@@ -395,12 +408,12 @@ describe('processMemberPayment', () => {
     vi.mocked(computeFeeBreakdown).mockResolvedValueOnce({ ...baseFees, baseAmount: 90, amount: 93.75 });
 
     const { processMemberPayment } = await import('./MemberPaymentService');
-    await processMemberPayment({
+    await processMemberPayment(testConfig, {
       ...baseParams,
       appliedCoupon: { id: 'cpn_2', code: 'TEN_PCT', type: 'Percentage', amount: '10', description: '10% off' },
     });
 
-    expect(computeFeeBreakdown).toHaveBeenCalledWith(90, false, 0, expect.any(Object));
+    expect(computeFeeBreakdown).toHaveBeenCalledWith(testConfig, 90, false, 0, expect.any(Object));
   });
 
   it('throws clear error when no gateway processor is configured', async () => {
@@ -411,7 +424,7 @@ describe('processMemberPayment', () => {
     });
 
     const { processMemberPayment } = await import('./MemberPaymentService');
-    const result = await processMemberPayment(baseParams);
+    const result = await processMemberPayment(testConfig, baseParams);
 
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/No card processor configured/);
@@ -423,10 +436,11 @@ describe('processMemberPayment', () => {
     vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(baseFees);
 
     const { processMemberPayment } = await import('./MemberPaymentService');
-    await processMemberPayment(baseParams);
+    await processMemberPayment(testConfig, baseParams);
 
     expect(mockProvider.createCustomer).not.toHaveBeenCalled();
     expect(mockProvider.processPayment).toHaveBeenCalledWith(
+      testConfig,
       expect.objectContaining({ customerId: 'cust_existing_999' }),
     );
   });
@@ -443,11 +457,12 @@ describe('processMemberPayment', () => {
     });
 
     const { processMemberPayment } = await import('./MemberPaymentService');
-    await processMemberPayment({ ...baseParams, isTaxable: true });
+    await processMemberPayment(testConfig, { ...baseParams, isTaxable: true });
 
     // taxStatePct (3.75 from getOrganizationTaxRate mock) is threaded through as 3rd arg
-    expect(computeFeeBreakdown).toHaveBeenCalledWith(100, true, 3.75, expect.any(Object));
+    expect(computeFeeBreakdown).toHaveBeenCalledWith(testConfig, 100, true, 3.75, expect.any(Object));
     expect(mockProvider.processPayment).toHaveBeenCalledWith(
+      testConfig,
       expect.objectContaining({ isTaxable: true }),
     );
   });
@@ -459,10 +474,10 @@ describe('processMemberPayment', () => {
     vi.mocked(getOrganizationTaxRate).mockResolvedValueOnce(5.25);
 
     const { processMemberPayment } = await import('./MemberPaymentService');
-    await processMemberPayment({ ...baseParams, isTaxable: true });
+    await processMemberPayment(testConfig, { ...baseParams, isTaxable: true });
 
     expect(getOrganizationTaxRate).toHaveBeenCalledWith('org_x');
-    expect(computeFeeBreakdown).toHaveBeenCalledWith(100, true, 5.25, expect.any(Object));
+    expect(computeFeeBreakdown).toHaveBeenCalledWith(testConfig, 100, true, 5.25, expect.any(Object));
   });
 
   it('isTaxable: false — does not call getOrganizationTaxRate', async () => {
@@ -472,10 +487,10 @@ describe('processMemberPayment', () => {
     vi.mocked(getOrganizationTaxRate).mockClear();
 
     const { processMemberPayment } = await import('./MemberPaymentService');
-    await processMemberPayment({ ...baseParams, isTaxable: false });
+    await processMemberPayment(testConfig, { ...baseParams, isTaxable: false });
 
     expect(getOrganizationTaxRate).not.toHaveBeenCalled();
-    expect(computeFeeBreakdown).toHaveBeenCalledWith(100, false, 0, expect.any(Object));
+    expect(computeFeeBreakdown).toHaveBeenCalledWith(testConfig, 100, false, 0, expect.any(Object));
   });
 
   // ── Saved-PM (vaulted) branch ────────────────────────────────────────────
@@ -484,7 +499,7 @@ describe('processMemberPayment', () => {
     resetDbMock({ existingCustomerId: null });
     const { processMemberPayment } = await import('./MemberPaymentService');
 
-    const result = await processMemberPayment({ ...baseParams, paymentMethodSource: 'saved' });
+    const result = await processMemberPayment(testConfig, { ...baseParams, paymentMethodSource: 'saved' });
 
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/no saved customer record/);
@@ -497,7 +512,7 @@ describe('processMemberPayment', () => {
     resetDbMock({ existingCustomerId: 'cust_have', savedPmRow: null });
     const { processMemberPayment } = await import('./MemberPaymentService');
 
-    const result = await processMemberPayment({ ...baseParams, paymentMethodSource: 'saved' });
+    const result = await processMemberPayment(testConfig, { ...baseParams, paymentMethodSource: 'saved' });
 
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/no saved payment method/);
@@ -518,19 +533,21 @@ describe('processMemberPayment', () => {
     vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(baseFees);
 
     const { processMemberPayment } = await import('./MemberPaymentService');
-    const result = await processMemberPayment({ ...baseParams, paymentMethodSource: 'saved' });
+    const result = await processMemberPayment(testConfig, { ...baseParams, paymentMethodSource: 'saved' });
 
     expect(result.success).toBe(true);
     expect(mockProvider.createCustomer).not.toHaveBeenCalled();
     expect(mockProvider.createPaymentMethod).not.toHaveBeenCalled();
-    expect(getCustomerPaymentMethod).toHaveBeenCalledWith('cust_have', 'pm_saved_1');
+    expect(getCustomerPaymentMethod).toHaveBeenCalledWith(testConfig, 'cust_have', 'pm_saved_1');
     expect(computeFeeBreakdown).toHaveBeenCalledWith(
+      testConfig,
       100,
       false,
       0,
       expect.objectContaining({ creditCardBin: '424242' }),
     );
     expect(mockProvider.processPayment).toHaveBeenCalledWith(
+      testConfig,
       expect.objectContaining({
         customerId: 'cust_have',
         paymentMethodId: 'pm_saved_1',
@@ -546,7 +563,7 @@ describe('processMemberPayment', () => {
     vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(baseFees);
 
     const { processMemberPayment } = await import('./MemberPaymentService');
-    await processMemberPayment(baseParams);
+    await processMemberPayment(testConfig, baseParams);
 
     expect(mockSendReceipt).toHaveBeenCalledTimes(1);
     expect(mockSendReceipt).toHaveBeenCalledWith(expect.objectContaining({
@@ -569,7 +586,7 @@ describe('processMemberPayment', () => {
     });
 
     const { processMemberPayment } = await import('./MemberPaymentService');
-    await processMemberPayment(baseParams);
+    await processMemberPayment(testConfig, baseParams);
 
     expect(mockSendReceipt).not.toHaveBeenCalled();
   });
@@ -579,7 +596,7 @@ describe('processMemberPayment', () => {
     vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(baseFees);
 
     const { processMemberPayment } = await import('./MemberPaymentService');
-    await processMemberPayment({
+    await processMemberPayment(testConfig, {
       ...baseParams,
       billingType: 'autopay',
       membershipPlanFrequency: 'monthly',

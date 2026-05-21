@@ -18,6 +18,7 @@ import type {
 } from './PaymentProviderService';
 
 import type { AppliedCoupon, BillingType, PaymentMethod } from '@/hooks/useAddMemberWizard';
+import type { IQProConfig } from '@/libs/IQPro';
 import { randomUUID } from 'node:crypto';
 
 import { and, desc, eq, sql } from 'drizzle-orm';
@@ -26,14 +27,13 @@ import {
   computeFeeBreakdown,
   getCustomerPaymentMethod,
   getGatewayProcessors,
-  isIQProConfigured,
 } from '@/libs/IQPro';
 import { logger } from '@/libs/Logger';
 import { couponSchema, couponUsageSchema, memberMembershipSchema, memberSchema, paymentMethodSchema, transactionSchema } from '@/models/Schema';
 
 import { sendPaymentReceiptEmail } from './EmailService';
 import { getOrganizationTaxRate } from './OrganizationService';
-import { getPaymentProvider, isPaymentEnabled } from './PaymentProviderService';
+import { getPaymentProvider } from './PaymentProviderService';
 
 // ===== Public types =====
 
@@ -148,12 +148,9 @@ export type RegisterPaymentMethodResult = {
 // ===== Main orchestration function =====
 
 export async function processMemberPayment(
+  config: IQProConfig,
   params: ProcessMemberPaymentParams,
 ): Promise<ProcessMemberPaymentResult> {
-  if (!isPaymentEnabled()) {
-    throw new Error('Payment processing is not configured. Set IQPRO_* environment variables.');
-  }
-
   // Per-user redemption limit — refuse before charging if this member has
   // already redeemed the coupon up to its perUserLimit. We re-fetch the coupon
   // from the DB rather than trusting the client's `appliedCoupon` payload.
@@ -241,7 +238,7 @@ export async function processMemberPayment(
       // Fetch the BIN (for card) or achToken (for ACH) from IQPro so
       // /calculatefees has a valid identifier. The endpoint requires exactly
       // one of token or creditCardBin.
-      const remoteInfo = await getCustomerPaymentMethod(customerId, paymentMethodId);
+      const remoteInfo = await getCustomerPaymentMethod(config, customerId, paymentMethodId);
       if (remoteInfo) {
         if (remoteInfo.type === 'card' && remoteInfo.firstSix) {
           feeBin = remoteInfo.firstSix;
@@ -276,7 +273,7 @@ export async function processMemberPayment(
       let resolvedCustomerId = existing[0]?.iqproCustomerId ?? null;
 
       if (!resolvedCustomerId) {
-        const created = await provider.createCustomer({
+        const created = await provider.createCustomer(config, {
           organizationId: params.organizationId,
           memberId: params.memberId,
           email: params.memberEmail,
@@ -300,7 +297,7 @@ export async function processMemberPayment(
       }
       customerId = resolvedCustomerId;
 
-      const pmResult = await provider.createPaymentMethod({
+      const pmResult = await provider.createPaymentMethod(config, {
         customerId,
         paymentMethod: params.paymentMethod,
         cardholderName: params.cardholderName,
@@ -342,7 +339,7 @@ export async function processMemberPayment(
     }
 
     // ── Step 2: Calculate authoritative fees (kiosk shape) ──────────
-    const processors = await getGatewayProcessors();
+    const processors = await getGatewayProcessors(config);
     const processorId = effectivePaymentMethod === 'card'
       ? processors.cardProcessorId
       : processors.achProcessorId;
@@ -356,6 +353,7 @@ export async function processMemberPayment(
     const taxStatePct = isTaxable ? await getOrganizationTaxRate(params.organizationId) : 0;
 
     const feeBreakdown: FeeBreakdown = await computeFeeBreakdown(
+      config,
       baseAmount,
       isTaxable,
       taxStatePct,
@@ -395,6 +393,7 @@ export async function processMemberPayment(
 
     if (isAutopay) {
       return await handleAutopay({
+        config,
         provider,
         params,
         customerId,
@@ -412,6 +411,7 @@ export async function processMemberPayment(
     }
 
     return await handleOneTimePayment({
+      config,
       provider,
       params,
       customerId,
@@ -438,12 +438,9 @@ export async function processMemberPayment(
 // ===== Register payment method only (no charge) =====
 
 export async function registerPaymentMethod(
+  config: IQProConfig,
   params: RegisterPaymentMethodParams,
 ): Promise<RegisterPaymentMethodResult> {
-  if (!isPaymentEnabled()) {
-    throw new Error('Payment processing is not configured. Set IQPRO_* environment variables.');
-  }
-
   const provider = await getPaymentProvider();
 
   try {
@@ -457,7 +454,7 @@ export async function registerPaymentMethod(
     let customerId = existing[0]?.iqproCustomerId ?? null;
 
     if (!customerId) {
-      const created = await provider.createCustomer({
+      const created = await provider.createCustomer(config, {
         organizationId: params.organizationId,
         memberId: params.memberId,
         email: params.memberEmail,
@@ -477,7 +474,7 @@ export async function registerPaymentMethod(
     }
 
     // Step 2: Create payment method (no charge)
-    const pmResult = await provider.createPaymentMethod({
+    const pmResult = await provider.createPaymentMethod(config, {
       customerId,
       paymentMethod: params.paymentMethod,
       cardholderName: params.cardholderName,
@@ -613,6 +610,7 @@ function fireReceiptEmail(args: {
 }
 
 type AutopayParams = {
+  config: IQProConfig;
   provider: Awaited<ReturnType<typeof getPaymentProvider>>;
   params: ProcessMemberPaymentParams;
   customerId: string;
@@ -629,9 +627,9 @@ type AutopayParams = {
 };
 
 async function handleAutopay(args: AutopayParams): Promise<ProcessMemberPaymentResult> {
-  const { provider, params, customerId, paymentMethodId, frequency, feeBreakdown, billingAddressId, billingAddress, lineItem, achData, vaulted, isTaxable } = args;
+  const { config, provider, params, customerId, paymentMethodId, frequency, feeBreakdown, billingAddressId, billingAddress, lineItem, achData, vaulted, isTaxable } = args;
 
-  const subResult = await provider.createSubscription({
+  const subResult = await provider.createSubscription(config, {
     customerId,
     paymentMethodId,
     amount: params.amount,
@@ -660,7 +658,7 @@ async function handleAutopay(args: AutopayParams): Promise<ProcessMemberPaymentR
   // IQPro subscriptions don't auto-charge on creation. Run an immediate Sale
   // for the first period so the member is charged on signup day. The recurring
   // schedule then takes over from the next billing date.
-  const initialCharge = await provider.processPayment({
+  const initialCharge = await provider.processPayment(config, {
     customerId,
     paymentMethodId,
     amount: feeBreakdown.amount,
@@ -776,6 +774,7 @@ async function handleAutopay(args: AutopayParams): Promise<ProcessMemberPaymentR
 }
 
 type OneTimeParams = {
+  config: IQProConfig;
   provider: Awaited<ReturnType<typeof getPaymentProvider>>;
   params: ProcessMemberPaymentParams;
   customerId: string;
@@ -791,9 +790,9 @@ type OneTimeParams = {
 };
 
 async function handleOneTimePayment(args: OneTimeParams): Promise<ProcessMemberPaymentResult> {
-  const { provider, params, customerId, paymentMethodId, feeBreakdown, billingAddressId, billingAddress, lineItem, achData, vaulted, isTaxable } = args;
+  const { config, provider, params, customerId, paymentMethodId, feeBreakdown, billingAddressId, billingAddress, lineItem, achData, vaulted, isTaxable } = args;
 
-  const payResult = await provider.processPayment({
+  const payResult = await provider.processPayment(config, {
     customerId,
     paymentMethodId,
     amount: feeBreakdown.amount,
@@ -1058,6 +1057,3 @@ export async function refundTransaction(
     decrementedCoupons,
   };
 }
-
-// Re-export for tests that previously imported from this module
-export { isIQProConfigured };
