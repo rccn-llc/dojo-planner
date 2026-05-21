@@ -392,8 +392,20 @@ CREATE TABLE "organization" (
 	"location_phone" text,
 	"location_email" text,
 	"location_tax_rate" real DEFAULT 0 NOT NULL,
+	"iqpro_config_client_id" text,
+	"iqpro_config_client_secret_enc" text,
+	"iqpro_config_gateway_id" text,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "platform_config" (
+	"id" text PRIMARY KEY NOT NULL DEFAULT 'singleton',
+	"iqpro_saas_client_id" text,
+	"iqpro_saas_client_secret_enc" text,
+	"iqpro_saas_gateway_id" text,
+	"updated_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "platform_config_singleton" CHECK ("id" = 'singleton')
 );
 --> statement-breakpoint
 CREATE TABLE "payment_method" (

@@ -156,6 +156,8 @@ docs/                      # Documentation
 | `/dashboard/preferences` | `preferences/page.tsx` | User preferences |
 | `/dashboard/security` | `security/page.tsx` | Security settings |
 | `/dashboard/location-settings` | `location-settings/page.tsx` | Per-org location settings (name, address, phone, email, tax rate) — backed by `organization.location*` columns |
+| `/dashboard/payment-settings` | `payment-settings/page.tsx` | Per-org IQPro merchant credentials (clientId, clientSecret, gatewayId). ADMIN-only |
+| `/dashboard/platform-settings` | `platform-settings/page.tsx` | Platform IQPro credentials for SaaS billing — backed by singleton `platform_config` row. Super-admin only |
 
 ### Auth Routes
 
@@ -369,9 +371,33 @@ npm run stripe:setup-price # Create test prices
 
 **Purpose:** Processes member-level payments (one-time charges and recurring autopay subscriptions) and organization-level SaaS subscriptions. Stripe remains as a legacy fallback for org-level billing only.
 
+**Per-org configuration (production multi-tenancy):**
+
+IQPro credentials are split across two scopes:
+
+| Field | Scope | Storage |
+|-------|-------|---------|
+| `clientId`, `clientSecret`, `gatewayId` | **per-org** (customer payments) | `organization.iqpro_config_*` columns. `clientSecret` is AES-256-GCM encrypted at rest. Set via the per-org Payment Settings page (ADMIN-only). |
+| `clientId`, `clientSecret`, `gatewayId` | **platform** (SaaS billing) | Singleton `platform_config` row (`id = 'singleton'` enforced by CHECK constraint). Encrypted. Set via Platform Settings (super-admin only). |
+| `scope`, `oauthUrl`, `baseUrl`, `webhookSecret` | **platform-wide** | Env vars (`IQPRO_SCOPE`, `IQPRO_OAUTH_URL`, `IQPRO_BASE_URL`, `IQPRO_WEBHOOK_SECRET`). Same for every dojo. |
+
+Customer-facing flows resolve config via `resolveIQProConfig(orgId)`; SaaS-billing flows use `resolvePlatformIQProConfig()`. Both resolvers fall back to the legacy `IQPRO_CLIENT_ID/IQPRO_CLIENT_SECRET/IQPRO_GATEWAY_ID` env vars per field when the DB column is null, so single-tenant deployments keep working unchanged.
+
+The webhook handler at `src/app/[locale]/webhook/iqpro/route.ts` does only DB writes (no callbacks into IQPro), so it doesn't need per-org config — the global `IQPRO_WEBHOOK_SECRET` validates every webhook and routing to the right org happens via subscription/transaction-ID DB lookup.
+
+**Migrating from env vars to DB-backed config:**
+
+1. Set `IQPRO_CONFIG_ENCRYPTION_KEY` (32 raw bytes, hex-encoded) on the deployment.
+2. For each org: ADMIN visits `/dashboard/payment-settings` and enters Client ID / Client Secret / Gateway ID (or run `src/scripts/backfillIQProConfig.ts --orgId=org_xxx` to copy the current env values into one org's DB row).
+3. For the platform's own SaaS-billing account: super admin visits `/dashboard/platform-settings` (or run `src/scripts/backfillPlatformIQProConfig.ts`).
+4. Once every org and the platform have their values in the DB, the `IQPRO_CLIENT_ID` / `IQPRO_CLIENT_SECRET` / `IQPRO_GATEWAY_ID` env vars can be removed (keep `IQPRO_SCOPE` / `IQPRO_OAUTH_URL` / `IQPRO_BASE_URL` / `IQPRO_WEBHOOK_SECRET` — they're platform-wide).
+
+**OAuth token cache:** keyed by `clientId` (since `oauthUrl` and `scope` are global). Two orgs with different `clientId`s get two separate cached tokens — there's no cross-tenant leakage. Cap 100 entries; lazy eviction on access; oldest-by-expiry dropped on overflow.
+
 **Key Files:**
 - `src/libs/IQPro.ts` - REST helpers (`iqproPost`, `iqproGet`, `iqproPut`), OAuth token management, tokenization config endpoint, ACH tokenization (`tokenizeAch`), gateway processor lookup (`getGatewayProcessors`), server-authoritative fee calculation (`calculateTransactionFees`)
-- `src/services/PaymentProviderService.ts` - Provider-agnostic interface + factory; defines `FeeBreakdown`, `TransactionLineItem`, `TransactionBillingAddress` types
+- `src/services/IQProConfigService.ts` - Per-org + platform IQPro config resolver (DB → env fallback). `resolveIQProConfig(orgId)` for customer-facing payments; `resolvePlatformIQProConfig()` for SaaS billing. Decrypts `client_secret` from AES-GCM at-rest storage. 60s in-memory cache per scope; invalidated on update.
+- `src/services/PaymentProviderService.ts` - Provider-agnostic interface + factory; defines `FeeBreakdown`, `TransactionLineItem`, `TransactionBillingAddress` types. Every interface method now takes `config: IQProConfig` as its first arg so the provider hits the right merchant gateway per call.
 - `src/services/IQProPaymentService.ts` - IQPro implementation (REST). `createCustomer` returns `{ customerId, billingAddressId }` (the billing-address ID is fetched via `iqproGet` and forwarded into transaction payloads as `paymentMethod.customer.customerBillingAddressId` so the ACH processor can resolve the cardholder name). Card uses InsertCard schema with token + maskedCard BIN format; ACH uses `tokenizeAch` then InsertAch. `processPayment` builds the canonical `Sale` payload with `remit` (tax + paymentAdjustments), `address[]`, and `lineItems[]`. Sandbox certification errors on ACH (`"not a valid transaction for certification"`) are tolerated as `pendingsettlement → approved` so dev flows work.
 - `src/services/MemberPaymentService.ts` - Payment orchestration (customer → method → calculate fees → charge/subscription → DB). Tax state for fee calculation comes from `params.memberAddress.state`. For autopay: subscription is created **and** an immediate Sale charge runs for the first period (IQPro subscriptions don't auto-charge on creation). If the initial charge fails after subscription creation, the failure is surfaced and `iqproSubscriptionId` is NOT persisted on the membership — the IQPro subscription will exist but the local membership stays unactivated.
 - `src/services/SaasSubscriptionService.ts` - Org SaaS subscriptions via REST. Uses `iqproPost`/`iqproGet`/`iqproPut` for customer create, payment method, subscription create/get/update, and cancel.
@@ -642,7 +668,8 @@ await deleteUserWithOrganization();
 **Schema:** `src/models/Schema.ts`
 
 **Key Tables:**
-- `organization` - Multi-tenant orgs with Stripe IDs + IQPro SaaS subscription fields (iqproCustomerId, iqproSubscriptionId, iqproSubscriptionPlanId, iqproBillingCycle, iqproSubscriptionStatus, iqproCurrentPeriodEnd, iqproPaymentMethodId) + location settings (locationName, locationAddress, locationPhone, locationEmail — nullable, set via the location-settings page; `locationTaxRate` real defaulting to 0, applied to taxable transactions)
+- `organization` - Multi-tenant orgs with Stripe IDs + IQPro SaaS subscription fields (iqproCustomerId, iqproSubscriptionId, iqproSubscriptionPlanId, iqproBillingCycle, iqproSubscriptionStatus, iqproCurrentPeriodEnd, iqproPaymentMethodId) + location settings (locationName, locationAddress, locationPhone, locationEmail — nullable, set via the location-settings page; `locationTaxRate` real defaulting to 0, applied to taxable transactions) + per-org IQPro merchant credentials (iqproConfigClientId, iqproConfigClientSecretEncrypted, iqproConfigGatewayId — set via Payment Settings; `clientSecret` AES-GCM encrypted at rest)
+- `platform_config` - Singleton row (`id = 'singleton'` enforced by CHECK constraint) holding the platform's own IQPro credentials used for SaaS billing (iqproSaasClientId, iqproSaasClientSecretEncrypted, iqproSaasGatewayId). Set via Platform Settings (super admin only).
 - `member` - Member records with dateOfBirth, optional `clerkUserId` for kiosk auth, optional `iqproCustomerId`
 - `membership_plan` - Pricing tiers
 - `member_membership` - Member-plan associations with startDate, endDate, firstPaymentDate, nextPaymentDate, optional `iqproSubscriptionId`
@@ -899,15 +926,25 @@ NEXT_PUBLIC_BETTER_STACK_SOURCE_TOKEN
 NEXT_PUBLIC_BETTER_STACK_INGESTING_HOST
 ```
 
-**Optional (IQPro Member Payments):**
+**Optional (IQPro — platform-wide):**
 ```bash
-IQPRO_CLIENT_ID
-IQPRO_CLIENT_SECRET
+# These five are platform-wide (same IQPro environment for every dojo).
 IQPRO_SCOPE
 IQPRO_OAUTH_URL
 IQPRO_BASE_URL
-IQPRO_GATEWAY_ID
 IQPRO_WEBHOOK_SECRET
+IQPRO_CONFIG_ENCRYPTION_KEY  # 32 raw bytes, hex-encoded (64 chars). Required when any iqpro_config_*_enc column is populated.
+
+# These three are per-org / per-platform. Read at runtime from the
+# organization or platform_config row, with these env vars as a fallback for
+# orgs that haven't filled in Payment Settings yet (or for the platform's own
+# SaaS-billing IQPro account before super admin fills in Platform Settings).
+# Once you've migrated everything into the DB via Payment Settings + Platform
+# Settings, these env vars can be removed.
+IQPRO_CLIENT_ID
+IQPRO_CLIENT_SECRET
+IQPRO_GATEWAY_ID
+
 SERVICE_FEE_PCT=3.75     # Service fee % applied to EVERY transaction. Sent to IQPro as a ServiceFee paymentAdjustment (percentage, not flatAmount).
 # Note: Sales-tax % is per-organization (see Location Settings page → tax_rate).
 # It is stored in `organization.location_tax_rate` (default 0) and applied to TAXABLE
@@ -1051,6 +1088,10 @@ AUDIT_ACTION.SAAS_SUBSCRIPTION_CANCEL;
 
 // Organization operations
 AUDIT_ACTION.ORGANIZATION_LOCATION_UPDATE;
+
+// IQPro merchant configuration
+AUDIT_ACTION.IQPRO_CONFIG_UPDATE; // per-org Payment Settings
+AUDIT_ACTION.PLATFORM_IQPRO_CONFIG_UPDATE; // platform Platform Settings (super admin)
 
 // Family member operations
 AUDIT_ACTION.FAMILY_MEMBER_LINK;

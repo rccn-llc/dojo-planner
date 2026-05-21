@@ -5,22 +5,15 @@
  * distinct from member-level payments handled by MemberPaymentService.
  */
 
+import type { IQProConfig } from '@/libs/IQPro';
 import type { SaasPlanId } from '@/utils/SaasPlans';
 import { eq } from 'drizzle-orm';
 import { db } from '@/libs/DB';
-import { Env } from '@/libs/Env';
-import { getGatewayProcessors, iqproGet, iqproPost, iqproPut, isIQProConfigured } from '@/libs/IQPro';
+import { getGatewayProcessors, iqproGet, iqproPost, iqproPut } from '@/libs/IQPro';
 import { logger } from '@/libs/Logger';
 import { organizationSchema } from '@/models/Schema';
 import { getPlanTotalPrice, getSaasPlan } from '@/utils/SaasPlans';
 import { isExemptOrg, isSuperAdmin } from '@/utils/SuperAdmins';
-
-function requireGatewayId(): string {
-  if (!isIQProConfigured()) {
-    throw new Error('IQPro is not configured');
-  }
-  return Env.IQPRO_GATEWAY_ID!;
-}
 
 // ===== Types =====
 
@@ -115,9 +108,12 @@ export async function getCurrentSubscription(
 
 // ===== Subscribe to a plan =====
 
-export async function subscribe(params: SubscribeParams): Promise<{ success: boolean; error?: string }> {
-  const gatewayId = requireGatewayId();
-  const processors = await getGatewayProcessors();
+export async function subscribe(
+  config: IQProConfig,
+  params: SubscribeParams,
+): Promise<{ success: boolean; error?: string }> {
+  const gatewayId = config.gatewayId;
+  const processors = await getGatewayProcessors(config);
 
   try {
     // Step 1: Get or create IQPro customer for the org
@@ -130,6 +126,7 @@ export async function subscribe(params: SubscribeParams): Promise<{ success: boo
 
     if (!customerId) {
       const customerRes = await iqproPost<{ data?: Record<string, unknown> }>(
+        config,
         `/api/gateway/${gatewayId}/customer`,
         {
           name: params.orgName,
@@ -159,6 +156,7 @@ export async function subscribe(params: SubscribeParams): Promise<{ success: boo
     const maskedCard = `${first6}******${last4}`;
 
     const pmRes = await iqproPost<{ data?: Record<string, unknown> }>(
+      config,
       `/api/gateway/${gatewayId}/customer/${customerId}/payment`,
       {
         card: {
@@ -248,6 +246,7 @@ export async function subscribe(params: SubscribeParams): Promise<{ success: boo
     };
 
     const response = await iqproPost<Record<string, unknown>>(
+      config,
       `/api/gateway/${gatewayId}/subscription`,
       subscriptionPayload,
     );
@@ -286,11 +285,12 @@ export async function subscribe(params: SubscribeParams): Promise<{ success: boo
 // ===== Change plan =====
 
 export async function changePlan(
+  config: IQProConfig,
   orgId: string,
   newPlanId: SaasPlanId,
   newBillingCycle: 'monthly' | 'annual',
 ): Promise<{ success: boolean; error?: string }> {
-  const gatewayId = requireGatewayId();
+  const gatewayId = config.gatewayId;
 
   try {
     const org = await db.query.organizationSchema.findFirst({
@@ -310,6 +310,7 @@ export async function changePlan(
     const amount = getPlanTotalPrice(newPlanId, newBillingCycle);
 
     await iqproPut(
+      config,
       `/api/gateway/${gatewayId}/subscription/${org.iqproSubscriptionId}`,
       {
         name: `Dojo Planner ${plan.name} Plan`,
@@ -346,6 +347,7 @@ export async function changePlan(
 // ===== Cancel subscription =====
 
 export async function cancelSubscription(
+  config: IQProConfig | null,
   orgId: string,
   endOfPeriod: boolean,
 ): Promise<{ success: boolean; error?: string }> {
@@ -356,9 +358,10 @@ export async function cancelSubscription(
     });
 
     // If there's an IQPro subscription, cancel it
-    if (org?.iqproSubscriptionId) {
-      const gatewayId = requireGatewayId();
+    if (org?.iqproSubscriptionId && config) {
+      const gatewayId = config.gatewayId;
       await iqproPost(
+        config,
         `/api/gateway/${gatewayId}/subscription/${org.iqproSubscriptionId}/cancel`,
         {
           cancel: {
@@ -387,19 +390,23 @@ export async function cancelSubscription(
 
 // ===== Get billing history =====
 
-export async function getBillingHistory(orgId: string): Promise<BillingHistoryItem[]> {
+export async function getBillingHistory(
+  config: IQProConfig | null,
+  orgId: string,
+): Promise<BillingHistoryItem[]> {
   const org = await db.query.organizationSchema.findFirst({
     where: eq(organizationSchema.id, orgId),
     columns: { iqproSubscriptionId: true },
   });
 
-  if (!org?.iqproSubscriptionId) {
+  if (!org?.iqproSubscriptionId || !config) {
     return [];
   }
 
   try {
-    const gatewayId = requireGatewayId();
+    const gatewayId = config.gatewayId;
     const subscription = await iqproGet<Record<string, unknown>>(
+      config,
       `/api/gateway/${gatewayId}/subscription/${org.iqproSubscriptionId}`,
     );
 

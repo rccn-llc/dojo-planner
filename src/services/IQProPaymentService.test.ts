@@ -23,6 +23,16 @@ vi.mock('@/libs/Logger', () => ({
   logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
 }));
 
+const testConfig = {
+  clientId: 'test-client-id',
+  clientSecret: 'test-client-secret',
+  gatewayId: 'test-gateway-001',
+  scope: 'test-scope',
+  oauthUrl: 'https://sandbox.oauth.example.com/token',
+  baseUrl: 'https://sandbox.api.basyspro.com',
+  source: 'env' as const,
+};
+
 describe('IQProPaymentProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -51,7 +61,7 @@ describe('IQProPaymentProvider', () => {
         },
       });
 
-      const result = await provider.createCustomer({
+      const result = await provider.createCustomer(testConfig, {
         organizationId: 'org_x',
         memberId: 'mem_42',
         email: 'jane@example.com',
@@ -71,6 +81,7 @@ describe('IQProPaymentProvider', () => {
       expect(result).toEqual({ customerId: 'cust_123', billingAddressId: 'addr_billing_1' });
 
       expect(iqproPost).toHaveBeenCalledWith(
+        testConfig,
         '/api/gateway/test-gateway-001/customer',
         expect.objectContaining({
           name: 'Jane Doe',
@@ -93,7 +104,7 @@ describe('IQProPaymentProvider', () => {
         }),
       );
 
-      expect(iqproGet).toHaveBeenCalledWith('/api/gateway/test-gateway-001/customer/cust_123');
+      expect(iqproGet).toHaveBeenCalledWith(testConfig, '/api/gateway/test-gateway-001/customer/cust_123');
     });
 
     it('skips the GET when no address is supplied', async () => {
@@ -101,7 +112,7 @@ describe('IQProPaymentProvider', () => {
 
       iqproPost.mockResolvedValueOnce({ data: { customerId: 'cust_noaddr' } });
 
-      const result = await provider.createCustomer({
+      const result = await provider.createCustomer(testConfig, {
         organizationId: 'org_x',
         memberId: 'mem_99',
         email: 'noaddr@example.com',
@@ -120,7 +131,7 @@ describe('IQProPaymentProvider', () => {
 
       iqproPost.mockResolvedValueOnce({ data: { customerPaymentMethodId: 'pm_card_1', last4: '4242' } });
 
-      const result = await provider.createPaymentMethod({
+      const result = await provider.createPaymentMethod(testConfig, {
         customerId: 'cust_123',
         paymentMethod: 'card',
         cardToken: 'tex-tok-abc',
@@ -133,6 +144,7 @@ describe('IQProPaymentProvider', () => {
       expect(result.last4).toBe('4242');
 
       expect(iqproPost).toHaveBeenCalledWith(
+        testConfig,
         '/api/gateway/test-gateway-001/customer/cust_123/payment',
         {
           card: {
@@ -151,7 +163,7 @@ describe('IQProPaymentProvider', () => {
       tokenizeAch.mockResolvedValueOnce({ achToken: 'ach-tok-xyz' });
       iqproPost.mockResolvedValueOnce({ data: { customerPaymentMethodId: 'pm_ach_1' } });
 
-      const result = await provider.createPaymentMethod({
+      const result = await provider.createPaymentMethod(testConfig, {
         customerId: 'cust_123',
         paymentMethod: 'ach',
         achRoutingNumber: '021000021',
@@ -162,7 +174,7 @@ describe('IQProPaymentProvider', () => {
       expect(result.paymentMethodId).toBe('pm_ach_1');
       expect(result.achToken).toBe('ach-tok-xyz');
 
-      expect(tokenizeAch).toHaveBeenCalledWith({
+      expect(tokenizeAch).toHaveBeenCalledWith(testConfig, {
         accountNumber: '987654321',
         routingNumber: '021000021',
         secCode: 'PPD',
@@ -170,6 +182,7 @@ describe('IQProPaymentProvider', () => {
       });
 
       expect(iqproPost).toHaveBeenCalledWith(
+        testConfig,
         '/api/gateway/test-gateway-001/customer/cust_123/payment',
         {
           ach: {
@@ -223,7 +236,7 @@ describe('IQProPaymentProvider', () => {
         data: { transaction: { transactionId: 'tx_42', status: 'Captured' } },
       });
 
-      const result = await provider.processPayment({
+      const result = await provider.processPayment(testConfig, {
         customerId: 'cust_123',
         paymentMethodId: 'pm_card_1',
         amount: 103.75,
@@ -236,7 +249,7 @@ describe('IQProPaymentProvider', () => {
 
       expect(result.success).toBe(true);
 
-      const p = iqproPost.mock.calls[0]![1] as Record<string, any>;
+      const p = iqproPost.mock.calls[0]![2] as Record<string, any>;
 
       // Non-taxable remit: taxAmount: 0, isTaxExempt: true
       expect(p.remit).toEqual({
@@ -276,7 +289,7 @@ describe('IQProPaymentProvider', () => {
         data: { transaction: { transactionId: 'tx_ach', status: 'Captured' } },
       });
 
-      await provider.processPayment({
+      await provider.processPayment(testConfig, {
         customerId: 'cust_123',
         paymentMethodId: 'pm_ach_1',
         amount: 103.75,
@@ -292,7 +305,7 @@ describe('IQProPaymentProvider', () => {
         billingAddress: baseBilling,
       });
 
-      const p = iqproPost.mock.calls[0]![1] as Record<string, any>;
+      const p = iqproPost.mock.calls[0]![2] as Record<string, any>;
 
       // ACH new-charge: inline ach, NOT customer-ref (matches kiosk)
       expect(p.paymentMethod).toEqual({
@@ -315,7 +328,7 @@ describe('IQProPaymentProvider', () => {
         data: { transaction: { transactionId: 'tx_event', status: 'Captured' } },
       });
 
-      await provider.processPayment({
+      await provider.processPayment(testConfig, {
         customerId: 'cust_123',
         paymentMethodId: 'pm_card_1',
         amount: 107.5,
@@ -326,7 +339,7 @@ describe('IQProPaymentProvider', () => {
         billingAddress: baseBilling,
       });
 
-      const p = iqproPost.mock.calls[0]![1] as Record<string, any>;
+      const p = iqproPost.mock.calls[0]![2] as Record<string, any>;
 
       // Taxable remit: taxAmount: null + isTaxExempt: false
       expect(p.remit.taxAmount).toBeNull();
@@ -346,7 +359,7 @@ describe('IQProPaymentProvider', () => {
         data: { transaction: { transactionId: 'tx_vault', status: 'Captured' } },
       });
 
-      await provider.processPayment({
+      await provider.processPayment(testConfig, {
         customerId: 'cust_existing',
         paymentMethodId: 'pm_saved',
         amount: 103.75,
@@ -358,7 +371,7 @@ describe('IQProPaymentProvider', () => {
         billingAddress: baseBilling,
       });
 
-      const p = iqproPost.mock.calls[0]![1] as Record<string, any>;
+      const p = iqproPost.mock.calls[0]![2] as Record<string, any>;
 
       // Vaulted: no customerBillingAddressId in customer ref
       expect(p.paymentMethod).toEqual({
@@ -377,7 +390,7 @@ describe('IQProPaymentProvider', () => {
         data: { transaction: { transactionId: 'tx_vault_ach', status: 'Captured' } },
       });
 
-      await provider.processPayment({
+      await provider.processPayment(testConfig, {
         customerId: 'cust_existing',
         paymentMethodId: 'pm_ach_saved',
         amount: 103.75,
@@ -394,7 +407,7 @@ describe('IQProPaymentProvider', () => {
         },
       });
 
-      const p = iqproPost.mock.calls[0]![1] as Record<string, any>;
+      const p = iqproPost.mock.calls[0]![2] as Record<string, any>;
 
       expect(p.paymentMethod).toEqual({
         customer: {
@@ -417,7 +430,7 @@ describe('IQProPaymentProvider', () => {
         },
       });
 
-      const result = await provider.processPayment({
+      const result = await provider.processPayment(testConfig, {
         customerId: 'cust_123',
         paymentMethodId: 'pm_ach_1',
         amount: 100,
@@ -448,7 +461,7 @@ describe('IQProPaymentProvider', () => {
         },
       });
 
-      const result = await provider.processPayment({
+      const result = await provider.processPayment(testConfig, {
         customerId: 'cust_123',
         paymentMethodId: 'pm_card_1',
         amount: 100,
@@ -465,7 +478,7 @@ describe('IQProPaymentProvider', () => {
       const { provider, iqproPost } = await loadProvider();
       iqproPost.mockRejectedValueOnce(new Error('boom'));
 
-      const result = await provider.processPayment({
+      const result = await provider.processPayment(testConfig, {
         customerId: 'cust_123',
         paymentMethodId: 'pm_card_1',
         amount: 100,
@@ -485,7 +498,7 @@ describe('IQProPaymentProvider', () => {
 
       iqproPost.mockResolvedValueOnce({ data: { subscriptionId: 'sub_1' } });
 
-      const result = await provider.createSubscription({
+      const result = await provider.createSubscription(testConfig, {
         customerId: 'cust_123',
         paymentMethodId: 'pm_card_1',
         amount: 99,
@@ -509,7 +522,7 @@ describe('IQProPaymentProvider', () => {
       expect(result.success).toBe(true);
       expect(result.subscriptionId).toBe('sub_1');
 
-      const [path, payload] = iqproPost.mock.calls[0]!;
+      const [, path, payload] = iqproPost.mock.calls[0]!;
 
       expect(path).toBe('/api/gateway/test-gateway-001/subscription');
 
@@ -533,7 +546,7 @@ describe('IQProPaymentProvider', () => {
 
       iqproPost.mockResolvedValueOnce({ data: { subscriptionId: 'sub_annual' } });
 
-      await provider.createSubscription({
+      await provider.createSubscription(testConfig, {
         customerId: 'cust_123',
         paymentMethodId: 'pm_card_1',
         amount: 999,
@@ -545,7 +558,7 @@ describe('IQProPaymentProvider', () => {
         email: 'jane@example.com',
       });
 
-      const p = iqproPost.mock.calls[0]![1] as Record<string, any>;
+      const p = iqproPost.mock.calls[0]![2] as Record<string, any>;
 
       expect(p.recurrence.billingPeriodId).toBe(6);
       expect(p.recurrence.schedule).toEqual({ minutes: [0], hours: [0], daysOfMonth: [15], monthsOfYear: [4] });

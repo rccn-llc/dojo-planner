@@ -48,7 +48,6 @@ vi.mock('@/models/Schema', () => ({
 }));
 
 vi.mock('@/libs/IQPro', () => ({
-  isIQProConfigured: vi.fn().mockReturnValue(true),
   computeFeeBreakdown: vi.fn(),
   getCustomerPaymentMethod: vi.fn(),
   getGatewayProcessors: vi.fn().mockResolvedValue({
@@ -56,6 +55,16 @@ vi.mock('@/libs/IQPro', () => ({
     achProcessorId: 'ach_proc_001',
   }),
 }));
+
+const testConfig = {
+  clientId: 'test-client-id',
+  clientSecret: 'test-client-secret',
+  gatewayId: 'test-gateway-001',
+  scope: 'test-scope',
+  oauthUrl: 'https://sandbox.oauth.example.com/token',
+  baseUrl: 'https://sandbox.api.basyspro.com',
+  source: 'env' as const,
+};
 
 vi.mock('./EmailService', () => ({
   sendPaymentReceiptEmail: vi.fn().mockResolvedValue(true),
@@ -76,7 +85,6 @@ vi.mock('./PaymentProviderService', async () => {
   const actual = await vi.importActual<typeof import('./PaymentProviderService')>('./PaymentProviderService');
   return {
     ...actual,
-    isPaymentEnabled: vi.fn().mockReturnValue(true),
     getPaymentProvider: vi.fn().mockResolvedValue(mockProvider),
   };
 });
@@ -127,7 +135,7 @@ describe('processMemberPayment — per-user coupon limit', () => {
       });
 
     const { processMemberPayment } = await import('./MemberPaymentService');
-    const result = await processMemberPayment(baseParams);
+    const result = await processMemberPayment(testConfig, baseParams);
 
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/already used this coupon/i);
@@ -159,7 +167,7 @@ describe('processMemberPayment — per-user coupon limit', () => {
     mockProvider.createCustomer.mockRejectedValueOnce(new Error('stop here'));
 
     const { processMemberPayment } = await import('./MemberPaymentService');
-    const result = await processMemberPayment(baseParams);
+    const result = await processMemberPayment(testConfig, baseParams);
 
     // The limit check passed — we got past it and into the IQPro path which
     // we forced to fail. The error message should NOT be the limit message.

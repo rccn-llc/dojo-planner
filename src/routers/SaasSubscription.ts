@@ -5,6 +5,7 @@ import * as z from 'zod';
 import { getTokenizationConfig } from '@/libs/IQPro';
 import { logger } from '@/libs/Logger';
 import { audit } from '@/services/AuditService';
+import { resolvePlatformIQProConfig } from '@/services/IQProConfigService';
 import {
   cancelSubscription,
   changePlan,
@@ -22,6 +23,14 @@ import {
 
 import { guardRole } from './AuthGuards';
 
+async function requirePlatformConfig() {
+  const config = await resolvePlatformIQProConfig();
+  if (!config) {
+    throw new ORPCError('SaaS billing is not configured. Set platform IQPro credentials in Platform Settings.', { status: 503 });
+  }
+  return config;
+}
+
 export const getCurrentPlan = os.handler(async () => {
   const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
   const { sessionClaims } = await auth();
@@ -34,9 +43,10 @@ export const subscribeToPlan = os
   .input(SubscribeValidation)
   .handler(async ({ input }) => {
     const context = await guardRole(ORG_ROLE.ADMIN);
+    const config = await requirePlatformConfig();
 
     try {
-      const result = await subscribe({
+      const result = await subscribe(config, {
         orgId: context.orgId,
         orgName: input.orgName,
         adminEmail: input.adminEmail,
@@ -80,9 +90,10 @@ export const changeSaasPlan = os
   .input(ChangePlanValidation)
   .handler(async ({ input }) => {
     const context = await guardRole(ORG_ROLE.ADMIN);
+    const config = await requirePlatformConfig();
 
     try {
-      const result = await changePlan(context.orgId, input.newPlanId, input.newBillingCycle);
+      const result = await changePlan(config, context.orgId, input.newPlanId, input.newBillingCycle);
 
       await audit(context, AUDIT_ACTION.SAAS_SUBSCRIPTION_CHANGE, AUDIT_ENTITY_TYPE.ORGANIZATION, {
         entityId: context.orgId,
@@ -111,9 +122,12 @@ export const cancelSaasSubscription = os
   .input(CancelSubscriptionValidation)
   .handler(async ({ input }) => {
     const context = await guardRole(ORG_ROLE.ADMIN);
+    // Resolve platform config best-effort — cancellation should still update
+    // local state even when IQPro is unreachable (or never configured).
+    const config = await resolvePlatformIQProConfig();
 
     try {
-      const result = await cancelSubscription(context.orgId, input.endOfPeriod);
+      const result = await cancelSubscription(config, context.orgId, input.endOfPeriod);
 
       await audit(context, AUDIT_ACTION.SAAS_SUBSCRIPTION_CANCEL, AUDIT_ENTITY_TYPE.ORGANIZATION, {
         entityId: context.orgId,
@@ -140,16 +154,18 @@ export const cancelSaasSubscription = os
 
 export const getSaasBillingHistory = os.handler(async () => {
   const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
-  return getBillingHistory(context.orgId);
+  const config = await resolvePlatformIQProConfig();
+  return getBillingHistory(config, context.orgId);
 });
 
 export const getSaasTokenizationConfig = os
   .input(z.object({ origin: z.string().url() }))
   .handler(async ({ input }) => {
     await guardRole(ORG_ROLE.ADMIN);
+    const config = await requirePlatformConfig();
 
     try {
-      return await getTokenizationConfig(input.origin);
+      return await getTokenizationConfig(config, input.origin);
     } catch (error) {
       logger.error('[SaaSSubscription] Failed to get tokenization config', { error });
       throw new ORPCError('Failed to load payment configuration.', { status: 500 });

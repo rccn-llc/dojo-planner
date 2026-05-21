@@ -19,6 +19,11 @@ export const Env = createEnv({
     IQPRO_BASE_URL: z.string().url().optional(),
     IQPRO_GATEWAY_ID: z.string().min(1).optional(),
     IQPRO_WEBHOOK_SECRET: z.string().min(1).optional(),
+    // AES-256-GCM key (32 raw bytes, hex-encoded → 64 chars) used to encrypt
+    // per-org and platform IQPro client_secret values stored in the DB.
+    // Required at decrypt time when any encrypted column has a value; optional
+    // otherwise so local dev without IQPro keeps booting.
+    IQPRO_CONFIG_ENCRYPTION_KEY: z.string().regex(/^[0-9a-f]{64}$/i, 'must be 64 hex chars (32 bytes)').optional(),
     // Service fee % applied to every transaction (membership + taxable).
     // Passed to IQPro as a paymentAdjustment of type "ServiceFee" (percentage,
     // not flatAmount — IQPro rejects flatAmount on ServiceFee adjustments).
@@ -53,6 +58,7 @@ export const Env = createEnv({
     IQPRO_BASE_URL: process.env.IQPRO_BASE_URL,
     IQPRO_GATEWAY_ID: process.env.IQPRO_GATEWAY_ID,
     IQPRO_WEBHOOK_SECRET: process.env.IQPRO_WEBHOOK_SECRET,
+    IQPRO_CONFIG_ENCRYPTION_KEY: process.env.IQPRO_CONFIG_ENCRYPTION_KEY,
     SERVICE_FEE_PCT: process.env.SERVICE_FEE_PCT,
     RESEND_API_KEY: process.env.RESEND_API_KEY,
     RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL,

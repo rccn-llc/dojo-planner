@@ -27,6 +27,8 @@ import { create as createMembershipPlan, remove as removeMembershipPlan, update 
 import { create as createNoteHandler, list as listNotes, remove as removeNoteHandler, update as updateNoteHandler } from './Notes';
 import { getLocation as getOrganizationLocation, updateLocation as updateOrganizationLocation } from './Organization';
 import { getTokenizationIframeConfig, processPayment, registerPaymentMethod } from './Payment';
+import { getConfig as getPaymentSettingsConfig, updateConfig as updatePaymentSettingsConfig } from './PaymentSettings';
+import { getPlatformConfig as getPlatformSettingsConfig, updatePlatformConfigHandler as updatePlatformSettingsConfig } from './PlatformSettings';
 import { create as createProgram, list as listPrograms, remove as removeProgram, update as updateProgram } from './Programs';
 import { chartData as reportChartData, currentValues as reportCurrentValues, insights as reportInsights } from './Reports';
 import { create as createRole, remove as removeRole, update as updateRole } from './Roles';
@@ -120,6 +122,14 @@ export const router = {
     process: processPayment,
     registerPaymentMethod,
     getTokenizationConfig: getTokenizationIframeConfig,
+  },
+  paymentSettings: {
+    getConfig: getPaymentSettingsConfig,
+    updateConfig: updatePaymentSettingsConfig,
+  },
+  platformSettings: {
+    getConfig: getPlatformSettingsConfig,
+    updateConfig: updatePlatformSettingsConfig,
   },
   dashboard: {
     membershipStats,

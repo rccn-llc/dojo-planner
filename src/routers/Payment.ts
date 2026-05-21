@@ -4,6 +4,7 @@ import * as z from 'zod';
 import { getTokenizationConfig } from '@/libs/IQPro';
 import { logger } from '@/libs/Logger';
 import { audit } from '@/services/AuditService';
+import { resolveIQProConfig } from '@/services/IQProConfigService';
 import { processMemberPayment, registerPaymentMethod as registerPaymentMethodService } from '@/services/MemberPaymentService';
 import { AUDIT_ACTION, AUDIT_ENTITY_TYPE } from '@/types/Audit';
 import { ORG_ROLE } from '@/types/Auth';
@@ -11,14 +12,22 @@ import { ProcessPaymentValidation, RegisterPaymentMethodValidation } from '@/val
 
 import { guardRole } from './AuthGuards';
 
+async function requirePerOrgConfig(orgId: string) {
+  const config = await resolveIQProConfig(orgId);
+  if (!config) {
+    throw new ORPCError('Payment processing is not configured for this organization. Set IQPro credentials in Payment Settings.', { status: 503 });
+  }
+  return config;
+}
+
 export const getTokenizationIframeConfig = os
   .input(z.object({ origin: z.string().url() }))
   .handler(async ({ input }) => {
-    await guardRole(ORG_ROLE.FRONT_DESK);
+    const context = await guardRole(ORG_ROLE.FRONT_DESK);
+    const config = await requirePerOrgConfig(context.orgId);
 
     try {
-      const config = await getTokenizationConfig(input.origin);
-      return config;
+      return await getTokenizationConfig(config, input.origin);
     } catch (error) {
       logger.error('[Payment] Failed to get tokenization config', { error });
       throw new ORPCError('Failed to load payment configuration.', { status: 500 });
@@ -29,6 +38,7 @@ export const processPayment = os
   .input(ProcessPaymentValidation)
   .handler(async ({ input }) => {
     const context = await guardRole(ORG_ROLE.FRONT_DESK);
+    const config = await requirePerOrgConfig(context.orgId);
 
     try {
       logger.info('[Payment] Processing member payment', {
@@ -39,7 +49,7 @@ export const processPayment = os
         isTaxable: input.isTaxable,
       });
 
-      const result = await processMemberPayment({
+      const result = await processMemberPayment(config, {
         organizationId: context.orgId,
         ...input,
       });
@@ -82,6 +92,7 @@ export const registerPaymentMethod = os
   .input(RegisterPaymentMethodValidation)
   .handler(async ({ input }) => {
     const context = await guardRole(ORG_ROLE.FRONT_DESK);
+    const config = await requirePerOrgConfig(context.orgId);
 
     try {
       logger.info('[Payment] Registering payment method (no charge)', {
@@ -89,7 +100,7 @@ export const registerPaymentMethod = os
         paymentMethod: input.paymentMethod,
       });
 
-      const result = await registerPaymentMethodService({
+      const result = await registerPaymentMethodService(config, {
         organizationId: context.orgId,
         ...input,
       });

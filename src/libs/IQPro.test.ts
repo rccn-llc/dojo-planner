@@ -7,12 +7,6 @@ vi.stubGlobal('fetch', mockFetch);
 // Mock Env
 vi.mock('./Env', () => ({
   Env: {
-    IQPRO_CLIENT_ID: 'test-client-id',
-    IQPRO_CLIENT_SECRET: 'test-client-secret',
-    IQPRO_SCOPE: 'test-scope',
-    IQPRO_OAUTH_URL: 'https://sandbox.oauth.example.com/token',
-    IQPRO_BASE_URL: 'https://sandbox.api.basyspro.com',
-    IQPRO_GATEWAY_ID: 'test-gateway-id',
     SERVICE_FEE_PCT: '3.75',
   },
 }));
@@ -27,6 +21,16 @@ const mockLogger = {
 vi.mock('./Logger', () => ({
   logger: mockLogger,
 }));
+
+const testConfig = {
+  clientId: 'test-client-id',
+  clientSecret: 'test-client-secret',
+  gatewayId: 'test-gateway-id',
+  scope: 'test-scope',
+  oauthUrl: 'https://sandbox.oauth.example.com/token',
+  baseUrl: 'https://sandbox.api.basyspro.com',
+  source: 'env' as const,
+};
 
 function mockOAuthOk() {
   mockFetch.mockResolvedValueOnce(new Response(
@@ -43,7 +47,7 @@ describe('tokenizeAch', () => {
 
   async function getTokenizeAch() {
     const mod = await import('./IQPro');
-    mod.resetOAuthToken();
+    mod.resetOAuthTokenCache();
     return mod.tokenizeAch;
   }
 
@@ -65,7 +69,7 @@ describe('tokenizeAch', () => {
       new Response(JSON.stringify({ achToken: 'ach-tok-abc123' }), { status: 200 }),
     );
 
-    const result = await tokenizeAch({
+    const result = await tokenizeAch(testConfig, {
       accountNumber: '123456789',
       routingNumber: '021000021',
       achAccountType: 'Checking',
@@ -102,7 +106,7 @@ describe('tokenizeAch', () => {
       new Response(JSON.stringify({ data: { achToken: 'ach-tok-nested' } }), { status: 200 }),
     );
 
-    const result = await tokenizeAch({
+    const result = await tokenizeAch(testConfig, {
       accountNumber: '987654321',
       routingNumber: '021000021',
     });
@@ -117,7 +121,7 @@ describe('tokenizeAch', () => {
       new Response(JSON.stringify({ statusCode: 'OK', data: { achId: 'ach-id-vault', maskedAccount: '12*****89' } }), { status: 200 }),
     );
 
-    const result = await tokenizeAch({
+    const result = await tokenizeAch(testConfig, {
       accountNumber: '123456789',
       routingNumber: '021000021',
     });
@@ -132,7 +136,7 @@ describe('tokenizeAch', () => {
       new Response(JSON.stringify({ token: 'ach-tok-fallback' }), { status: 200 }),
     );
 
-    const result = await tokenizeAch({
+    const result = await tokenizeAch(testConfig, {
       accountNumber: '987654321',
       routingNumber: '021000021',
     });
@@ -147,7 +151,7 @@ describe('tokenizeAch', () => {
       new Response(JSON.stringify({ achToken: 'ach-tok-defaults' }), { status: 200 }),
     );
 
-    await tokenizeAch({
+    await tokenizeAch(testConfig, {
       accountNumber: '123456789',
       routingNumber: '021000021',
     });
@@ -165,7 +169,7 @@ describe('tokenizeAch', () => {
       new Response(JSON.stringify({ achToken: 'ach-tok-savings' }), { status: 200 }),
     );
 
-    await tokenizeAch({
+    await tokenizeAch(testConfig, {
       accountNumber: '123456789',
       routingNumber: '021000021',
       achAccountType: 'Savings',
@@ -183,7 +187,7 @@ describe('tokenizeAch', () => {
       new Response('Bad Request', { status: 400 }),
     );
 
-    await expect(tokenizeAch({
+    await expect(tokenizeAch(testConfig, {
       accountNumber: '123456789',
       routingNumber: '021000021',
     })).rejects.toThrow('ACH tokenization failed: 400');
@@ -196,47 +200,10 @@ describe('tokenizeAch', () => {
       new Response(JSON.stringify({ someOtherField: 'value' }), { status: 200 }),
     );
 
-    await expect(tokenizeAch({
+    await expect(tokenizeAch(testConfig, {
       accountNumber: '123456789',
       routingNumber: '021000021',
     })).rejects.toThrow('ACH tokenization response missing achToken');
-  });
-
-  it('should throw when IQPro is not configured', async () => {
-    // Override the Env mock to remove required values
-    vi.doMock('./Env', () => ({
-      Env: {
-        IQPRO_CLIENT_ID: undefined,
-        IQPRO_CLIENT_SECRET: undefined,
-        IQPRO_SCOPE: undefined,
-        IQPRO_OAUTH_URL: undefined,
-        IQPRO_BASE_URL: undefined,
-        IQPRO_GATEWAY_ID: undefined,
-      },
-    }));
-
-    // Re-import to pick up new mock
-    vi.resetModules();
-    const { tokenizeAch } = await import('./IQPro');
-
-    await expect(tokenizeAch({
-      accountNumber: '123456789',
-      routingNumber: '021000021',
-    })).rejects.toThrow('IQPro is not configured');
-
-    // Restore original mock for other tests
-    vi.doMock('./Env', () => ({
-      Env: {
-        IQPRO_CLIENT_ID: 'test-client-id',
-        IQPRO_CLIENT_SECRET: 'test-client-secret',
-        IQPRO_SCOPE: 'test-scope',
-        IQPRO_OAUTH_URL: 'https://sandbox.oauth.example.com/token',
-        IQPRO_BASE_URL: 'https://sandbox.api.basyspro.com',
-        IQPRO_GATEWAY_ID: 'test-gateway-id',
-        TAX_STATE_PCT: '3.75',
-        SERVICE_FEE_PCT: '3.75',
-      },
-    }));
   });
 });
 
@@ -248,7 +215,7 @@ describe('iqproPost', () => {
 
   it('logs both request body and response body in full', async () => {
     const mod = await import('./IQPro');
-    mod.resetOAuthToken();
+    mod.resetOAuthTokenCache();
 
     mockOAuthOk();
     mockFetch.mockResolvedValueOnce(new Response(
@@ -257,7 +224,7 @@ describe('iqproPost', () => {
     ));
 
     const requestBody = { name: 'Acme', referenceId: 'mem_1' };
-    const result = await mod.iqproPost('/api/gateway/test-gateway-id/customer', requestBody);
+    const result = await mod.iqproPost(testConfig, '/api/gateway/test-gateway-id/customer', requestBody);
 
     expect(result).toEqual({ data: { customerId: 'cust_42' } });
 
@@ -281,7 +248,7 @@ describe('iqproPost', () => {
 
   it('logs the full error body on failure and throws with status', async () => {
     const mod = await import('./IQPro');
-    mod.resetOAuthToken();
+    mod.resetOAuthTokenCache();
 
     mockOAuthOk();
     mockFetch.mockResolvedValueOnce(new Response(
@@ -290,7 +257,7 @@ describe('iqproPost', () => {
     ));
 
     await expect(
-      mod.iqproPost('/api/gateway/test-gateway-id/customer', { x: 1 }),
+      mod.iqproPost(testConfig, '/api/gateway/test-gateway-id/customer', { x: 1 }),
     ).rejects.toThrow('IQPro API /api/gateway/test-gateway-id/customer failed: 400 Validation failed: missing field');
 
     expect(mockLogger.error).toHaveBeenCalledWith('[IQPro] POST failed', {
@@ -309,7 +276,7 @@ describe('iqproGet', () => {
 
   it('returns parsed JSON and logs request + response', async () => {
     const mod = await import('./IQPro');
-    mod.resetOAuthToken();
+    mod.resetOAuthTokenCache();
 
     mockOAuthOk();
     mockFetch.mockResolvedValueOnce(new Response(
@@ -318,6 +285,7 @@ describe('iqproGet', () => {
     ));
 
     const result = await mod.iqproGet<{ data: { addresses: Array<{ customerAddressId: string }> } }>(
+      testConfig,
       '/api/gateway/test-gateway-id/customer/cust_42',
     );
 
@@ -343,7 +311,7 @@ describe('iqproPut', () => {
 
   it('PUTs the body and returns parsed JSON', async () => {
     const mod = await import('./IQPro');
-    mod.resetOAuthToken();
+    mod.resetOAuthTokenCache();
 
     mockOAuthOk();
     mockFetch.mockResolvedValueOnce(new Response(
@@ -351,7 +319,7 @@ describe('iqproPut', () => {
       { status: 200 },
     ));
 
-    const result = await mod.iqproPut('/api/gateway/test-gateway-id/subscription/sub_1', { name: 'X' });
+    const result = await mod.iqproPut(testConfig, '/api/gateway/test-gateway-id/subscription/sub_1', { name: 'X' });
 
     expect(result).toEqual({ data: { id: 'sub_1' } });
 
@@ -370,7 +338,7 @@ describe('computeFeeBreakdown', () => {
 
   it('non-taxable (membership) returns 0 tax + IQPro service fee', async () => {
     const mod = await import('./IQPro');
-    mod.resetOAuthToken();
+    mod.resetOAuthTokenCache();
 
     mockOAuthOk();
     // /calculatefees response — IQPro returns the flat service-fee amount
@@ -379,7 +347,7 @@ describe('computeFeeBreakdown', () => {
       { status: 200 },
     ));
 
-    const result = await mod.computeFeeBreakdown(100, /* isTaxable */ false, /* taxStatePct */ 3.75, {
+    const result = await mod.computeFeeBreakdown(testConfig, 100, /* isTaxable */ false, /* taxStatePct */ 3.75, {
       processorId: 'proc_1',
       token: 'tok_xyz',
     });
@@ -409,7 +377,7 @@ describe('computeFeeBreakdown', () => {
 
   it('taxable (event/store) computes tax locally + IQPro service fee', async () => {
     const mod = await import('./IQPro');
-    mod.resetOAuthToken();
+    mod.resetOAuthTokenCache();
 
     mockOAuthOk();
     mockFetch.mockResolvedValueOnce(new Response(
@@ -417,7 +385,7 @@ describe('computeFeeBreakdown', () => {
       { status: 200 },
     ));
 
-    const result = await mod.computeFeeBreakdown(100, /* isTaxable */ true, /* taxStatePct */ 3.75, {
+    const result = await mod.computeFeeBreakdown(testConfig, 100, /* isTaxable */ true, /* taxStatePct */ 3.75, {
       processorId: 'proc_1',
       creditCardBin: '424242',
     });
@@ -431,7 +399,7 @@ describe('computeFeeBreakdown', () => {
 
   it('taxable with 0 tax rate yields no tax (default for new orgs)', async () => {
     const mod = await import('./IQPro');
-    mod.resetOAuthToken();
+    mod.resetOAuthTokenCache();
 
     mockOAuthOk();
     mockFetch.mockResolvedValueOnce(new Response(
@@ -439,7 +407,7 @@ describe('computeFeeBreakdown', () => {
       { status: 200 },
     ));
 
-    const result = await mod.computeFeeBreakdown(100, /* isTaxable */ true, /* taxStatePct */ 0, {
+    const result = await mod.computeFeeBreakdown(testConfig, 100, /* isTaxable */ true, /* taxStatePct */ 0, {
       processorId: 'proc_1',
       token: 'tok_xyz',
     });
@@ -451,7 +419,7 @@ describe('computeFeeBreakdown', () => {
 
   it('taxable with custom tax rate (e.g. 5.25%) computes correctly', async () => {
     const mod = await import('./IQPro');
-    mod.resetOAuthToken();
+    mod.resetOAuthTokenCache();
 
     mockOAuthOk();
     mockFetch.mockResolvedValueOnce(new Response(
@@ -459,7 +427,7 @@ describe('computeFeeBreakdown', () => {
       { status: 200 },
     ));
 
-    const result = await mod.computeFeeBreakdown(100, /* isTaxable */ true, /* taxStatePct */ 5.25, {
+    const result = await mod.computeFeeBreakdown(testConfig, 100, /* isTaxable */ true, /* taxStatePct */ 5.25, {
       processorId: 'proc_1',
       token: 'tok_xyz',
     });
@@ -471,7 +439,7 @@ describe('computeFeeBreakdown', () => {
 
   it('falls back to creditCardBin when token is not provided', async () => {
     const mod = await import('./IQPro');
-    mod.resetOAuthToken();
+    mod.resetOAuthTokenCache();
 
     mockOAuthOk();
     mockFetch.mockResolvedValueOnce(new Response(
@@ -479,7 +447,7 @@ describe('computeFeeBreakdown', () => {
       { status: 200 },
     ));
 
-    await mod.computeFeeBreakdown(50, false, 0, {
+    await mod.computeFeeBreakdown(testConfig, 50, false, 0, {
       processorId: 'proc_1',
       creditCardBin: '424242',
     });
@@ -574,7 +542,7 @@ describe('getCustomerPaymentMethod', () => {
 
   it('extracts BIN + last4 from a saved card', async () => {
     const mod = await import('./IQPro');
-    mod.resetOAuthToken();
+    mod.resetOAuthTokenCache();
 
     mockOAuthOk();
     mockFetch.mockResolvedValueOnce(new Response(
@@ -592,14 +560,14 @@ describe('getCustomerPaymentMethod', () => {
       { status: 200 },
     ));
 
-    const info = await mod.getCustomerPaymentMethod('cust_1', 'pm_2');
+    const info = await mod.getCustomerPaymentMethod(testConfig, 'cust_1', 'pm_2');
 
     expect(info).toEqual({ type: 'card', firstSix: '555555', last4: '5555' });
   });
 
   it('extracts achToken from a saved ACH PM', async () => {
     const mod = await import('./IQPro');
-    mod.resetOAuthToken();
+    mod.resetOAuthTokenCache();
 
     mockOAuthOk();
     mockFetch.mockResolvedValueOnce(new Response(
@@ -616,7 +584,7 @@ describe('getCustomerPaymentMethod', () => {
       { status: 200 },
     ));
 
-    const info = await mod.getCustomerPaymentMethod('cust_1', 'pm_ach');
+    const info = await mod.getCustomerPaymentMethod(testConfig, 'cust_1', 'pm_ach');
 
     expect(info?.type).toBe('ach');
     expect(info?.achToken).toBe('ach-tok-xyz');
@@ -625,7 +593,7 @@ describe('getCustomerPaymentMethod', () => {
 
   it('returns null when paymentMethodId is not found', async () => {
     const mod = await import('./IQPro');
-    mod.resetOAuthToken();
+    mod.resetOAuthTokenCache();
 
     mockOAuthOk();
     mockFetch.mockResolvedValueOnce(new Response(
@@ -633,7 +601,7 @@ describe('getCustomerPaymentMethod', () => {
       { status: 200 },
     ));
 
-    const info = await mod.getCustomerPaymentMethod('cust_1', 'pm_missing');
+    const info = await mod.getCustomerPaymentMethod(testConfig, 'cust_1', 'pm_missing');
 
     expect(info).toBeNull();
   });
@@ -647,8 +615,8 @@ describe('getGatewayProcessors', () => {
 
   it('extracts default card and ACH processor IDs', async () => {
     const mod = await import('./IQPro');
-    mod.resetOAuthToken();
-    mod.resetGatewayProcessors();
+    mod.resetOAuthTokenCache();
+    mod.resetGatewayProcessorsCache();
 
     mockOAuthOk();
     mockFetch.mockResolvedValueOnce(new Response(
@@ -664,43 +632,8 @@ describe('getGatewayProcessors', () => {
       { status: 200 },
     ));
 
-    const result = await mod.getGatewayProcessors();
+    const result = await mod.getGatewayProcessors(testConfig);
 
     expect(result).toEqual({ cardProcessorId: 'card_proc', achProcessorId: 'ach_proc' });
-  });
-
-  it('returns nulls when IQPro is not configured', async () => {
-    vi.doMock('./Env', () => ({
-      Env: {
-        IQPRO_CLIENT_ID: undefined,
-        IQPRO_CLIENT_SECRET: undefined,
-        IQPRO_SCOPE: undefined,
-        IQPRO_OAUTH_URL: undefined,
-        IQPRO_BASE_URL: undefined,
-        IQPRO_GATEWAY_ID: undefined,
-      },
-    }));
-    vi.resetModules();
-
-    const { getGatewayProcessors, resetGatewayProcessors } = await import('./IQPro');
-
-    resetGatewayProcessors();
-    const result = await getGatewayProcessors();
-
-    expect(result).toEqual({ cardProcessorId: null, achProcessorId: null });
-
-    // Restore
-    vi.doMock('./Env', () => ({
-      Env: {
-        IQPRO_CLIENT_ID: 'test-client-id',
-        IQPRO_CLIENT_SECRET: 'test-client-secret',
-        IQPRO_SCOPE: 'test-scope',
-        IQPRO_OAUTH_URL: 'https://sandbox.oauth.example.com/token',
-        IQPRO_BASE_URL: 'https://sandbox.api.basyspro.com',
-        IQPRO_GATEWAY_ID: 'test-gateway-id',
-        TAX_STATE_PCT: '3.75',
-        SERVICE_FEE_PCT: '3.75',
-      },
-    }));
   });
 });

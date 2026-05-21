@@ -24,6 +24,19 @@ vi.mock('@/services/MemberPaymentService', () => ({
 vi.mock('@/libs/IQPro', () => ({
   getTokenizationConfig: vi.fn(),
 }));
+vi.mock('@/services/IQProConfigService', () => ({
+  resolveIQProConfig: vi.fn(),
+}));
+
+const testConfig = {
+  clientId: 'test-client-id',
+  clientSecret: 'test-client-secret',
+  gatewayId: 'test-gateway-001',
+  scope: 'test-scope',
+  oauthUrl: 'https://sandbox.oauth.example.com/token',
+  baseUrl: 'https://sandbox.api.basyspro.com',
+  source: 'env' as const,
+};
 
 const mockContext: AuditContext = {
   userId: 'test-user-123',
@@ -49,8 +62,10 @@ function callHandler(handler: unknown, input?: unknown) {
 }
 
 describe('Payment Router', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    const { resolveIQProConfig } = await import('@/services/IQProConfigService');
+    vi.mocked(resolveIQProConfig).mockResolvedValue(testConfig);
   });
 
   describe('processPayment', () => {
@@ -72,7 +87,7 @@ describe('Payment Router', () => {
       const result = await callHandler(processPayment, baseInput);
 
       expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
-      expect(processMemberPayment).toHaveBeenCalledWith({
+      expect(processMemberPayment).toHaveBeenCalledWith(testConfig, {
         organizationId: 'test-org-456',
         ...baseInput,
       });
@@ -273,22 +288,23 @@ describe('Payment Router', () => {
       const result = await callHandler(getTokenizationIframeConfig, input);
 
       expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
-      expect(getTokenizationConfig).toHaveBeenCalledWith('http://localhost:3000');
+      expect(getTokenizationConfig).toHaveBeenCalledWith(testConfig, 'http://localhost:3000');
       expect(result).toEqual(mockConfig);
     });
 
-    it('should return null when IQPro is not configured', async () => {
+    it('should throw 503 when IQPro is not configured for the org', async () => {
       const { guardRole } = await import('./AuthGuards');
-      const { getTokenizationConfig } = await import('@/libs/IQPro');
+      const { resolveIQProConfig } = await import('@/services/IQProConfigService');
 
       vi.mocked(guardRole).mockResolvedValue(mockContext);
-      vi.mocked(getTokenizationConfig).mockResolvedValue(null);
+      vi.mocked(resolveIQProConfig).mockResolvedValue(null);
 
       const { getTokenizationIframeConfig } = await import('./Payment');
       const input = { origin: 'http://localhost:3000' };
-      const result = await callHandler(getTokenizationIframeConfig, input);
 
-      expect(result).toBeNull();
+      await expect(callHandler(getTokenizationIframeConfig, input)).rejects.toThrow(
+        /Payment processing is not configured/,
+      );
     });
 
     it('should throw ORPCError when getTokenizationConfig fails', async () => {
@@ -347,7 +363,7 @@ describe('Payment Router', () => {
       const result = await callHandler(registerPaymentMethod, registerInput);
 
       expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
-      expect(registerService).toHaveBeenCalledWith({
+      expect(registerService).toHaveBeenCalledWith(testConfig, {
         organizationId: 'test-org-456',
         ...registerInput,
       });
