@@ -15,12 +15,6 @@ const translationKeys: Record<string, string> = {
   renewal_none: 'No auto-renewal',
   renewal_month_to_month: 'Month-to-Month after contract',
   renewal_same_term: 'Same term renewal',
-  cancellation_fee_label: 'Cancellation Fee',
-  cancellation_fee_placeholder: '0.00',
-  cancellation_fee_help: 'Fee charged for early cancellation',
-  hold_limit_label: 'Hold Limit per Year',
-  hold_limit_placeholder: 'e.g., 2',
-  hold_limit_help: 'Maximum number of holds allowed per year',
   cancel_button: 'Cancel',
   save_button: 'Save Changes',
   saving_button: 'Saving...',
@@ -39,8 +33,6 @@ describe('EditContractTermsModal', () => {
     onClose: mockOnClose,
     contractLength: '12-months' as const,
     autoRenewal: 'month-to-month' as const,
-    cancellationFee: 300,
-    holdLimitPerYear: 2,
     onSave: mockOnSave,
   };
 
@@ -80,24 +72,24 @@ describe('EditContractTermsModal', () => {
     expect(autoRenewalLabel).toBeTruthy();
   });
 
-  it('should render cancellation fee label and help text', () => {
+  it('should NOT render Cancellation Fee (moved to Edit Payments and Fees)', () => {
     render(<EditContractTermsModal {...defaultProps} />);
 
-    const cancellationFeeLabel = page.getByText('Cancellation Fee');
-    const cancellationFeeHelp = page.getByText('Fee charged for early cancellation');
+    const cancellationFeeLabels = Array.from(document.querySelectorAll('label')).filter(
+      el => el.textContent === 'Cancellation Fee',
+    );
 
-    expect(cancellationFeeLabel).toBeTruthy();
-    expect(cancellationFeeHelp).toBeTruthy();
+    expect(cancellationFeeLabels.length).toBe(0);
   });
 
-  it('should render hold limit label and help text', () => {
+  it('should NOT render Hold Limit per Year (moved to Edit Payments and Fees)', () => {
     render(<EditContractTermsModal {...defaultProps} />);
 
-    const holdLimitLabel = page.getByText('Hold Limit per Year');
-    const holdLimitHelp = page.getByText('Maximum number of holds allowed per year');
+    const holdLimitLabels = Array.from(document.querySelectorAll('label')).filter(
+      el => el.textContent === 'Hold Limit per Year',
+    );
 
-    expect(holdLimitLabel).toBeTruthy();
-    expect(holdLimitHelp).toBeTruthy();
+    expect(holdLimitLabels.length).toBe(0);
   });
 
   it('should render Cancel button', () => {
@@ -134,27 +126,11 @@ describe('EditContractTermsModal', () => {
     expect(saveButton?.disabled).toBe(false);
   });
 
-  it('should render dollar sign prefix for cancellation fee input', () => {
+  it('should NOT render any dollar-sign fee inputs (all moved to Edit Payments and Fees)', () => {
     render(<EditContractTermsModal {...defaultProps} />);
 
     const dollarSigns = Array.from(document.querySelectorAll('span')).filter(s => s.textContent === '$');
 
-    expect(dollarSigns.length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('should render hold limit placeholder', () => {
-    render(<EditContractTermsModal {...defaultProps} />);
-
-    const holdLimitInput = page.getByPlaceholder('e.g., 2');
-
-    expect(holdLimitInput).toBeTruthy();
-  });
-
-  it('should render cancellation fee placeholder', () => {
-    render(<EditContractTermsModal {...defaultProps} />);
-
-    const cancellationFeeInput = page.getByPlaceholder('0.00');
-
-    expect(cancellationFeeInput).toBeTruthy();
+    expect(dollarSigns.length).toBe(0);
   });
 });

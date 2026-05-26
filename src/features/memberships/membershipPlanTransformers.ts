@@ -1,4 +1,8 @@
-import type { AddMembershipWizardData } from '@/hooks/useAddMembershipWizard';
+import type {
+  AddMembershipWizardData,
+  HoldFeeFrequencyOption,
+} from '@/hooks/useAddMembershipWizard';
+import type { HoldFeeFrequency, MembershipPlanFrequency } from '@/services/MembershipPlansService';
 import type { CreateMembershipPlanInput } from '@/validations/MembershipPlanValidation';
 
 /**
@@ -14,21 +18,44 @@ function slugify(name: string): string {
     .replace(/^_+|_+$/g, '');
 }
 
-function frequencyFromWizard(
-  data: AddMembershipWizardData,
-): 'Monthly' | 'Annual' | 'Weekly' | 'None' {
-  if (data.membershipType === 'punchcard') {
-    return 'None';
+// Punchcards and trials have no payment frequency — DB stores null.
+function frequencyFromWizard(data: AddMembershipWizardData): MembershipPlanFrequency | null {
+  if (data.membershipType === 'punchcard' || data.membershipType === 'trial') {
+    return null;
   }
   switch (data.paymentFrequency) {
     case 'monthly':
       return 'Monthly';
     case 'annually':
       return 'Annual';
+    case 'semi-annually':
+      return 'Semi-Annual';
     case 'weekly':
       return 'Weekly';
     default:
       return 'Monthly';
+  }
+}
+
+function holdFeeFrequencyFromWizard(data: AddMembershipWizardData): HoldFeeFrequency | null {
+  if (data.membershipType === 'punchcard' || !data.holdFeeFrequency || !data.holdFeeAmount) {
+    return null;
+  }
+  return holdFeeFrequencyToDb(data.holdFeeFrequency);
+}
+
+function holdFeeFrequencyToDb(value: HoldFeeFrequencyOption): HoldFeeFrequency {
+  switch (value) {
+    case 'one-time':
+      return 'one-time';
+    case 'weekly':
+      return 'Weekly';
+    case 'monthly':
+      return 'Monthly';
+    case 'semi-annually':
+      return 'Semi-Annual';
+    case 'annually':
+      return 'Annual';
   }
 }
 
@@ -75,6 +102,7 @@ export function transformWizardDataToDb(
 ): CreateMembershipPlanInput {
   const slug = slugify(data.membershipName);
   const programName = data.associatedProgramName ?? 'Uncategorized';
+  const isPunchcard = data.membershipType === 'punchcard';
   return {
     name: data.membershipName,
     slug,
@@ -82,7 +110,11 @@ export function transformWizardDataToDb(
     program: programName,
     programId: data.associatedProgramId ?? null,
     price: priceFromWizard(data),
-    signupFee: data.membershipType === 'punchcard' ? 0 : (data.signUpFee ?? 0),
+    signupFee: isPunchcard ? 0 : (data.signUpFee ?? 0),
+    cancellationFee: data.cancellationFee ?? 0,
+    holdFeeAmount: isPunchcard ? 0 : (data.holdFeeAmount ?? 0),
+    holdFeeFrequency: holdFeeFrequencyFromWizard(data),
+    holdLimitPerYear: isPunchcard ? null : (data.holdLimitPerYear ?? null),
     frequency: frequencyFromWizard(data),
     contractLength: contractLengthFromWizard(data),
     accessLevel: accessLevelFromWizard(data),
@@ -110,23 +142,29 @@ type MembershipDetailLikeData = {
   associatedProgramName: string | null;
   signUpFee: number | null;
   monthlyFee: number | null;
-  paymentFrequency: 'monthly' | 'weekly' | 'annually';
+  paymentFrequency: 'monthly' | 'weekly' | 'semi-annually' | 'annually' | 'one-time';
   contractLength: 'month-to-month' | '3-months' | '6-months' | '12-months';
+  cancellationFee?: number | null;
+  holdFeeAmount?: number | null;
+  holdFeeFrequency?: HoldFeeFrequencyOption | null;
+  holdLimitPerYear?: number | null;
 };
 
-function frequencyFromDetail(
-  data: MembershipDetailLikeData,
-): 'Monthly' | 'Annual' | 'Weekly' | 'None' {
-  if (data.membershipType === 'punchcard') {
-    return 'None';
+function frequencyFromDetail(data: MembershipDetailLikeData): MembershipPlanFrequency | null {
+  if (data.membershipType === 'punchcard' || data.membershipType === 'trial') {
+    return null;
   }
   switch (data.paymentFrequency) {
     case 'monthly':
       return 'Monthly';
     case 'annually':
       return 'Annual';
+    case 'semi-annually':
+      return 'Semi-Annual';
     case 'weekly':
       return 'Weekly';
+    case 'one-time':
+      return null;
     default:
       return 'Monthly';
   }
@@ -161,7 +199,11 @@ export type DetailUpdatePayload = {
   programId: string | null;
   price: number;
   signupFee: number;
-  frequency: 'Monthly' | 'Annual' | 'Weekly' | 'None';
+  cancellationFee: number;
+  holdFeeAmount: number;
+  holdFeeFrequency: HoldFeeFrequency | null;
+  holdLimitPerYear: number | null;
+  frequency: MembershipPlanFrequency | null;
   contractLength: string;
   accessLevel: string;
   description: string | null;
@@ -176,7 +218,8 @@ export function transformDetailDataToDb(
 ): DetailUpdatePayload {
   const slug = slugify(data.membershipName);
   const programName = data.associatedProgramName ?? data.category ?? 'Uncategorized';
-  const contractLength = data.membershipType === 'punchcard'
+  const isPunchcard = data.membershipType === 'punchcard';
+  const contractLength = isPunchcard
     ? fallbackContractLength
     : (contractLengthFromDetail(data) || fallbackContractLength);
   return {
@@ -187,6 +230,12 @@ export function transformDetailDataToDb(
     programId: data.associatedProgramId,
     price: data.monthlyFee ?? 0,
     signupFee: data.signUpFee ?? 0,
+    cancellationFee: data.cancellationFee ?? 0,
+    holdFeeAmount: isPunchcard ? 0 : (data.holdFeeAmount ?? 0),
+    holdFeeFrequency: isPunchcard || !data.holdFeeFrequency || !data.holdFeeAmount
+      ? null
+      : holdFeeFrequencyToDb(data.holdFeeFrequency),
+    holdLimitPerYear: isPunchcard ? null : (data.holdLimitPerYear ?? null),
     frequency: frequencyFromDetail(data),
     contractLength,
     accessLevel: fallbackAccessLevel,
@@ -196,4 +245,4 @@ export function transformDetailDataToDb(
   };
 }
 
-export { slugify };
+export { holdFeeFrequencyToDb, slugify };

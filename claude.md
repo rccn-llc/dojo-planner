@@ -43,7 +43,7 @@ src/
 ├── routers/               # ORPC API handlers
 │   ├── AuthGuards.ts      # Auth middleware with role hierarchy
 │   ├── Catalog.ts         # Catalog items, variants, categories, images
-│   ├── Member.ts          # Member CRUD, family linking/unlinking, HOH search, member type conversion, confirmation email
+│   ├── Member.ts          # Member CRUD, family linking/unlinking, HOH search, member type conversion, confirmation email, membership lifecycle (cancelMembership, holdMembership, reactivateMembership)
 │   ├── Members.ts         # Members list ops
 │   ├── Classes.ts         # Classes list & tags
 │   ├── Events.ts          # Events list
@@ -291,7 +291,71 @@ The member detail/edit page (`members/[memberId]/edit/page.tsx`) displays:
 - Family members (displayed only when member is Head of Household, fetched via `listFamilyMembers` endpoint)
 - "Add Family Member" button (HOH only) — opens `AddFamilyMembersModal` for adding multiple family members
 - "Convert" dropdown menu — opens `ConvertMemberModal` for type conversion with business rule enforcement
+- "Actions" dropdown menu (when an active or held membership exists) — opens lifecycle modals: Place on Hold, Reactivate, Cancel Membership
 - Attendance records and notes
+
+### Cancel / Hold / Reactivate Membership
+
+The membership lifecycle on the member detail page is implemented as three router endpoints that orchestrate IQPro side effects + DB writes. Mirrors the kiosk's PATCH /api/members/[memberId]/membership behavior so the two apps converge on the same IQPro shape.
+
+**Cancellation:** `member.cancelMembership(memberId, memberMembershipId, waiveFee?)`
+1. Fetches the joined member + membership + plan (via `getLifecycleContext`)
+2. If `plan.cancellationFee > 0` and `!waiveFee`: charges the fee as a one-time Sale via IQPro using the saved payment method on the existing subscription (`chargeOneTimeFee` in `MemberPaymentService.ts`). On approval, inserts a `transaction` row with `transactionType = 'cancellation_fee'`.
+3. Calls IQPro `POST /subscription/{id}/cancel` to cancel the membership subscription immediately.
+4. If a recurring hold-fee subscription exists (`iqproHoldFeeSubscriptionId`), cancels that too.
+5. Sets `member_membership.status='cancelled'`, `endDate=now`, clears the hold-fee sub pointer.
+6. Mirrors `member.status='cancelled'` only when this was the member's last active membership (same semantics as the IQPro webhook handler).
+7. Audits `MEMBERSHIP_CANCEL` and (when charged) `CANCELLATION_FEE_CHARGE`.
+
+The cancellation fee is best-effort: if the charge fails, the cancellation still proceeds and the failure is surfaced as a partial-success warning in the UI rather than a rollback.
+
+**Hold:** `member.holdMembership(memberId, memberMembershipId)`
+0. **Enforce `hold_limit_per_year`** if set on the plan. Counts prior successful `memberMembership.hold` audit events for the same `memberMembershipId` in the trailing 12 months. If the count is at the limit, throws `HoldLimitReachedError` → router maps to a 409 with a clear message. 0 or null = unlimited.
+1. Lifecycle context fetch.
+2. If the plan has `holdFeeAmount > 0` and `holdFeeFrequency === 'one-time'`: charges a single Sale via the saved PM (same `chargeOneTimeFee` helper). Inserts a `transaction` row with `transactionType = 'hold_fee'`.
+3. If `holdFeeFrequency` is recurring (`Weekly` | `Monthly` | `Semi-Annual` | `Annual`): creates a brand-new IQPro subscription with prefix `'HOLD'` and that cadence, then stores the new subscription id on `member_membership.iqproHoldFeeSubscriptionId`.
+4. Pauses the original membership subscription (`setSubscriptionAutoRenewal(false)` — `PUT` with `isAutoRenewed: false`).
+5. Sets `member_membership.status='hold'` and `member.status='hold'`.
+6. Audits `MEMBERSHIP_HOLD` (this is what the next limit-check counts) and (when applicable) `HOLD_FEE_CHARGE`.
+
+The kiosk's `PATCH /api/members/[memberId]/membership` mirrors the same precheck against its `audit_event` slice and writes its own audit row on each successful hold/cancel/reactivate so the two apps stay consistent.
+
+**Signup fee enforcement:** `membership_plan.signup_fee` is added to the **first** charge by the Add Member, Add Family Members, and Convert Member flows (`finalPrice = plan_price - coupon_discount + signup_fee`). The coupon discount applies to the recurring price only, not to the signup fee. The fee is bundled into the immediate at-registration charge; for autopay subscriptions, the first-period charge includes both. The `PaymentStep` + `FamilyPaymentStep` summaries display the same combined total so users see the number they'll be billed.
+
+**Reactivate:** `member.reactivateMembership(memberId, memberMembershipId)`
+1. Cancels any recurring hold-fee subscription (`iqproHoldFeeSubscriptionId`).
+2. Resumes the original membership subscription (`setSubscriptionAutoRenewal(true)`).
+3. Sets statuses back to `active` on both the membership row and the member, and clears the hold-fee sub pointer.
+4. Audits `MEMBERSHIP_REACTIVATE`.
+
+**UI:**
+- `src/features/members/lifecycle/CancelMembershipModal.tsx` — confirmation modal showing plan name, cancellation fee, a "waive fee" checkbox, and the saved-card billing summary. Wired into the "Cancel Membership" action.
+- `src/features/members/lifecycle/HoldMembershipModal.tsx` — confirmation modal showing plan name, hold-fee amount + cadence (one-time vs recurring), and an explanation that the subscription will be paused.
+- "Reactivate" is a one-click action (no modal) — it just calls the endpoint and refreshes the cache.
+
+**Kiosk parity:** `dojo-planner-kiosk/src/app/api/members/[memberId]/membership/route.ts` PATCH handles the same three actions on the kiosk side. The hold-fee one-time charge is mirrored; the recurring hold-fee path is currently planner-only (kiosk member-area flow does short-term holds where one-time fees are the common case — this can be backported later if needed).
+
+### Payment frequency conventions
+
+Membership plans' `frequency` column is **nullable**. The convention:
+
+- `null` (preferred) or legacy `'None'`: no recurring billing — used for punchcards, free trials, and any one-time purchase plan.
+- `'Weekly'`, `'Monthly'`, `'Semi-Annual'`, `'Annual'`: recurring cadences. The seed script writes `null` for the 10-Class Punch Card and the 7-Day Free Trial; the wizard transformer (`membershipPlanTransformers.ts`) writes `null` for punchcard + trial membership types.
+
+UI consumers must handle `null` everywhere it's displayed. The membership detail page's `mapFrequency` (in `src/app/[locale]/(auth)/dashboard/memberships/[membershipId]/page.tsx`) maps `null | 'None'` → `'one-time'`, which downstream cards/edit modals render as "One-time" with no `/mo` suffix on prices.
+
+The IQPro subscription mapping (`src/services/IQProPaymentService.ts` `createSubscription`) handles four cadences:
+
+| Frequency | IQPro `billingPeriodId` | Schedule |
+|-----------|-------------------------|----------|
+| `Weekly` | 2 | `daysOfWeek: [startDayOfWeek]` (no `daysOfMonth`) |
+| `Monthly` | 4 | `daysOfMonth: [startDayOfMonth]` |
+| `Semi-Annual` | 6 (yearly) | `daysOfMonth: [startDayOfMonth]`, `monthsOfYear: [startMonth, startMonth+6 wrapped mod 12]` — fires twice a year |
+| `Annual` | 6 | `daysOfMonth: [startDayOfMonth]`, `monthsOfYear: [startMonth]` |
+
+Semi-annual is not a native IQPro `billingPeriodId`; we emulate it by using the yearly billing period with two `monthsOfYear` entries 6 months apart. This is the safest approach against the sandbox — verify behavior in the IQPro sandbox console when first deploying semi-annual plans.
+
+`normalizeFrequency(value)` in `MemberPaymentService.ts` is the canonical helper for converting any plan-frequency string (or `null`) into the IQPro `SubscriptionFrequency` enum. Anything that doesn't map to a recurring cadence (null, empty, `'None'`, `'one-time'`, unrecognized) returns `null` → the caller routes through `handleOneTimePayment` instead of `handleAutopay`.
 
 ## Vendor Integrations
 
@@ -671,8 +735,8 @@ await deleteUserWithOrganization();
 - `organization` - Multi-tenant orgs with Stripe IDs + IQPro SaaS subscription fields (iqproCustomerId, iqproSubscriptionId, iqproSubscriptionPlanId, iqproBillingCycle, iqproSubscriptionStatus, iqproCurrentPeriodEnd, iqproPaymentMethodId) + location settings (locationName, locationAddress, locationPhone, locationEmail — nullable, set via the location-settings page; `locationTaxRate` real defaulting to 0, applied to taxable transactions) + per-org IQPro merchant credentials (iqproConfigClientId, iqproConfigClientSecretEncrypted, iqproConfigGatewayId — set via Payment Settings; `clientSecret` AES-GCM encrypted at rest)
 - `platform_config` - Singleton row (`id = 'singleton'` enforced by CHECK constraint) holding the platform's own IQPro credentials used for SaaS billing (iqproSaasClientId, iqproSaasClientSecretEncrypted, iqproSaasGatewayId). Set via Platform Settings (super admin only).
 - `member` - Member records with dateOfBirth, optional `clerkUserId` for kiosk auth, optional `iqproCustomerId`
-- `membership_plan` - Pricing tiers
-- `member_membership` - Member-plan associations with startDate, endDate, firstPaymentDate, nextPaymentDate, optional `iqproSubscriptionId`
+- `membership_plan` - Pricing tiers, including `frequency` (nullable: null = one-time / punchcard / trial; otherwise `Weekly` | `Monthly` | `Semi-Annual` | `Annual`), `cancellationFee` (real, default 0), `holdFeeAmount` (real, default 0), `holdFeeFrequency` (nullable: `one-time` | `Weekly` | `Monthly` | `Semi-Annual` | `Annual`), `holdLimitPerYear` (integer, nullable; null or 0 = unlimited; enforced server-side by `holdMembershipLifecycle` via a 12-month-window audit-log count)
+- `member_membership` - Member-plan associations with startDate, endDate, firstPaymentDate, nextPaymentDate, optional `iqproSubscriptionId`, optional `iqproHoldFeeSubscriptionId` (set when a recurring hold-fee subscription is created at hold time; cleared on reactivate/cancel)
 - `program` - Training programs (Adult BJJ, Kids, Competition)
 - `class` - Class definitions
 - `class_schedule_instance` - Recurring schedule patterns
@@ -1097,6 +1161,13 @@ AUDIT_ACTION.PLATFORM_IQPRO_CONFIG_UPDATE; // platform Platform Settings (super 
 AUDIT_ACTION.FAMILY_MEMBER_LINK;
 AUDIT_ACTION.FAMILY_MEMBER_UNLINK;
 AUDIT_ACTION.MEMBER_CONVERT;
+
+// Membership lifecycle operations
+AUDIT_ACTION.MEMBERSHIP_CANCEL;
+AUDIT_ACTION.MEMBERSHIP_HOLD;
+AUDIT_ACTION.MEMBERSHIP_REACTIVATE;
+AUDIT_ACTION.CANCELLATION_FEE_CHARGE;
+AUDIT_ACTION.HOLD_FEE_CHARGE;
 
 // See src/types/Audit.ts for full list
 ```

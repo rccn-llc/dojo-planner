@@ -7,7 +7,7 @@ import type { Member } from '@/hooks/useMembersCache';
 import type { MemberPaymentMethodData } from '@/services/MembersService';
 import type { SignedWaiverWithTemplateName } from '@/services/WaiversService';
 import { useOrganization } from '@clerk/nextjs';
-import { ArrowRightLeft, Download, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArrowRightLeft, Download, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
@@ -26,6 +26,8 @@ import { EditMemberPhotoModal } from '@/features/members/details/EditMemberPhoto
 import { EditPaymentMethodModal } from '@/features/members/details/EditPaymentMethodModal';
 import { MemberDetailAttendance } from '@/features/members/details/MemberDetailAttendance';
 import { MemberDetailNotes } from '@/features/members/details/MemberDetailNotes';
+import { CancelMembershipModal } from '@/features/members/lifecycle/CancelMembershipModal';
+import { HoldMembershipModal } from '@/features/members/lifecycle/HoldMembershipModal';
 import { AddFamilyMembersModal } from '@/features/members/wizard/AddFamilyMembersModal';
 import { useCouponsCache } from '@/hooks/useCouponsCache';
 import { invalidateMembersCache, useMembersCache } from '@/hooks/useMembersCache';
@@ -191,7 +193,7 @@ function getMemberStatus(status?: string): 'active' | 'on-hold' | 'cancelled' {
 type MembershipPlanInfo = {
   name?: string;
   price?: number;
-  frequency?: string;
+  frequency?: string | null;
   contractLength?: string;
   isTrial?: boolean | null;
 };
@@ -240,8 +242,8 @@ function buildMembershipDetails(
   // If we have actual plan data, use it
   if (plan?.name) {
     const isPaid = plan.price && plan.price > 0;
-    // Punchcard / one-time memberships (frequency = 'None', not trial) have no future payments
-    const isOneTime = plan.frequency === 'None' && !plan.isTrial;
+    // Punchcard / one-time memberships (frequency null or legacy 'None', not trial) have no future payments
+    const isOneTime = (plan.frequency == null || plan.frequency === 'None') && !plan.isTrial;
     return {
       ...baseDetails,
       membershipType: plan.name,
@@ -492,6 +494,11 @@ export default function EditMemberPage() {
   const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
   const [conversionType, setConversionType] = useState<ConversionType | null>(null);
 
+  // State for cancel/hold lifecycle modals
+  const [isCancelMembershipOpen, setIsCancelMembershipOpen] = useState(false);
+  const [isHoldMembershipOpen, setIsHoldMembershipOpen] = useState(false);
+  const [isReactivateLoading, setIsReactivateLoading] = useState(false);
+
   // HOH data for family members (who is this family member's HOH?)
   const [currentHOH, setCurrentHOH] = useState<{ id: string; name: string } | null>(null);
 
@@ -531,6 +538,28 @@ export default function EditMemberPage() {
     setIsConvertModalOpen(false);
     setConversionType(null);
     await invalidateMembersCache();
+  };
+
+  const handleLifecycleSuccess = async () => {
+    await invalidateMembersCache();
+  };
+
+  const handleReactivate = async () => {
+    if (!currentMembership) {
+      return;
+    }
+    setIsReactivateLoading(true);
+    try {
+      await client.member.reactivateMembership({
+        memberId,
+        memberMembershipId: currentMembership.id,
+      });
+      await invalidateMembersCache();
+    } catch (err) {
+      console.error('[member.reactivateMembership] failed', err);
+    } finally {
+      setIsReactivateLoading(false);
+    }
   };
 
   // Handler to sync tab from URL
@@ -977,6 +1006,47 @@ export default function EditMemberPage() {
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
+            {currentMembership && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 gap-1 text-sm">
+                    <MoreVertical className="h-3.5 w-3.5" />
+                    Actions
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  {currentMembership.status === 'active' && (
+                    <>
+                      <DropdownMenuItem onClick={() => setIsHoldMembershipOpen(true)}>
+                        Place on Hold
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onClick={() => setIsCancelMembershipOpen(true)}
+                      >
+                        Cancel Membership
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  {currentMembership.status === 'hold' && (
+                    <>
+                      <DropdownMenuItem
+                        disabled={isReactivateLoading}
+                        onClick={handleReactivate}
+                      >
+                        {isReactivateLoading ? 'Reactivating…' : 'Reactivate'}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onClick={() => setIsCancelMembershipOpen(true)}
+                      >
+                        Cancel Membership
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary">{state.currentData.billingContactRole}</Badge>
@@ -1583,6 +1653,32 @@ export default function EditMemberPage() {
           currentHOHName={currentHOH?.name}
           availableCoupons={availableCoupons}
         />
+      )}
+
+      {currentMember && currentMembership && (
+        <>
+          <CancelMembershipModal
+            isOpen={isCancelMembershipOpen}
+            onClose={() => setIsCancelMembershipOpen(false)}
+            memberId={currentMember.id}
+            memberMembershipId={currentMembership.id}
+            memberName={`${currentMember.firstName || ''} ${currentMember.lastName || ''}`.trim()}
+            planName={currentMembership.membershipPlan?.name ?? 'Membership'}
+            cancellationFee={currentMembership.membershipPlan?.cancellationFee ?? 0}
+            onSuccess={handleLifecycleSuccess}
+          />
+          <HoldMembershipModal
+            isOpen={isHoldMembershipOpen}
+            onClose={() => setIsHoldMembershipOpen(false)}
+            memberId={currentMember.id}
+            memberMembershipId={currentMembership.id}
+            memberName={`${currentMember.firstName || ''} ${currentMember.lastName || ''}`.trim()}
+            planName={currentMembership.membershipPlan?.name ?? 'Membership'}
+            holdFeeAmount={currentMembership.membershipPlan?.holdFeeAmount ?? 0}
+            holdFeeFrequency={currentMembership.membershipPlan?.holdFeeFrequency ?? null}
+            onSuccess={handleLifecycleSuccess}
+          />
+        </>
       )}
     </div>
   );

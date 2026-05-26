@@ -12,7 +12,11 @@ export type MembershipPlanData = {
   program: string;
   price: number;
   signupFee: number;
-  frequency: string;
+  cancellationFee: number;
+  holdFeeAmount: number;
+  holdFeeFrequency: string | null;
+  holdLimitPerYear: number | null;
+  frequency: string | null;
   contractLength: string;
   accessLevel: string;
   description: string | null;
@@ -37,7 +41,11 @@ type MembershipPlan = {
   program: string;
   price: number;
   signupFee: number;
-  frequency: string;
+  cancellationFee: number;
+  holdFeeAmount: number;
+  holdFeeFrequency: string | null;
+  holdLimitPerYear: number | null;
+  frequency: string | null;
   contractLength: string;
   accessLevel: string;
   description: string | null;
@@ -181,6 +189,10 @@ export async function getOrganizationMembers(
       program: plan.program,
       price: plan.price,
       signupFee: plan.signupFee,
+      cancellationFee: plan.cancellationFee,
+      holdFeeAmount: plan.holdFeeAmount,
+      holdFeeFrequency: plan.holdFeeFrequency,
+      holdLimitPerYear: plan.holdLimitPerYear,
       frequency: plan.frequency,
       contractLength: plan.contractLength,
       accessLevel: plan.accessLevel,
@@ -492,6 +504,10 @@ export async function getMembershipPlans(organizationId: string): Promise<Member
     program: plan.program,
     price: plan.price,
     signupFee: plan.signupFee,
+    cancellationFee: plan.cancellationFee,
+    holdFeeAmount: plan.holdFeeAmount,
+    holdFeeFrequency: plan.holdFeeFrequency,
+    holdLimitPerYear: plan.holdLimitPerYear,
     frequency: plan.frequency,
     contractLength: plan.contractLength,
     accessLevel: plan.accessLevel,
@@ -520,6 +536,10 @@ export async function getAllMembershipPlans(organizationId: string): Promise<Mem
     program: plan.program,
     price: plan.price,
     signupFee: plan.signupFee,
+    cancellationFee: plan.cancellationFee,
+    holdFeeAmount: plan.holdFeeAmount,
+    holdFeeFrequency: plan.holdFeeFrequency,
+    holdLimitPerYear: plan.holdLimitPerYear,
     frequency: plan.frequency,
     contractLength: plan.contractLength,
     accessLevel: plan.accessLevel,

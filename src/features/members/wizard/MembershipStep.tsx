@@ -41,6 +41,10 @@ const mockMembershipPlans: MembershipPlanData[] = [
     program: 'Adult',
     price: 150,
     signupFee: 35,
+    cancellationFee: 0,
+    holdFeeAmount: 0,
+    holdFeeFrequency: null,
+    holdLimitPerYear: null,
     frequency: 'Monthly',
     contractLength: '12 Months',
     accessLevel: 'Unlimited',
@@ -56,6 +60,10 @@ const mockMembershipPlans: MembershipPlanData[] = [
     program: 'Adult',
     price: 170,
     signupFee: 35,
+    cancellationFee: 0,
+    holdFeeAmount: 0,
+    holdFeeFrequency: null,
+    holdLimitPerYear: null,
     frequency: 'Monthly',
     contractLength: 'Month-to-Month',
     accessLevel: 'Unlimited',
@@ -71,6 +79,10 @@ const mockMembershipPlans: MembershipPlanData[] = [
     program: 'Adult',
     price: 0,
     signupFee: 0,
+    cancellationFee: 0,
+    holdFeeAmount: 0,
+    holdFeeFrequency: null,
+    holdLimitPerYear: null,
     frequency: 'None',
     contractLength: '7 Days',
     accessLevel: '3 Classes Total',
@@ -86,6 +98,10 @@ const mockMembershipPlans: MembershipPlanData[] = [
     program: 'Kids',
     price: 95,
     signupFee: 25,
+    cancellationFee: 0,
+    holdFeeAmount: 0,
+    holdFeeFrequency: null,
+    holdLimitPerYear: null,
     frequency: 'Monthly',
     contractLength: 'Month-to-Month',
     accessLevel: '8 Classes/mo',
@@ -101,6 +117,10 @@ const mockMembershipPlans: MembershipPlanData[] = [
     program: 'Kids',
     price: 0,
     signupFee: 0,
+    cancellationFee: 0,
+    holdFeeAmount: 0,
+    holdFeeFrequency: null,
+    holdLimitPerYear: null,
     frequency: 'None',
     contractLength: '7 Days',
     accessLevel: '2 Classes Total',
@@ -116,6 +136,10 @@ const mockMembershipPlans: MembershipPlanData[] = [
     program: 'Competition',
     price: 200,
     signupFee: 50,
+    cancellationFee: 0,
+    holdFeeAmount: 0,
+    holdFeeFrequency: null,
+    holdLimitPerYear: null,
     frequency: 'Monthly',
     contractLength: '6 Months',
     accessLevel: 'Unlimited',
@@ -237,11 +261,25 @@ export const MembershipStep = ({
     await onNext();
   };
 
-  const formatPrice = (price: number, frequency: string) => {
+  const formatPrice = (price: number, frequency: string | null) => {
     if (price === 0) {
       return t('free_price');
     }
-    return `$${price.toFixed(2)}/${frequency.toLowerCase() === 'annual' ? 'yr' : 'mo'}`;
+    const base = `$${price.toFixed(2)}`;
+    if (!frequency || frequency === 'None') {
+      return base;
+    }
+    const lower = frequency.toLowerCase();
+    if (lower === 'weekly') {
+      return `${base}/wk`;
+    }
+    if (lower === 'semi-annual' || lower === 'semi-annually') {
+      return `${base}/6mo`;
+    }
+    if (lower === 'annual' || lower === 'annually') {
+      return `${base}/yr`;
+    }
+    return `${base}/mo`;
   };
 
   return (

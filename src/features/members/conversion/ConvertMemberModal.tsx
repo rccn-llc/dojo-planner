@@ -240,10 +240,14 @@ export const ConvertMemberModal = ({
         });
       }
 
-      // 5. Process payment (family-to-individual, or HOH-to-individual without payment method)
-      const finalPrice = wizard.data.appliedCoupon
+      // 5. Process payment (family-to-individual, or HOH-to-individual
+      // without payment method). Signup fee added on top so it's actually
+      // billed on first charge — see AddMemberModal for rationale.
+      const planPrice = wizard.data.appliedCoupon
         ? computeDiscountedPrice(wizard.data.membershipPlanPrice, wizard.data.appliedCoupon) ?? 0
         : (wizard.data.membershipPlanPrice ?? 0);
+      const signupFee = wizard.data.membershipPlanSignupFee ?? 0;
+      const finalPrice = planPrice + signupFee;
 
       let paymentDeclined = false;
 

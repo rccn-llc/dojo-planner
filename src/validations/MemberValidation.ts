@@ -136,3 +136,37 @@ export const SendConfirmationEmailValidation = z.object({
     couponDiscountedPrice: z.number().optional(),
   }).optional(),
 });
+
+// =============================================================================
+// MEMBERSHIP LIFECYCLE: CANCEL / HOLD / REACTIVATE
+// =============================================================================
+
+/**
+ * Cancel a specific membership. Charges the plan's cancellation fee (if any)
+ * via IQPro using the saved payment method, then cancels the IQPro
+ * subscription, then updates the DB. `waiveFee=true` lets staff skip the fee.
+ */
+export const CancelMembershipValidation = z.object({
+  memberId: z.string().min(1),
+  memberMembershipId: z.string().min(1),
+  waiveFee: z.boolean().optional().default(false),
+});
+
+/**
+ * Place a member's membership on hold. Charges the plan's hold fee
+ * one-time (if `holdFeeFrequency === 'one-time'`) or creates a recurring
+ * hold-fee subscription, then pauses the original membership subscription.
+ */
+export const HoldMembershipValidation = z.object({
+  memberId: z.string().min(1),
+  memberMembershipId: z.string().min(1),
+});
+
+/**
+ * Reactivate a held membership. Cancels the hold-fee subscription (if any)
+ * and resumes the original membership subscription.
+ */
+export const ReactivateMembershipValidation = z.object({
+  memberId: z.string().min(1),
+  memberMembershipId: z.string().min(1),
+});

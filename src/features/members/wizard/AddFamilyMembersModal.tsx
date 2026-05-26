@@ -335,10 +335,14 @@ export const AddFamilyMembersModal = ({
         });
       }
 
-      // 4. Process payment
-      const finalPrice = wizard.data.appliedCoupon
+      // 4. Process payment — add signup fee on top of the recurring price so
+      // it's actually billed on first charge. Coupon discount applies to the
+      // recurring price only.
+      const planPrice = wizard.data.appliedCoupon
         ? computeDiscountedPrice(wizard.data.membershipPlanPrice, wizard.data.appliedCoupon) ?? 0
         : (wizard.data.membershipPlanPrice ?? 0);
+      const signupFee = wizard.data.membershipPlanSignupFee ?? 0;
+      const finalPrice = planPrice + signupFee;
 
       let paymentDeclined = false;
 

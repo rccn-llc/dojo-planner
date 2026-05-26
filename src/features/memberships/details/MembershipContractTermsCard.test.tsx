@@ -41,8 +41,6 @@ describe('MembershipContractTermsCard', () => {
   const defaultProps = {
     contractLength: '12-months' as const,
     autoRenewal: 'month-to-month' as const,
-    cancellationFee: 300,
-    holdLimitPerYear: 2,
     onEdit: mockOnEdit,
   };
 
@@ -134,76 +132,34 @@ describe('MembershipContractTermsCard', () => {
     expect(autoRenewalValue).toBeTruthy();
   });
 
-  it('should render cancellation fee', () => {
+  it('should NOT render Cancellation Fee (moved to Payments and Fees card)', () => {
     render(<MembershipContractTermsCard {...defaultProps} />);
 
-    const cancellationFeeLabel = page.getByText('Cancellation Fee');
-    const cancellationFeeValue = page.getByText('$300.00');
-
-    expect(cancellationFeeLabel).toBeTruthy();
-    expect(cancellationFeeValue).toBeTruthy();
-  });
-
-  it('should render No fee for null cancellation fee', () => {
-    render(
-      <MembershipContractTermsCard
-        {...defaultProps}
-        cancellationFee={null}
-      />,
+    const cancellationFeeLabels = Array.from(document.querySelectorAll('span')).filter(
+      el => el.textContent === 'Cancellation Fee',
     );
 
-    const noFeeValue = page.getByText('No fee');
-
-    expect(noFeeValue).toBeTruthy();
+    expect(cancellationFeeLabels.length).toBe(0);
   });
 
-  it('should render No fee for zero cancellation fee', () => {
-    render(
-      <MembershipContractTermsCard
-        {...defaultProps}
-        cancellationFee={0}
-      />,
-    );
-
-    const noFeeValue = page.getByText('No fee');
-
-    expect(noFeeValue).toBeTruthy();
-  });
-
-  it('should render hold limit', () => {
+  it('should NOT render Hold Limit (moved to Payments and Fees card)', () => {
     render(<MembershipContractTermsCard {...defaultProps} />);
 
-    const holdLimitLabel = page.getByText('Hold Limit');
-    const holdLimitValue = page.getByText('2 holds per year');
-
-    expect(holdLimitLabel).toBeTruthy();
-    expect(holdLimitValue).toBeTruthy();
-  });
-
-  it('should render No holds allowed for null hold limit', () => {
-    render(
-      <MembershipContractTermsCard
-        {...defaultProps}
-        holdLimitPerYear={null}
-      />,
+    const holdLimitLabels = Array.from(document.querySelectorAll('span')).filter(
+      el => el.textContent === 'Hold Limit',
     );
 
-    const noHoldsValue = page.getByText('No holds allowed');
-
-    expect(noHoldsValue).toBeTruthy();
+    expect(holdLimitLabels.length).toBe(0);
   });
 
-  it('should render No holds allowed for zero hold limit', () => {
-    render(
-      <MembershipContractTermsCard
-        {...defaultProps}
-        holdLimitPerYear={0}
-      />,
+  it('should NOT render Hold Fee (moved to Payments and Fees card)', () => {
+    render(<MembershipContractTermsCard {...defaultProps} />);
+
+    const holdFeeLabels = Array.from(document.querySelectorAll('span')).filter(
+      el => el.textContent === 'Hold Fee',
     );
 
-    const noHoldsValue = page.getByText('No holds allowed');
-
-    expect(noHoldsValue).toBeTruthy();
+    expect(holdFeeLabels.length).toBe(0);
   });
 
   it('should render 3 Months contract length', () => {

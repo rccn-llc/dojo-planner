@@ -152,14 +152,22 @@ export type PaymentResult = {
   error?: string;
 };
 
+export type SubscriptionFrequency = 'weekly' | 'monthly' | 'semi-annual' | 'annual';
+
 export type CreateSubscriptionParams = {
   customerId: string;
   paymentMethodId: string;
   amount: number;
-  frequency: 'monthly' | 'annual';
+  frequency: SubscriptionFrequency;
   startDate: Date;
   description: string;
   metadata?: Record<string, string>;
+  /**
+   * Subscription prefix sent to IQPro (max 10 chars). Defaults to 'MBR' for
+   * member-membership subscriptions. Use 'HOLD' for the recurring hold-fee
+   * sub created when a member is placed on hold.
+   */
+  prefix?: string;
 
   // Member info for subscription address (required by IQPro)
   firstName: string;

@@ -1,5 +1,5 @@
 {
-  "id": "a198cf69-4d66-4bdd-bf89-a55c9a2a0e21",
+  "id": "f6293606-374e-4d79-93aa-8e5daa5bc7b7",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -2911,6 +2911,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "iqpro_hold_fee_subscription_id": {
+          "name": "iqpro_hold_fee_subscription_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -3264,12 +3270,37 @@
           "notNull": true,
           "default": 0
         },
+        "cancellation_fee": {
+          "name": "cancellation_fee",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "hold_fee_amount": {
+          "name": "hold_fee_amount",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "hold_fee_frequency": {
+          "name": "hold_fee_frequency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "hold_limit_per_year": {
+          "name": "hold_limit_per_year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "frequency": {
           "name": "frequency",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
-          "default": "'Monthly'"
+          "notNull": false
         },
         "contract_length": {
           "name": "contract_length",
@@ -3790,56 +3821,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.platform_config": {
-      "name": "platform_config",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "'singleton'"
-        },
-        "iqpro_saas_client_id": {
-          "name": "iqpro_saas_client_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "iqpro_saas_client_secret_enc": {
-          "name": "iqpro_saas_client_secret_enc",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "iqpro_saas_gateway_id": {
-          "name": "iqpro_saas_gateway_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "platform_config_singleton": {
-          "name": "platform_config_singleton",
-          "value": "\"id\" = 'singleton'"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.payment_method": {
       "name": "payment_method",
       "schema": "",
@@ -3904,6 +3885,51 @@
           "onUpdate": "no action"
         }
       },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.platform_config": {
+      "name": "platform_config",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "'singleton'"
+        },
+        "iqpro_saas_client_id": {
+          "name": "iqpro_saas_client_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "iqpro_saas_client_secret_enc": {
+          "name": "iqpro_saas_client_secret_enc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "iqpro_saas_gateway_id": {
+          "name": "iqpro_saas_gateway_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

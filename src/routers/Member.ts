@@ -5,12 +5,14 @@ import { z } from 'zod';
 import { logger } from '@/libs/Logger';
 import { audit } from '@/services/AuditService';
 import { sendMemberConfirmationEmail } from '@/services/EmailService';
+import { resolveIQProConfig } from '@/services/IQProConfigService';
+import { cancelMembershipLifecycle, getLifecycleContext, HoldLimitReachedError, holdMembershipLifecycle, reactivateMembershipLifecycle } from '@/services/MemberPaymentService';
 import { addMemberMembership, changeMemberMembership, createMember, getAllMembershipPlans, getFamilyMembers, getHeadOfHouseholdMembers, getHOHForFamilyMember, getMemberPaymentMethods, getMembershipPlans, getMemberTransactions, linkFamilyMember, removeFully, unlinkFamilyMember, updateMember, updateMemberContactInfo, updateMemberPhoto, updateMemberStatus } from '@/services/MembersService';
 import { generatePdfFilename } from '@/services/WaiverPdfService';
 import { generateWaiverPdfBuffer } from '@/services/WaiverPdfService.server';
 import { AUDIT_ACTION, AUDIT_ENTITY_TYPE } from '@/types/Audit';
 import { ORG_ROLE } from '@/types/Auth';
-import { DeleteMemberValidation, EditMemberValidation, GetHOHForMemberValidation, GetHOHPaymentMethodsValidation, LinkFamilyMemberValidation, ListFamilyMembersValidation, MemberPaymentMethodsValidation, MemberTransactionsValidation, MemberValidation, RemoveFullyMemberValidation, SearchHOHValidation, SendConfirmationEmailValidation, UnlinkFamilyMemberValidation, UpdateMemberContactInfoValidation, UpdateMemberPhotoValidation, UpdateMemberTypeValidation } from '@/validations/MemberValidation';
+import { CancelMembershipValidation, DeleteMemberValidation, EditMemberValidation, GetHOHForMemberValidation, GetHOHPaymentMethodsValidation, HoldMembershipValidation, LinkFamilyMemberValidation, ListFamilyMembersValidation, MemberPaymentMethodsValidation, MemberTransactionsValidation, MemberValidation, ReactivateMembershipValidation, RemoveFullyMemberValidation, SearchHOHValidation, SendConfirmationEmailValidation, UnlinkFamilyMemberValidation, UpdateMemberContactInfoValidation, UpdateMemberPhotoValidation, UpdateMemberTypeValidation } from '@/validations/MemberValidation';
 import { guardAuth, guardRole } from './AuthGuards';
 
 export const create = os
@@ -165,6 +167,154 @@ export const remove = os
         error: errorMessage,
       });
 
+      throw error;
+    }
+  });
+
+/**
+ * Cancel a specific member membership. Charges the plan's cancellationFee via
+ * IQPro using the saved payment method on the existing subscription (unless
+ * `waiveFee` is true), cancels the IQPro subscription, and updates DB rows.
+ *
+ * Separate from `member.remove` so the IQPro side effects + cancellation-fee
+ * audit trail are distinct from the legacy soft-archive endpoint. Mirrors
+ * the kiosk's PATCH /api/members/[memberId]/membership behavior.
+ */
+export const cancelMembership = os
+  .input(CancelMembershipValidation)
+  .handler(async ({ input }) => {
+    const context = await guardRole(ORG_ROLE.FRONT_DESK);
+
+    try {
+      const ctx = await getLifecycleContext(input.memberId, input.memberMembershipId, context.orgId);
+      if (!ctx) {
+        throw new ORPCError('Membership not found', { status: 404 });
+      }
+
+      const iqproConfig = await resolveIQProConfig(context.orgId);
+
+      const result = await cancelMembershipLifecycle({
+        config: iqproConfig,
+        ctx,
+        waiveFee: input.waiveFee,
+      });
+
+      await audit(context, AUDIT_ACTION.MEMBERSHIP_CANCEL, AUDIT_ENTITY_TYPE.MEMBERSHIP, {
+        entityId: input.memberMembershipId,
+        status: 'success',
+      });
+
+      if (result.cancellationFeeCharged > 0) {
+        await audit(context, AUDIT_ACTION.CANCELLATION_FEE_CHARGE, AUDIT_ENTITY_TYPE.TRANSACTION, {
+          entityId: result.cancellationTransactionId,
+          status: 'success',
+        });
+      }
+
+      return {
+        cancellationFeeCharged: result.cancellationFeeCharged,
+        cancellationTransactionId: result.cancellationTransactionId,
+        subscriptionCancelled: result.subscriptionCancelled,
+        feeChargeError: result.error,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      await audit(context, AUDIT_ACTION.MEMBERSHIP_CANCEL, AUDIT_ENTITY_TYPE.MEMBERSHIP, {
+        entityId: input.memberMembershipId,
+        status: 'failure',
+        error: errorMessage,
+      });
+      throw error;
+    }
+  });
+
+/**
+ * Place a member's membership on hold. Charges the plan's hold fee
+ * (one-time or recurring) via IQPro, pauses the original subscription, and
+ * updates statuses. Mirrors the kiosk's hold action.
+ */
+export const holdMembership = os
+  .input(HoldMembershipValidation)
+  .handler(async ({ input }) => {
+    const context = await guardRole(ORG_ROLE.FRONT_DESK);
+
+    try {
+      const ctx = await getLifecycleContext(input.memberId, input.memberMembershipId, context.orgId);
+      if (!ctx) {
+        throw new ORPCError('Membership not found', { status: 404 });
+      }
+
+      const iqproConfig = await resolveIQProConfig(context.orgId);
+
+      const result = await holdMembershipLifecycle({ config: iqproConfig, ctx });
+
+      await audit(context, AUDIT_ACTION.MEMBERSHIP_HOLD, AUDIT_ENTITY_TYPE.MEMBERSHIP, {
+        entityId: input.memberMembershipId,
+        status: 'success',
+      });
+
+      if (result.holdFeeCharged > 0 || result.holdFeeSubscriptionId) {
+        await audit(context, AUDIT_ACTION.HOLD_FEE_CHARGE, AUDIT_ENTITY_TYPE.TRANSACTION, {
+          entityId: result.holdFeeTransactionId ?? result.holdFeeSubscriptionId,
+          status: 'success',
+        });
+      }
+
+      return {
+        holdFeeCharged: result.holdFeeCharged,
+        holdFeeTransactionId: result.holdFeeTransactionId,
+        holdFeeSubscriptionId: result.holdFeeSubscriptionId,
+        feeChargeError: result.error,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      await audit(context, AUDIT_ACTION.MEMBERSHIP_HOLD, AUDIT_ENTITY_TYPE.MEMBERSHIP, {
+        entityId: input.memberMembershipId,
+        status: 'failure',
+        error: errorMessage,
+      });
+      // The plan's hold_limit_per_year refused this request — surface as 409
+      // so the UI can show a clear "limit reached" message instead of a
+      // generic 500.
+      if (error instanceof HoldLimitReachedError) {
+        throw new ORPCError('Conflict', { status: 409, message: error.message });
+      }
+      throw error;
+    }
+  });
+
+/**
+ * Reactivate a held membership. Cancels any recurring hold-fee subscription
+ * and resumes the original membership subscription.
+ */
+export const reactivateMembership = os
+  .input(ReactivateMembershipValidation)
+  .handler(async ({ input }) => {
+    const context = await guardRole(ORG_ROLE.FRONT_DESK);
+
+    try {
+      const ctx = await getLifecycleContext(input.memberId, input.memberMembershipId, context.orgId);
+      if (!ctx) {
+        throw new ORPCError('Membership not found', { status: 404 });
+      }
+
+      const iqproConfig = await resolveIQProConfig(context.orgId);
+
+      await reactivateMembershipLifecycle({ config: iqproConfig, ctx });
+
+      await audit(context, AUDIT_ACTION.MEMBERSHIP_REACTIVATE, AUDIT_ENTITY_TYPE.MEMBERSHIP, {
+        entityId: input.memberMembershipId,
+        status: 'success',
+      });
+
+      return { success: true };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      await audit(context, AUDIT_ACTION.MEMBERSHIP_REACTIVATE, AUDIT_ENTITY_TYPE.MEMBERSHIP, {
+        entityId: input.memberMembershipId,
+        status: 'failure',
+        error: errorMessage,
+      });
       throw error;
     }
   });

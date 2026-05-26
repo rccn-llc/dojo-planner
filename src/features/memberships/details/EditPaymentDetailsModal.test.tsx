@@ -5,7 +5,7 @@ import { EditPaymentDetailsModal } from './EditPaymentDetailsModal';
 
 // Mock next-intl with proper translations
 const translationKeys: Record<string, string> = {
-  title: 'Edit Payment Details',
+  title: 'Edit Payments and Fees',
   signup_fee_label: 'Sign-up Fee',
   signup_fee_placeholder: '0.00',
   charge_signup_fee_label: 'Charge Sign-up Fee',
@@ -13,15 +13,37 @@ const translationKeys: Record<string, string> = {
   charge_first_payment: 'With first payment',
   monthly_fee_label: 'Monthly Fee',
   weekly_fee_label: 'Weekly Fee',
+  semi_annual_fee_label: 'Semi-Annual Fee',
   annual_fee_label: 'Annual Fee',
+  one_time_fee_label: 'One-Time Price',
   fee_placeholder: '0.00',
   fee_error: 'Please enter a valid fee amount.',
   payment_frequency_label: 'Payment Frequency',
   frequency_monthly: 'Monthly',
   frequency_weekly: 'Weekly',
+  frequency_semi_annually: 'Every 6 Months',
   frequency_annually: 'Annually',
+  frequency_one_time: 'One-time',
   prorate_label: 'Pro-rate First Payment',
   prorate_description: 'Enable proration for partial months',
+  fees_section_title: 'Cancellation and Hold Fees',
+  cancellation_fee_label: 'Cancellation Fee',
+  cancellation_fee_placeholder: '0.00',
+  cancellation_fee_help: 'Charged when a member cancels this membership',
+  hold_fee_amount_label: 'Hold Fee',
+  hold_fee_amount_placeholder: '0.00',
+  hold_fee_amount_help: 'Charged when a member is placed on hold',
+  hold_fee_frequency_label: 'Hold Fee Frequency',
+  hold_fee_frequency_placeholder: 'Select a frequency',
+  hold_fee_frequency_help: 'One-time charge or recurring on this cadence while on hold',
+  hold_fee_frequency_one_time: 'One-time',
+  hold_fee_frequency_weekly: 'Weekly',
+  hold_fee_frequency_monthly: 'Monthly',
+  hold_fee_frequency_semi_annually: 'Every 6 Months',
+  hold_fee_frequency_annually: 'Annually',
+  hold_limit_label: 'Hold Limit per Year',
+  hold_limit_placeholder: 'e.g., 2',
+  hold_limit_help: 'Maximum holds allowed in any rolling 12-month window. Leave blank for unlimited.',
   cancel_button: 'Cancel',
   save_button: 'Save Changes',
   saving_button: 'Saving...',
@@ -43,6 +65,10 @@ describe('EditPaymentDetailsModal', () => {
     monthlyFee: 150,
     paymentFrequency: 'monthly' as const,
     proRateFirstPayment: true,
+    cancellationFee: null,
+    holdFeeAmount: null,
+    holdFeeFrequency: null,
+    holdLimitPerYear: null,
     isTrial: false,
     onSave: mockOnSave,
   };
@@ -54,7 +80,7 @@ describe('EditPaymentDetailsModal', () => {
   it('should render the modal with title when open', () => {
     render(<EditPaymentDetailsModal {...defaultProps} />);
 
-    const heading = page.getByText('Edit Payment Details');
+    const heading = page.getByText('Edit Payments and Fees');
 
     expect(heading).toBeTruthy();
   });
@@ -62,7 +88,7 @@ describe('EditPaymentDetailsModal', () => {
   it('should not render when isOpen is false', () => {
     render(<EditPaymentDetailsModal {...defaultProps} isOpen={false} />);
 
-    const heading = document.body.textContent?.includes('Edit Payment Details');
+    const heading = document.body.textContent?.includes('Edit Payments and Fees');
 
     expect(heading).toBe(false);
   });
@@ -134,7 +160,7 @@ describe('EditPaymentDetailsModal', () => {
   it('should render Cancel button', () => {
     render(<EditPaymentDetailsModal {...defaultProps} />);
 
-    const cancelButton = page.getByText('Cancel');
+    const cancelButton = page.getByRole('button', { name: 'Cancel' });
 
     expect(cancelButton).toBeTruthy();
   });
@@ -150,7 +176,8 @@ describe('EditPaymentDetailsModal', () => {
   it('should call onClose when Cancel button is clicked', async () => {
     render(<EditPaymentDetailsModal {...defaultProps} />);
 
-    const cancelButton = page.getByText('Cancel');
+    // Scope to button role — 'Cancel' string also appears in 'Cancellation Fee' label.
+    const cancelButton = page.getByRole('button', { name: 'Cancel' });
     await userEvent.click(cancelButton);
 
     expect(mockOnClose).toHaveBeenCalledTimes(1);

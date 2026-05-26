@@ -75,6 +75,8 @@ describe('MembershipSuccessStep', () => {
     autoRenewal: 'month-to-month',
     cancellationFee: 300,
     holdLimitPerYear: 2,
+    holdFeeAmount: null,
+    holdFeeFrequency: null,
     classesIncluded: null,
     punchcardPrice: null,
   };
@@ -362,6 +364,8 @@ describe('MembershipSuccessStep', () => {
     const noHoldLimitData: AddMembershipWizardData = {
       ...mockData,
       holdLimitPerYear: 0,
+      holdFeeAmount: null,
+      holdFeeFrequency: null,
       associatedWaiverId: null,
       associatedWaiverName: null,
     };

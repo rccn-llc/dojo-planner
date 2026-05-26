@@ -4,6 +4,7 @@ import type {
   AutoRenewalOption,
   ChargeSignUpFeeOption,
   ContractLength,
+  HoldFeeFrequencyOption,
   MembershipStatus,
   MembershipType,
   PaymentFrequency,
@@ -52,19 +53,27 @@ export type MembershipDetailData = {
   signUpFee: number | null;
   chargeSignUpFee: ChargeSignUpFeeOption;
   monthlyFee: number | null;
-  paymentFrequency: PaymentFrequency;
+  paymentFrequency: PaymentFrequency | 'one-time';
   proRateFirstPayment: boolean;
   // Contract Terms
   contractLength: ContractLength;
   autoRenewal: AutoRenewalOption;
   cancellationFee: number | null;
   holdLimitPerYear: number | null;
+  holdFeeAmount: number | null;
+  holdFeeFrequency: HoldFeeFrequencyOption | null;
   // Stats (read-only)
   activeCount: number;
   revenue: string;
 };
 
-function mapFrequency(frequency: string): PaymentFrequency {
+// `null` (DB value for punchcards / trials / one-time plans) and the legacy
+// sentinel 'None' both map to 'one-time' — the wizard, payment-step, and
+// detail-card UIs are expected to handle 'one-time' explicitly.
+function mapFrequency(frequency: string | null | undefined): PaymentFrequency | 'one-time' {
+  if (frequency == null || frequency === '') {
+    return 'one-time';
+  }
   switch (frequency.toLowerCase()) {
     case 'monthly':
       return 'monthly';
@@ -73,8 +82,35 @@ function mapFrequency(frequency: string): PaymentFrequency {
     case 'annual':
     case 'annually':
       return 'annually';
+    case 'semi-annual':
+    case 'semi-annually':
+      return 'semi-annually';
+    case 'none':
+      return 'one-time';
     default:
       return 'monthly';
+  }
+}
+
+function mapHoldFeeFrequency(value: string | null | undefined): HoldFeeFrequencyOption | null {
+  if (value == null || value === '') {
+    return null;
+  }
+  switch (value.toLowerCase()) {
+    case 'one-time':
+      return 'one-time';
+    case 'weekly':
+      return 'weekly';
+    case 'monthly':
+      return 'monthly';
+    case 'semi-annual':
+    case 'semi-annually':
+      return 'semi-annually';
+    case 'annual':
+    case 'annually':
+      return 'annually';
+    default:
+      return null;
   }
 }
 
@@ -97,7 +133,9 @@ function mapMembershipType(plan: MembershipPlanData): MembershipType {
   if (plan.isTrial) {
     return 'trial';
   }
-  if (plan.frequency === 'None' && !plan.isTrial) {
+  // Null frequency (the new convention) and the legacy 'None' sentinel both
+  // mean "no recurring billing" — for non-trial plans that signals a punchcard.
+  if ((plan.frequency == null || plan.frequency === 'None') && !plan.isTrial) {
     return 'punchcard';
   }
   return 'standard';
@@ -122,8 +160,10 @@ function transformPlanToDetailData(plan: MembershipPlanData): MembershipDetailDa
     proRateFirstPayment: false,
     contractLength: mapContractLength(plan.contractLength),
     autoRenewal: 'none',
-    cancellationFee: null,
-    holdLimitPerYear: null,
+    cancellationFee: plan.cancellationFee ?? null,
+    holdLimitPerYear: plan.holdLimitPerYear ?? null,
+    holdFeeAmount: plan.holdFeeAmount ?? null,
+    holdFeeFrequency: mapHoldFeeFrequency(plan.holdFeeFrequency ?? null),
     activeCount: 0,
     revenue: '$0/mo revenue',
   };
@@ -252,7 +292,8 @@ export default function MembershipDetailPage({ params }: { params: Promise<PageP
     }
   };
 
-  // Format price for display
+  // Format price for display. One-time / null-frequency plans show just the
+  // dollar amount (no /mo, /wk, etc.) since there's no recurring cadence.
   const formattedPrice = useMemo(() => {
     if (!membershipData) {
       return '';
@@ -260,11 +301,16 @@ export default function MembershipDetailPage({ params }: { params: Promise<PageP
     if (membershipData.monthlyFee === null || membershipData.monthlyFee === 0) {
       return t('price_free');
     }
-    const frequencySuffix = {
-      monthly: '/mo',
-      weekly: '/wk',
-      annually: '/yr',
-    }[membershipData.paymentFrequency];
+    const frequencySuffix = (() => {
+      switch (membershipData.paymentFrequency) {
+        case 'monthly': return '/mo';
+        case 'weekly': return '/wk';
+        case 'semi-annually': return '/6mo';
+        case 'annually': return '/yr';
+        case 'one-time': return '';
+        default: return '';
+      }
+    })();
     return `$${membershipData.monthlyFee.toFixed(2)}${frequencySuffix}`;
   }, [membershipData, t]);
 
@@ -348,23 +394,26 @@ export default function MembershipDetailPage({ params }: { params: Promise<PageP
           onEdit={canEdit ? () => setIsEditAssociatedProgramOpen(true) : undefined}
         />
 
-        {/* Payment Details Card */}
+        {/* Payments and Fees Card — sign-up + recurring fee + frequency + cancel/hold fees + hold limit */}
         <MembershipPaymentDetailsCard
           signUpFee={membershipData.signUpFee}
           chargeSignUpFee={membershipData.chargeSignUpFee}
           monthlyFee={membershipData.monthlyFee}
           paymentFrequency={membershipData.paymentFrequency}
           proRateFirstPayment={membershipData.proRateFirstPayment}
+          cancellationFee={membershipData.cancellationFee}
+          holdFeeAmount={membershipData.holdFeeAmount}
+          holdFeeFrequency={membershipData.holdFeeFrequency}
+          holdLimitPerYear={membershipData.holdLimitPerYear}
           isTrial={isTrial}
+          isPunchcard={membershipData.membershipType === 'punchcard'}
           onEdit={canEdit ? () => setIsEditPaymentOpen(true) : undefined}
         />
 
-        {/* Contract Terms Card */}
+        {/* Contract Terms Card — contract length + auto-renewal only */}
         <MembershipContractTermsCard
           contractLength={membershipData.contractLength}
           autoRenewal={membershipData.autoRenewal}
-          cancellationFee={membershipData.cancellationFee}
-          holdLimitPerYear={membershipData.holdLimitPerYear}
           onEdit={canEdit ? () => setIsEditContractOpen(true) : undefined}
         />
       </div>
@@ -403,7 +452,12 @@ export default function MembershipDetailPage({ params }: { params: Promise<PageP
         monthlyFee={membershipData.monthlyFee}
         paymentFrequency={membershipData.paymentFrequency}
         proRateFirstPayment={membershipData.proRateFirstPayment}
+        cancellationFee={membershipData.cancellationFee}
+        holdFeeAmount={membershipData.holdFeeAmount}
+        holdFeeFrequency={membershipData.holdFeeFrequency}
+        holdLimitPerYear={membershipData.holdLimitPerYear}
         isTrial={isTrial}
+        isPunchcard={membershipData.membershipType === 'punchcard'}
         onSave={(data) => {
           handleUpdateMembership(data);
           setIsEditPaymentOpen(false);
@@ -415,8 +469,6 @@ export default function MembershipDetailPage({ params }: { params: Promise<PageP
         onClose={() => setIsEditContractOpen(false)}
         contractLength={membershipData.contractLength}
         autoRenewal={membershipData.autoRenewal}
-        cancellationFee={membershipData.cancellationFee}
-        holdLimitPerYear={membershipData.holdLimitPerYear}
         onSave={(data) => {
           handleUpdateMembership(data);
           setIsEditContractOpen(false);

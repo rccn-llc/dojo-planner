@@ -418,20 +418,43 @@ export class IQProPaymentProvider implements IPaymentProvider {
     try {
       const now = params.startDate.toISOString();
       const dayOfMonth = params.startDate.getDate();
+      const startMonth = params.startDate.getMonth() + 1; // 1-12
 
-      // Billing period: Monthly=4, Yearly=6
-      const billingPeriodId = params.frequency === 'annual' ? 6 : 4;
-
-      // Schedule varies by frequency:
-      // Monthly: minutes, hours, daysOfMonth (no monthsOfYear)
-      // Annual: minutes, hours, daysOfMonth, monthsOfYear (only start month)
+      // Billing period mapping (IQPro recurrence schema):
+      // - Weekly (billingPeriodId: 2): schedule must include daysOfWeek.
+      // - Monthly (billingPeriodId: 4): schedule needs daysOfMonth only.
+      // - Semi-annual: IQPro has no native 6-month cadence. We use
+      //   billingPeriodId: 6 (yearly) with two monthsOfYear entries (startMonth
+      //   and startMonth+6 wrapped mod 12) so the sub fires twice a year.
+      // - Annual (billingPeriodId: 6): schedule needs daysOfMonth +
+      //   monthsOfYear with the single start month.
+      let billingPeriodId: number;
       const schedule: Record<string, number[]> = {
         minutes: [0],
         hours: [0],
         daysOfMonth: [dayOfMonth],
       };
-      if (params.frequency === 'annual') {
-        schedule.monthsOfYear = [params.startDate.getMonth() + 1];
+      switch (params.frequency) {
+        case 'weekly':
+          billingPeriodId = 2;
+          schedule.daysOfWeek = [params.startDate.getDay()];
+          // Weekly schedules don't need daysOfMonth — replace it.
+          delete (schedule as Record<string, unknown>).daysOfMonth;
+          break;
+        case 'semi-annual': {
+          billingPeriodId = 6;
+          const secondMonth = ((startMonth - 1 + 6) % 12) + 1;
+          schedule.monthsOfYear = [startMonth, secondMonth].sort((a, b) => a - b);
+          break;
+        }
+        case 'annual':
+          billingPeriodId = 6;
+          schedule.monthsOfYear = [startMonth];
+          break;
+        case 'monthly':
+        default:
+          billingPeriodId = 4;
+          break;
       }
 
       // Billing address — API requires country, state, email at minimum
@@ -466,11 +489,24 @@ export class IQProPaymentProvider implements IPaymentProvider {
         country,
       };
 
+      // IQPro unitOfMeasureId: 1=Item, 3=Month, 4=Year, 6=Week (per gateway docs).
+      // Semi-annual bills in months, so use Month (3) and let unitPrice be the
+      // 6-month total.
+      const unitOfMeasureId = (() => {
+        switch (params.frequency) {
+          case 'weekly': return 6;
+          case 'annual': return 4;
+          case 'semi-annual':
+          case 'monthly':
+          default: return 3;
+        }
+      })();
+
       const subscriptionPayload: Record<string, unknown> = {
         customerId: params.customerId,
         subscriptionStatusId: 1, // Active
         name: params.description,
-        prefix: 'MBR', // Membership subscription prefix (max 10 chars)
+        prefix: params.prefix ?? 'MBR', // Membership subscription prefix (max 10 chars). 'HOLD' for hold-fee subs.
         recurrence: {
           termStartDate: now,
           billingStartDate: now,
@@ -495,7 +531,7 @@ export class IQProPaymentProvider implements IPaymentProvider {
             quantity: 1,
             unitPrice: params.amount, // Dollars, not cents
             discount: 0,
-            unitOfMeasureId: params.frequency === 'annual' ? 4 : 3, // YEAR=4, MONTH=3
+            unitOfMeasureId,
           },
         ],
         ...(params.paymentAdjustments && params.paymentAdjustments.length > 0 && {

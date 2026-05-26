@@ -304,6 +304,7 @@ CREATE TABLE "member_membership" (
 	"first_payment_date" timestamp,
 	"next_payment_date" timestamp,
 	"iqpro_subscription_id" text,
+	"iqpro_hold_fee_subscription_id" text,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
@@ -338,7 +339,11 @@ CREATE TABLE "membership_plan" (
 	"program" text NOT NULL,
 	"price" real DEFAULT 0 NOT NULL,
 	"signup_fee" real DEFAULT 0 NOT NULL,
-	"frequency" text DEFAULT 'Monthly' NOT NULL,
+	"cancellation_fee" real DEFAULT 0 NOT NULL,
+	"hold_fee_amount" real DEFAULT 0 NOT NULL,
+	"hold_fee_frequency" text,
+	"hold_limit_per_year" integer,
+	"frequency" text,
 	"contract_length" text NOT NULL,
 	"access_level" text NOT NULL,
 	"description" text,

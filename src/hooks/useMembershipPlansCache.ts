@@ -13,7 +13,11 @@ export type MembershipPlanData = {
   program: string;
   price: number;
   signupFee: number;
-  frequency: string;
+  cancellationFee: number;
+  holdFeeAmount: number;
+  holdFeeFrequency: string | null;
+  holdLimitPerYear: number | null;
+  frequency: string | null;
   contractLength: string;
   accessLevel: string;
   description: string | null;

@@ -3,7 +3,8 @@ import { useState } from 'react';
 export type MembershipType = 'standard' | 'trial' | 'punchcard';
 export type MembershipStatus = 'active' | 'inactive';
 export type ChargeSignUpFeeOption = 'at-registration' | 'first-payment';
-export type PaymentFrequency = 'monthly' | 'weekly' | 'annually';
+export type PaymentFrequency = 'monthly' | 'weekly' | 'semi-annually' | 'annually';
+export type HoldFeeFrequencyOption = 'one-time' | 'weekly' | 'monthly' | 'semi-annually' | 'annually';
 export type MembershipStartDateOption = 'same-as-registration' | 'custom';
 export type ContractLength = 'month-to-month' | '3-months' | '6-months' | '12-months';
 export type AutoRenewalOption = 'none' | 'month-to-month' | 'same-term';
@@ -35,6 +36,8 @@ export type AddMembershipWizardData = {
   autoRenewal: AutoRenewalOption;
   cancellationFee: number | null;
   holdLimitPerYear: number | null;
+  holdFeeAmount: number | null;
+  holdFeeFrequency: HoldFeeFrequencyOption | null;
 
   // Punchcard-specific fields
   classesIncluded: number | null;
@@ -63,6 +66,8 @@ const initialData: AddMembershipWizardData = {
   autoRenewal: 'none',
   cancellationFee: null,
   holdLimitPerYear: null,
+  holdFeeAmount: null,
+  holdFeeFrequency: null,
   classesIncluded: null,
   punchcardPrice: null,
 };

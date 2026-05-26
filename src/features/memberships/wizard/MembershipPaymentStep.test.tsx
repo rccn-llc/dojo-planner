@@ -6,8 +6,8 @@ import { MembershipPaymentStep } from './MembershipPaymentStep';
 
 // Mock next-intl with proper translations
 const translationKeys: Record<string, string> = {
-  title: 'Payment Details',
-  subtitle: 'Configure the pricing and payment schedule',
+  title: 'Payments and Fees',
+  subtitle: 'Configure the recurring price, sign-up fee, and any cancellation or hold fees for this membership',
   signup_fee_label: 'Sign-up Fee',
   signup_fee_placeholder: '0.00',
   charge_signup_fee_label: 'Charge Sign-up Fee',
@@ -15,19 +15,35 @@ const translationKeys: Record<string, string> = {
   charge_first_payment: 'With first payment',
   monthly_fee_label: 'Monthly Fee',
   weekly_fee_label: 'Weekly Fee',
+  semi_annual_fee_label: 'Semi-Annual Fee',
   annual_fee_label: 'Annual Fee',
   monthly_fee_placeholder: '0.00',
   monthly_fee_error: 'Please enter a valid fee amount.',
   payment_frequency_label: 'Payment Frequency',
   frequency_monthly: 'Monthly',
   frequency_weekly: 'Weekly',
+  frequency_semi_annually: 'Every 6 Months',
   frequency_annually: 'Annually',
-  start_date_label: 'Membership Start Date',
-  start_date_same_as_registration: 'Same as registration date',
-  start_date_custom: 'Custom date',
-  custom_start_date_label: 'Custom Start Date',
   prorate_label: 'Pro-rate First Payment',
   prorate_description: 'Enable proration for partial months',
+  fees_section_title: 'Cancellation and Hold Fees',
+  cancellation_fee_label: 'Cancellation Fee',
+  cancellation_fee_placeholder: '0.00',
+  cancellation_fee_help: 'Charged when a member cancels this membership',
+  hold_fee_amount_label: 'Hold Fee',
+  hold_fee_amount_placeholder: '0.00',
+  hold_fee_amount_help: 'Charged when a member is placed on hold',
+  hold_fee_frequency_label: 'Hold Fee Frequency',
+  hold_fee_frequency_placeholder: 'Select a frequency',
+  hold_fee_frequency_help: 'One-time charge or recurring on this cadence while on hold',
+  hold_fee_frequency_one_time: 'One-time',
+  hold_fee_frequency_weekly: 'Weekly',
+  hold_fee_frequency_monthly: 'Monthly',
+  hold_fee_frequency_semi_annually: 'Every 6 Months',
+  hold_fee_frequency_annually: 'Annually',
+  hold_limit_label: 'Hold Limit per Year',
+  hold_limit_placeholder: 'e.g., 2',
+  hold_limit_help: 'Maximum number of holds allowed per year',
   classes_included_label: 'Classes Included',
   classes_included_placeholder: 'e.g., 10',
   classes_included_error: 'Please enter the number of classes (at least 1).',
@@ -73,6 +89,8 @@ describe('MembershipPaymentStep', () => {
     autoRenewal: 'none',
     cancellationFee: null,
     holdLimitPerYear: null,
+    holdFeeAmount: null,
+    holdFeeFrequency: null,
     classesIncluded: null,
     punchcardPrice: null,
   };
@@ -152,7 +170,7 @@ describe('MembershipPaymentStep', () => {
     expect(frequencyLabel).toBeTruthy();
   });
 
-  it('should render membership start date select', () => {
+  it('should render the Cancellation and Hold Fees section', () => {
     render(
       <MembershipPaymentStep
         data={mockData}
@@ -163,9 +181,35 @@ describe('MembershipPaymentStep', () => {
       />,
     );
 
-    const startDateLabel = page.getByText('Membership Start Date');
+    const sectionHeading = page.getByText('Cancellation and Hold Fees');
+    const cancellationFeeLabel = page.getByText('Cancellation Fee');
+    const holdFeeLabel = page.getByText('Hold Fee');
+    const holdFeeFrequencyLabel = page.getByText('Hold Fee Frequency');
+    const holdLimitLabel = page.getByText('Hold Limit per Year');
 
-    expect(startDateLabel).toBeTruthy();
+    expect(sectionHeading).toBeTruthy();
+    expect(cancellationFeeLabel).toBeTruthy();
+    expect(holdFeeLabel).toBeTruthy();
+    expect(holdFeeFrequencyLabel).toBeTruthy();
+    expect(holdLimitLabel).toBeTruthy();
+  });
+
+  it('should NOT render Membership Start Date on this step (moved to Contract Terms)', () => {
+    render(
+      <MembershipPaymentStep
+        data={mockData}
+        onUpdate={mockHandlers.onUpdate}
+        onNext={mockHandlers.onNext}
+        onBack={mockHandlers.onBack}
+        onCancel={mockHandlers.onCancel}
+      />,
+    );
+
+    const startDateLabels = Array.from(document.querySelectorAll('label')).filter(
+      el => el.textContent === 'Membership Start Date',
+    );
+
+    expect(startDateLabels.length).toBe(0);
   });
 
   it('should render pro-rate toggle', () => {
@@ -328,28 +372,6 @@ describe('MembershipPaymentStep', () => {
     const errorMessage = page.getByText('Something went wrong');
 
     expect(errorMessage).toBeTruthy();
-  });
-
-  it('should show custom date input when custom start date is selected', () => {
-    const customDateData: AddMembershipWizardData = {
-      ...mockData,
-      membershipStartDate: 'custom',
-      monthlyFee: 150,
-    };
-
-    render(
-      <MembershipPaymentStep
-        data={customDateData}
-        onUpdate={mockHandlers.onUpdate}
-        onNext={mockHandlers.onNext}
-        onBack={mockHandlers.onBack}
-        onCancel={mockHandlers.onCancel}
-      />,
-    );
-
-    const customDateLabel = page.getByText('Custom Start Date');
-
-    expect(customDateLabel).toBeTruthy();
   });
 
   it('should call onUpdate when signup fee input changes', async () => {

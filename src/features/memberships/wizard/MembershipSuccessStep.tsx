@@ -25,6 +25,8 @@ export const MembershipSuccessStep = ({ data, onDone }: MembershipSuccessStepPro
         return t('frequency_monthly');
       case 'weekly':
         return t('frequency_weekly');
+      case 'semi-annually':
+        return t('frequency_semi_annually');
       case 'annually':
         return t('frequency_annually');
       default:
