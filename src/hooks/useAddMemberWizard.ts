@@ -34,7 +34,7 @@ export type WizardStepData = {
   // Membership selection
   membershipPlanId: string | null;
   membershipPlanPrice?: number;
-  membershipPlanFrequency?: string;
+  membershipPlanFrequency?: string | null;
   membershipPlanName?: string;
   membershipPlanIsTrial?: boolean;
   membershipPlanContractLength?: string;

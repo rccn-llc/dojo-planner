@@ -3,7 +3,7 @@
 import type {
   AddMembershipWizardData,
   ChargeSignUpFeeOption,
-  MembershipStartDateOption,
+  HoldFeeFrequencyOption,
   PaymentFrequency,
 } from '@/hooks/useAddMembershipWizard';
 import { useTranslations } from 'next-intl';
@@ -76,6 +76,8 @@ export const MembershipPaymentStep = ({ data, onUpdate, onNext, onBack, onCancel
     switch (data.paymentFrequency) {
       case 'weekly':
         return t('weekly_fee_label');
+      case 'semi-annually':
+        return t('semi_annual_fee_label');
       case 'annually':
         return t('annual_fee_label');
       default:
@@ -213,39 +215,11 @@ export const MembershipPaymentStep = ({ data, onUpdate, onNext, onBack, onCancel
                   <SelectContent>
                     <SelectItem value="monthly">{t('frequency_monthly')}</SelectItem>
                     <SelectItem value="weekly">{t('frequency_weekly')}</SelectItem>
+                    <SelectItem value="semi-annually">{t('frequency_semi_annually')}</SelectItem>
                     <SelectItem value="annually">{t('frequency_annually')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-
-            {/* Membership Start Date */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">{t('start_date_label')}</label>
-                <Select
-                  value={data.membershipStartDate}
-                  onValueChange={(value: MembershipStartDateOption) => onUpdate({ membershipStartDate: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="same-as-registration">{t('start_date_same_as_registration')}</SelectItem>
-                    <SelectItem value="custom">{t('start_date_custom')}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {data.membershipStartDate === 'custom' && (
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">{t('custom_start_date_label')}</label>
-                  <Input
-                    type="date"
-                    value={data.customStartDate}
-                    onChange={e => onUpdate({ customStartDate: e.target.value })}
-                  />
-                </div>
-              )}
             </div>
 
             {/* Pro-rate First Payment */}
@@ -260,6 +234,79 @@ export const MembershipPaymentStep = ({ data, onUpdate, onNext, onBack, onCancel
                   onUpdate({ proRateFirstPayment: checked });
                 }}
               />
+            </div>
+
+            {/* Cancellation Fee + Hold Fee section */}
+            <div className="space-y-4 border-t border-border pt-4">
+              <h3 className="text-sm font-semibold text-foreground">{t('fees_section_title')}</h3>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">{t('cancellation_fee_label')}</label>
+                  <div className="relative">
+                    <span className="absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground">$</span>
+                    <Input
+                      type="number"
+                      placeholder={t('cancellation_fee_placeholder')}
+                      value={data.cancellationFee ?? ''}
+                      onChange={e => handleNumberChange('cancellationFee', e.target.value)}
+                      className="pl-7"
+                      min={0}
+                      step="0.01"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">{t('cancellation_fee_help')}</p>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">{t('hold_fee_amount_label')}</label>
+                  <div className="relative">
+                    <span className="absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground">$</span>
+                    <Input
+                      type="number"
+                      placeholder={t('hold_fee_amount_placeholder')}
+                      value={data.holdFeeAmount ?? ''}
+                      onChange={e => handleNumberChange('holdFeeAmount', e.target.value)}
+                      className="pl-7"
+                      min={0}
+                      step="0.01"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">{t('hold_fee_amount_help')}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">{t('hold_fee_frequency_label')}</label>
+                  <Select
+                    value={data.holdFeeFrequency ?? ''}
+                    onValueChange={(value: HoldFeeFrequencyOption) => onUpdate({ holdFeeFrequency: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('hold_fee_frequency_placeholder')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="one-time">{t('hold_fee_frequency_one_time')}</SelectItem>
+                      <SelectItem value="weekly">{t('hold_fee_frequency_weekly')}</SelectItem>
+                      <SelectItem value="monthly">{t('hold_fee_frequency_monthly')}</SelectItem>
+                      <SelectItem value="semi-annually">{t('hold_fee_frequency_semi_annually')}</SelectItem>
+                      <SelectItem value="annually">{t('hold_fee_frequency_annually')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">{t('hold_fee_frequency_help')}</p>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">{t('hold_limit_label')}</label>
+                  <Input
+                    type="number"
+                    placeholder={t('hold_limit_placeholder')}
+                    value={data.holdLimitPerYear ?? ''}
+                    onChange={e => handleNumberChange('holdLimitPerYear', e.target.value)}
+                    min={0}
+                  />
+                  <p className="text-xs text-muted-foreground">{t('hold_limit_help')}</p>
+                </div>
+              </div>
             </div>
           </>
         )}

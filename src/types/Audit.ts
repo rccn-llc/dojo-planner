@@ -14,6 +14,11 @@ export const AUDIT_ACTION = {
   MEMBER_UPDATE_ACCESS: 'member.updateAccess',
   MEMBER_ADD_MEMBERSHIP: 'member.addMembership',
   MEMBER_CHANGE_MEMBERSHIP: 'member.changeMembership',
+  MEMBERSHIP_CANCEL: 'memberMembership.cancel',
+  MEMBERSHIP_HOLD: 'memberMembership.hold',
+  MEMBERSHIP_REACTIVATE: 'memberMembership.reactivate',
+  CANCELLATION_FEE_CHARGE: 'cancellationFee.charge',
+  HOLD_FEE_CHARGE: 'holdFee.charge',
 
   // Membership plan operations
   MEMBERSHIP_PLAN_CREATE: 'membershipPlan.create',

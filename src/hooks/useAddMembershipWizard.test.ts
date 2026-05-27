@@ -32,6 +32,8 @@ describe('useAddMembershipWizard types and exports', () => {
       autoRenewal: 'month-to-month',
       cancellationFee: 300,
       holdLimitPerYear: 2,
+      holdFeeAmount: null,
+      holdFeeFrequency: null,
       classesIncluded: null,
       punchcardPrice: null,
     };
@@ -132,6 +134,8 @@ describe('useAddMembershipWizard types and exports', () => {
       autoRenewal: 'none',
       cancellationFee: null,
       holdLimitPerYear: null,
+      holdFeeAmount: null,
+      holdFeeFrequency: null,
       classesIncluded: null,
       punchcardPrice: null,
     };
@@ -164,6 +168,8 @@ describe('useAddMembershipWizard types and exports', () => {
       autoRenewal: 'none',
       cancellationFee: null,
       holdLimitPerYear: null,
+      holdFeeAmount: null,
+      holdFeeFrequency: null,
       classesIncluded: null,
       punchcardPrice: null,
     };
@@ -193,6 +199,8 @@ describe('useAddMembershipWizard types and exports', () => {
       autoRenewal: 'none',
       cancellationFee: null,
       holdLimitPerYear: null,
+      holdFeeAmount: null,
+      holdFeeFrequency: null,
       classesIncluded: null,
       punchcardPrice: null,
     };
@@ -223,6 +231,8 @@ describe('useAddMembershipWizard types and exports', () => {
       autoRenewal: 'month-to-month',
       cancellationFee: 300,
       holdLimitPerYear: 2,
+      holdFeeAmount: null,
+      holdFeeFrequency: null,
       classesIncluded: null,
       punchcardPrice: null,
     };
@@ -253,6 +263,8 @@ describe('useAddMembershipWizard types and exports', () => {
       autoRenewal: 'none',
       cancellationFee: null,
       holdLimitPerYear: null,
+      holdFeeAmount: null,
+      holdFeeFrequency: null,
       classesIncluded: null,
       punchcardPrice: null,
     };
@@ -281,6 +293,8 @@ describe('useAddMembershipWizard types and exports', () => {
       autoRenewal: 'same-term',
       cancellationFee: null,
       holdLimitPerYear: null,
+      holdFeeAmount: null,
+      holdFeeFrequency: null,
       classesIncluded: null,
       punchcardPrice: null,
     };
@@ -310,6 +324,8 @@ describe('useAddMembershipWizard types and exports', () => {
       autoRenewal: 'none',
       cancellationFee: null,
       holdLimitPerYear: null,
+      holdFeeAmount: null,
+      holdFeeFrequency: null,
       classesIncluded: null,
       punchcardPrice: null,
     };
@@ -339,6 +355,8 @@ describe('useAddMembershipWizard types and exports', () => {
       autoRenewal: 'month-to-month',
       cancellationFee: null,
       holdLimitPerYear: null,
+      holdFeeAmount: null,
+      holdFeeFrequency: null,
       classesIncluded: null,
       punchcardPrice: null,
     };
@@ -367,6 +385,8 @@ describe('useAddMembershipWizard types and exports', () => {
       autoRenewal: 'none',
       cancellationFee: null,
       holdLimitPerYear: null,
+      holdFeeAmount: null,
+      holdFeeFrequency: null,
       classesIncluded: 10,
       punchcardPrice: 200,
     };

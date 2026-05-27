@@ -22,6 +22,8 @@ const baseWizard: AddMembershipWizardData = {
   autoRenewal: 'none',
   cancellationFee: null,
   holdLimitPerYear: null,
+  holdFeeAmount: null,
+  holdFeeFrequency: null,
   classesIncluded: null,
   punchcardPrice: null,
 };
@@ -59,7 +61,7 @@ describe('transformWizardDataToDb', () => {
     expect(result.isTrial).toBe(true);
   });
 
-  it('uses None frequency for punchcard plans', () => {
+  it('writes null frequency for punchcard plans (no recurring billing)', () => {
     const result = transformWizardDataToDb({
       ...baseWizard,
       membershipType: 'punchcard',
@@ -67,10 +69,63 @@ describe('transformWizardDataToDb', () => {
       punchcardPrice: 200,
     });
 
-    expect(result.frequency).toBe('None');
+    expect(result.frequency).toBeNull();
     expect(result.price).toBe(200);
     expect(result.contractLength).toBe('10 Classes');
     expect(result.accessLevel).toBe('10 Classes Total');
+  });
+
+  it('writes null frequency for trial plans', () => {
+    const result = transformWizardDataToDb({
+      ...baseWizard,
+      membershipType: 'trial',
+    });
+
+    expect(result.frequency).toBeNull();
+    expect(result.isTrial).toBe(true);
+  });
+
+  it('maps semi-annually wizard frequency to Semi-Annual DB value', () => {
+    const result = transformWizardDataToDb({
+      ...baseWizard,
+      paymentFrequency: 'semi-annually',
+    });
+
+    expect(result.frequency).toBe('Semi-Annual');
+  });
+
+  it('maps weekly wizard frequency to Weekly DB value', () => {
+    const result = transformWizardDataToDb({
+      ...baseWizard,
+      paymentFrequency: 'weekly',
+    });
+
+    expect(result.frequency).toBe('Weekly');
+  });
+
+  it('persists hold-fee fields when amount + frequency are set', () => {
+    const result = transformWizardDataToDb({
+      ...baseWizard,
+      holdFeeAmount: 25,
+      holdFeeFrequency: 'monthly',
+    });
+
+    expect(result.holdFeeAmount).toBe(25);
+    expect(result.holdFeeFrequency).toBe('Monthly');
+  });
+
+  it('clears hold-fee fields for punchcards', () => {
+    const result = transformWizardDataToDb({
+      ...baseWizard,
+      membershipType: 'punchcard',
+      classesIncluded: 10,
+      punchcardPrice: 200,
+      holdFeeAmount: 25,
+      holdFeeFrequency: 'monthly',
+    });
+
+    expect(result.holdFeeAmount).toBe(0);
+    expect(result.holdFeeFrequency).toBeNull();
   });
 
   it('renders empty description as null', () => {

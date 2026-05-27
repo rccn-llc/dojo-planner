@@ -10,7 +10,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -24,13 +23,9 @@ type EditContractTermsModalProps = {
   onClose: () => void;
   contractLength: ContractLength;
   autoRenewal: AutoRenewalOption;
-  cancellationFee: number | null;
-  holdLimitPerYear: number | null;
   onSave: (data: {
     contractLength: ContractLength;
     autoRenewal: AutoRenewalOption;
-    cancellationFee: number | null;
-    holdLimitPerYear: number | null;
   }) => void;
 };
 
@@ -39,50 +34,36 @@ export function EditContractTermsModal({
   onClose,
   contractLength: initialContractLength,
   autoRenewal: initialAutoRenewal,
-  cancellationFee: initialCancellationFee,
-  holdLimitPerYear: initialHoldLimit,
   onSave,
 }: EditContractTermsModalProps) {
   const t = useTranslations('MembershipDetailPage.EditContractTermsModal');
 
   const [contractLength, setContractLength] = useState<ContractLength>(initialContractLength);
   const [autoRenewal, setAutoRenewal] = useState<AutoRenewalOption>(initialAutoRenewal);
-  const [cancellationFee, setCancellationFee] = useState<number | null>(initialCancellationFee);
-  const [holdLimitPerYear, setHoldLimitPerYear] = useState<number | null>(initialHoldLimit);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleNumberChange = (setter: (value: number | null) => void, value: string) => {
-    const numValue = value ? Number.parseFloat(value) : null;
-    setter(numValue);
+  const resetState = () => {
+    setContractLength(initialContractLength);
+    setAutoRenewal(initialAutoRenewal);
   };
 
   const handleSubmit = async () => {
     setIsLoading(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500));
     onSave({
       contractLength,
       autoRenewal,
-      cancellationFee,
-      holdLimitPerYear,
     });
     setIsLoading(false);
   };
 
   const handleCancel = () => {
-    setContractLength(initialContractLength);
-    setAutoRenewal(initialAutoRenewal);
-    setCancellationFee(initialCancellationFee);
-    setHoldLimitPerYear(initialHoldLimit);
+    resetState();
     onClose();
   };
 
   const handleOpenChange = (open: boolean) => {
     if (open) {
-      setContractLength(initialContractLength);
-      setAutoRenewal(initialAutoRenewal);
-      setCancellationFee(initialCancellationFee);
-      setHoldLimitPerYear(initialHoldLimit);
+      resetState();
     } else {
       handleCancel();
     }
@@ -90,7 +71,7 @@ export function EditContractTermsModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t('title')}</DialogTitle>
         </DialogHeader>
@@ -130,37 +111,6 @@ export function EditContractTermsModal({
                   <SelectItem value="same-term">{t('renewal_same_term')}</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-          </div>
-
-          {/* Cancellation Fee and Hold Limit */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">{t('cancellation_fee_label')}</label>
-              <div className="relative">
-                <span className="absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground">$</span>
-                <Input
-                  type="number"
-                  placeholder={t('cancellation_fee_placeholder')}
-                  value={cancellationFee ?? ''}
-                  onChange={e => handleNumberChange(setCancellationFee, e.target.value)}
-                  className="pl-7"
-                  min={0}
-                  step="0.01"
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">{t('cancellation_fee_help')}</p>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">{t('hold_limit_label')}</label>
-              <Input
-                type="number"
-                placeholder={t('hold_limit_placeholder')}
-                value={holdLimitPerYear ?? ''}
-                onChange={e => handleNumberChange(setHoldLimitPerYear, e.target.value)}
-                min={0}
-              />
-              <p className="text-xs text-muted-foreground">{t('hold_limit_help')}</p>
             </div>
           </div>
 

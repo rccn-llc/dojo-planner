@@ -7,6 +7,9 @@ import { memberMembershipSchema, membershipPlanSchema } from '@/models/Schema';
 // TYPES
 // =============================================================================
 
+export type MembershipPlanFrequency = 'Weekly' | 'Monthly' | 'Semi-Annual' | 'Annual' | 'None';
+export type HoldFeeFrequency = 'one-time' | 'Weekly' | 'Monthly' | 'Semi-Annual' | 'Annual';
+
 export type MembershipPlan = {
   id: string;
   organizationId: string;
@@ -17,7 +20,11 @@ export type MembershipPlan = {
   program: string;
   price: number;
   signupFee: number;
-  frequency: string;
+  cancellationFee: number;
+  holdFeeAmount: number;
+  holdFeeFrequency: HoldFeeFrequency | null;
+  holdLimitPerYear: number | null;
+  frequency: MembershipPlanFrequency | null;
   contractLength: string;
   accessLevel: string;
   description: string | null;
@@ -35,7 +42,11 @@ export type MembershipPlanInput = {
   programId?: string | null;
   price: number;
   signupFee: number;
-  frequency: 'Monthly' | 'Annual' | 'Weekly' | 'None';
+  cancellationFee: number;
+  holdFeeAmount: number;
+  holdFeeFrequency: HoldFeeFrequency | null;
+  holdLimitPerYear: number | null;
+  frequency: MembershipPlanFrequency | null;
   contractLength: string;
   accessLevel: string;
   description?: string | null;
@@ -80,7 +91,11 @@ type MembershipPlanRow = {
   program: string;
   price: number;
   signupFee: number;
-  frequency: string;
+  cancellationFee: number;
+  holdFeeAmount: number;
+  holdFeeFrequency: string | null;
+  holdLimitPerYear: number | null;
+  frequency: string | null;
   contractLength: string;
   accessLevel: string;
   description: string | null;
@@ -101,7 +116,11 @@ function toMembershipPlan(row: MembershipPlanRow): MembershipPlan {
     program: row.program,
     price: row.price,
     signupFee: row.signupFee,
-    frequency: row.frequency,
+    cancellationFee: row.cancellationFee,
+    holdFeeAmount: row.holdFeeAmount,
+    holdFeeFrequency: row.holdFeeFrequency as HoldFeeFrequency | null,
+    holdLimitPerYear: row.holdLimitPerYear,
+    frequency: row.frequency as MembershipPlanFrequency | null,
     contractLength: row.contractLength,
     accessLevel: row.accessLevel,
     description: row.description,
@@ -135,6 +154,10 @@ export async function createMembershipPlan(input: MembershipPlanInput, organizat
         program: input.program,
         price: input.price,
         signupFee: input.signupFee,
+        cancellationFee: input.cancellationFee,
+        holdFeeAmount: input.holdFeeAmount,
+        holdFeeFrequency: input.holdFeeFrequency,
+        holdLimitPerYear: input.holdLimitPerYear,
         frequency: input.frequency,
         contractLength: input.contractLength,
         accessLevel: input.accessLevel,
@@ -185,6 +208,10 @@ export async function updateMembershipPlan(
         program: input.program,
         price: input.price,
         signupFee: input.signupFee,
+        cancellationFee: input.cancellationFee,
+        holdFeeAmount: input.holdFeeAmount,
+        holdFeeFrequency: input.holdFeeFrequency,
+        holdLimitPerYear: input.holdLimitPerYear,
         frequency: input.frequency,
         contractLength: input.contractLength,
         accessLevel: input.accessLevel,

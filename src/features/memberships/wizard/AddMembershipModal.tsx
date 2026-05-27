@@ -75,7 +75,7 @@ export const AddMembershipModal = ({ isOpen, onCloseAction, onMembershipCreated 
             : result.plan.signupFee === 0
               ? 'No signup fee'
               : `$${result.plan.signupFee.toFixed(2)} signup fee`,
-          frequency: result.plan.frequency,
+          frequency: result.plan.frequency ?? 'One-time',
           contract: result.plan.contractLength,
           access: result.plan.accessLevel,
           activeCount: 0,

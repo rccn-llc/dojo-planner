@@ -411,10 +411,17 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
         return;
       }
 
-      // Process payment if payment details were collected and amount > 0
-      const finalPrice = wizard.data.appliedCoupon
+      // Process payment if payment details were collected and amount > 0.
+      // The signup fee (if any) is charged immediately alongside the first
+      // membership payment so it's actually enforced — the wizard form
+      // collects it on the plan, and the member should be billed for it on
+      // registration. The coupon discount applies to the recurring price
+      // only, not the signup fee.
+      const planPrice = wizard.data.appliedCoupon
         ? computeDiscountedPrice(wizard.data.membershipPlanPrice, wizard.data.appliedCoupon) ?? 0
         : (wizard.data.membershipPlanPrice ?? 0);
+      const signupFee = wizard.data.membershipPlanSignupFee ?? 0;
+      const finalPrice = planPrice + signupFee;
 
       let paymentDeclined = false;
 
@@ -658,10 +665,13 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
         });
       }
 
-      // 4. Process payment using HOH's context
-      const finalPrice = wizard.data.appliedCoupon
+      // 4. Process payment using HOH's context (signup fee added on top —
+      // see comment in the standalone-member branch above for rationale).
+      const planPrice = wizard.data.appliedCoupon
         ? computeDiscountedPrice(wizard.data.membershipPlanPrice, wizard.data.appliedCoupon) ?? 0
         : (wizard.data.membershipPlanPrice ?? 0);
+      const signupFee = wizard.data.membershipPlanSignupFee ?? 0;
+      const finalPrice = planPrice + signupFee;
 
       let paymentDeclined = false;
 

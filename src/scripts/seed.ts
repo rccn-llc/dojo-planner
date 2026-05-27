@@ -347,13 +347,27 @@ const scheduleExceptionsData = [
 ];
 
 // Membership plans
-const membershipPlansData = [
+// `frequency` is null for one-time / non-recurring plans (punchcards, free trials).
+// For recurring plans it is one of: 'Weekly' | 'Monthly' | 'Semi-Annual' | 'Annual'.
+const membershipPlansData: Array<{
+  name: string;
+  slug: string;
+  category: string;
+  program: string;
+  programSlug: string;
+  price: number;
+  signupFee: number;
+  frequency: string | null;
+  contractLength: string;
+  accessLevel: string;
+  isTrial: boolean;
+}> = [
   { name: '12 Month Commitment (Gold)', slug: '12-month-gold', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', programSlug: 'adult-bjj', price: 149, signupFee: 99, frequency: 'Monthly', contractLength: '12 Months', accessLevel: 'Unlimited', isTrial: false },
   { name: 'Month to Month (Gold)', slug: 'month-to-month-gold', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', programSlug: 'adult-bjj', price: 179, signupFee: 99, frequency: 'Monthly', contractLength: 'Month-to-Month', accessLevel: 'Unlimited', isTrial: false },
-  { name: '7-Day Free Trial', slug: '7-day-trial', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', programSlug: 'adult-bjj', price: 0, signupFee: 0, frequency: 'None', contractLength: '7 Days', accessLevel: 'Unlimited', isTrial: true },
+  { name: '7-Day Free Trial', slug: '7-day-trial', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', programSlug: 'adult-bjj', price: 0, signupFee: 0, frequency: null, contractLength: '7 Days', accessLevel: 'Unlimited', isTrial: true },
   { name: 'Kids Monthly', slug: 'kids-monthly', category: 'Kids Brazilian Jiu-Jitsu', program: 'Kids', programSlug: 'kids-program', price: 99, signupFee: 50, frequency: 'Monthly', contractLength: 'Month-to-Month', accessLevel: 'Kids Classes', isTrial: false },
   { name: 'Competition Team', slug: 'competition-team', category: 'Competition', program: 'Competition', programSlug: 'competition-team', price: 199, signupFee: 0, frequency: 'Monthly', contractLength: 'Month-to-Month', accessLevel: 'Unlimited + Comp Classes', isTrial: false },
-  { name: '10-Class Punch Card', slug: '10-class-punchcard', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', programSlug: 'adult-bjj', price: 200, signupFee: 0, frequency: 'None', contractLength: 'N/A', accessLevel: '10 Classes', isTrial: false },
+  { name: '10-Class Punch Card', slug: '10-class-punchcard', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', programSlug: 'adult-bjj', price: 200, signupFee: 0, frequency: null, contractLength: 'N/A', accessLevel: '10 Classes', isTrial: false },
 ];
 
 // Catalog categories

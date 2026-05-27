@@ -7,7 +7,7 @@ import { MembershipContractStep } from './MembershipContractStep';
 // Mock next-intl with proper translations
 const translationKeys: Record<string, string> = {
   title: 'Contract Terms',
-  subtitle: 'Set up contract length and renewal options',
+  subtitle: 'Set the contract length, renewal options, and when the membership begins',
   contract_length_label: 'Contract Length',
   contract_month_to_month: 'Month-to-Month',
   contract_3_months: '3 Months',
@@ -17,12 +17,10 @@ const translationKeys: Record<string, string> = {
   auto_renewal_none: 'No auto-renewal',
   auto_renewal_month_to_month: 'Month-to-Month after contract',
   auto_renewal_same_term: 'Same term renewal',
-  cancellation_fee_label: 'Cancellation Fee',
-  cancellation_fee_placeholder: '0.00',
-  cancellation_fee_help: 'Fee charged for early cancellation',
-  hold_limit_label: 'Hold Limit per Year',
-  hold_limit_placeholder: 'e.g., 2',
-  hold_limit_help: 'Maximum number of holds allowed per year',
+  start_date_label: 'Membership Start Date',
+  start_date_same_as_registration: 'Same as registration date',
+  start_date_custom: 'Custom date',
+  custom_start_date_label: 'Custom Start Date',
   cancel_button: 'Cancel',
   back_button: 'Back',
   create_button: 'Create Membership',
@@ -62,6 +60,8 @@ describe('MembershipContractStep', () => {
     autoRenewal: 'none',
     cancellationFee: null,
     holdLimitPerYear: null,
+    holdFeeAmount: null,
+    holdFeeFrequency: null,
     classesIncluded: null,
     punchcardPrice: null,
   };
@@ -125,7 +125,7 @@ describe('MembershipContractStep', () => {
     expect(autoRenewalLabel).toBeTruthy();
   });
 
-  it('should render cancellation fee input', () => {
+  it('should render Membership Start Date select (moved here from Payments and Fees)', () => {
     render(
       <MembershipContractStep
         data={mockData}
@@ -136,12 +136,33 @@ describe('MembershipContractStep', () => {
       />,
     );
 
-    const cancellationFeeLabel = page.getByText('Cancellation Fee');
+    const startDateLabel = page.getByText('Membership Start Date');
 
-    expect(cancellationFeeLabel).toBeTruthy();
+    expect(startDateLabel).toBeTruthy();
   });
 
-  it('should render hold limit input', () => {
+  it('should show custom date input when custom start date is selected', () => {
+    const customDateData: AddMembershipWizardData = {
+      ...mockData,
+      membershipStartDate: 'custom',
+    };
+
+    render(
+      <MembershipContractStep
+        data={customDateData}
+        onUpdate={mockHandlers.onUpdate}
+        onNext={mockHandlers.onNext}
+        onBack={mockHandlers.onBack}
+        onCancel={mockHandlers.onCancel}
+      />,
+    );
+
+    const customDateLabel = page.getByText('Custom Start Date');
+
+    expect(customDateLabel).toBeTruthy();
+  });
+
+  it('should NOT render Cancellation Fee on this step (moved to Payments and Fees)', () => {
     render(
       <MembershipContractStep
         data={mockData}
@@ -152,9 +173,47 @@ describe('MembershipContractStep', () => {
       />,
     );
 
-    const holdLimitLabel = page.getByText('Hold Limit per Year');
+    const cancellationFeeLabels = Array.from(document.querySelectorAll('label')).filter(
+      el => el.textContent === 'Cancellation Fee',
+    );
 
-    expect(holdLimitLabel).toBeTruthy();
+    expect(cancellationFeeLabels.length).toBe(0);
+  });
+
+  it('should NOT render Hold Fee on this step (moved to Payments and Fees)', () => {
+    render(
+      <MembershipContractStep
+        data={mockData}
+        onUpdate={mockHandlers.onUpdate}
+        onNext={mockHandlers.onNext}
+        onBack={mockHandlers.onBack}
+        onCancel={mockHandlers.onCancel}
+      />,
+    );
+
+    const holdFeeLabels = Array.from(document.querySelectorAll('label')).filter(
+      el => el.textContent === 'Hold Fee',
+    );
+
+    expect(holdFeeLabels.length).toBe(0);
+  });
+
+  it('should NOT render Hold Limit per Year on this step (moved to Payments and Fees)', () => {
+    render(
+      <MembershipContractStep
+        data={mockData}
+        onUpdate={mockHandlers.onUpdate}
+        onNext={mockHandlers.onNext}
+        onBack={mockHandlers.onBack}
+        onCancel={mockHandlers.onCancel}
+      />,
+    );
+
+    const holdLimitLabels = Array.from(document.querySelectorAll('label')).filter(
+      el => el.textContent === 'Hold Limit per Year',
+    );
+
+    expect(holdLimitLabels.length).toBe(0);
   });
 
   it('should have Create Membership button enabled by default', () => {
@@ -287,93 +346,5 @@ describe('MembershipContractStep', () => {
     const errorMessage = page.getByText('Something went wrong');
 
     expect(errorMessage).toBeTruthy();
-  });
-
-  it('should render help text for cancellation fee', () => {
-    render(
-      <MembershipContractStep
-        data={mockData}
-        onUpdate={mockHandlers.onUpdate}
-        onNext={mockHandlers.onNext}
-        onBack={mockHandlers.onBack}
-        onCancel={mockHandlers.onCancel}
-      />,
-    );
-
-    const helpText = page.getByText('Fee charged for early cancellation');
-
-    expect(helpText).toBeTruthy();
-  });
-
-  it('should render help text for hold limit', () => {
-    render(
-      <MembershipContractStep
-        data={mockData}
-        onUpdate={mockHandlers.onUpdate}
-        onNext={mockHandlers.onNext}
-        onBack={mockHandlers.onBack}
-        onCancel={mockHandlers.onCancel}
-      />,
-    );
-
-    const helpText = page.getByText('Maximum number of holds allowed per year');
-
-    expect(helpText).toBeTruthy();
-  });
-
-  it('should call onUpdate when cancellation fee input changes', async () => {
-    render(
-      <MembershipContractStep
-        data={mockData}
-        onUpdate={mockHandlers.onUpdate}
-        onNext={mockHandlers.onNext}
-        onBack={mockHandlers.onBack}
-        onCancel={mockHandlers.onCancel}
-      />,
-    );
-
-    const inputs = Array.from(document.querySelectorAll('input[type="number"]'));
-
-    if (inputs[0]) {
-      await userEvent.type(inputs[0], '300');
-
-      expect(mockHandlers.onUpdate).toHaveBeenCalled();
-    }
-  });
-
-  it('should call onUpdate when hold limit input changes', async () => {
-    render(
-      <MembershipContractStep
-        data={mockData}
-        onUpdate={mockHandlers.onUpdate}
-        onNext={mockHandlers.onNext}
-        onBack={mockHandlers.onBack}
-        onCancel={mockHandlers.onCancel}
-      />,
-    );
-
-    const inputs = Array.from(document.querySelectorAll('input[type="number"]'));
-
-    if (inputs[1]) {
-      await userEvent.type(inputs[1], '2');
-
-      expect(mockHandlers.onUpdate).toHaveBeenCalled();
-    }
-  });
-
-  it('should render dollar sign prefix for cancellation fee', () => {
-    render(
-      <MembershipContractStep
-        data={mockData}
-        onUpdate={mockHandlers.onUpdate}
-        onNext={mockHandlers.onNext}
-        onBack={mockHandlers.onBack}
-        onCancel={mockHandlers.onCancel}
-      />,
-    );
-
-    const dollarSign = Array.from(document.querySelectorAll('span')).find(s => s.textContent === '$');
-
-    expect(dollarSign).toBeTruthy();
   });
 });

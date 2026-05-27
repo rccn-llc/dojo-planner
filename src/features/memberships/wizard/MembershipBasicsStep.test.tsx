@@ -62,6 +62,8 @@ describe('MembershipBasicsStep', () => {
     autoRenewal: 'none',
     cancellationFee: null,
     holdLimitPerYear: null,
+    holdFeeAmount: null,
+    holdFeeFrequency: null,
     classesIncluded: null,
     punchcardPrice: null,
   };

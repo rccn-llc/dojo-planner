@@ -18,7 +18,9 @@ describe('Audit Types', () => {
     it('should have correct number of action types', () => {
       const actionCount = Object.keys(AUDIT_ACTION).length;
 
-      // 8 member + 3 membership plan + 3 program + 9 class (3+3+3 exception) + 6 event
+      // 8 member + 5 membership lifecycle (cancel + hold + reactivate
+      //   + cancellation fee charge + hold fee charge)
+      // + 3 membership plan + 3 program + 9 class (3+3+3 exception) + 6 event
       // + 4 coupon + 4 enrollment/registration + 2 attendance + 3 transaction + 3 tag + 2 image
       // + 12 catalog (6 item + 3 variant + 3 category + 1 stock + 2 image)
       // + 8 waiver (4 template + 1 signed + 3 membership waiver)
@@ -26,8 +28,8 @@ describe('Audit Types', () => {
       // + 1 family member unlink + 1 member convert + 3 saas subscription
       // + 3 note (create + update + delete) + 3 staff (invite + update + remove)
       // + 3 role (create + update + delete) + 1 organization location update
-      // + 2 iqpro config (per-org + platform) = 90
-      expect(actionCount).toBe(90);
+      // + 2 iqpro config (per-org + platform) = 95
+      expect(actionCount).toBe(95);
     });
   });
 

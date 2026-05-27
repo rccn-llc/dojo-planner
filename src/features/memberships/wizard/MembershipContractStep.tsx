@@ -4,6 +4,7 @@ import type {
   AddMembershipWizardData,
   AutoRenewalOption,
   ContractLength,
+  MembershipStartDateOption,
 } from '@/hooks/useAddMembershipWizard';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
@@ -28,11 +29,6 @@ type MembershipContractStepProps = {
 
 export const MembershipContractStep = ({ data, onUpdate, onNext, onBack, onCancel, isLoading, error }: MembershipContractStepProps) => {
   const t = useTranslations('AddMembershipWizard.MembershipContractStep');
-
-  const handleNumberChange = (field: keyof AddMembershipWizardData, value: string) => {
-    const numValue = value ? Number.parseFloat(value) : null;
-    onUpdate({ [field]: numValue });
-  };
 
   // Contract step has all optional fields, so form is always valid
   const isFormValid = true;
@@ -88,36 +84,37 @@ export const MembershipContractStep = ({ data, onUpdate, onNext, onBack, onCance
           </div>
         </div>
 
-        {/* Cancellation Fee and Hold Limit */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">{t('cancellation_fee_label')}</label>
-            <div className="relative">
-              <span className="absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground">$</span>
-              <Input
-                type="number"
-                placeholder={t('cancellation_fee_placeholder')}
-                value={data.cancellationFee ?? ''}
-                onChange={e => handleNumberChange('cancellationFee', e.target.value)}
-                className="pl-7"
-                min={0}
-                step="0.01"
-              />
+        {/* Membership Start Date — moved here from Payments and Fees */}
+        {data.membershipType !== 'punchcard' && (
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">{t('start_date_label')}</label>
+              <Select
+                value={data.membershipStartDate}
+                onValueChange={(value: MembershipStartDateOption) => onUpdate({ membershipStartDate: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="same-as-registration">{t('start_date_same_as_registration')}</SelectItem>
+                  <SelectItem value="custom">{t('start_date_custom')}</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <p className="text-xs text-muted-foreground">{t('cancellation_fee_help')}</p>
+            {data.membershipStartDate === 'custom' && (
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground">{t('custom_start_date_label')}</label>
+                <Input
+                  type="date"
+                  value={data.customStartDate}
+                  onChange={e => onUpdate({ customStartDate: e.target.value })}
+                />
+              </div>
+            )}
           </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground">{t('hold_limit_label')}</label>
-            <Input
-              type="number"
-              placeholder={t('hold_limit_placeholder')}
-              value={data.holdLimitPerYear ?? ''}
-              onChange={e => handleNumberChange('holdLimitPerYear', e.target.value)}
-              min={0}
-            />
-            <p className="text-xs text-muted-foreground">{t('hold_limit_help')}</p>
-          </div>
-        </div>
+        )}
+
       </div>
 
       <div className="flex justify-between gap-3 pt-6">

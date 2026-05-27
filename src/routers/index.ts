@@ -21,7 +21,7 @@ import { tags as classTags, create as createClass, list as listClasses, remove a
 import { create as createCoupon, getTotalSavings as getCouponTotalSavings, listActive as listActiveCoupons, list as listCoupons, remove as removeCoupon, update as updateCoupon } from './Coupons';
 import { earningsChart, financialStats, memberAverageChart, membershipStats } from './Dashboard';
 import { create as createEvent, list as listEvents, remove as removeEvent, update as updateEvent } from './Events';
-import { addMembership, changeMembership, create as createMember, getHOHForMember, getHOHPaymentMethods, linkFamily, listAllMembershipPlans, listFamily, listMembershipPlans, listMemberTransactions, listPaymentMethods, removeFullyMember, remove as removeMember, restore as restoreMember, searchHOH, sendConfirmationEmail, unlinkFamily, updateLastAccessed, update as updateMember, updateContactInfo as updateMemberContactInfo, updatePhoto as updateMemberPhoto, updateMemberType } from './Member';
+import { addMembership, cancelMembership, changeMembership, create as createMember, getHOHForMember, getHOHPaymentMethods, holdMembership, linkFamily, listAllMembershipPlans, listFamily, listMembershipPlans, listMemberTransactions, listPaymentMethods, reactivateMembership, removeFullyMember, remove as removeMember, restore as restoreMember, searchHOH, sendConfirmationEmail, unlinkFamily, updateLastAccessed, update as updateMember, updateContactInfo as updateMemberContactInfo, updatePhoto as updateMemberPhoto, updateMemberType } from './Member';
 import { list as listMembers } from './Members';
 import { create as createMembershipPlan, remove as removeMembershipPlan, update as updateMembershipPlan } from './MembershipPlans';
 import { create as createNoteHandler, list as listNotes, remove as removeNoteHandler, update as updateNoteHandler } from './Notes';
@@ -76,6 +76,9 @@ export const router = {
     listMemberTransactions,
     remove: removeMember,
     removeFully: removeFullyMember,
+    cancelMembership,
+    holdMembership,
+    reactivateMembership,
     restore: restoreMember,
     updateLastAccessed,
     searchHOH,

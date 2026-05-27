@@ -34,13 +34,19 @@ const formatPaymentAmount = (price?: number): string => {
   return `$${price.toFixed(2)}`;
 };
 
-const getFrequencyLabel = (frequency?: string): string => {
+const getFrequencyLabel = (frequency?: string | null): string => {
   if (!frequency || frequency === 'None') {
     return '';
   }
   const lower = frequency.toLowerCase();
   if (lower === 'monthly') {
     return 'month';
+  }
+  if (lower === 'weekly') {
+    return 'week';
+  }
+  if (lower === 'semi-annual' || lower === 'semi-annually') {
+    return '6 months';
   }
   if (lower === 'annual' || lower === 'annually' || lower === 'yearly') {
     return 'year';
@@ -136,7 +142,11 @@ export const FamilyPaymentStep = ({
     return { discountAmount: 0, finalPrice: originalPrice };
   }, [data.appliedCoupon, originalPrice]);
 
-  const paymentAmount = formatPaymentAmount(finalPrice);
+  // Signup fee is added to the first charge by AddFamilyMembersModal — keep
+  // the displayed total in sync.
+  const signupFee = data.membershipPlanSignupFee ?? 0;
+  const chargeTotal = finalPrice + signupFee;
+  const paymentAmount = formatPaymentAmount(chargeTotal);
 
   const handleCouponChange = (couponId: string) => {
     if (couponId === 'none') {

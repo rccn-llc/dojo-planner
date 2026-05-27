@@ -5,7 +5,7 @@ import { MembershipPaymentDetailsCard } from './MembershipPaymentDetailsCard';
 
 // Mock next-intl with proper translations
 const translationKeys: Record<string, string> = {
-  title: 'Payment Details',
+  title: 'Payments and Fees',
   edit_button: 'Edit',
   signup_fee_label: 'Sign-up Fee',
   charge_signup_fee_label: 'Charge Sign-up Fee',
@@ -13,19 +13,44 @@ const translationKeys: Record<string, string> = {
   charge_first_payment: 'With first payment',
   monthly_fee_label: 'Monthly Fee',
   weekly_fee_label: 'Weekly Fee',
+  semi_annual_fee_label: 'Semi-Annual Fee',
   annual_fee_label: 'Annual Fee',
+  one_time_fee_label: 'One-Time Price',
   payment_frequency_label: 'Payment Frequency',
   frequency_monthly: 'Monthly',
   frequency_weekly: 'Weekly',
+  frequency_semi_annually: 'Every 6 Months',
   frequency_annually: 'Annually',
+  frequency_one_time: 'One-time',
   prorate_label: 'Pro-rate First Payment',
   prorate_yes: 'Yes',
   prorate_no: 'No',
   free: 'Free',
+  no_fee: 'No fee',
+  fees_section_title: 'Cancellation and Hold Fees',
+  cancellation_fee_label: 'Cancellation Fee',
+  hold_fee_label: 'Hold Fee',
+  no_hold_fee: 'No hold fee',
+  hold_fee_frequency_one_time: 'One-time',
+  hold_fee_frequency_weekly: 'Weekly',
+  hold_fee_frequency_monthly: 'Monthly',
+  hold_fee_frequency_semi_annually: 'Every 6 Months',
+  hold_fee_frequency_annually: 'Annually',
+  hold_limit_label: 'Hold Limit',
+  hold_limit_value: '{count} holds per year',
+  no_holds: 'No limit',
 };
 
 vi.mock('next-intl', () => ({
-  useTranslations: () => (key: string) => translationKeys[key] || key,
+  useTranslations: () => (key: string, params?: Record<string, string | number>) => {
+    let result = translationKeys[key] || key;
+    if (params) {
+      Object.entries(params).forEach(([paramKey, paramValue]) => {
+        result = result.replace(`{${paramKey}}`, String(paramValue));
+      });
+    }
+    return result;
+  },
 }));
 
 describe('MembershipPaymentDetailsCard', () => {
@@ -37,6 +62,10 @@ describe('MembershipPaymentDetailsCard', () => {
     monthlyFee: 150,
     paymentFrequency: 'monthly' as const,
     proRateFirstPayment: true,
+    cancellationFee: null,
+    holdFeeAmount: null,
+    holdFeeFrequency: null,
+    holdLimitPerYear: null,
     isTrial: false,
     onEdit: mockOnEdit,
   };
@@ -48,9 +77,28 @@ describe('MembershipPaymentDetailsCard', () => {
   it('should render the card with title', () => {
     render(<MembershipPaymentDetailsCard {...defaultProps} />);
 
-    const heading = page.getByText('Payment Details');
+    const heading = page.getByText('Payments and Fees');
 
     expect(heading).toBeTruthy();
+  });
+
+  it('should render the Cancellation and Hold Fees section', () => {
+    render(<MembershipPaymentDetailsCard {...defaultProps} cancellationFee={50} holdFeeAmount={25} holdFeeFrequency="monthly" holdLimitPerYear={2} />);
+
+    expect(page.getByText('Cancellation and Hold Fees')).toBeTruthy();
+    expect(page.getByText('Cancellation Fee')).toBeTruthy();
+    expect(page.getByText('Hold Fee')).toBeTruthy();
+    expect(page.getByText('Hold Limit')).toBeTruthy();
+  });
+
+  it('should NOT render fees section for punchcards', () => {
+    render(<MembershipPaymentDetailsCard {...defaultProps} isPunchcard={true} />);
+
+    const sectionLabels = Array.from(document.querySelectorAll('h3')).filter(
+      el => el.textContent === 'Cancellation and Hold Fees',
+    );
+
+    expect(sectionLabels.length).toBe(0);
   });
 
   it('should render Edit button', () => {

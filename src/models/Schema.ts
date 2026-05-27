@@ -218,7 +218,11 @@ export const membershipPlanSchema = pgTable(
     program: text('program').notNull(), // Legacy field - e.g., 'Adult', 'Kids', 'Competition'
     price: real('price').notNull().default(0), // Monthly price amount
     signupFee: real('signup_fee').notNull().default(0),
-    frequency: text('frequency').notNull().default('Monthly'), // Monthly, Annual, None
+    cancellationFee: real('cancellation_fee').notNull().default(0), // Charged via IQPro when membership is cancelled
+    holdFeeAmount: real('hold_fee_amount').notNull().default(0), // Charged when member is placed on hold
+    holdFeeFrequency: text('hold_fee_frequency'), // null | 'one-time' | 'Weekly' | 'Monthly' | 'Semi-Annual' | 'Annual'
+    holdLimitPerYear: integer('hold_limit_per_year'), // null or 0 = unlimited; otherwise the max number of holds per year
+    frequency: text('frequency'), // Monthly, Annual, Semi-Annual, Weekly, or null for one-time / punchcards
     contractLength: text('contract_length').notNull(), // e.g., '12 Months', 'Month-to-Month', '7 Days'
     accessLevel: text('access_level').notNull(), // e.g., 'Unlimited', '8 Classes/mo'
     description: text('description'), // Short description of the plan
@@ -251,6 +255,7 @@ export const memberMembershipSchema = pgTable(
     firstPaymentDate: timestamp('first_payment_date', { mode: 'date' }), // When the first payment was made
     nextPaymentDate: timestamp('next_payment_date', { mode: 'date' }), // When the next payment is due (for autopay)
     iqproSubscriptionId: text('iqpro_subscription_id'), // IQPro recurring subscription ID
+    iqproHoldFeeSubscriptionId: text('iqpro_hold_fee_subscription_id'), // IQPro subscription billing the recurring hold fee while on hold
     createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { mode: 'date' })
       .defaultNow()

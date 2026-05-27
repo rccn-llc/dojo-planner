@@ -13,6 +13,7 @@
 
 import type {
   FeeBreakdown,
+  SubscriptionFrequency,
   TransactionBillingAddress,
   TransactionLineItem,
 } from './PaymentProviderService';
@@ -21,15 +22,20 @@ import type { AppliedCoupon, BillingType, PaymentMethod } from '@/hooks/useAddMe
 import type { IQProConfig } from '@/libs/IQPro';
 import { randomUUID } from 'node:crypto';
 
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import { db } from '@/libs/DB';
 import {
+  assertTransactionApproved,
+  buildServiceFeeAdjustment,
   computeFeeBreakdown,
   getCustomerPaymentMethod,
   getGatewayProcessors,
+  iqproGet,
+  iqproPost,
+  iqproPut,
 } from '@/libs/IQPro';
 import { logger } from '@/libs/Logger';
-import { couponSchema, couponUsageSchema, memberMembershipSchema, memberSchema, paymentMethodSchema, transactionSchema } from '@/models/Schema';
+import { auditEventSchema, couponSchema, couponUsageSchema, memberMembershipSchema, memberSchema, membershipPlanSchema, paymentMethodSchema, transactionSchema } from '@/models/Schema';
 
 import { sendPaymentReceiptEmail } from './EmailService';
 import { getOrganizationTaxRate } from './OrganizationService';
@@ -386,19 +392,21 @@ export async function processMemberPayment(
     };
 
     // ── Step 3: Route by billing type ───────────────────────────────
-    const frequency = params.membershipPlanFrequency?.toLowerCase();
+    // Recurring frequencies that map to an IQPro subscription. 'none' / null
+    // / 'one-time' all fall through to a single one-time charge.
+    const frequency = normalizeFrequency(params.membershipPlanFrequency);
     const isAutopay
       = params.billingType === 'autopay'
-        && (frequency === 'monthly' || frequency === 'annual');
+        && frequency !== null;
 
-    if (isAutopay) {
+    if (isAutopay && frequency) {
       return await handleAutopay({
         config,
         provider,
         params,
         customerId,
         paymentMethodId,
-        frequency: frequency as 'monthly' | 'annual',
+        frequency,
         feeBreakdown,
         billingAddressId,
         billingAddress,
@@ -514,6 +522,38 @@ export async function registerPaymentMethod(
 
 // ===== Internal helpers =====
 
+/**
+ * Normalize a membership-plan frequency string (case-insensitive) to the
+ * IQPro-subscription frequency enum. Null/undefined/empty/'None'/'one-time'
+ * all collapse to `null`, meaning "no recurring subscription — use a one-time
+ * charge."
+ */
+export function normalizeFrequency(frequency: string | null | undefined): SubscriptionFrequency | null {
+  if (!frequency) {
+    return null;
+  }
+  const lower = frequency.toLowerCase();
+  switch (lower) {
+    case 'weekly':
+      return 'weekly';
+    case 'monthly':
+      return 'monthly';
+    case 'semi-annual':
+    case 'semi-annually':
+    case 'semiannual':
+      return 'semi-annual';
+    case 'annual':
+    case 'annually':
+    case 'yearly':
+      return 'annual';
+    case 'none':
+    case 'one-time':
+    case 'onetime':
+    default:
+      return null;
+  }
+}
+
 function computeCouponDiscount(amount: number, coupon?: AppliedCoupon | null): number {
   if (!coupon) {
     return 0;
@@ -615,7 +655,7 @@ type AutopayParams = {
   params: ProcessMemberPaymentParams;
   customerId: string;
   paymentMethodId: string;
-  frequency: 'monthly' | 'annual';
+  frequency: SubscriptionFrequency;
   feeBreakdown: FeeBreakdown;
   billingAddressId?: string;
   billingAddress: TransactionBillingAddress;
@@ -1056,4 +1096,672 @@ export async function refundTransaction(
     originalTransactionId: transactionId,
     decrementedCoupons,
   };
+}
+
+// =============================================================================
+// MEMBERSHIP LIFECYCLE: CANCEL / HOLD / REACTIVATE
+// =============================================================================
+
+export type LifecycleContext = {
+  member: {
+    id: string;
+    organizationId: string;
+    firstName: string;
+    lastName: string;
+    email: string | null;
+    phone: string | null;
+    iqproCustomerId: string | null;
+  };
+  membership: {
+    id: string;
+    memberId: string;
+    membershipPlanId: string;
+    status: string;
+    iqproSubscriptionId: string | null;
+    iqproHoldFeeSubscriptionId: string | null;
+  };
+  plan: {
+    id: string;
+    name: string;
+    cancellationFee: number;
+    holdFeeAmount: number;
+    holdFeeFrequency: string | null;
+    holdLimitPerYear: number | null;
+  };
+};
+
+/**
+ * Fetch the member + membership + plan together for a lifecycle action.
+ * Returns null when the record doesn't exist, is in a different org, or
+ * doesn't match the requested member. The router-level guards already check
+ * the org, so this is mostly a tenancy belt-and-suspenders.
+ */
+export async function getLifecycleContext(
+  memberId: string,
+  memberMembershipId: string,
+  organizationId: string,
+): Promise<LifecycleContext | null> {
+  const rows = await db
+    .select({
+      memberId: memberSchema.id,
+      memberOrgId: memberSchema.organizationId,
+      memberFirstName: memberSchema.firstName,
+      memberLastName: memberSchema.lastName,
+      memberEmail: memberSchema.email,
+      memberPhone: memberSchema.phone,
+      iqproCustomerId: memberSchema.iqproCustomerId,
+      membershipId: memberMembershipSchema.id,
+      membershipPlanId: memberMembershipSchema.membershipPlanId,
+      membershipStatus: memberMembershipSchema.status,
+      iqproSubscriptionId: memberMembershipSchema.iqproSubscriptionId,
+      iqproHoldFeeSubscriptionId: memberMembershipSchema.iqproHoldFeeSubscriptionId,
+      planId: membershipPlanSchema.id,
+      planName: membershipPlanSchema.name,
+      cancellationFee: membershipPlanSchema.cancellationFee,
+      holdFeeAmount: membershipPlanSchema.holdFeeAmount,
+      holdFeeFrequency: membershipPlanSchema.holdFeeFrequency,
+      holdLimitPerYear: membershipPlanSchema.holdLimitPerYear,
+    })
+    .from(memberMembershipSchema)
+    .innerJoin(memberSchema, eq(memberMembershipSchema.memberId, memberSchema.id))
+    .innerJoin(membershipPlanSchema, eq(memberMembershipSchema.membershipPlanId, membershipPlanSchema.id))
+    .where(and(
+      eq(memberMembershipSchema.id, memberMembershipId),
+      eq(memberMembershipSchema.memberId, memberId),
+      eq(memberSchema.organizationId, organizationId),
+    ))
+    .limit(1);
+
+  const row = rows[0];
+  if (!row) {
+    return null;
+  }
+  return {
+    member: {
+      id: row.memberId,
+      organizationId: row.memberOrgId,
+      firstName: row.memberFirstName,
+      lastName: row.memberLastName,
+      email: row.memberEmail,
+      phone: row.memberPhone,
+      iqproCustomerId: row.iqproCustomerId,
+    },
+    membership: {
+      id: row.membershipId,
+      memberId: row.memberId,
+      membershipPlanId: row.membershipPlanId,
+      status: row.membershipStatus,
+      iqproSubscriptionId: row.iqproSubscriptionId,
+      iqproHoldFeeSubscriptionId: row.iqproHoldFeeSubscriptionId,
+    },
+    plan: {
+      id: row.planId,
+      name: row.planName,
+      cancellationFee: row.cancellationFee,
+      holdFeeAmount: row.holdFeeAmount,
+      holdFeeFrequency: row.holdFeeFrequency,
+      holdLimitPerYear: row.holdLimitPerYear,
+    },
+  };
+}
+
+export type LifecycleResult = {
+  success: boolean;
+  amountCharged?: number;
+  transactionId?: string;
+  error?: string;
+};
+
+/**
+ * Charge a one-time fee against an existing IQPro subscription's vaulted
+ * payment method. Mirrors the kiosk's cancellation-fee Sale payload byte-for-
+ * byte. Used for cancellation fees and one-time hold fees.
+ *
+ * Returns `success: false` when the charge can't proceed (no subscription,
+ * no payment method on file) — callers can decide whether the missing fee is
+ * fatal or whether the cancel/hold should continue anyway.
+ */
+export async function chargeOneTimeFee(args: {
+  config: IQProConfig;
+  iqproSubscriptionId: string;
+  iqproCustomerId: string;
+  orgId: string;
+  memberId: string;
+  memberMembershipId: string;
+  amount: number;
+  transactionType: 'cancellation_fee' | 'hold_fee';
+  description: string;
+  caption: string;
+}): Promise<LifecycleResult> {
+  const { config, iqproSubscriptionId, iqproCustomerId, orgId, memberId, memberMembershipId, amount, transactionType, description, caption } = args;
+  const gatewayId = config.gatewayId;
+  const baseAmount = Math.round(amount * 100) / 100;
+
+  if (baseAmount <= 0) {
+    return { success: true, amountCharged: 0 };
+  }
+
+  // Pull the subscription so we can resolve customerId + payment-method id
+  // exactly the way the kiosk does. IQPro lets us reference the saved PM
+  // by customerPaymentMethodId on the Sale payload.
+  const subRes = await iqproGet<{ data?: Record<string, unknown> }>(
+    config,
+    `/api/gateway/${gatewayId}/subscription/${iqproSubscriptionId}`,
+  );
+  const sub = (subRes.data ?? subRes) as Record<string, unknown>;
+  const subPM = sub.paymentMethod as Record<string, unknown> | undefined;
+  const custPM = subPM?.customerPaymentMethod as Record<string, unknown> | undefined;
+  const customerId = ((sub.customer as Record<string, unknown> | undefined)?.customerId ?? iqproCustomerId) as string;
+  const pmId = (custPM?.paymentMethodId ?? '') as string;
+
+  if (!pmId) {
+    return {
+      success: false,
+      error: 'No saved payment method on the existing subscription. Cannot charge fee.',
+    };
+  }
+
+  const paymentMethodName: 'card' | 'ach' = custPM?.card ? 'card' : 'ach';
+
+  // /calculatefees needs processorId + BIN for cards. Fall back to '400000'
+  // for the test BIN when the vault doesn't expose one — matches kiosk.
+  const { cardProcessorId, achProcessorId } = await getGatewayProcessors(config);
+  const processorId = paymentMethodName === 'card' ? cardProcessorId : achProcessorId;
+  if (!processorId) {
+    return { success: false, error: `No ${paymentMethodName} processor configured` };
+  }
+  const cardInfo = custPM?.card as Record<string, unknown> | undefined;
+  const maskedNumber = (cardInfo?.maskedNumber ?? cardInfo?.maskedCard ?? '') as string;
+  const bin = maskedNumber && maskedNumber.length >= 6 ? maskedNumber.slice(0, 6) : '400000';
+
+  // Cancellation / hold fees are NOT taxable (per Basys guidance on non-store charges).
+  const serverFees = await computeFeeBreakdown(config, baseAmount, /* isTaxable */ false, /* taxStatePct */ 0, {
+    processorId,
+    creditCardBin: paymentMethodName === 'card' ? bin : undefined,
+  });
+  const paymentAdjustments: Array<Record<string, unknown>> = [buildServiceFeeAdjustment(serverFees)];
+
+  const feeTxPayload = {
+    type: 'Sale',
+    remit: {
+      baseAmount: serverFees.baseAmount,
+      taxAmount: serverFees.taxAmount,
+      isTaxExempt: serverFees.taxAmount <= 0,
+      currencyCode: 'USD',
+      addTaxToTotal: true,
+      paymentAdjustments,
+    },
+    paymentMethod: {
+      customer: {
+        customerId,
+        customerPaymentMethodId: pmId,
+      },
+    },
+    lineItems: [
+      {
+        name: caption,
+        description,
+        quantity: 1,
+        unitPrice: baseAmount,
+        discount: 0,
+        freightAmount: 0,
+        unitOfMeasureId: 1,
+        localTaxPercent: 0,
+        nationalTaxPercent: 0,
+      },
+    ],
+    caption,
+  };
+
+  try {
+    const txRes = await iqproPost<{ data?: Record<string, unknown> }>(
+      config,
+      `/api/gateway/${gatewayId}/transaction`,
+      feeTxPayload,
+    );
+    const txRaw = txRes.data ?? txRes;
+    const txData = ((txRaw as Record<string, unknown>).transaction ?? txRaw) as Record<string, unknown>;
+    assertTransactionApproved(txData);
+
+    const txId = (txData.transactionId ?? txData.id ?? '') as string;
+    const now = new Date();
+
+    await db.insert(transactionSchema).values({
+      id: randomUUID(),
+      organizationId: orgId,
+      memberId,
+      memberMembershipId,
+      transactionType,
+      amount: serverFees.amount,
+      status: 'paid',
+      paymentMethod: paymentMethodName,
+      description,
+      iqproTransactionId: txId,
+      processedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return { success: true, amountCharged: serverFees.amount, transactionId: txId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    logger.error('[MemberPayment] One-time fee charge failed', { transactionType, error: message });
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Cancel an IQPro subscription via the dedicated cancel endpoint. Idempotent
+ * from the caller's perspective — failures are logged and returned rather
+ * than thrown so the local DB cleanup can still proceed.
+ */
+export async function cancelIQProSubscription(
+  config: IQProConfig,
+  iqproSubscriptionId: string,
+  opts?: { endOfBillingPeriod?: boolean },
+): Promise<{ success: boolean; error?: string }> {
+  const gatewayId = config.gatewayId;
+  try {
+    await iqproPost(
+      config,
+      `/api/gateway/${gatewayId}/subscription/${iqproSubscriptionId}/cancel`,
+      {
+        cancel: {
+          now: !opts?.endOfBillingPeriod,
+          endOfBillingPeriod: !!opts?.endOfBillingPeriod,
+        },
+      },
+    );
+    return { success: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    logger.error('[MemberPayment] IQPro subscription cancel failed', { iqproSubscriptionId, error: message });
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Toggle an existing IQPro subscription's auto-renewal flag. Used to pause
+ * (isAutoRenewed=false) when placing a member on hold and resume
+ * (isAutoRenewed=true) on reactivation. Mirrors the kiosk's PUT recurrence
+ * payload exactly so we don't drift between the two apps.
+ */
+export async function setSubscriptionAutoRenewal(
+  config: IQProConfig,
+  iqproSubscriptionId: string,
+  isAutoRenewed: boolean,
+): Promise<{ success: boolean; error?: string }> {
+  const gatewayId = config.gatewayId;
+  const subPath = `/api/gateway/${gatewayId}/subscription/${iqproSubscriptionId}`;
+  try {
+    const subRes = await iqproGet<{ data?: Record<string, unknown> }>(config, subPath);
+    const sub = (subRes.data ?? subRes) as Record<string, unknown>;
+    const recurrence = sub.recurrence as Record<string, unknown> | undefined;
+
+    const putPayload: Record<string, unknown> = {
+      name: sub.name,
+      prefix: sub.prefix,
+    };
+    if (recurrence) {
+      putPayload.recurrence = {
+        termStartDate: recurrence.termStartDate,
+        billingStartDate: recurrence.billingStartDate,
+        isAutoRenewed,
+        allowProration: recurrence.allowProration,
+        trialLengthInDays: recurrence.trialLengthInDays,
+        invoiceLengthInDays: recurrence.invoiceLengthInDays,
+        billingPeriodId: (recurrence.billingPeriod as Record<string, unknown> | undefined)?.billingPeriodId,
+        schedule: recurrence.schedule,
+      };
+    }
+
+    await iqproPut(config, subPath, putPayload);
+    return { success: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    logger.error('[MemberPayment] IQPro subscription update failed', { iqproSubscriptionId, isAutoRenewed, error: message });
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Map a stored `holdFeeFrequency` ('Monthly', 'Semi-Annual', etc.) to the
+ * IQPro `SubscriptionFrequency` enum. Returns null for 'one-time' or unknown
+ * values — caller is expected to special-case 'one-time' before calling.
+ */
+function holdFeeFrequencyToSubscriptionFrequency(value: string | null): SubscriptionFrequency | null {
+  if (!value || value === 'one-time') {
+    return null;
+  }
+  return normalizeFrequency(value);
+}
+
+export type CancelMembershipResult = {
+  success: boolean;
+  cancellationFeeCharged: number;
+  cancellationTransactionId?: string;
+  subscriptionCancelled: boolean;
+  error?: string;
+};
+
+/**
+ * Cancel a member's membership end-to-end:
+ *  1) Charge the plan's cancellation fee (unless waived) via IQPro using the
+ *     saved payment method on the existing subscription. A failure here is
+ *     surfaced but does NOT block the cancellation itself.
+ *  2) Cancel the IQPro subscription via the dedicated cancel endpoint.
+ *  3) Cancel any recurring hold-fee subscription if the membership was on hold.
+ *  4) Mark the membership cancelled + set endDate; only flip member.status to
+ *     'cancelled' if this was the member's last active membership (mirrors
+ *     the IQPro webhook semantics so the two code paths agree).
+ *
+ * Returns a structured result so the caller (router/audit) can record exactly
+ * what happened.
+ */
+export async function cancelMembershipLifecycle(args: {
+  config: IQProConfig | null;
+  ctx: LifecycleContext;
+  waiveFee: boolean;
+}): Promise<CancelMembershipResult> {
+  const { config, ctx, waiveFee } = args;
+  const now = new Date();
+  const feeAmount = waiveFee ? 0 : (ctx.plan.cancellationFee ?? 0);
+
+  let cancellationFeeCharged = 0;
+  let cancellationTransactionId: string | undefined;
+  let feeChargeError: string | undefined;
+
+  // 1) Charge the cancellation fee (best-effort)
+  if (config && feeAmount > 0 && ctx.member.iqproCustomerId && ctx.membership.iqproSubscriptionId) {
+    const feeResult = await chargeOneTimeFee({
+      config,
+      iqproSubscriptionId: ctx.membership.iqproSubscriptionId,
+      iqproCustomerId: ctx.member.iqproCustomerId,
+      orgId: ctx.member.organizationId,
+      memberId: ctx.member.id,
+      memberMembershipId: ctx.membership.id,
+      amount: feeAmount,
+      transactionType: 'cancellation_fee',
+      description: `Cancellation fee — ${ctx.plan.name}`,
+      caption: 'Cancellation fee',
+    });
+    if (feeResult.success) {
+      cancellationFeeCharged = feeResult.amountCharged ?? 0;
+      cancellationTransactionId = feeResult.transactionId;
+    } else {
+      feeChargeError = feeResult.error;
+    }
+  }
+
+  // 2) Cancel the IQPro membership subscription
+  let subscriptionCancelled = false;
+  if (config && ctx.membership.iqproSubscriptionId) {
+    const cancelResult = await cancelIQProSubscription(config, ctx.membership.iqproSubscriptionId);
+    subscriptionCancelled = cancelResult.success;
+  }
+
+  // 3) Tear down any recurring hold-fee subscription
+  if (config && ctx.membership.iqproHoldFeeSubscriptionId) {
+    await cancelIQProSubscription(config, ctx.membership.iqproHoldFeeSubscriptionId);
+  }
+
+  // 4) Update local DB rows
+  await db.update(memberMembershipSchema)
+    .set({
+      status: 'cancelled',
+      endDate: now,
+      iqproHoldFeeSubscriptionId: null,
+    })
+    .where(eq(memberMembershipSchema.id, ctx.membership.id));
+
+  // Mirror member.status only if no other active memberships remain — matches
+  // the IQPro webhook handler at src/app/[locale]/webhook/iqpro/route.ts.
+  const otherActive = await db.query.memberMembershipSchema.findFirst({
+    where: and(
+      eq(memberMembershipSchema.memberId, ctx.member.id),
+      eq(memberMembershipSchema.status, 'active'),
+    ),
+    columns: { id: true },
+  });
+  if (!otherActive) {
+    await db.update(memberSchema)
+      .set({ status: 'cancelled', statusChangedAt: now })
+      .where(eq(memberSchema.id, ctx.member.id));
+  }
+
+  return {
+    success: true,
+    cancellationFeeCharged,
+    cancellationTransactionId,
+    subscriptionCancelled,
+    error: feeChargeError,
+  };
+}
+
+export type HoldMembershipResult = {
+  success: boolean;
+  holdFeeCharged: number;
+  holdFeeTransactionId?: string;
+  holdFeeSubscriptionId?: string;
+  error?: string;
+  /** Set when the request was refused because the plan's hold-limit-per-year has been reached. */
+  limitReached?: {
+    holdLimitPerYear: number;
+    priorHolds: number;
+  };
+};
+
+/**
+ * Thrown by `holdMembershipLifecycle` when the plan's `hold_limit_per_year`
+ * has been hit in the trailing 12 months. Router catches this and surfaces
+ * a 409 to the client.
+ */
+export class HoldLimitReachedError extends Error {
+  public readonly holdLimitPerYear: number;
+  public readonly priorHolds: number;
+
+  constructor(holdLimitPerYear: number, priorHolds: number) {
+    super(`Hold limit reached: ${priorHolds} of ${holdLimitPerYear} holds used in the past 12 months.`);
+    this.name = 'HoldLimitReachedError';
+    this.holdLimitPerYear = holdLimitPerYear;
+    this.priorHolds = priorHolds;
+  }
+}
+
+/**
+ * Count successful `memberMembership.hold` audit events for a given
+ * membership over the trailing 12 months. We count from the audit log rather
+ * than from the membership row because the hold state is short-lived (we
+ * flip back to 'active' on reactivate, losing the historical fact). The
+ * audit log is the canonical record of "how many holds did this membership
+ * have this year".
+ */
+async function countRecentHolds(memberMembershipId: string, organizationId: string): Promise<number> {
+  const twelveMonthsAgo = new Date();
+  twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1);
+
+  const result = await db
+    .select({ count: sql<number>`cast(count(*) as integer)` })
+    .from(auditEventSchema)
+    .where(and(
+      eq(auditEventSchema.organizationId, organizationId),
+      eq(auditEventSchema.action, 'memberMembership.hold'),
+      eq(auditEventSchema.entityId, memberMembershipId),
+      eq(auditEventSchema.status, 'success'),
+      gte(auditEventSchema.timestamp, twelveMonthsAgo),
+    ));
+
+  return result[0]?.count ?? 0;
+}
+
+/**
+ * Place a membership on hold end-to-end:
+ *  0) Enforce the plan's `hold_limit_per_year` if set. Counts prior successful
+ *     hold actions in the trailing 12 months via the audit log. Throws
+ *     `HoldLimitReachedError` (caught by the router as a 409) when reached.
+ *  1) If the plan has a one-time hold fee, charge it now via the saved PM.
+ *  2) If the plan has a recurring hold fee, create a new IQPro subscription
+ *     (prefix 'HOLD') that bills the fee on that cadence; store its id on
+ *     member_membership.iqproHoldFeeSubscriptionId so reactivation can tear
+ *     it down.
+ *  3) Pause the original membership subscription (isAutoRenewed=false).
+ *  4) Set membership.status='hold' and member.status='hold'.
+ */
+export async function holdMembershipLifecycle(args: {
+  config: IQProConfig | null;
+  ctx: LifecycleContext;
+}): Promise<HoldMembershipResult> {
+  const { config, ctx } = args;
+  const now = new Date();
+
+  // 0) Enforce the per-year hold limit if the plan has one. 0 or null = unlimited.
+  const limit = ctx.plan.holdLimitPerYear;
+  if (limit != null && limit > 0) {
+    const priorHolds = await countRecentHolds(ctx.membership.id, ctx.member.organizationId);
+    if (priorHolds >= limit) {
+      throw new HoldLimitReachedError(limit, priorHolds);
+    }
+  }
+
+  let holdFeeCharged = 0;
+  let holdFeeTransactionId: string | undefined;
+  let holdFeeSubscriptionId: string | undefined;
+  let chargeError: string | undefined;
+
+  const feeAmount = ctx.plan.holdFeeAmount ?? 0;
+  const feeFrequency = ctx.plan.holdFeeFrequency;
+
+  if (
+    config
+    && feeAmount > 0
+    && ctx.member.iqproCustomerId
+    && ctx.membership.iqproSubscriptionId
+    && feeFrequency
+  ) {
+    if (feeFrequency === 'one-time') {
+      const result = await chargeOneTimeFee({
+        config,
+        iqproSubscriptionId: ctx.membership.iqproSubscriptionId,
+        iqproCustomerId: ctx.member.iqproCustomerId,
+        orgId: ctx.member.organizationId,
+        memberId: ctx.member.id,
+        memberMembershipId: ctx.membership.id,
+        amount: feeAmount,
+        transactionType: 'hold_fee',
+        description: `Hold fee — ${ctx.plan.name}`,
+        caption: 'Hold fee',
+      });
+      if (result.success) {
+        holdFeeCharged = result.amountCharged ?? 0;
+        holdFeeTransactionId = result.transactionId;
+      } else {
+        chargeError = result.error;
+      }
+    } else {
+      // Recurring hold-fee subscription. Re-use the existing
+      // provider.createSubscription path but with prefix 'HOLD' and the
+      // hold-fee cadence. We need the member's payment-method id from the
+      // existing membership sub — look it up.
+      const subFrequency = holdFeeFrequencyToSubscriptionFrequency(feeFrequency);
+      if (subFrequency) {
+        try {
+          const subRes = await iqproGet<{ data?: Record<string, unknown> }>(
+            config,
+            `/api/gateway/${config.gatewayId}/subscription/${ctx.membership.iqproSubscriptionId}`,
+          );
+          const sub = (subRes.data ?? subRes) as Record<string, unknown>;
+          const subPM = sub.paymentMethod as Record<string, unknown> | undefined;
+          const custPM = subPM?.customerPaymentMethod as Record<string, unknown> | undefined;
+          const pmId = (custPM?.paymentMethodId ?? '') as string;
+          const customerId = ((sub.customer as Record<string, unknown> | undefined)?.customerId ?? ctx.member.iqproCustomerId) as string;
+
+          if (pmId) {
+            const provider = await getPaymentProvider();
+            const subResult = await provider.createSubscription(config, {
+              customerId,
+              paymentMethodId: pmId,
+              amount: feeAmount,
+              frequency: subFrequency,
+              startDate: now,
+              description: `Hold fee — ${ctx.plan.name}`,
+              prefix: 'HOLD',
+              firstName: ctx.member.firstName,
+              lastName: ctx.member.lastName,
+              email: ctx.member.email ?? '',
+              ...(ctx.member.phone ? { phone: ctx.member.phone } : {}),
+            });
+            if (subResult.success && subResult.subscriptionId) {
+              holdFeeSubscriptionId = subResult.subscriptionId;
+            } else {
+              chargeError = subResult.error;
+            }
+          } else {
+            chargeError = 'No saved payment method on the existing subscription. Cannot create recurring hold-fee sub.';
+          }
+        } catch (err) {
+          chargeError = err instanceof Error ? err.message : 'Unknown error';
+          logger.error('[MemberPayment] Hold-fee subscription create failed', { error: chargeError });
+        }
+      }
+    }
+  }
+
+  // Pause the original membership subscription
+  if (config && ctx.membership.iqproSubscriptionId) {
+    await setSubscriptionAutoRenewal(config, ctx.membership.iqproSubscriptionId, false);
+  }
+
+  // Update local DB rows
+  await db.update(memberMembershipSchema)
+    .set({
+      status: 'hold',
+      ...(holdFeeSubscriptionId ? { iqproHoldFeeSubscriptionId: holdFeeSubscriptionId } : {}),
+    })
+    .where(eq(memberMembershipSchema.id, ctx.membership.id));
+
+  await db.update(memberSchema)
+    .set({ status: 'hold', statusChangedAt: now })
+    .where(eq(memberSchema.id, ctx.member.id));
+
+  return {
+    success: true,
+    holdFeeCharged,
+    holdFeeTransactionId,
+    holdFeeSubscriptionId,
+    error: chargeError,
+  };
+}
+
+/**
+ * Reactivate a held membership:
+ *  1) Cancel any recurring hold-fee subscription that was created at hold time.
+ *  2) Resume the original membership subscription (isAutoRenewed=true).
+ *  3) Set membership.status='active' and member.status='active'.
+ */
+export async function reactivateMembershipLifecycle(args: {
+  config: IQProConfig | null;
+  ctx: LifecycleContext;
+}): Promise<{ success: boolean; error?: string }> {
+  const { config, ctx } = args;
+  const now = new Date();
+
+  if (config && ctx.membership.iqproHoldFeeSubscriptionId) {
+    await cancelIQProSubscription(config, ctx.membership.iqproHoldFeeSubscriptionId);
+  }
+  if (config && ctx.membership.iqproSubscriptionId) {
+    await setSubscriptionAutoRenewal(config, ctx.membership.iqproSubscriptionId, true);
+  }
+
+  await db.update(memberMembershipSchema)
+    .set({
+      status: 'active',
+      iqproHoldFeeSubscriptionId: null,
+    })
+    .where(eq(memberMembershipSchema.id, ctx.membership.id));
+
+  await db.update(memberSchema)
+    .set({ status: 'active', statusChangedAt: now })
+    .where(eq(memberSchema.id, ctx.member.id));
+
+  return { success: true };
 }

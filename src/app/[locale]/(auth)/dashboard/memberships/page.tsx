@@ -47,24 +47,33 @@ function formatPrice(plan: MembershipPlanData): string {
       return `${formatted}/mo`;
     case 'Weekly':
       return `${formatted}/wk`;
+    case 'Semi-Annual':
+      return `${formatted}/6mo`;
     case 'Annual':
     case 'Annually':
       return `${formatted}/yr`;
     default:
+      // null (new convention) and legacy 'None' both render as a flat price.
       return formatted;
   }
 }
 
 function formatSignupFee(plan: MembershipPlanData): string {
   if (plan.signupFee === 0) {
-    return plan.frequency === 'None' ? 'One-time purchase' : 'No signup fee';
+    const isOneTime = plan.frequency == null || plan.frequency === 'None';
+    return isOneTime ? 'One-time purchase' : 'No signup fee';
   }
   return `$${plan.signupFee.toFixed(0)} signup fee`;
 }
 
 function transformPlanToMembership(plan: MembershipPlanData): Membership {
-  const isPunchcard = plan.frequency === 'None' && !plan.isTrial;
-  const isMonthly = plan.frequency === 'Monthly' || plan.frequency === 'Weekly' || plan.frequency === 'Annual' || plan.frequency === 'Annually';
+  const isOneTime = plan.frequency == null || plan.frequency === 'None';
+  const isPunchcard = isOneTime && !plan.isTrial;
+  const isMonthly = plan.frequency === 'Monthly'
+    || plan.frequency === 'Weekly'
+    || plan.frequency === 'Semi-Annual'
+    || plan.frequency === 'Annual'
+    || plan.frequency === 'Annually';
 
   return {
     id: plan.id,
@@ -77,7 +86,7 @@ function transformPlanToMembership(plan: MembershipPlanData): Membership {
     isPunchcard,
     price: formatPrice(plan),
     signupFee: formatSignupFee(plan),
-    frequency: plan.frequency,
+    frequency: plan.frequency ?? 'One-time',
     contract: plan.contractLength,
     access: plan.accessLevel,
     activeCount: 0,
