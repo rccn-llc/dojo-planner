@@ -20,6 +20,11 @@ export const ProcessPaymentValidation = z.object({
   paymentMethod: z.enum(['card', 'ach']),
   billingType: z.enum(['autopay', 'one-time']),
   amount: z.number().min(0),
+  // One-time signup fee charged on the FIRST transaction only. Bundled into
+  // the initial Sale alongside `amount`, but never carried into the recurring
+  // subscription. Coupon discounts apply to `amount` (recurring) only, never
+  // to the signup fee.
+  signupFee: z.number().min(0).optional().default(0),
   description: z.string(),
 
   // Card fields

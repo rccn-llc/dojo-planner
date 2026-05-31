@@ -125,8 +125,13 @@ export type ProcessPaymentParams = {
   feeBreakdown: FeeBreakdown;
   /** IQPro `customerAddressId` to attach to the transaction's customer ref. */
   customerBillingAddressId?: string;
-  /** Single line item describing what's being charged. */
-  lineItem?: TransactionLineItem;
+  /**
+   * Line items describing what's being charged. When more than one is
+   * provided (e.g. membership + signup fee), each becomes a row in the
+   * IQPro Sale's `lineItems[]` array. When omitted, the provider falls
+   * back to a single item built from `description` + `amount`.
+   */
+  lineItems?: TransactionLineItem[];
   /** Buyer billing address — used in the transaction's `address[]` block. */
   billingAddress?: TransactionBillingAddress;
   /**

@@ -335,18 +335,18 @@ export const AddFamilyMembersModal = ({
         });
       }
 
-      // 4. Process payment — add signup fee on top of the recurring price so
-      // it's actually billed on first charge. Coupon discount applies to the
-      // recurring price only.
+      // 4. Process payment. Recurring (post-coupon) goes in `amount`; the
+      // signup fee rides separately so the IQPro subscription is configured at
+      // the recurring price only (the fee is bundled into the initial Sale).
       const planPrice = wizard.data.appliedCoupon
         ? computeDiscountedPrice(wizard.data.membershipPlanPrice, wizard.data.appliedCoupon) ?? 0
         : (wizard.data.membershipPlanPrice ?? 0);
       const signupFee = wizard.data.membershipPlanSignupFee ?? 0;
-      const finalPrice = planPrice + signupFee;
+      const totalDueToday = planPrice + signupFee;
 
       let paymentDeclined = false;
 
-      if (finalPrice > 0 && result.id) {
+      if (totalDueToday > 0 && result.id) {
         try {
           wizard.updateData({ paymentStatus: 'processing' });
 
@@ -368,7 +368,8 @@ export const AddFamilyMembersModal = ({
             // without re-collecting card data.
             paymentMethodSource: wizard.data.hohHasPaymentMethod ? 'saved' : 'new',
             billingType: 'autopay',
-            amount: finalPrice,
+            amount: planPrice,
+            signupFee,
             description: wizard.data.membershipPlanName
               ? `Membership: ${wizard.data.membershipPlanName}`
               : 'Membership payment',
@@ -387,6 +388,9 @@ export const AddFamilyMembersModal = ({
             }),
             ...(wizard.data.membershipPlanId && { membershipPlanId: wizard.data.membershipPlanId }),
             ...(wizard.data.membershipPlanFrequency && { membershipPlanFrequency: wizard.data.membershipPlanFrequency }),
+            // Family member's own membership row id — the payment service
+            // updates this row with the IQPro subscription id + dates.
+            ...(result.memberMembershipId && { memberMembershipId: result.memberMembershipId }),
             ...(wizard.data.appliedCoupon && { appliedCoupon: wizard.data.appliedCoupon }),
           });
 

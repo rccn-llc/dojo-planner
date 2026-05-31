@@ -36,6 +36,7 @@ import {
 } from '@/libs/IQPro';
 import { logger } from '@/libs/Logger';
 import { auditEventSchema, couponSchema, couponUsageSchema, memberMembershipSchema, memberSchema, membershipPlanSchema, paymentMethodSchema, transactionSchema } from '@/models/Schema';
+import { computeNextPaymentDate, normalizeFrequency } from '@/utils/PaymentSchedule';
 
 import { sendPaymentReceiptEmail } from './EmailService';
 import { getOrganizationTaxRate } from './OrganizationService';
@@ -62,6 +63,15 @@ export type ProcessMemberPaymentParams = {
   paymentMethod: PaymentMethod;
   billingType: BillingType;
   amount: number;
+  /**
+   * One-time signup fee charged on the FIRST transaction only. When > 0,
+   * this is added to the immediate Sale alongside `amount`, but never enters
+   * the recurring subscription amount. Coupon discounts apply to `amount`
+   * only, never to the signup fee. Recorded as a separate `signup_fee`
+   * transaction row sharing the same `iqproTransactionId` as the membership
+   * row.
+   */
+  signupFee?: number;
   description: string;
 
   // Card fields
@@ -354,7 +364,11 @@ export async function processMemberPayment(
     }
 
     const couponDiscount = computeCouponDiscount(params.amount, params.appliedCoupon);
-    const baseAmount = Math.max(0, Math.round((params.amount - couponDiscount) * 100) / 100);
+    const signupFee = params.signupFee ?? 0;
+    // baseAmount is the customer-facing subtotal sent to IQPro's fee
+    // calculator: recurring (post-coupon) + one-time signup fee. The
+    // signup fee never gets a coupon discount.
+    const baseAmount = Math.max(0, Math.round(((params.amount - couponDiscount) + signupFee) * 100) / 100);
 
     const taxStatePct = isTaxable ? await getOrganizationTaxRate(params.organizationId) : 0;
 
@@ -384,12 +398,25 @@ export async function processMemberPayment(
       country: params.memberAddress?.country ?? 'US',
     };
 
-    const lineItem: TransactionLineItem = {
-      name: params.description,
-      description: params.description,
-      unitPrice: params.amount,
-      discount: couponDiscount,
-    };
+    // Itemize the membership and (optional) signup fee as separate IQPro
+    // line items. The signup-fee line has no coupon discount.
+    const lineItems: TransactionLineItem[] = [
+      {
+        name: params.description,
+        description: params.description,
+        unitPrice: params.amount,
+        discount: couponDiscount,
+      },
+    ];
+    if (signupFee > 0) {
+      const planLabel = params.description.replace(/^Membership:\s*/i, '').trim() || 'membership';
+      lineItems.push({
+        name: 'Sign-up fee',
+        description: `Sign-up fee — ${planLabel}`,
+        unitPrice: signupFee,
+        discount: 0,
+      });
+    }
 
     // ── Step 3: Route by billing type ───────────────────────────────
     // Recurring frequencies that map to an IQPro subscription. 'none' / null
@@ -410,7 +437,7 @@ export async function processMemberPayment(
         feeBreakdown,
         billingAddressId,
         billingAddress,
-        lineItem,
+        lineItems,
         achData,
         vaulted,
         isTaxable,
@@ -427,7 +454,7 @@ export async function processMemberPayment(
       feeBreakdown,
       billingAddressId,
       billingAddress,
-      lineItem,
+      lineItems,
       achData,
       vaulted,
       isTaxable,
@@ -522,37 +549,11 @@ export async function registerPaymentMethod(
 
 // ===== Internal helpers =====
 
-/**
- * Normalize a membership-plan frequency string (case-insensitive) to the
- * IQPro-subscription frequency enum. Null/undefined/empty/'None'/'one-time'
- * all collapse to `null`, meaning "no recurring subscription — use a one-time
- * charge."
- */
-export function normalizeFrequency(frequency: string | null | undefined): SubscriptionFrequency | null {
-  if (!frequency) {
-    return null;
-  }
-  const lower = frequency.toLowerCase();
-  switch (lower) {
-    case 'weekly':
-      return 'weekly';
-    case 'monthly':
-      return 'monthly';
-    case 'semi-annual':
-    case 'semi-annually':
-    case 'semiannual':
-      return 'semi-annual';
-    case 'annual':
-    case 'annually':
-    case 'yearly':
-      return 'annual';
-    case 'none':
-    case 'one-time':
-    case 'onetime':
-    default:
-      return null;
-  }
-}
+// Re-export the schedule helpers so callers (tests, lifecycle code) that
+// historically imported them from this module keep working. The actual
+// implementations live in `@/utils/PaymentSchedule` — a pure module the
+// seed script can import without pulling in DB/IQPro/Env.
+export { computeNextPaymentDate, normalizeFrequency };
 
 function computeCouponDiscount(amount: number, coupon?: AppliedCoupon | null): number {
   if (!coupon) {
@@ -594,7 +595,9 @@ function buildPaymentAdjustments(
 
 /**
  * Build the receipt-email line items from a member-payment context. For
- * memberships, this is a single line: plan name + frequency + price.
+ * memberships, this is a single line (plan name + frequency + price). When a
+ * signup fee is present, an additional one-time line is emitted with no
+ * discount (coupons never apply to signup fees).
  */
 function buildReceiptLineItems(params: ProcessMemberPaymentParams): Array<{
   name: string;
@@ -604,7 +607,8 @@ function buildReceiptLineItems(params: ProcessMemberPaymentParams): Array<{
   discount?: number;
 }> {
   const couponDiscount = computeCouponDiscount(params.amount, params.appliedCoupon);
-  return [
+  const signupFee = params.signupFee ?? 0;
+  const items = [
     {
       name: params.description,
       description: params.description,
@@ -613,6 +617,17 @@ function buildReceiptLineItems(params: ProcessMemberPaymentParams): Array<{
       discount: couponDiscount,
     },
   ];
+  if (signupFee > 0) {
+    const planLabel = params.description.replace(/^Membership:\s*/i, '').trim() || 'membership';
+    items.push({
+      name: 'Sign-up fee',
+      description: `Sign-up fee — ${planLabel}`,
+      quantity: 1,
+      unitPrice: signupFee,
+      discount: 0,
+    });
+  }
+  return items;
 }
 
 /**
@@ -659,7 +674,7 @@ type AutopayParams = {
   feeBreakdown: FeeBreakdown;
   billingAddressId?: string;
   billingAddress: TransactionBillingAddress;
-  lineItem: TransactionLineItem;
+  lineItems: TransactionLineItem[];
   achData?: { achToken: string; secCode: string; routingNumber: string; accountType: string };
   vaulted: boolean;
   isTaxable: boolean;
@@ -667,12 +682,19 @@ type AutopayParams = {
 };
 
 async function handleAutopay(args: AutopayParams): Promise<ProcessMemberPaymentResult> {
-  const { config, provider, params, customerId, paymentMethodId, frequency, feeBreakdown, billingAddressId, billingAddress, lineItem, achData, vaulted, isTaxable } = args;
+  const { config, provider, params, customerId, paymentMethodId, frequency, feeBreakdown, billingAddressId, billingAddress, lineItems, achData, vaulted, isTaxable } = args;
+
+  const signupFee = params.signupFee ?? 0;
+  const couponDiscount = computeCouponDiscount(params.amount, params.appliedCoupon);
+  // Recurring price — what IQPro will bill every cycle. Coupon discount
+  // applies to recurring only; signup fee is NEVER part of the recurring
+  // amount (it's a one-time charge on the initial Sale only).
+  const recurringAmount = Math.max(0, Math.round((params.amount - couponDiscount) * 100) / 100);
 
   const subResult = await provider.createSubscription(config, {
     customerId,
     paymentMethodId,
-    amount: params.amount,
+    amount: recurringAmount,
     frequency,
     startDate: new Date(),
     description: params.description,
@@ -696,8 +718,9 @@ async function handleAutopay(args: AutopayParams): Promise<ProcessMemberPaymentR
   }
 
   // IQPro subscriptions don't auto-charge on creation. Run an immediate Sale
-  // for the first period so the member is charged on signup day. The recurring
-  // schedule then takes over from the next billing date.
+  // for the first period so the member is charged on signup day. This Sale
+  // includes both the recurring portion AND the one-time signup fee; the
+  // recurring schedule then takes over with `recurringAmount` only.
   const initialCharge = await provider.processPayment(config, {
     customerId,
     paymentMethodId,
@@ -707,7 +730,7 @@ async function handleAutopay(args: AutopayParams): Promise<ProcessMemberPaymentR
     feeBreakdown,
     customerBillingAddressId: billingAddressId,
     billingAddress,
-    lineItem,
+    lineItems,
     ach: achData,
     vaulted,
     isTaxable,
@@ -720,27 +743,52 @@ async function handleAutopay(args: AutopayParams): Promise<ProcessMemberPaymentR
     },
   });
 
-  // Persist the initial transaction regardless of outcome so the failure is
-  // visible in the transactions table.
+  // Persist the initial transaction(s). When signup fee > 0, split into TWO
+  // rows sharing the same IQPro transaction id (one Sale, two local rows) —
+  // mirrors the cancellation_fee / hold_fee pattern and gives clean per-type
+  // revenue reporting. The membership row's amount is the post-coupon
+  // recurring portion; the signup-fee row is the full fee.
+  const txStatus = initialCharge.status === 'approved'
+    ? 'paid' as const
+    : initialCharge.status === 'declined'
+      ? 'declined' as const
+      : 'processing' as const;
+  const processedAt = initialCharge.success ? new Date() : null;
   const txId = randomUUID();
-  await db.insert(transactionSchema).values({
-    id: txId,
-    organizationId: params.organizationId,
-    memberId: params.memberId,
-    memberMembershipId: params.memberMembershipId ?? null,
-    iqproTransactionId: initialCharge.transactionId ?? null,
-    transactionType: 'membership_payment',
-    amount: feeBreakdown.amount,
-    currency: 'USD',
-    status: initialCharge.status === 'approved'
-      ? 'paid'
-      : initialCharge.status === 'declined'
-        ? 'declined'
-        : 'processing',
-    paymentMethod: params.paymentMethod,
-    description: params.description,
-    processedAt: initialCharge.success ? new Date() : null,
-  });
+  const txRows: Array<typeof transactionSchema.$inferInsert> = [
+    {
+      id: txId,
+      organizationId: params.organizationId,
+      memberId: params.memberId,
+      memberMembershipId: params.memberMembershipId ?? null,
+      iqproTransactionId: initialCharge.transactionId ?? null,
+      transactionType: 'membership_payment',
+      amount: recurringAmount,
+      currency: 'USD',
+      status: txStatus,
+      paymentMethod: params.paymentMethod,
+      description: params.description,
+      processedAt,
+    },
+  ];
+  if (signupFee > 0) {
+    const planLabel = params.description.replace(/^Membership:\s*/i, '').trim() || 'membership';
+    txRows.push({
+      id: randomUUID(),
+      organizationId: params.organizationId,
+      memberId: params.memberId,
+      memberMembershipId: params.memberMembershipId ?? null,
+      iqproTransactionId: initialCharge.transactionId ?? null,
+      transactionType: 'signup_fee',
+      amount: signupFee,
+      currency: 'USD',
+      status: txStatus,
+      paymentMethod: params.paymentMethod,
+      description: `Sign-up fee — ${planLabel}`,
+      processedAt,
+    });
+  }
+  await db.insert(transactionSchema).values(txRows);
 
   if (!initialCharge.success) {
     // Subscription was created in IQPro but the initial charge failed. Surface
@@ -764,16 +812,15 @@ async function handleAutopay(args: AutopayParams): Promise<ProcessMemberPaymentR
 
   // Persist subscription ID + dates on membership only after both succeed.
   if (params.memberMembershipId) {
-    const nextPayment = frequency === 'annual'
-      ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
-      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const firstPaymentDate = new Date();
+    const nextPayment = computeNextPaymentDate(firstPaymentDate, frequency);
 
     await db
       .update(memberMembershipSchema)
       .set({
         iqproSubscriptionId: subResult.subscriptionId,
         billingType: 'autopay',
-        firstPaymentDate: new Date(),
+        firstPaymentDate,
         nextPaymentDate: nextPayment,
       })
       .where(eq(memberMembershipSchema.id, params.memberMembershipId));
@@ -822,7 +869,7 @@ type OneTimeParams = {
   feeBreakdown: FeeBreakdown;
   billingAddressId?: string;
   billingAddress: TransactionBillingAddress;
-  lineItem: TransactionLineItem;
+  lineItems: TransactionLineItem[];
   achData?: { achToken: string; secCode: string; routingNumber: string; accountType: string };
   vaulted: boolean;
   isTaxable: boolean;
@@ -830,7 +877,11 @@ type OneTimeParams = {
 };
 
 async function handleOneTimePayment(args: OneTimeParams): Promise<ProcessMemberPaymentResult> {
-  const { config, provider, params, customerId, paymentMethodId, feeBreakdown, billingAddressId, billingAddress, lineItem, achData, vaulted, isTaxable } = args;
+  const { config, provider, params, customerId, paymentMethodId, feeBreakdown, billingAddressId, billingAddress, lineItems, achData, vaulted, isTaxable } = args;
+
+  const signupFee = params.signupFee ?? 0;
+  const couponDiscount = computeCouponDiscount(params.amount, params.appliedCoupon);
+  const membershipAmount = Math.max(0, Math.round((params.amount - couponDiscount) * 100) / 100);
 
   const payResult = await provider.processPayment(config, {
     customerId,
@@ -841,7 +892,7 @@ async function handleOneTimePayment(args: OneTimeParams): Promise<ProcessMemberP
     feeBreakdown,
     customerBillingAddressId: billingAddressId,
     billingAddress,
-    lineItem,
+    lineItems,
     ach: achData,
     vaulted,
     isTaxable,
@@ -853,22 +904,50 @@ async function handleOneTimePayment(args: OneTimeParams): Promise<ProcessMemberP
     },
   });
 
-  // Persist transaction record
+  // Persist transaction record(s). When signupFee > 0, split into TWO rows
+  // sharing the same IQPro transaction id — mirrors handleAutopay and the
+  // cancellation_fee / hold_fee pattern.
+  const txStatus = payResult.status === 'approved'
+    ? 'paid' as const
+    : payResult.status === 'declined'
+      ? 'declined' as const
+      : 'processing' as const;
+  const processedAt = payResult.success ? new Date() : null;
   const txId = randomUUID();
-  await db.insert(transactionSchema).values({
-    id: txId,
-    organizationId: params.organizationId,
-    memberId: params.memberId,
-    memberMembershipId: params.memberMembershipId ?? null,
-    iqproTransactionId: payResult.transactionId ?? null,
-    transactionType: 'membership_payment',
-    amount: feeBreakdown.amount,
-    currency: 'USD',
-    status: payResult.status === 'approved' ? 'paid' : payResult.status === 'declined' ? 'declined' : 'processing',
-    paymentMethod: params.paymentMethod,
-    description: params.description,
-    processedAt: payResult.success ? new Date() : null,
-  });
+  const txRows: Array<typeof transactionSchema.$inferInsert> = [
+    {
+      id: txId,
+      organizationId: params.organizationId,
+      memberId: params.memberId,
+      memberMembershipId: params.memberMembershipId ?? null,
+      iqproTransactionId: payResult.transactionId ?? null,
+      transactionType: 'membership_payment',
+      amount: membershipAmount,
+      currency: 'USD',
+      status: txStatus,
+      paymentMethod: params.paymentMethod,
+      description: params.description,
+      processedAt,
+    },
+  ];
+  if (signupFee > 0) {
+    const planLabel = params.description.replace(/^Membership:\s*/i, '').trim() || 'membership';
+    txRows.push({
+      id: randomUUID(),
+      organizationId: params.organizationId,
+      memberId: params.memberId,
+      memberMembershipId: params.memberMembershipId ?? null,
+      iqproTransactionId: payResult.transactionId ?? null,
+      transactionType: 'signup_fee',
+      amount: signupFee,
+      currency: 'USD',
+      status: txStatus,
+      paymentMethod: params.paymentMethod,
+      description: `Sign-up fee — ${planLabel}`,
+      processedAt,
+    });
+  }
+  await db.insert(transactionSchema).values(txRows);
 
   // Update membership billing info
   if (params.memberMembershipId && payResult.success) {

@@ -97,6 +97,53 @@ describe('ProcessPaymentValidation', () => {
   });
 
   // ===========================================================================
+  // SIGNUP FEE
+  // ===========================================================================
+
+  describe('signupFee', () => {
+    it('should accept a positive signupFee', () => {
+      const result = ProcessPaymentValidation.safeParse({
+        ...validCardPayment,
+        signupFee: 99,
+      });
+
+      expect(result.success).toBe(true);
+
+      if (result.success) {
+        expect(result.data.signupFee).toBe(99);
+      }
+    });
+
+    it('should default signupFee to 0 when omitted', () => {
+      const result = ProcessPaymentValidation.safeParse(validCardPayment);
+
+      expect(result.success).toBe(true);
+
+      if (result.success) {
+        expect(result.data.signupFee).toBe(0);
+      }
+    });
+
+    it('should accept signupFee of zero', () => {
+      const result = ProcessPaymentValidation.safeParse({
+        ...validCardPayment,
+        signupFee: 0,
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should reject negative signupFee', () => {
+      const result = ProcessPaymentValidation.safeParse({
+        ...validCardPayment,
+        signupFee: -10,
+      });
+
+      expect(result.success).toBe(false);
+    });
+  });
+
+  // ===========================================================================
   // MISSING REQUIRED FIELDS
   // ===========================================================================
 

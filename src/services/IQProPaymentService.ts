@@ -322,25 +322,25 @@ export class IQProPaymentProvider implements IPaymentProvider {
       // per-line-item tax check passes ("Remit.IsTaxExempt must be true when
       // all line items have zero tax"). IQPro charges tax via the Tax
       // paymentAdjustment, not from this percent.
-      const lineItem = params.lineItem ?? {
-        name: params.description,
-        description: params.description,
-        unitPrice: params.amount,
-        discount: 0,
-      };
-      const lineItems = [
-        {
-          name: lineItem.name,
-          description: lineItem.description,
-          quantity: 1,
-          unitPrice: lineItem.unitPrice,
-          discount: lineItem.discount,
-          freightAmount: 0,
-          unitOfMeasureId: 1,
-          localTaxPercent: isTaxable ? fb.taxPct : 0,
-          nationalTaxPercent: 0,
-        },
-      ];
+      const sourceLineItems = params.lineItems && params.lineItems.length > 0
+        ? params.lineItems
+        : [{
+            name: params.description,
+            description: params.description,
+            unitPrice: params.amount,
+            discount: 0,
+          }];
+      const lineItems = sourceLineItems.map(li => ({
+        name: li.name,
+        description: li.description,
+        quantity: 1,
+        unitPrice: li.unitPrice,
+        discount: li.discount,
+        freightAmount: 0,
+        unitOfMeasureId: 1,
+        localTaxPercent: isTaxable ? fb.taxPct : 0,
+        nationalTaxPercent: 0,
+      }));
 
       const txPayload: Record<string, unknown> = {
         type: 'Sale',

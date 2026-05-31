@@ -8,7 +8,12 @@ import { PaymentStep } from './PaymentStep';
 // Mock next-intl
 const translationKeys: Record<string, string> = {
   pay_amount: 'Pay {amount}',
+  pay_amount_today: 'Pay {amount} today',
   payment_description: '{plan} recurring membership ({period})',
+  payment_description_with_signup_fee: '{plan} recurring at {recurringAmount}/{period}. Plus one-time {signupFee} sign-up fee.',
+  membership_label: 'Membership',
+  signup_fee_label: 'Sign-up fee',
+  total_due_today_label: 'Total due today',
   plan_monthly: 'monthly',
   plan_annual: 'annual',
   period_month: 'month',
@@ -2311,6 +2316,69 @@ describe('PaymentStep', () => {
       render(<PaymentStep {...oddProps} />);
 
       expect(page.getByLabelText(/Name on card/)).toBeTruthy();
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Signup-fee breakdown — when membershipPlanSignupFee > 0, the heading uses
+  // the "today" variant, the description names recurring + signup fee
+  // separately, and a three-row breakdown panel is rendered.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  describe('signup fee breakdown', () => {
+    const signupFeeProps = {
+      ...defaultProps,
+      data: {
+        ...defaultProps.data,
+        membershipPlanName: '12 Month Commitment (Gold)',
+        membershipPlanPrice: 149,
+        membershipPlanSignupFee: 99,
+        membershipPlanFrequency: 'Monthly',
+      } as AddMemberWizardData,
+    };
+
+    it('shows "Pay $248 today" heading when signup fee is present', () => {
+      render(<PaymentStep {...signupFeeProps} />);
+
+      expect(page.getByText(/Pay \$248\.00 today/)).toBeTruthy();
+    });
+
+    it('description names recurring and signup fee separately, not the bundled total', () => {
+      render(<PaymentStep {...signupFeeProps} />);
+
+      // Description should mention $149/month recurring AND $99 one-time fee
+      const descriptionMatch = document.body.textContent ?? '';
+
+      expect(descriptionMatch).toContain('$149');
+      expect(descriptionMatch).toContain('$99');
+      expect(descriptionMatch).toContain('sign-up fee');
+    });
+
+    it('renders three-row breakdown panel (Membership / Sign-up fee / Total)', () => {
+      render(<PaymentStep {...signupFeeProps} />);
+
+      expect(page.getByText('Membership').first()).toBeTruthy();
+      expect(page.getByText('Sign-up fee').first()).toBeTruthy();
+      expect(page.getByText('Total due today')).toBeTruthy();
+    });
+
+    it('falls back to original heading + description when signupFee is 0', () => {
+      const noFeeProps = {
+        ...defaultProps,
+        data: {
+          ...defaultProps.data,
+          membershipPlanName: '12 Month Commitment (Gold)',
+          membershipPlanPrice: 149,
+          membershipPlanSignupFee: 0,
+          membershipPlanFrequency: 'Monthly',
+        } as AddMemberWizardData,
+      };
+
+      render(<PaymentStep {...noFeeProps} />);
+
+      // No "today" suffix in the heading, no breakdown panel
+      expect(page.getByText(/Pay \$149\.00$/).first()).toBeTruthy();
+      expect(document.body.textContent).not.toContain('Total due today');
     });
   });
 });
