@@ -53,6 +53,7 @@ import {
   waiverMergeFieldSchema,
   waiverTemplateSchema,
 } from '../models/Schema';
+import { computeNextPaymentDate, normalizeFrequency } from '../utils/PaymentSchedule';
 
 // Parse command line arguments
 const args = process.argv.slice(2);
@@ -1119,6 +1120,11 @@ async function seedOrganization(organizationId: string) {
       const planSlug = member.status === 'trial' ? '7-day-trial' : '12-month-gold';
       const planId = membershipPlanIdMap[planSlug];
       if (planId) {
+        // Synthetic iqproSubscriptionId for autopay members so the cancel /
+        // hold / reactivate lifecycle flows can be exercised in local dev
+        // without a real IQPro sandbox call. Trial members are one-time —
+        // no recurring subscription, so the field stays null.
+        const isAutopay = member.status === 'active';
         await db.insert(memberMembershipSchema).values({
           id: randomUUID(),
           memberId: id,
@@ -1126,6 +1132,7 @@ async function seedOrganization(organizationId: string) {
           status: 'active',
           billingType: member.status === 'trial' ? 'one-time' : 'autopay',
           startDate: new Date(),
+          iqproSubscriptionId: isAutopay ? `seed_sub_${randomUUID()}` : null,
         }).onConflictDoNothing();
       }
     }
@@ -1361,23 +1368,45 @@ async function seedOrganization(organizationId: string) {
     7: new Date('2024-05-20'), // Isabella Chen - joined May 2024
   };
 
+  // Helper: starting from joinDate, advance by one billing cycle at a time
+  // until the next payment lands in the future. Mirrors what a real autopay
+  // subscription's nextPaymentDate would be after months/years of charges.
+  const projectNextPaymentDate = (joinDate: Date, planSlug: string): Date | null => {
+    const plan = membershipPlansData.find(p => p.slug === planSlug);
+    const frequency = normalizeFrequency(plan?.frequency ?? null);
+    if (frequency === null) {
+      return null;
+    }
+    let cursor = new Date(joinDate);
+    const now = new Date();
+    // Cap iterations defensively (e.g. annual plan joined decades ago would
+    // still terminate, but we don't want a runaway loop).
+    for (let i = 0; i < 1000; i++) {
+      cursor = computeNextPaymentDate(cursor, frequency);
+      if (cursor > now) {
+        return cursor;
+      }
+    }
+    return cursor;
+  };
+
   for (let i = 0; i < membersData.length; i++) {
     const member = membersData[i]!;
     const memberId = memberIds[i]!;
     const joinDate = memberJoinDates[i]!;
 
     if (member.status === 'active' || member.status === 'trial') {
-      const nextPayment = new Date();
-      nextPayment.setDate(15);
-      if (nextPayment <= new Date()) {
-        nextPayment.setMonth(nextPayment.getMonth() + 1);
-      }
+      // Use the plan's actual frequency to compute the next payment date,
+      // honoring weekly / monthly / semi-annual / annual cadences and
+      // end-of-month clamping. Trial members get null (no recurring cycle).
+      const planSlug = member.status === 'trial' ? '7-day-trial' : '12-month-gold';
+      const nextPayment = member.status === 'trial' ? null : projectNextPaymentDate(joinDate, planSlug);
 
       await db.update(memberMembershipSchema)
         .set({
           startDate: joinDate,
           firstPaymentDate: joinDate,
-          nextPaymentDate: member.status === 'trial' ? null : nextPayment,
+          nextPaymentDate: nextPayment,
         })
         .where(eq(memberMembershipSchema.memberId, memberId));
     }
@@ -1428,12 +1457,15 @@ async function seedOrganization(organizationId: string) {
   console.info('  💰 Seeding transactions...');
   let transactionCount = 0;
 
-  // Helper to create a transaction
+  // Helper to create a transaction. Accepts an optional iqproTransactionId
+  // so the first-charge signup_fee + membership_payment rows can be linked
+  // (mirrors the wizard, which writes one IQPro Sale → two local rows).
   async function createTransaction(values: {
     organizationId: string;
     memberId: string;
     memberMembershipId?: string;
     eventRegistrationId?: string;
+    iqproTransactionId?: string;
     transactionType: string;
     amount: number;
     status: string;
@@ -1448,6 +1480,7 @@ async function seedOrganization(organizationId: string) {
       memberId: values.memberId,
       memberMembershipId: values.memberMembershipId ?? null,
       eventRegistrationId: values.eventRegistrationId ?? null,
+      iqproTransactionId: values.iqproTransactionId ?? null,
       transactionType: values.transactionType,
       amount: values.amount,
       currency: 'USD',
@@ -1496,18 +1529,27 @@ async function seedOrganization(organizationId: string) {
     { index: 7, planSlug: '12-month-gold', price: 149, signupFee: 99, startMonth: new Date('2024-05-15'), endMonth: null, paymentMethod: 'bank_transfer', last4: '' },
   ];
 
-  // Generate membership payment transactions
+  // Generate membership payment transactions. The first charge (signup fee +
+  // first month's membership payment) shares ONE iqproTransactionId — mirrors
+  // the wizard's "one IQPro Sale → two local tx rows" pattern. Each subsequent
+  // recurring cycle gets its own iqproTransactionId.
   for (const config of memberTxConfigs) {
     const memberId = memberIds[config.index]!;
     const mmId = memberMembershipIds[memberId];
 
-    // Signup fee
+    // Synthetic IQPro transaction id for the first-charge Sale that bundles
+    // signup fee + first month. Same id on both rows; null when there's no
+    // signup fee or no first-month charge (trial).
+    const firstChargeIqproId = `seed_tx_${randomUUID()}`;
+
+    // Signup fee (row 1 of the first-charge pair)
     if (config.signupFee > 0) {
       const joinDate = memberJoinDates[config.index]!;
       await createTransaction({
         organizationId,
         memberId,
         memberMembershipId: mmId,
+        iqproTransactionId: firstChargeIqproId,
         transactionType: 'signup_fee',
         amount: config.signupFee,
         status: 'paid',
@@ -1552,10 +1594,18 @@ async function seedOrganization(organizationId: string) {
         ? `Monthly membership - Card ending ${config.last4}`
         : 'Monthly membership - Bank transfer';
 
+      // First month: row 2 of the first-charge pair — shares the signup
+      // fee's iqproTransactionId. Subsequent months: each cycle is its own
+      // IQPro Sale, so each gets a fresh synthetic id.
+      const iqproTransactionId = mi === 0
+        ? firstChargeIqproId
+        : `seed_tx_${randomUUID()}`;
+
       await createTransaction({
         organizationId,
         memberId,
         memberMembershipId: mmId,
+        iqproTransactionId,
         transactionType: 'membership_payment',
         amount: config.price,
         status,

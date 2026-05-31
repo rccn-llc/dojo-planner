@@ -102,11 +102,17 @@ vi.mock('./EmailService', () => ({
 // - update-set-where (set iqproCustomerId / membership fields)
 // - insert-values (payment method + transaction + coupon usage)
 
+// insertCalls stores whatever was passed to `db.insert(...).values(arg)`.
+// The orchestrator passes both single rows (payment_method, coupon_usage)
+// and arrays of rows (transactions — one row when no signup fee, two when
+// present), so the type is the union.
+type InsertArg = Record<string, unknown> | Array<Record<string, unknown>>;
+
 let dbState: {
   existingCustomerId: string | null;
   savedPmRow: { iqproPaymentMethodId: string; type: string; last4: string | null } | null;
   setCalls: Array<Record<string, unknown>>;
-  insertCalls: Array<Record<string, unknown>>;
+  insertCalls: InsertArg[];
   selectIndex: number;
 };
 
@@ -155,7 +161,7 @@ function resetDbMock(opts: {
   });
 
   dbMocks.insert.mockReturnValue({
-    values: vi.fn((vals: Record<string, unknown>) => {
+    values: vi.fn((vals: InsertArg) => {
       dbState.insertCalls.push(vals);
       return Promise.resolve();
     }),
@@ -261,6 +267,136 @@ describe('processMemberPayment', () => {
     expect(mockProvider.createSubscription).not.toHaveBeenCalled();
   });
 
+  it('autopay (monthly): writes firstPaymentDate=now and nextPaymentDate=now+1mo on success', async () => {
+    const { computeFeeBreakdown } = await import('@/libs/IQPro');
+    vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(baseFees);
+
+    const { processMemberPayment } = await import('./MemberPaymentService');
+    const beforeCall = Date.now();
+    await processMemberPayment(testConfig, {
+      ...baseParams,
+      billingType: 'autopay',
+      membershipPlanFrequency: 'monthly',
+      memberMembershipId: 'mm_1',
+    });
+    const afterCall = Date.now();
+
+    const membershipSet = dbState.setCalls.find(s => s.iqproSubscriptionId === 'sub_42');
+
+    expect(membershipSet).toBeDefined();
+    expect(membershipSet?.firstPaymentDate).toBeInstanceOf(Date);
+    expect(membershipSet?.nextPaymentDate).toBeInstanceOf(Date);
+
+    // firstPaymentDate must be ~now
+    const firstPaymentMs = (membershipSet?.firstPaymentDate as Date).getTime();
+
+    expect(firstPaymentMs).toBeGreaterThanOrEqual(beforeCall);
+    expect(firstPaymentMs).toBeLessThanOrEqual(afterCall);
+
+    // nextPaymentDate should be one month later — same day-of-month when
+    // possible, clamped to the last day of the target month when not (e.g.
+    // Jan 31 → Feb 28). Either way, the month diff must be exactly 1.
+    const nextPaymentDate = membershipSet?.nextPaymentDate as Date;
+    const firstPaymentDate = membershipSet?.firstPaymentDate as Date;
+    const monthsDiff = (nextPaymentDate.getFullYear() - firstPaymentDate.getFullYear()) * 12
+      + (nextPaymentDate.getMonth() - firstPaymentDate.getMonth());
+
+    expect(monthsDiff).toBe(1);
+
+    const lastDayOfNextMonth = new Date(nextPaymentDate.getFullYear(), nextPaymentDate.getMonth() + 1, 0).getDate();
+
+    expect([firstPaymentDate.getDate(), lastDayOfNextMonth]).toContain(nextPaymentDate.getDate());
+  });
+
+  it('autopay (annual): nextPaymentDate is exactly one year later', async () => {
+    const { computeFeeBreakdown } = await import('@/libs/IQPro');
+    vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(baseFees);
+
+    const { processMemberPayment } = await import('./MemberPaymentService');
+    await processMemberPayment(testConfig, {
+      ...baseParams,
+      billingType: 'autopay',
+      membershipPlanFrequency: 'annual',
+      memberMembershipId: 'mm_1',
+    });
+
+    const membershipSet = dbState.setCalls.find(s => s.iqproSubscriptionId === 'sub_42');
+    const next = membershipSet?.nextPaymentDate as Date;
+    const first = membershipSet?.firstPaymentDate as Date;
+
+    expect(next.getFullYear() - first.getFullYear()).toBe(1);
+    expect(next.getMonth()).toBe(first.getMonth());
+    expect(next.getDate()).toBe(first.getDate());
+  });
+
+  it('autopay (weekly): nextPaymentDate is exactly 7 days later', async () => {
+    const { computeFeeBreakdown } = await import('@/libs/IQPro');
+    vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(baseFees);
+
+    const { processMemberPayment } = await import('./MemberPaymentService');
+    await processMemberPayment(testConfig, {
+      ...baseParams,
+      billingType: 'autopay',
+      membershipPlanFrequency: 'weekly',
+      memberMembershipId: 'mm_1',
+    });
+
+    const membershipSet = dbState.setCalls.find(s => s.iqproSubscriptionId === 'sub_42');
+    const next = membershipSet?.nextPaymentDate as Date;
+    const first = membershipSet?.firstPaymentDate as Date;
+    const diffMs = next.getTime() - first.getTime();
+
+    expect(diffMs).toBe(7 * 24 * 60 * 60 * 1000);
+  });
+
+  it('autopay (semi-annual): nextPaymentDate is exactly six months later', async () => {
+    const { computeFeeBreakdown } = await import('@/libs/IQPro');
+    vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(baseFees);
+
+    const { processMemberPayment } = await import('./MemberPaymentService');
+    await processMemberPayment(testConfig, {
+      ...baseParams,
+      billingType: 'autopay',
+      membershipPlanFrequency: 'semi-annual',
+      memberMembershipId: 'mm_1',
+    });
+
+    const membershipSet = dbState.setCalls.find(s => s.iqproSubscriptionId === 'sub_42');
+    const next = membershipSet?.nextPaymentDate as Date;
+    const first = membershipSet?.firstPaymentDate as Date;
+    const monthsDiff = (next.getFullYear() - first.getFullYear()) * 12
+      + (next.getMonth() - first.getMonth());
+
+    expect(monthsDiff).toBe(6);
+
+    // Day-of-month is preserved when possible, clamped to last day of target
+    // month otherwise (e.g. May 31 → Nov 30).
+    const lastDayOfNextMonth = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+
+    expect([first.getDate(), lastDayOfNextMonth]).toContain(next.getDate());
+  });
+
+  it('autopay: writes NOTHING to membership row when memberMembershipId is missing (regression guard)', async () => {
+    const { computeFeeBreakdown } = await import('@/libs/IQPro');
+    vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(baseFees);
+
+    const { processMemberPayment } = await import('./MemberPaymentService');
+    await processMemberPayment(testConfig, {
+      ...baseParams,
+      billingType: 'autopay',
+      membershipPlanFrequency: 'monthly',
+      // memberMembershipId intentionally omitted — exactly the pre-fix bug.
+    });
+
+    // The autopay db.update path is gated on memberMembershipId. Without it,
+    // no membership row gets `iqproSubscriptionId` / `nextPaymentDate` set —
+    // which is the bug this whole fix is about. Test guards that callers
+    // (the wizards) MUST pass memberMembershipId.
+    const membershipSet = dbState.setCalls.find(s => s.iqproSubscriptionId === 'sub_42');
+
+    expect(membershipSet).toBeUndefined();
+  });
+
   it('autopay: creates subscription THEN runs immediate Sale', async () => {
     const { computeFeeBreakdown } = await import('@/libs/IQPro');
     vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(baseFees);
@@ -328,7 +464,13 @@ describe('processMemberPayment', () => {
 
     expect(wroteAutopay).toBe(false);
 
-    const txInsert = dbState.insertCalls.find(i => i.iqproTransactionId === 'tx_decline');
+    // Transaction inserts now use an array form (one row when no signup
+    // fee, two rows when present). Find the array containing the declined tx.
+    const txInsertArray = dbState.insertCalls.find(
+      (call): call is Array<Record<string, unknown>> =>
+        Array.isArray(call) && call.some(r => r.iqproTransactionId === 'tx_decline'),
+    );
+    const txInsert = txInsertArray?.find(r => r.iqproTransactionId === 'tx_decline');
 
     expect(txInsert?.status).toBe('declined');
   });
@@ -606,5 +748,339 @@ describe('processMemberPayment', () => {
     expect(mockSendReceipt).toHaveBeenCalledWith(expect.objectContaining({
       isRecurring: true,
     }));
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // SIGNUP FEE — load-bearing: when present, the IQPro recurring subscription
+  // MUST be created at the recurring amount only (NOT bundled with the fee),
+  // and the initial Sale MUST carry two line items + write two tx rows.
+  // Regression guard against the $149/mo plan getting billed at $248/mo.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  describe('with signup fee', () => {
+    // Plan: $149/mo recurring + $99 one-time signup fee. Service fee 3.75%
+    // applied to the post-coupon subtotal ($149 + $99 = $248) → $9.30 SF →
+    // gross IQPro Sale ≈ $257.30 (but the local membership row records $149
+    // and the signup-fee row records $99 — fees aren't split across rows).
+    const planRecurring = 149;
+    const planSignupFee = 99;
+    const subtotal = planRecurring + planSignupFee;
+    const serviceFeeAmount = Math.round(subtotal * 0.0375 * 100) / 100;
+    const grossAmount = Math.round((subtotal + serviceFeeAmount) * 100) / 100;
+    const feesWithSignup = {
+      baseAmount: subtotal,
+      taxAmount: 0,
+      taxPct: 0,
+      serviceFeeAmount,
+      serviceFeePct: 3.75,
+      amount: grossAmount,
+    };
+
+    it('autopay: creates subscription at recurring amount only (not bundled with signup fee)', async () => {
+      const { computeFeeBreakdown } = await import('@/libs/IQPro');
+      vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(feesWithSignup);
+
+      const { processMemberPayment } = await import('./MemberPaymentService');
+      await processMemberPayment(testConfig, {
+        ...baseParams,
+        amount: planRecurring,
+        signupFee: planSignupFee,
+        billingType: 'autopay',
+        membershipPlanFrequency: 'monthly',
+        memberMembershipId: 'mm_signup',
+      });
+
+      // The critical assertion: IQPro subscription created at $149, NOT $248
+      expect(mockProvider.createSubscription).toHaveBeenCalledWith(
+        testConfig,
+        expect.objectContaining({
+          amount: planRecurring,
+        }),
+      );
+
+      const subArgs = mockProvider.createSubscription.mock.calls[0]![1];
+
+      expect(subArgs.amount).not.toBe(subtotal);
+    });
+
+    it('autopay: initial Sale carries TWO line items (membership + signup fee)', async () => {
+      const { computeFeeBreakdown } = await import('@/libs/IQPro');
+      vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(feesWithSignup);
+
+      const { processMemberPayment } = await import('./MemberPaymentService');
+      await processMemberPayment(testConfig, {
+        ...baseParams,
+        amount: planRecurring,
+        signupFee: planSignupFee,
+        billingType: 'autopay',
+        membershipPlanFrequency: 'monthly',
+        memberMembershipId: 'mm_signup',
+        description: 'Membership: 12 Month Commitment (Gold)',
+      });
+
+      expect(mockProvider.processPayment).toHaveBeenCalledTimes(1);
+
+      const saleArgs = mockProvider.processPayment.mock.calls[0]![1];
+
+      expect(saleArgs.lineItems).toHaveLength(2);
+      expect(saleArgs.lineItems[0]).toEqual(expect.objectContaining({
+        unitPrice: planRecurring,
+        discount: 0,
+      }));
+      expect(saleArgs.lineItems[1]).toEqual(expect.objectContaining({
+        name: 'Sign-up fee',
+        unitPrice: planSignupFee,
+        discount: 0,
+      }));
+      expect(saleArgs.amount).toBe(grossAmount);
+    });
+
+    it('autopay: writes TWO local tx rows sharing the same iqproTransactionId', async () => {
+      const { computeFeeBreakdown } = await import('@/libs/IQPro');
+      vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(feesWithSignup);
+
+      const { processMemberPayment } = await import('./MemberPaymentService');
+      await processMemberPayment(testConfig, {
+        ...baseParams,
+        amount: planRecurring,
+        signupFee: planSignupFee,
+        billingType: 'autopay',
+        membershipPlanFrequency: 'monthly',
+        memberMembershipId: 'mm_signup',
+        description: 'Membership: 12 Month Commitment (Gold)',
+      });
+
+      const txInsert = dbState.insertCalls.find(
+        (call): call is Array<Record<string, unknown>> => Array.isArray(call),
+      );
+
+      expect(txInsert).toBeDefined();
+      expect(txInsert).toHaveLength(2);
+
+      const membershipRow = txInsert!.find(r => r.transactionType === 'membership_payment')!;
+      const signupRow = txInsert!.find(r => r.transactionType === 'signup_fee')!;
+
+      expect(membershipRow.amount).toBe(planRecurring);
+      expect(signupRow.amount).toBe(planSignupFee);
+      expect(membershipRow.iqproTransactionId).toBe('tx_42');
+      expect(signupRow.iqproTransactionId).toBe('tx_42');
+      expect(signupRow.description).toContain('Sign-up fee');
+      expect(signupRow.description).toContain('12 Month Commitment (Gold)');
+    });
+
+    it('one-time: single Sale with two line items + two tx rows', async () => {
+      const { computeFeeBreakdown } = await import('@/libs/IQPro');
+      vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(feesWithSignup);
+
+      const { processMemberPayment } = await import('./MemberPaymentService');
+      await processMemberPayment(testConfig, {
+        ...baseParams,
+        amount: planRecurring,
+        signupFee: planSignupFee,
+        description: 'Membership: 12 Month Commitment (Gold)',
+      });
+
+      expect(mockProvider.createSubscription).not.toHaveBeenCalled();
+
+      const saleArgs = mockProvider.processPayment.mock.calls[0]![1];
+
+      expect(saleArgs.lineItems).toHaveLength(2);
+
+      const txInsert = dbState.insertCalls.find(
+        (call): call is Array<Record<string, unknown>> => Array.isArray(call),
+      );
+
+      expect(txInsert).toHaveLength(2);
+
+      const types = txInsert!.map(r => r.transactionType);
+
+      expect(types).toContain('membership_payment');
+      expect(types).toContain('signup_fee');
+    });
+
+    it('signupFee + coupon: discount applies to membership row only', async () => {
+      const { computeFeeBreakdown } = await import('@/libs/IQPro');
+      // 10% off $149 = $14.90 discount → membership row $134.10, signup $99
+      vi.mocked(computeFeeBreakdown).mockResolvedValueOnce({
+        ...feesWithSignup,
+        baseAmount: 233.10,
+        amount: 241.84,
+      });
+
+      const { processMemberPayment } = await import('./MemberPaymentService');
+      await processMemberPayment(testConfig, {
+        ...baseParams,
+        amount: planRecurring,
+        signupFee: planSignupFee,
+        billingType: 'autopay',
+        membershipPlanFrequency: 'monthly',
+        memberMembershipId: 'mm_signup_coupon',
+        appliedCoupon: {
+          id: 'coup_10pct',
+          code: 'WELCOME10',
+          type: 'Percentage',
+          amount: '10%',
+          description: '10% off',
+        },
+      });
+
+      // Recurring subscription is on the DISCOUNTED recurring price only
+      const subArgs = mockProvider.createSubscription.mock.calls[0]![1];
+
+      expect(subArgs.amount).toBeCloseTo(134.10, 2);
+
+      // Local tx rows: membership = discounted recurring, signup = full fee
+      const txInsert = dbState.insertCalls.find(
+        (call): call is Array<Record<string, unknown>> => Array.isArray(call),
+      )!;
+      const membershipRow = txInsert.find(r => r.transactionType === 'membership_payment')!;
+      const signupRow = txInsert.find(r => r.transactionType === 'signup_fee')!;
+
+      expect(membershipRow.amount as number).toBeCloseTo(134.10, 2);
+      expect(signupRow.amount).toBe(planSignupFee); // coupon NEVER applies to signup fee
+    });
+
+    it('signupFee === 0: writes ONE tx row, ONE line item (regression guard)', async () => {
+      const { computeFeeBreakdown } = await import('@/libs/IQPro');
+      vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(baseFees);
+
+      const { processMemberPayment } = await import('./MemberPaymentService');
+      await processMemberPayment(testConfig, {
+        ...baseParams,
+        amount: planRecurring,
+        signupFee: 0,
+        billingType: 'autopay',
+        membershipPlanFrequency: 'monthly',
+        memberMembershipId: 'mm_no_signup',
+      });
+
+      // Subscription amount === membership amount (no signup fee folded in)
+      const subArgs = mockProvider.createSubscription.mock.calls[0]![1];
+
+      expect(subArgs.amount).toBe(planRecurring);
+
+      // Single line item, single tx row
+      const saleArgs = mockProvider.processPayment.mock.calls[0]![1];
+
+      expect(saleArgs.lineItems).toHaveLength(1);
+
+      const txInsert = dbState.insertCalls.find(
+        (call): call is Array<Record<string, unknown>> => Array.isArray(call),
+      )!;
+
+      expect(txInsert).toHaveLength(1);
+      expect(txInsert[0]!.transactionType).toBe('membership_payment');
+    });
+
+    it('receipt email: includes both line items when signupFee > 0', async () => {
+      const { computeFeeBreakdown } = await import('@/libs/IQPro');
+      vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(feesWithSignup);
+
+      const { processMemberPayment } = await import('./MemberPaymentService');
+      await processMemberPayment(testConfig, {
+        ...baseParams,
+        amount: planRecurring,
+        signupFee: planSignupFee,
+        billingType: 'autopay',
+        membershipPlanFrequency: 'monthly',
+        memberMembershipId: 'mm_signup_receipt',
+        description: 'Membership: 12 Month Commitment (Gold)',
+      });
+
+      expect(mockSendReceipt).toHaveBeenCalledTimes(1);
+
+      const receiptArgs = mockSendReceipt.mock.calls[0]![0];
+
+      expect(receiptArgs.lineItems).toHaveLength(2);
+      expect(receiptArgs.lineItems[1]).toEqual(expect.objectContaining({
+        name: 'Sign-up fee',
+        unitPrice: planSignupFee,
+        discount: 0,
+      }));
+    });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// computeNextPaymentDate — calendar-math helper used to fill
+// member_membership.nextPaymentDate after a successful autopay charge.
+// Uses real Date.setMonth / Date.setFullYear (not 30-day approximations).
+// ─────────────────────────────────────────────────────────────────────────
+
+describe('computeNextPaymentDate', () => {
+  it('weekly: adds exactly 7 days', async () => {
+    const { computeNextPaymentDate } = await import('./MemberPaymentService');
+    const from = new Date('2026-06-01T12:00:00Z');
+    const next = computeNextPaymentDate(from, 'weekly');
+
+    expect(next.getTime() - from.getTime()).toBe(7 * 24 * 60 * 60 * 1000);
+  });
+
+  it('monthly: adds exactly 1 month, preserving day-of-month', async () => {
+    const { computeNextPaymentDate } = await import('./MemberPaymentService');
+    const from = new Date(2026, 5, 15); // 15 June 2026 (local time, no TZ surprises)
+    const next = computeNextPaymentDate(from, 'monthly');
+
+    expect(next.getFullYear()).toBe(2026);
+    expect(next.getMonth()).toBe(6); // July
+    expect(next.getDate()).toBe(15);
+  });
+
+  it('monthly: handles year wraparound (Dec → Jan next year)', async () => {
+    const { computeNextPaymentDate } = await import('./MemberPaymentService');
+    const from = new Date(2026, 11, 15); // 15 December 2026
+    const next = computeNextPaymentDate(from, 'monthly');
+
+    expect(next.getFullYear()).toBe(2027);
+    expect(next.getMonth()).toBe(0); // January
+    expect(next.getDate()).toBe(15);
+  });
+
+  it('semi-annual: adds exactly 6 months', async () => {
+    const { computeNextPaymentDate } = await import('./MemberPaymentService');
+    const from = new Date(2026, 0, 15); // 15 January 2026
+    const next = computeNextPaymentDate(from, 'semi-annual');
+
+    expect(next.getFullYear()).toBe(2026);
+    expect(next.getMonth()).toBe(6); // July
+    expect(next.getDate()).toBe(15);
+  });
+
+  it('annual: adds exactly 1 year, preserving month and day', async () => {
+    const { computeNextPaymentDate } = await import('./MemberPaymentService');
+    const from = new Date(2026, 5, 15); // 15 June 2026
+    const next = computeNextPaymentDate(from, 'annual');
+
+    expect(next.getFullYear()).toBe(2027);
+    expect(next.getMonth()).toBe(5); // June
+    expect(next.getDate()).toBe(15);
+  });
+
+  it('null (one-time / no recurring): returns the same date unshifted', async () => {
+    const { computeNextPaymentDate } = await import('./MemberPaymentService');
+    const from = new Date('2026-06-01T12:00:00Z');
+    const next = computeNextPaymentDate(from, null);
+
+    expect(next.getTime()).toBe(from.getTime());
+  });
+
+  it('monthly: clamps day-of-month (Jan 31 → Feb 28, not Mar 3)', async () => {
+    const { computeNextPaymentDate } = await import('./MemberPaymentService');
+    const from = new Date(2026, 0, 31); // 31 January 2026 (non-leap)
+    const next = computeNextPaymentDate(from, 'monthly');
+
+    expect(next.getFullYear()).toBe(2026);
+    expect(next.getMonth()).toBe(1); // February
+    expect(next.getDate()).toBe(28); // clamped to last day of Feb
+  });
+
+  it('monthly: clamps day-of-month on a 31-day → 30-day month (May 31 → Jun 30)', async () => {
+    const { computeNextPaymentDate } = await import('./MemberPaymentService');
+    const from = new Date(2026, 4, 31); // 31 May 2026
+    const next = computeNextPaymentDate(from, 'monthly');
+
+    expect(next.getFullYear()).toBe(2026);
+    expect(next.getMonth()).toBe(5); // June
+    expect(next.getDate()).toBe(30); // clamped to last day of June
   });
 });

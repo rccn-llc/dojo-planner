@@ -56,7 +56,10 @@ export const create = os
         status: 'success',
       });
 
-      // If a membership plan was selected, validate it exists and create the membership
+      // If a membership plan was selected, validate it exists and create the membership.
+      // We capture the new member_membership.id so downstream payment processing can
+      // attach the IQPro subscription id + first/next payment dates to the right row.
+      let memberMembershipId: string | undefined;
       if (input.membershipPlanId && member[0]?.id) {
         // Skip mock plan IDs (they start with 'mock-')
         if (input.membershipPlanId.startsWith('mock-')) {
@@ -66,8 +69,9 @@ export const create = os
           const plans = await getMembershipPlans(context.orgId);
           const planExists = plans.some(p => p.id === input.membershipPlanId);
           if (planExists) {
-            await addMemberMembership(member[0].id, input.membershipPlanId);
-            logger.info(`Membership added for new member: ${member[0].id}, planId: ${input.membershipPlanId}`);
+            const memberships = await addMemberMembership(member[0].id, input.membershipPlanId);
+            memberMembershipId = memberships[0]?.id;
+            logger.info(`Membership added for new member: ${member[0].id}, planId: ${input.membershipPlanId}, memberMembershipId: ${memberMembershipId}`);
 
             // Audit the membership addition
             await audit(context, AUDIT_ACTION.MEMBER_ADD_MEMBERSHIP, AUDIT_ENTITY_TYPE.MEMBERSHIP, {
@@ -82,6 +86,7 @@ export const create = os
 
       return {
         id: member[0]?.id,
+        memberMembershipId,
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';

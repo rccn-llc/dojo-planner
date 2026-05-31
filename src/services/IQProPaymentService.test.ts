@@ -490,6 +490,44 @@ describe('IQProPaymentProvider', () => {
       expect(result.success).toBe(false);
       expect(result.error).toBe('boom');
     });
+
+    it('lineItems array (membership + signup fee): emits one IQPro lineItem per entry', async () => {
+      const { provider, iqproPost } = await loadProvider();
+      iqproPost.mockResolvedValueOnce({
+        data: { transaction: { transactionId: 'tx_signup', status: 'Captured' } },
+      });
+
+      await provider.processPayment(testConfig, {
+        customerId: 'cust_123',
+        paymentMethodId: 'pm_card_1',
+        amount: 257.30,
+        currency: 'USD',
+        description: 'Membership: 12 Month Commitment (Gold)',
+        feeBreakdown: nonTaxableFees,
+        customerBillingAddressId: 'addr_billing_1',
+        billingAddress: baseBilling,
+        lineItems: [
+          { name: 'Membership: 12 Month Commitment (Gold)', description: 'Membership: 12 Month Commitment (Gold)', unitPrice: 149, discount: 0 },
+          { name: 'Sign-up fee', description: 'Sign-up fee — 12 Month Commitment (Gold)', unitPrice: 99, discount: 0 },
+        ],
+      });
+
+      const p = iqproPost.mock.calls[0]![2] as Record<string, any>;
+
+      expect(p.lineItems).toHaveLength(2);
+      expect(p.lineItems[0]).toEqual(expect.objectContaining({
+        name: 'Membership: 12 Month Commitment (Gold)',
+        unitPrice: 149,
+        discount: 0,
+        quantity: 1,
+      }));
+      expect(p.lineItems[1]).toEqual(expect.objectContaining({
+        name: 'Sign-up fee',
+        unitPrice: 99,
+        discount: 0,
+        quantity: 1,
+      }));
+    });
   });
 
   describe('createSubscription', () => {

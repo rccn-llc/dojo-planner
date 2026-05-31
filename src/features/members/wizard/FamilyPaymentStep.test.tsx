@@ -25,6 +25,9 @@ const translationKeys: Record<string, string> = {
   confirm_button: 'Confirm & Add Member',
   processing_button: 'Processing...',
   // PaymentStep namespace (read via tPayment)
+  membership_label: 'Membership',
+  signup_fee_label: 'Sign-up fee',
+  total_due_today_label: 'Total due today',
   card_tab_label: 'Debit / Credit Card',
   ach_tab_label: 'ACH Bank Account',
   cardholder_name_label: 'Name on card',
@@ -207,5 +210,46 @@ describe('FamilyPaymentStep — Free trial mode (#129/#135/#139)', () => {
     render(<FamilyPaymentStep {...baseProps} />);
 
     expect(page.getByText('Billing Summary')).toBeTruthy();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Signup-fee breakdown — when `membershipPlanSignupFee > 0` the single
+// "Amount" row in the summary is replaced by three rows: Membership,
+// Sign-up fee, Total due today.
+// ─────────────────────────────────────────────────────────────────────────
+
+describe('FamilyPaymentStep — signup fee breakdown', () => {
+  it('itemizes membership and signup fee when signupFee > 0', () => {
+    const dataWithFee: AddMemberWizardData = {
+      ...baseData,
+      membershipPlanPrice: 149,
+      membershipPlanSignupFee: 99,
+      membershipPlanName: '12 Month Commitment (Gold)',
+    };
+    render(<FamilyPaymentStep {...baseProps} data={dataWithFee} />);
+
+    // Three breakdown rows replace the single "Amount" row
+    expect(page.getByText('Membership').first()).toBeTruthy();
+    expect(page.getByText('Sign-up fee').first()).toBeTruthy();
+    expect(page.getByText('Total due today')).toBeTruthy();
+    // The original "Amount" label should NOT be shown when the breakdown is active
+    expect(document.body.textContent).not.toContain('Amount');
+    // The summary numbers should reflect $149 recurring + $99 fee = $248 total
+    expect(document.body.textContent).toContain('$149');
+    expect(document.body.textContent).toContain('$99');
+    expect(document.body.textContent).toContain('$248');
+  });
+
+  it('falls back to the single "Amount" row when signupFee is 0', () => {
+    const dataNoFee: AddMemberWizardData = {
+      ...baseData,
+      membershipPlanPrice: 149,
+      membershipPlanSignupFee: 0,
+    };
+    render(<FamilyPaymentStep {...baseProps} data={dataNoFee} />);
+
+    expect(page.getByText('Amount')).toBeTruthy();
+    expect(document.body.textContent).not.toContain('Total due today');
   });
 });

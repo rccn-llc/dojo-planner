@@ -142,11 +142,15 @@ export const FamilyPaymentStep = ({
     return { discountAmount: 0, finalPrice: originalPrice };
   }, [data.appliedCoupon, originalPrice]);
 
-  // Signup fee is added to the first charge by AddFamilyMembersModal — keep
-  // the displayed total in sync.
+  // Signup fee rides with the initial Sale only; the recurring subscription
+  // is configured at `finalPrice` (post-coupon, no signup fee). Itemize in
+  // the summary when present so the user sees what recurs vs. one-time.
   const signupFee = data.membershipPlanSignupFee ?? 0;
+  const hasSignupFee = signupFee > 0;
   const chargeTotal = finalPrice + signupFee;
   const paymentAmount = formatPaymentAmount(chargeTotal);
+  const recurringAmount = formatPaymentAmount(finalPrice);
+  const signupFeeAmount = formatPaymentAmount(signupFee);
 
   const handleCouponChange = (couponId: string) => {
     if (couponId === 'none') {
@@ -280,21 +284,51 @@ export const FamilyPaymentStep = ({
               <span className="text-muted-foreground">{t('plan_label')}</span>
               <span className="font-medium">{data.membershipPlanName || '-'}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">{t('amount_label')}</span>
-              <span className="font-medium">
-                {hasCouponApplied
-                  ? (
-                      <>
-                        {paymentAmount}
-                        {' '}
-                        <span className="text-muted-foreground line-through">{formatPaymentAmount(originalPrice)}</span>
-                      </>
-                    )
-                  : paymentAmount}
-                {frequencyLabel && `/${frequencyLabel}`}
-              </span>
-            </div>
+            {hasSignupFee
+              ? (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">{tPayment('membership_label')}</span>
+                      <span className="font-medium">
+                        {hasCouponApplied
+                          ? (
+                              <>
+                                {recurringAmount}
+                                {' '}
+                                <span className="text-muted-foreground line-through">{formatPaymentAmount(originalPrice)}</span>
+                              </>
+                            )
+                          : recurringAmount}
+                        {frequencyLabel && `/${frequencyLabel}`}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">{tPayment('signup_fee_label')}</span>
+                      <span className="font-medium">{signupFeeAmount}</span>
+                    </div>
+                    <div className="flex justify-between border-t pt-2">
+                      <span className="font-semibold">{tPayment('total_due_today_label')}</span>
+                      <span className="font-semibold">{paymentAmount}</span>
+                    </div>
+                  </>
+                )
+              : (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">{t('amount_label')}</span>
+                    <span className="font-medium">
+                      {hasCouponApplied
+                        ? (
+                            <>
+                              {paymentAmount}
+                              {' '}
+                              <span className="text-muted-foreground line-through">{formatPaymentAmount(originalPrice)}</span>
+                            </>
+                          )
+                        : paymentAmount}
+                      {frequencyLabel && `/${frequencyLabel}`}
+                    </span>
+                  </div>
+                )}
             <div className="border-t pt-2">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">{t('hoh_label')}</span>

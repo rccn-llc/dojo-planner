@@ -85,6 +85,51 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 let cacheStore: CacheEntry | null = null;
 const revalidateCallbacks: Array<() => void | Promise<void>> = [];
 
+/**
+ * Derives the display-only fields (`membershipType`, `amountDue`, `nextPayment`)
+ * on a member row for the members table. Pure — exported so unit tests can
+ * cover the "amountDue should be empty when the next payment is in the future"
+ * rule without spinning up the whole hook.
+ *
+ * `amountDue` is the plan's recurring price (one cycle), shown only when
+ * `nextPaymentDate` is in the past or absent — i.e. the member actually owes.
+ * For a freshly-paid autopay member whose next charge is in the future, the
+ * cell is empty.
+ */
+export function deriveMemberDisplayFields(member: any, now: Date = new Date()): Member {
+  const plan = member.currentMembership?.membershipPlan;
+  const membership = member.currentMembership;
+
+  let membershipType: Member['membershipType'];
+  if (plan) {
+    if (plan.isTrial) {
+      membershipType = 'free-trial';
+    } else if (plan.frequency === 'Monthly') {
+      membershipType = 'monthly';
+    } else if (plan.frequency === 'Annual') {
+      membershipType = 'annual';
+    } else {
+      membershipType = 'free';
+    }
+  }
+
+  const nextPayment = membership?.nextPaymentDate
+    ? new Date(membership.nextPaymentDate)
+    : undefined;
+
+  const isPaid = nextPayment !== undefined && nextPayment.getTime() > now.getTime();
+  const amountDue = !isPaid && plan?.price != null && plan.price > 0
+    ? Number(plan.price).toFixed(2)
+    : undefined;
+
+  return {
+    ...member,
+    membershipType,
+    amountDue,
+    nextPayment,
+  };
+}
+
 function cacheReducer(state: CacheState, action: CacheAction): CacheState {
   switch (action.type) {
     case 'RESET':
@@ -147,39 +192,7 @@ export const useMembersCache = (organizationId?: string | undefined) => {
       const membersData = await client.members.list();
       const rawMembers = (membersData.members || []) as any[];
 
-      // Derive membershipType, amountDue, and nextPayment from currentMembership
-      const detailedMembers: Member[] = rawMembers.map((member: any) => {
-        const plan = member.currentMembership?.membershipPlan;
-        const membership = member.currentMembership;
-
-        let membershipType: Member['membershipType'];
-        if (plan) {
-          if (plan.isTrial) {
-            membershipType = 'free-trial';
-          } else if (plan.frequency === 'Monthly') {
-            membershipType = 'monthly';
-          } else if (plan.frequency === 'Annual') {
-            membershipType = 'annual';
-          } else {
-            membershipType = 'free';
-          }
-        }
-
-        const amountDue = plan?.price != null && plan.price > 0
-          ? Number(plan.price).toFixed(2)
-          : undefined;
-
-        const nextPayment = membership?.nextPaymentDate
-          ? new Date(membership.nextPaymentDate)
-          : undefined;
-
-        return {
-          ...member,
-          membershipType,
-          amountDue,
-          nextPayment,
-        };
-      });
+      const detailedMembers: Member[] = rawMembers.map(member => deriveMemberDisplayFields(member));
 
       // Update cache
       cacheStore = {

@@ -174,20 +174,25 @@ export const ConvertMemberModal = ({
         memberType: targetMemberType,
       });
 
-      // 3. Add membership if one was selected in the wizard
+      // 3. Add membership if one was selected in the wizard. Capture the new
+      // member_membership.id so the subsequent payment call can attach the
+      // IQPro subscription + first/next payment dates to the right row.
+      let newMemberMembershipId: string | undefined;
       if (wizard.data.membershipPlanId) {
         if (hasMembership || (conversionType === 'family-to-individual')) {
           // Change existing membership (marks old as 'converted', creates new)
-          await client.member.changeMembership({
+          const r = await client.member.changeMembership({
             memberId,
             newMembershipPlanId: wizard.data.membershipPlanId,
           });
+          newMemberMembershipId = r?.id;
         } else {
           // No existing membership — add new
-          await client.member.addMembership({
+          const r = await client.member.addMembership({
             memberId,
             membershipPlanId: wizard.data.membershipPlanId,
           });
+          newMemberMembershipId = r?.id;
         }
       }
 
@@ -241,17 +246,18 @@ export const ConvertMemberModal = ({
       }
 
       // 5. Process payment (family-to-individual, or HOH-to-individual
-      // without payment method). Signup fee added on top so it's actually
-      // billed on first charge — see AddMemberModal for rationale.
+      // without payment method). Recurring (post-coupon) goes in `amount`;
+      // the signup fee rides separately so the IQPro subscription is
+      // configured at the recurring price only.
       const planPrice = wizard.data.appliedCoupon
         ? computeDiscountedPrice(wizard.data.membershipPlanPrice, wizard.data.appliedCoupon) ?? 0
         : (wizard.data.membershipPlanPrice ?? 0);
       const signupFee = wizard.data.membershipPlanSignupFee ?? 0;
-      const finalPrice = planPrice + signupFee;
+      const totalDueToday = planPrice + signupFee;
 
       let paymentDeclined = false;
 
-      if (wizard.data.paymentMethod && finalPrice > 0) {
+      if (wizard.data.paymentMethod && totalDueToday > 0) {
         try {
           wizard.updateData({ paymentStatus: 'processing' });
 
@@ -265,7 +271,8 @@ export const ConvertMemberModal = ({
             memberLastName: lastName,
             paymentMethod: wizard.data.paymentMethod,
             billingType: wizard.data.billingType || 'autopay',
-            amount: finalPrice,
+            amount: planPrice,
+            signupFee,
             description: wizard.data.membershipPlanName
               ? `Membership: ${wizard.data.membershipPlanName}`
               : 'Membership payment',
@@ -282,6 +289,9 @@ export const ConvertMemberModal = ({
             ...(wizard.data.achAccountType && { achAccountType: wizard.data.achAccountType }),
             ...(wizard.data.membershipPlanId && { membershipPlanId: wizard.data.membershipPlanId }),
             ...(wizard.data.membershipPlanFrequency && { membershipPlanFrequency: wizard.data.membershipPlanFrequency }),
+            // New membership row from step 3 — payment service attaches the
+            // IQPro subscription id + first/next payment dates here.
+            ...(newMemberMembershipId && { memberMembershipId: newMemberMembershipId }),
             ...(wizard.data.appliedCoupon && { appliedCoupon: wizard.data.appliedCoupon }),
           });
 

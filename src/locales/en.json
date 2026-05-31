@@ -395,7 +395,12 @@
     },
     "PaymentStep": {
       "pay_amount": "Pay {amount}",
+      "pay_amount_today": "Pay {amount} today",
       "payment_description": "This signs up this member for a {plan} recurring membership. They will be charged {amount} every {period} on this day until they cancel.",
+      "payment_description_with_signup_fee": "This signs up this member for a {plan} recurring membership. They will be charged {recurringAmount} every {period} on this day until they cancel. Today's charge also includes a one-time {signupFee} sign-up fee.",
+      "membership_label": "Membership",
+      "signup_fee_label": "Sign-up fee",
+      "total_due_today_label": "Total due today",
       "card_tab_label": "Debit / Credit Card",
       "ach_tab_label": "ACH Bank Account",
       "cardholder_name_label": "Name on card",

@@ -417,15 +417,19 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
       // collects it on the plan, and the member should be billed for it on
       // registration. The coupon discount applies to the recurring price
       // only, not the signup fee.
+      // Recurring (post-coupon) — what IQPro subscription will bill every
+      // cycle. Sent to the service as `amount`.
       const planPrice = wizard.data.appliedCoupon
         ? computeDiscountedPrice(wizard.data.membershipPlanPrice, wizard.data.appliedCoupon) ?? 0
         : (wizard.data.membershipPlanPrice ?? 0);
+      // One-time signup fee — sent separately so it only hits the initial
+      // Sale, never the recurring subscription amount.
       const signupFee = wizard.data.membershipPlanSignupFee ?? 0;
-      const finalPrice = planPrice + signupFee;
+      const totalDueToday = planPrice + signupFee;
 
       let paymentDeclined = false;
 
-      if (wizard.data.paymentMethod && finalPrice > 0 && result.id) {
+      if (wizard.data.paymentMethod && totalDueToday > 0 && result.id) {
         try {
           wizard.updateData({ paymentStatus: 'processing' });
 
@@ -438,7 +442,8 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
             ...(wizard.data.address && { memberAddress: wizard.data.address }),
             paymentMethod: wizard.data.paymentMethod,
             billingType: wizard.data.billingType || 'one-time',
-            amount: finalPrice,
+            amount: planPrice,
+            signupFee,
             description: wizard.data.membershipPlanName
               ? `Membership: ${wizard.data.membershipPlanName}`
               : 'Membership payment',
@@ -457,9 +462,12 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
             ...(wizard.data.achRoutingNumber && { achRoutingNumber: wizard.data.achRoutingNumber }),
             ...(wizard.data.achAccountNumber && { achAccountNumber: wizard.data.achAccountNumber }),
             ...(wizard.data.achAccountType && { achAccountType: wizard.data.achAccountType }),
-            // Membership context
+            // Membership context — including memberMembershipId so the
+            // service can attach the IQPro subscription id + first/next
+            // payment dates to the right row on success.
             ...(wizard.data.membershipPlanId && { membershipPlanId: wizard.data.membershipPlanId }),
             ...(wizard.data.membershipPlanFrequency && { membershipPlanFrequency: wizard.data.membershipPlanFrequency }),
+            ...(result.memberMembershipId && { memberMembershipId: result.memberMembershipId }),
             ...(wizard.data.appliedCoupon && { appliedCoupon: wizard.data.appliedCoupon }),
           });
 
@@ -665,17 +673,18 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
         });
       }
 
-      // 4. Process payment using HOH's context (signup fee added on top —
-      // see comment in the standalone-member branch above for rationale).
+      // 4. Process payment using HOH's context. Recurring + signup fee are
+      // sent separately so the IQPro subscription is created at the recurring
+      // amount only (signup fee is charged once on the initial Sale).
       const planPrice = wizard.data.appliedCoupon
         ? computeDiscountedPrice(wizard.data.membershipPlanPrice, wizard.data.appliedCoupon) ?? 0
         : (wizard.data.membershipPlanPrice ?? 0);
       const signupFee = wizard.data.membershipPlanSignupFee ?? 0;
-      const finalPrice = planPrice + signupFee;
+      const totalDueToday = planPrice + signupFee;
 
       let paymentDeclined = false;
 
-      if (finalPrice > 0 && result.id && wizard.data.hohMemberId) {
+      if (totalDueToday > 0 && result.id && wizard.data.hohMemberId) {
         try {
           wizard.updateData({ paymentStatus: 'processing' });
 
@@ -702,7 +711,8 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
             // the local payment_method table.
             paymentMethodSource: wizard.data.hohHasPaymentMethod ? 'saved' : 'new',
             billingType: 'autopay',
-            amount: finalPrice,
+            amount: planPrice,
+            signupFee,
             description: wizard.data.membershipPlanName
               ? `Membership: ${wizard.data.membershipPlanName}`
               : 'Membership payment',
@@ -722,6 +732,10 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
             }),
             ...(wizard.data.membershipPlanId && { membershipPlanId: wizard.data.membershipPlanId }),
             ...(wizard.data.membershipPlanFrequency && { membershipPlanFrequency: wizard.data.membershipPlanFrequency }),
+            // result.memberMembershipId belongs to the FAMILY member's
+            // membership row, even though we may charge the HOH's vaulted
+            // payment method. The payment service updates this row.
+            ...(result.memberMembershipId && { memberMembershipId: result.memberMembershipId }),
             ...(wizard.data.appliedCoupon && { appliedCoupon: wizard.data.appliedCoupon }),
           });
 

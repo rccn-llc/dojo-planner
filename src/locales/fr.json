@@ -395,7 +395,12 @@
     },
     "PaymentStep": {
       "pay_amount": "Payer {amount}",
+      "pay_amount_today": "Payer {amount} aujourd'hui",
       "payment_description": "Ceci inscrit ce membre pour un abonnement récurrent {plan}. Il sera facturé {amount} tous les {period} à partir de ce jour jusqu'à l'annulation.",
+      "payment_description_with_signup_fee": "Ceci inscrit ce membre pour un abonnement récurrent {plan}. Il sera facturé {recurringAmount} tous les {period} à partir de ce jour jusqu'à l'annulation. Le paiement d'aujourd'hui inclut également des frais d'inscription uniques de {signupFee}.",
+      "membership_label": "Abonnement",
+      "signup_fee_label": "Frais d'inscription",
+      "total_due_today_label": "Total à payer aujourd'hui",
       "card_tab_label": "Carte de débit / crédit",
       "ach_tab_label": "Compte bancaire ACH",
       "cardholder_name_label": "Nom sur la carte",

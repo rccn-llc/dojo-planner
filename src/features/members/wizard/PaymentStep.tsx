@@ -143,12 +143,16 @@ export const PaymentStep = ({
     return { discountAmount: 0, finalPrice: originalPrice };
   }, [data.appliedCoupon, originalPrice]);
 
-  // Signup fee is added to the first charge by AddMemberModal — keep the
-  // displayed total in sync so the user sees the same number the card is
-  // billed for.
+  // Signup fee is charged once on the first transaction only; the recurring
+  // subscription (when autopay) is configured at `finalPrice` only. Display
+  // the combined total as today's charge, but break it out below so the user
+  // sees exactly what will recur vs. what's a one-time fee.
   const signupFee = data.membershipPlanSignupFee ?? 0;
+  const hasSignupFee = signupFee > 0;
   const chargeTotal = finalPrice + signupFee;
   const paymentAmount = formatPaymentAmount(chargeTotal);
+  const recurringAmount = formatPaymentAmount(finalPrice);
+  const signupFeeAmount = formatPaymentAmount(signupFee);
 
   // Free-trial detection — both flags must agree. A paid plan with a coupon
   // that brings price to $0 isn't a trial; it's a discounted plan and we
@@ -328,25 +332,66 @@ export const PaymentStep = ({
                     {hasCouponApplied
                       ? (
                           <>
-                            {t('pay_amount', { amount: paymentAmount })}
+                            {hasSignupFee
+                              ? t('pay_amount_today', { amount: paymentAmount })
+                              : t('pay_amount', { amount: paymentAmount })}
                             {' '}
                             <span className="text-base font-normal text-muted-foreground line-through">
                               {originalAmountText}
                             </span>
                           </>
                         )
-                      : t('pay_amount', { amount: paymentAmount })}
+                      : hasSignupFee
+                        ? t('pay_amount_today', { amount: paymentAmount })
+                        : t('pay_amount', { amount: paymentAmount })}
                   </h2>
                   <p className="text-sm text-muted-foreground">
-                    {t('payment_description', {
-                      plan: planText,
-                      amount: paymentAmount,
-                      period: periodText,
-                    })}
+                    {hasSignupFee
+                      ? t('payment_description_with_signup_fee', {
+                          plan: planText,
+                          recurringAmount,
+                          period: periodText,
+                          signupFee: signupFeeAmount,
+                        })
+                      : t('payment_description', {
+                          plan: planText,
+                          amount: paymentAmount,
+                          period: periodText,
+                        })}
                   </p>
                 </>
               )}
       </div>
+
+      {/* Breakdown panel — only when a signup fee is present. Shows the user
+          exactly which portion recurs vs. which is a one-time charge. */}
+      {!captureOnly && !isFreeTrial && hasSignupFee && (
+        <div className="space-y-2 rounded-lg border bg-muted/30 p-4 text-sm">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">
+              {t('membership_label')}
+              {periodText && (
+                <span className="ml-1 text-xs text-muted-foreground">
+                  (
+                  {recurringAmount}
+                  /
+                  {periodText}
+                  )
+                </span>
+              )}
+            </span>
+            <span className="font-medium">{recurringAmount}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">{t('signup_fee_label')}</span>
+            <span className="font-medium">{signupFeeAmount}</span>
+          </div>
+          <div className="flex justify-between border-t pt-2">
+            <span className="font-semibold">{t('total_due_today_label')}</span>
+            <span className="font-semibold">{paymentAmount}</span>
+          </div>
+        </div>
+      )}
 
       {/* Capture-only info notice */}
       {captureOnly && (
