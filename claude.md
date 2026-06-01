@@ -924,17 +924,24 @@ DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/postgres" npx tsx sr
 **What gets seeded:**
 - 4 programs (Adult BJJ, Kids Program, Competition Team, Special Programs)
 - 14 tags (9 class tags + 5 membership tags)
-- 9 classes with schedule instances
-- 4 schedule exceptions (cancellations, time changes)
-- 2 events with sessions and billing tiers
+- 13 classes (BJJ Fundamentals I/II, Intermediate, Advanced, Kids Class, Kids Advanced, Advanced No-Gi, Beginner No-Gi, Women's BJJ, Open Mat, Open Mat - Weeknight, Self-Defense Workshop, Competition Team) with schedule instances
+- 8 schedule exceptions (mix of past + future, cancellations + modifications)
+- 5 events covering all `eventType` values — seminar, workshop, tournament, camp, and one past workshop with historical attendance. Dates are relative to seed time (e.g., +6 weeks, +10 weeks, +14 weeks, +20 weeks, −12 weeks for the past one)
 - 12 coupons (various types and statuses)
-- 6 membership plans
-- 8 sample members with memberships (with realistic startDate, firstPaymentDate, nextPaymentDate)
-- ~7 payment methods (one per active/trial/past_due member)
-- ~200 transactions spanning Jan 2024 – present (membership payments, signup fees, event registrations, refunds, adjustments)
+- 10 membership plans covering every IQPro frequency branch (Weekly, Monthly, Semi-Annual, Annual, null) and every fee combination — signup, cancellation, hold (one-time + recurring), hold limits per year
+- 14 sample members covering every lifecycle state (active, trial, hold, cancelled, past_due) and every memberType (individual, head-of-household, family-member). Each gets a synthetic `iqproCustomerId` so vaulted-charge code paths work
+- 10 family-member links (5 HOH ↔ family-member pairs, bidirectional rows)
+- 14 payment methods (one per member, all with synthetic `iqproPaymentMethodId`)
+- ~200 transactions covering every `transactionType`: signup_fee, membership_payment, event_registration, refund, adjustment, hold_fee (one-time + recurring), cancellation_fee
+- Lifecycle audit events — `member.create` for every member, `memberMembership.hold` / `memberMembership.cancel` / `holdFee.charge` / `cancellationFee.charge` for the matching members. Includes a prior hold row on John (idx 0) so the `holdLimitPerYear: 2` enforcement can be tested by triggering further holds.
 - Catalog items with variants, categories, and images
 - 3 waiver templates (Standard Adult, Kids Program, Free Trial) with membership associations
+- Signed waivers for every member with a membership — each row has the full plan snapshot (price, frequency, signup fee, contract length, isTrial) and 2 members get a coupon snapshot too. Kids members get the Kids waiver; trial member gets the Trial waiver; everyone else gets the standard Adult waiver
 - 2 waiver merge fields (academy, academy_owners)
+- Rich attendance records — 6-15 per active/trial/hold member spanning the last 8 weeks (2-3 for cancelled/past_due), with `checkOutTime`, `instructorClerkId` (3-instructor rotation), `checkedInByClerkId` for manual check-ins, and a short `notes` string on ~20% of rows
+- Active SaaS subscription on the seeded organization — `stripeSubscriptionStatus='active'` + synthetic IQPro SaaS fields with period end +30 days, so the dashboard layout's expired-subscription gate doesn't redirect freshly seeded orgs to `/dashboard/subscription-expired`
+
+**Dynamic dates:** every date in the seeded data — event sessions, schedule exceptions, member join dates, transactions, attendance, waiver signings — is computed relative to `seedNow` (the script's run time). Re-seeding 6 months from now produces the same shape of data, just shifted forward — no stale 2025/2026 literals.
 
 **Note:** The seed script creates the organization record in the local database if it doesn't exist. Staff/instructor assignments require creating users in the Clerk dashboard first.
 

@@ -156,7 +156,7 @@ DATABASE_URL="file:local.db" npx tsx src/scripts/seed.ts --orgId=org_xxxxx --res
 2. Click on an organization
 3. Copy the Organization ID (starts with `org_`)
 
-The seed script creates sample programs, classes, events, coupons, membership plans, tags, members, and waiver templates.
+The seed script creates a complete, realistic dataset for testing every flow end-to-end: 13 classes with schedules + exceptions, 5 events covering every type (seminar / workshop / tournament / camp + one past workshop), 10 membership plans covering every billing frequency and every fee combination, 14 members in every lifecycle state (active / trial / hold / cancelled / past_due / HOH / family-member with linked relationships), signed waivers with full plan snapshots, lifecycle audit events (member.create / hold / cancel / fee charges), rich attendance over the last 8 weeks, and an active SaaS subscription on the seeded org so the dashboard doesn't gate behind subscription-expired. All dates are computed relative to seed time, so re-seeding months later still produces fresh-looking data. See `CLAUDE.md` for the full breakdown.
 
 ### Stripe Integration
 

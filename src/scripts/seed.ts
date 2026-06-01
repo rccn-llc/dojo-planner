@@ -18,6 +18,7 @@ import { Pool } from 'pg';
 import {
   addressSchema,
   attendanceSchema,
+  auditEventSchema,
   catalogCategorySchema,
   catalogItemCategorySchema,
   catalogItemImageSchema,
@@ -233,55 +234,169 @@ const classesData = [
       { dayOfWeek: 5, startTime: '20:00', endTime: '21:00' }, // Friday 8 PM
     ],
   },
+  {
+    name: 'Kids Advanced',
+    slug: 'kids-advanced',
+    description: 'For students ages 10-15 with at least one stripe on a grey belt.',
+    color: '#0ea5e9',
+    programSlug: 'kids-program',
+    defaultDurationMinutes: 60,
+    minAge: 10,
+    maxAge: 15,
+    tags: ['advanced', 'kids', 'gi'],
+    schedule: [
+      { dayOfWeek: 2, startTime: '17:00', endTime: '18:00' }, // Tuesday 5 PM
+      { dayOfWeek: 4, startTime: '17:00', endTime: '18:00' }, // Thursday 5 PM
+    ],
+  },
+  {
+    name: 'Open Mat - Weeknight',
+    slug: 'open-mat-weeknight',
+    description: 'Friday-night open training. Drill, roll, and ask questions.',
+    color: '#ef4444',
+    programSlug: 'special-programs',
+    defaultDurationMinutes: 90,
+    tags: ['adults', 'gi'],
+    schedule: [
+      { dayOfWeek: 5, startTime: '20:00', endTime: '21:30' }, // Friday 8 PM
+    ],
+  },
+  {
+    name: 'Beginner No-Gi',
+    slug: 'beginner-no-gi',
+    description: 'Intro no-gi techniques for students new to grappling without the kimono.',
+    color: '#f97316',
+    programSlug: 'adult-bjj',
+    defaultDurationMinutes: 60,
+    tags: ['beginner', 'adults', 'no-gi'],
+    schedule: [
+      { dayOfWeek: 6, startTime: '09:00', endTime: '10:00' }, // Saturday 9 AM
+    ],
+  },
+  {
+    name: 'Self-Defense Workshop',
+    slug: 'self-defense-workshop',
+    description: 'Practical situational self-defense for adults of all levels.',
+    color: '#8b5cf6',
+    programSlug: 'special-programs',
+    defaultDurationMinutes: 75,
+    tags: ['adults', 'gi'],
+    schedule: [
+      { dayOfWeek: 0, startTime: '13:00', endTime: '14:15' }, // Sunday 1 PM
+    ],
+  },
 ];
 
-// Event pricing type
+// Event pricing type. `validUntilDaysFromAnchor` is computed relative to the
+// event's first session (e.g. -7 = "early bird ends 1 week before").
 type EventPricing = {
   name: string;
   price: number;
   memberOnly?: boolean;
-  validUntil?: string;
+  validUntilDaysFromAnchor?: number;
 };
 
-// Events data
+// Events data. Session dates are expressed as day-offsets from the first
+// session's anchor (`anchorDaysFromNow`) — so a 3-day seminar starting 6 weeks
+// out becomes `anchorDaysFromNow: 42, sessions: [{dayOffset: 0,...}, {dayOffset: 1,...}]`.
+type EventSession = {
+  dayOffset: number;
+  startTime: string;
+  endTime: string;
+};
+
 const eventsData: Array<{
   name: string;
   slug: string;
   description: string;
   eventType: string;
   maxCapacity?: number;
-  sessions: Array<{ date: string; startTime: string; endTime: string }>;
+  anchorDaysFromNow: number;
+  sessions: EventSession[];
   pricing: EventPricing[];
 }> = [
   {
     name: 'BJJ Fundamentals Seminar Series',
-    slug: 'bjj-fundamentals-seminar-2026',
+    slug: 'bjj-fundamentals-seminar',
     description: 'A comprehensive 3-day seminar covering essential BJJ fundamentals with world-class instruction.',
     eventType: 'seminar',
+    anchorDaysFromNow: 42, // +6 weeks
     sessions: [
-      { date: '2026-01-15', startTime: '10:00', endTime: '13:00' },
-      { date: '2026-01-15', startTime: '15:00', endTime: '18:00' },
-      { date: '2026-01-16', startTime: '10:00', endTime: '13:00' },
-      { date: '2026-01-16', startTime: '15:00', endTime: '18:00' },
-      { date: '2026-01-17', startTime: '10:00', endTime: '13:00' },
+      { dayOffset: 0, startTime: '10:00', endTime: '13:00' },
+      { dayOffset: 0, startTime: '15:00', endTime: '18:00' },
+      { dayOffset: 1, startTime: '10:00', endTime: '13:00' },
+      { dayOffset: 1, startTime: '15:00', endTime: '18:00' },
+      { dayOffset: 2, startTime: '10:00', endTime: '13:00' },
     ],
     pricing: [
-      { name: 'Early Bird', price: 149.99, validUntil: '2026-01-01' },
+      { name: 'Early Bird', price: 149.99, validUntilDaysFromAnchor: -14 },
       { name: 'Regular', price: 199.99 },
     ],
   },
   {
     name: 'Guest Instructor: Master Rodriguez',
-    slug: 'master-rodriguez-seminar-2026',
+    slug: 'master-rodriguez-workshop',
     description: 'One-day exclusive training session with IBJJF World Champion.',
     eventType: 'workshop',
     maxCapacity: 40,
+    anchorDaysFromNow: 70, // +10 weeks
     sessions: [
-      { date: '2026-02-08', startTime: '11:00', endTime: '14:00' },
+      { dayOffset: 0, startTime: '11:00', endTime: '14:00' },
     ],
     pricing: [
       { name: 'Member Price', price: 60, memberOnly: true },
       { name: 'Non-Member', price: 75 },
+    ],
+  },
+  {
+    name: 'Local BJJ Tournament',
+    slug: 'local-bjj-tournament',
+    description: 'In-house tournament open to adults and kids divisions. Spectators welcome.',
+    eventType: 'tournament',
+    maxCapacity: 120,
+    anchorDaysFromNow: 98, // +14 weeks
+    sessions: [
+      { dayOffset: 0, startTime: '08:00', endTime: '17:00' },
+    ],
+    pricing: [
+      { name: 'Adult Competitor', price: 85 },
+      { name: 'Kids Competitor', price: 55 },
+      { name: 'Spectator', price: 20 },
+    ],
+  },
+  {
+    name: 'Summer BJJ Camp',
+    slug: 'summer-bjj-camp',
+    description: '5-day immersive training camp with daily drills, rolling, and guest instruction.',
+    eventType: 'camp',
+    maxCapacity: 60,
+    anchorDaysFromNow: 140, // +20 weeks
+    sessions: [
+      { dayOffset: 0, startTime: '09:00', endTime: '17:00' },
+      { dayOffset: 1, startTime: '09:00', endTime: '17:00' },
+      { dayOffset: 2, startTime: '09:00', endTime: '17:00' },
+      { dayOffset: 3, startTime: '09:00', endTime: '17:00' },
+      { dayOffset: 4, startTime: '09:00', endTime: '15:00' },
+    ],
+    pricing: [
+      { name: 'Member', price: 499 },
+      { name: 'Non-Member', price: 649 },
+      { name: 'Kids', price: 299 },
+    ],
+  },
+  {
+    name: 'Women\'s Self-Defense Workshop',
+    slug: 'womens-self-defense-past',
+    description: 'A past workshop — kept seeded so reports show historical event-registration data.',
+    eventType: 'workshop',
+    maxCapacity: 30,
+    anchorDaysFromNow: -84, // -12 weeks (past)
+    sessions: [
+      { dayOffset: 0, startTime: '13:00', endTime: '16:00' },
+    ],
+    pricing: [
+      { name: 'Member', price: 0, memberOnly: true },
+      { name: 'Non-Member', price: 40 },
     ],
   },
 ];
@@ -302,54 +417,78 @@ const couponsData = [
   { code: 'VIP50', name: 'VIP Member Discount', discountType: 'fixed', discountValue: 50, applicableTo: 'membership', usageLimit: 20, status: 'inactive' },
 ];
 
-// Members data (from MemberCard.stories.tsx)
-const membersData = [
-  { firstName: 'John', lastName: 'Doe', email: 'john.doe@example.com', phone: '+1234567890', dateOfBirth: '1990-01-15', status: 'active', memberType: 'individual' },
-  { firstName: 'Sarah', lastName: 'Johnson', email: 'sarah.johnson@example.com', phone: '+1987654321', dateOfBirth: '1985-03-22', status: 'active', memberType: 'individual' },
-  { firstName: 'Mike', lastName: 'Rodriguez', email: 'mike.rodriguez@example.com', phone: '+1555123456', dateOfBirth: '1992-07-10', status: 'trial', memberType: 'individual' },
-  { firstName: 'Emma', lastName: 'Wilson', email: 'emma.wilson@example.com', phone: null, dateOfBirth: '1995-11-03', status: 'active', memberType: 'individual' },
-  { firstName: 'David', lastName: 'Brown', email: 'david.brown@example.com', phone: '+1777888999', dateOfBirth: '1988-09-18', status: 'cancelled', memberType: 'individual' },
-  { firstName: 'Lisa', lastName: 'Martinez', email: 'lisa.martinez@example.com', phone: '+1444555666', dateOfBirth: '1991-12-07', status: 'past_due', memberType: 'individual' },
-  { firstName: 'Alex', lastName: 'Thompson', email: 'alex.thompson@example.com', phone: '+1222333444', dateOfBirth: '1993-04-25', status: 'active', memberType: 'individual' },
-  { firstName: 'Isabella', lastName: 'Chen', email: 'isabella.chen@example.com', phone: '+1666777888', dateOfBirth: '1987-08-12', status: 'active', memberType: 'individual' },
+// Members data — 14 records covering every lifecycle state + member type the
+// UI distinguishes. `joinedMonthsAgo` and `lifecycleEventMonthsAgo` are
+// relative offsets converted to real Dates at seed time via monthsFromNow().
+// `planSlug` picks each member's membership; cancelled / past_due / hold
+// members use their plan to drive cancellation/hold-fee transactions and the
+// matching audit-log rows.
+type MemberSeed = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string | null;
+  dateOfBirth: string;
+  status: 'active' | 'trial' | 'hold' | 'cancelled' | 'past_due';
+  memberType: 'individual' | 'family-member' | 'head-of-household';
+  planSlug: string | null; // null = no membership (rare; reserved for future)
+  joinedMonthsAgo: number; // how long ago they signed up
+  lifecycleEventMonthsAgo?: number; // hold / cancellation timestamp (months ago)
+};
+
+const membersData: MemberSeed[] = [
+  // Individuals — every status represented.
+  { firstName: 'John', lastName: 'Doe', email: 'john.doe@example.com', phone: '+1234567890', dateOfBirth: '1990-01-15', status: 'active', memberType: 'individual', planSlug: '12-month-gold', joinedMonthsAgo: 28 },
+  { firstName: 'Sarah', lastName: 'Johnson', email: 'sarah.johnson@example.com', phone: '+1987654321', dateOfBirth: '1985-03-22', status: 'active', memberType: 'individual', planSlug: 'month-to-month-gold', joinedMonthsAgo: 4 },
+  { firstName: 'Mike', lastName: 'Rodriguez', email: 'mike.rodriguez@example.com', phone: '+1555123456', dateOfBirth: '1992-07-10', status: 'trial', memberType: 'individual', planSlug: '7-day-trial', joinedMonthsAgo: 0 },
+  { firstName: 'Emma', lastName: 'Wilson', email: 'emma.wilson@example.com', phone: '+1303555100', dateOfBirth: '1995-11-03', status: 'hold', memberType: 'individual', planSlug: '12-month-gold', joinedMonthsAgo: 18, lifecycleEventMonthsAgo: 3 },
+  { firstName: 'David', lastName: 'Brown', email: 'david.brown@example.com', phone: '+1777888999', dateOfBirth: '1988-09-18', status: 'cancelled', memberType: 'individual', planSlug: '12-month-gold', joinedMonthsAgo: 22, lifecycleEventMonthsAgo: 2 },
+  { firstName: 'Lisa', lastName: 'Martinez', email: 'lisa.martinez@example.com', phone: '+1444555666', dateOfBirth: '1991-12-07', status: 'past_due', memberType: 'individual', planSlug: '12-month-gold', joinedMonthsAgo: 20 },
+  // Heads of household.
+  { firstName: 'Alex', lastName: 'Thompson', email: 'alex.thompson@example.com', phone: '+1222333444', dateOfBirth: '1983-04-25', status: 'active', memberType: 'head-of-household', planSlug: 'family-plan', joinedMonthsAgo: 16 },
+  { firstName: 'Isabella', lastName: 'Chen', email: 'isabella.chen@example.com', phone: '+1666777888', dateOfBirth: '1981-08-12', status: 'active', memberType: 'head-of-household', planSlug: 'competition-team', joinedMonthsAgo: 19 },
+  // Family members linked to HOHs above (linkages created in §11b).
+  { firstName: 'Noah', lastName: 'Thompson', email: 'noah.thompson@example.com', phone: null, dateOfBirth: '2014-06-20', status: 'active', memberType: 'family-member', planSlug: 'kids-monthly', joinedMonthsAgo: 16 },
+  { firstName: 'Olivia', lastName: 'Thompson', email: 'olivia.thompson@example.com', phone: null, dateOfBirth: '2016-09-10', status: 'active', memberType: 'family-member', planSlug: 'kids-monthly', joinedMonthsAgo: 16 },
+  { firstName: 'Maria', lastName: 'Thompson', email: 'maria.thompson@example.com', phone: '+1222333445', dateOfBirth: '1985-02-14', status: 'active', memberType: 'family-member', planSlug: 'month-to-month-gold', joinedMonthsAgo: 16 },
+  { firstName: 'Ethan', lastName: 'Chen', email: 'ethan.chen@example.com', phone: null, dateOfBirth: '2013-11-30', status: 'hold', memberType: 'family-member', planSlug: 'kids-monthly', joinedMonthsAgo: 19, lifecycleEventMonthsAgo: 1 },
+  { firstName: 'Liam', lastName: 'Chen', email: 'liam.chen@example.com', phone: null, dateOfBirth: '2015-04-05', status: 'active', memberType: 'family-member', planSlug: 'kids-monthly', joinedMonthsAgo: 19 },
+  // One more individual on a punchcard for variety.
+  { firstName: 'Sophia', lastName: 'Park', email: 'sophia.park@example.com', phone: '+1909555200', dateOfBirth: '1994-07-22', status: 'active', memberType: 'individual', planSlug: '10-class-punchcard', joinedMonthsAgo: 2 },
 ];
 
-// Schedule exceptions data
-const scheduleExceptionsData = [
-  {
-    classSlug: 'bjj-fundamentals-i',
-    exceptionDate: '2025-09-15', // Monday
-    exceptionType: 'modified',
-    newInstructorClerkId: null,
-    reason: 'Coach Alex out sick - Professor Jessica substituting',
-  },
-  {
-    classSlug: 'bjj-fundamentals-i',
-    exceptionDate: '2025-09-17', // Wednesday
-    exceptionType: 'cancelled',
-    reason: 'Gym closed for maintenance',
-  },
-  {
-    classSlug: 'competition-team',
-    exceptionDate: '2025-09-15', // Monday
-    exceptionType: 'modified',
-    newStartTime: '19:30',
-    newEndTime: '20:30',
-    reason: 'Earlier start time this week',
-  },
-  {
-    classSlug: 'bjj-intermediate',
-    exceptionDate: '2025-09-17', // Wednesday
-    exceptionType: 'modified',
-    newStartTime: '19:30',
-    newEndTime: '20:30',
-    reason: 'Permanent time change',
-  },
+// Schedule exceptions — dates expressed as offsets in days from seedNow so
+// they stay fresh on every re-seed (mix of past and future).
+type ScheduleException = {
+  classSlug: string;
+  daysFromNow: number;
+  exceptionType: 'modified' | 'cancelled';
+  newStartTime?: string;
+  newEndTime?: string;
+  newInstructorClerkId?: string | null;
+  reason: string;
+};
+
+const scheduleExceptionsData: ScheduleException[] = [
+  // Past — for "what happened" history.
+  { classSlug: 'bjj-fundamentals-i', daysFromNow: -21, exceptionType: 'modified', newInstructorClerkId: null, reason: 'Coach Alex out sick - Professor Jessica substituting' },
+  { classSlug: 'bjj-fundamentals-i', daysFromNow: -14, exceptionType: 'cancelled', reason: 'Gym closed for maintenance' },
+  { classSlug: 'kids-class', daysFromNow: -10, exceptionType: 'cancelled', reason: 'Snow day — gym closed' },
+  { classSlug: 'beginner-no-gi', daysFromNow: -7, exceptionType: 'modified', newStartTime: '10:00', newEndTime: '11:00', reason: 'Holiday weekend — later start' },
+  // Future — for "what's coming".
+  { classSlug: 'competition-team', daysFromNow: 3, exceptionType: 'modified', newStartTime: '19:30', newEndTime: '20:30', reason: 'Earlier start time this week' },
+  { classSlug: 'bjj-intermediate', daysFromNow: 7, exceptionType: 'modified', newStartTime: '19:30', newEndTime: '20:30', reason: 'Time change for upcoming tournament prep' },
+  { classSlug: 'self-defense-workshop', daysFromNow: 14, exceptionType: 'cancelled', reason: 'Instructor at out-of-town seminar' },
+  { classSlug: 'open-mat-weeknight', daysFromNow: 21, exceptionType: 'modified', newStartTime: '19:00', newEndTime: '21:00', reason: 'Extended open mat — visiting black belt' },
 ];
 
 // Membership plans
 // `frequency` is null for one-time / non-recurring plans (punchcards, free trials).
 // For recurring plans it is one of: 'Weekly' | 'Monthly' | 'Semi-Annual' | 'Annual'.
+// `holdFeeFrequency` is null when there's no hold fee; otherwise 'one-time' or one
+// of the recurring cadences (drives whether holding creates a new IQPro subscription).
+// `holdLimitPerYear` is null or 0 = unlimited; otherwise enforced via 12-month
+// audit-event count in MemberPaymentService.holdMembershipLifecycle.
 const membershipPlansData: Array<{
   name: string;
   slug: string;
@@ -358,17 +497,26 @@ const membershipPlansData: Array<{
   programSlug: string;
   price: number;
   signupFee: number;
+  cancellationFee: number;
+  holdFeeAmount: number;
+  holdFeeFrequency: string | null;
+  holdLimitPerYear: number | null;
   frequency: string | null;
   contractLength: string;
   accessLevel: string;
+  description: string;
   isTrial: boolean;
 }> = [
-  { name: '12 Month Commitment (Gold)', slug: '12-month-gold', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', programSlug: 'adult-bjj', price: 149, signupFee: 99, frequency: 'Monthly', contractLength: '12 Months', accessLevel: 'Unlimited', isTrial: false },
-  { name: 'Month to Month (Gold)', slug: 'month-to-month-gold', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', programSlug: 'adult-bjj', price: 179, signupFee: 99, frequency: 'Monthly', contractLength: 'Month-to-Month', accessLevel: 'Unlimited', isTrial: false },
-  { name: '7-Day Free Trial', slug: '7-day-trial', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', programSlug: 'adult-bjj', price: 0, signupFee: 0, frequency: null, contractLength: '7 Days', accessLevel: 'Unlimited', isTrial: true },
-  { name: 'Kids Monthly', slug: 'kids-monthly', category: 'Kids Brazilian Jiu-Jitsu', program: 'Kids', programSlug: 'kids-program', price: 99, signupFee: 50, frequency: 'Monthly', contractLength: 'Month-to-Month', accessLevel: 'Kids Classes', isTrial: false },
-  { name: 'Competition Team', slug: 'competition-team', category: 'Competition', program: 'Competition', programSlug: 'competition-team', price: 199, signupFee: 0, frequency: 'Monthly', contractLength: 'Month-to-Month', accessLevel: 'Unlimited + Comp Classes', isTrial: false },
-  { name: '10-Class Punch Card', slug: '10-class-punchcard', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', programSlug: 'adult-bjj', price: 200, signupFee: 0, frequency: null, contractLength: 'N/A', accessLevel: '10 Classes', isTrial: false },
+  { name: '12 Month Commitment (Gold)', slug: '12-month-gold', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', programSlug: 'adult-bjj', price: 149, signupFee: 99, cancellationFee: 199, holdFeeAmount: 15, holdFeeFrequency: 'Monthly', holdLimitPerYear: 2, frequency: 'Monthly', contractLength: '12 Months', accessLevel: 'Unlimited', description: 'Best value — 12-month commitment with unlimited classes and recurring hold fee while paused.', isTrial: false },
+  { name: 'Month to Month (Gold)', slug: 'month-to-month-gold', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', programSlug: 'adult-bjj', price: 179, signupFee: 99, cancellationFee: 0, holdFeeAmount: 25, holdFeeFrequency: 'one-time', holdLimitPerYear: null, frequency: 'Monthly', contractLength: 'Month-to-Month', accessLevel: 'Unlimited', description: 'Flexible month-to-month with no cancellation fee. Unlimited holds.', isTrial: false },
+  { name: '7-Day Free Trial', slug: '7-day-trial', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', programSlug: 'adult-bjj', price: 0, signupFee: 0, cancellationFee: 0, holdFeeAmount: 0, holdFeeFrequency: null, holdLimitPerYear: null, frequency: null, contractLength: '7 Days', accessLevel: 'Unlimited', description: 'Try us out — 7 days of unlimited classes, no commitment.', isTrial: true },
+  { name: 'Kids Monthly', slug: 'kids-monthly', category: 'Kids Brazilian Jiu-Jitsu', program: 'Kids', programSlug: 'kids-program', price: 99, signupFee: 50, cancellationFee: 0, holdFeeAmount: 10, holdFeeFrequency: 'one-time', holdLimitPerYear: 4, frequency: 'Monthly', contractLength: 'Month-to-Month', accessLevel: 'Kids Classes', description: 'Monthly plan for kids program. Generous hold policy for family travel.', isTrial: false },
+  { name: 'Kids Annual', slug: 'kids-annual', category: 'Kids Brazilian Jiu-Jitsu', program: 'Kids', programSlug: 'kids-program', price: 990, signupFee: 50, cancellationFee: 100, holdFeeAmount: 25, holdFeeFrequency: 'Annual', holdLimitPerYear: 1, frequency: 'Annual', contractLength: '12 Months', accessLevel: 'Kids Classes', description: 'Annual prepay with $200 savings. One hold per year allowed.', isTrial: false },
+  { name: 'Competition Team', slug: 'competition-team', category: 'Competition', program: 'Competition', programSlug: 'competition-team', price: 199, signupFee: 0, cancellationFee: 99, holdFeeAmount: 50, holdFeeFrequency: 'Monthly', holdLimitPerYear: 1, frequency: 'Monthly', contractLength: 'Month-to-Month', accessLevel: 'Unlimited + Comp Classes', description: 'Competition track — includes all adult and comp classes. Strict hold limit.', isTrial: false },
+  { name: 'Family Plan (HOH)', slug: 'family-plan', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', programSlug: 'adult-bjj', price: 299, signupFee: 150, cancellationFee: 250, holdFeeAmount: 30, holdFeeFrequency: 'Monthly', holdLimitPerYear: 2, frequency: 'Monthly', contractLength: '12 Months', accessLevel: 'Unlimited (HOH + dependents)', description: 'Head-of-household plan covering the primary member; dependents add on at family-member rates.', isTrial: false },
+  { name: 'Weekly Drop-In', slug: 'weekly-dropin', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', programSlug: 'adult-bjj', price: 35, signupFee: 0, cancellationFee: 0, holdFeeAmount: 0, holdFeeFrequency: null, holdLimitPerYear: null, frequency: 'Weekly', contractLength: 'Week-to-Week', accessLevel: 'Unlimited', description: 'Weekly recurring drop-in for travelers and casual training.', isTrial: false },
+  { name: 'Semi-Annual Pass', slug: 'semi-annual-pass', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', programSlug: 'adult-bjj', price: 800, signupFee: 100, cancellationFee: 50, holdFeeAmount: 0, holdFeeFrequency: null, holdLimitPerYear: null, frequency: 'Semi-Annual', contractLength: '6 Months', accessLevel: 'Unlimited', description: 'Pay every 6 months. No hold fee.', isTrial: false },
+  { name: '10-Class Punch Card', slug: '10-class-punchcard', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', programSlug: 'adult-bjj', price: 200, signupFee: 0, cancellationFee: 0, holdFeeAmount: 0, holdFeeFrequency: null, holdLimitPerYear: null, frequency: null, contractLength: 'N/A', accessLevel: '10 Classes', description: 'Pay-as-you-go punchcard for 10 classes. No expiration.', isTrial: false },
 ];
 
 // Catalog categories
@@ -738,7 +886,7 @@ const catalogItemsData: CatalogItemData[] = [
     isFeatured: true,
     categories: ['seminars-events'],
     variants: [],
-    eventSlug: 'bjj-fundamentals-seminar-2026',
+    eventSlug: 'bjj-fundamentals-seminar',
     imageUrl: 'https://placehold.co/600x600/059669/ffffff?text=Seminar+Pass',
   },
   {
@@ -755,7 +903,7 @@ const catalogItemsData: CatalogItemData[] = [
     isFeatured: true,
     categories: ['seminars-events'],
     variants: [],
-    eventSlug: 'master-rodriguez-seminar-2026',
+    eventSlug: 'master-rodriguez-workshop',
     imageUrl: 'https://placehold.co/600x600/7c3aed/ffffff?text=Workshop',
   },
 ];
@@ -865,6 +1013,10 @@ async function clearSeededData(organizationId: string) {
   await db.delete(transactionSchema).where(eq(transactionSchema.organizationId, organizationId));
   await db.delete(paymentMethodSchema).where(sql`${paymentMethodSchema.memberId} IN (SELECT id FROM member WHERE organization_id = ${organizationId})`);
 
+  // Clear audit_event rows for this org (references member / membership IDs that
+  // are about to be deleted, so must run before those FK targets).
+  await db.delete(auditEventSchema).where(eq(auditEventSchema.organizationId, organizationId));
+
   // Clear class and event dependencies, ordered by foreign-key depth so each
   // delete only happens after everything that references it has been removed.
 
@@ -916,6 +1068,23 @@ async function seedOrganization(organizationId: string) {
   if (shouldReset) {
     await clearSeededData(organizationId);
   }
+
+  // Anchor all relative dates to a single instant so a re-seed always
+  // produces dates that are coherent with "today" — not stale 2025/2026
+  // literals. Every event date, schedule exception, member join date, etc.
+  // is computed off these helpers.
+  const seedNow = new Date();
+  const daysFromNow = (days: number, hours = 10, minutes = 0): Date => {
+    const d = new Date(seedNow);
+    d.setDate(d.getDate() + days);
+    d.setHours(hours, minutes, 0, 0);
+    return d;
+  };
+  const monthsFromNow = (months: number): Date => {
+    const d = new Date(seedNow);
+    d.setMonth(d.getMonth() + months);
+    return d;
+  };
 
   // 1. Seed Programs
   console.info('  📚 Seeding programs...');
@@ -1002,7 +1171,7 @@ async function seedOrganization(organizationId: string) {
         await db.insert(classScheduleExceptionSchema).values({
           id: randomUUID(),
           classScheduleInstanceId: scheduleInstanceId,
-          exceptionDate: new Date(exception.exceptionDate),
+          exceptionDate: daysFromNow(exception.daysFromNow),
           exceptionType: exception.exceptionType,
           newStartTime: exception.newStartTime,
           newEndTime: exception.newEndTime,
@@ -1031,12 +1200,12 @@ async function seedOrganization(organizationId: string) {
       maxCapacity: eventData.maxCapacity,
     }).onConflictDoNothing();
 
-    // Create event sessions
+    // Create event sessions — each session date is the event's anchor + dayOffset.
     for (const session of eventData.sessions) {
       await db.insert(eventSessionSchema).values({
         id: randomUUID(),
         eventId,
-        sessionDate: new Date(session.date),
+        sessionDate: daysFromNow(eventData.anchorDaysFromNow + session.dayOffset),
         startTime: session.startTime,
         endTime: session.endTime,
       }).onConflictDoNothing();
@@ -1052,7 +1221,9 @@ async function seedOrganization(organizationId: string) {
         name: pricing.name,
         price: pricing.price,
         memberOnly: pricing.memberOnly ?? false,
-        validUntil: pricing.validUntil ? new Date(pricing.validUntil) : null,
+        validUntil: pricing.validUntilDaysFromAnchor !== undefined
+          ? daysFromNow(eventData.anchorDaysFromNow + pricing.validUntilDaysFromAnchor)
+          : null,
       }).onConflictDoNothing();
     }
   }
@@ -1089,19 +1260,46 @@ async function seedOrganization(organizationId: string) {
       program: plan.program,
       price: plan.price,
       signupFee: plan.signupFee,
+      cancellationFee: plan.cancellationFee,
+      holdFeeAmount: plan.holdFeeAmount,
+      holdFeeFrequency: plan.holdFeeFrequency,
+      holdLimitPerYear: plan.holdLimitPerYear,
       frequency: plan.frequency,
       contractLength: plan.contractLength,
       accessLevel: plan.accessLevel,
+      description: plan.description,
+      isActive: true,
       isTrial: plan.isTrial,
     }).onConflictDoNothing();
   }
 
-  // 7. Seed Members
+  // 7. Seed Members + member_memberships
+  //
+  // Each member gets a synthetic iqproCustomerId so vaulted-charge code paths
+  // that read it don't break in local/preview. Status maps directly to
+  // member.status, while member_membership.status mirrors it (with cancelled
+  // memberships getting an endDate and hold members getting an
+  // iqproHoldFeeSubscriptionId when their plan has a recurring hold fee).
   console.info('  👥 Seeding members...');
   const memberIds: string[] = [];
-  for (const member of membersData) {
+  const memberJoinDates: Date[] = []; // index-aligned with membersData
+  const memberMembershipIdByIndex: (string | null)[] = []; // null = no membership
+
+  for (let i = 0; i < membersData.length; i++) {
+    const member = membersData[i]!;
     const id = randomUUID();
     memberIds.push(id);
+
+    // joinDate is "N months ago" from seedNow.
+    const joinDate = monthsFromNow(-member.joinedMonthsAgo);
+    memberJoinDates.push(joinDate);
+
+    // Compute statusChangedAt for non-active statuses so the timeline UI has
+    // a real date to show.
+    const statusChangedAt = member.lifecycleEventMonthsAgo !== undefined
+      ? monthsFromNow(-member.lifecycleEventMonthsAgo)
+      : null;
+
     await db.insert(memberSchema).values({
       id,
       organizationId,
@@ -1111,31 +1309,82 @@ async function seedOrganization(organizationId: string) {
       phone: member.phone,
       dateOfBirth: member.dateOfBirth ? new Date(member.dateOfBirth) : null,
       status: member.status,
+      statusChangedAt,
       memberType: member.memberType,
-      clerkUserId: null, // Members don't have Clerk accounts in seed data
+      iqproCustomerId: `seed_cus_${randomUUID()}`,
+      clerkUserId: null,
     }).onConflictDoNothing();
 
-    // Assign a membership plan to active/trial members
-    if (member.status === 'active' || member.status === 'trial') {
-      const planSlug = member.status === 'trial' ? '7-day-trial' : '12-month-gold';
-      const planId = membershipPlanIdMap[planSlug];
-      if (planId) {
-        // Synthetic iqproSubscriptionId for autopay members so the cancel /
-        // hold / reactivate lifecycle flows can be exercised in local dev
-        // without a real IQPro sandbox call. Trial members are one-time —
-        // no recurring subscription, so the field stays null.
-        const isAutopay = member.status === 'active';
+    // Assign a membership for every member that has a planSlug. Trial =
+    // one-time, everything else = autopay. Status on the membership row
+    // mirrors the member's lifecycle (active / hold / cancelled). past_due
+    // gets an active membership row — the payment failures are tracked via
+    // the transaction table, not the membership status.
+    if (member.planSlug) {
+      const plan = membershipPlansData.find(p => p.slug === member.planSlug);
+      const planId = membershipPlanIdMap[member.planSlug];
+      if (planId && plan) {
+        const isTrial = plan.isTrial;
+        const isAutopay = !isTrial && plan.frequency !== null;
+        const membershipStatus = member.status === 'cancelled'
+          ? 'cancelled'
+          : member.status === 'hold' ? 'hold' : 'active';
+        // Recurring hold fee → seed an iqproHoldFeeSubscriptionId on hold
+        // members whose plan has a recurring hold-fee cadence.
+        const hasRecurringHoldFee = member.status === 'hold'
+          && plan.holdFeeAmount > 0
+          && plan.holdFeeFrequency !== null
+          && plan.holdFeeFrequency !== 'one-time';
+
+        const mmId = randomUUID();
+        memberMembershipIdByIndex.push(mmId);
         await db.insert(memberMembershipSchema).values({
-          id: randomUUID(),
+          id: mmId,
           memberId: id,
           membershipPlanId: planId,
-          status: 'active',
-          billingType: member.status === 'trial' ? 'one-time' : 'autopay',
-          startDate: new Date(),
+          status: membershipStatus,
+          billingType: isAutopay ? 'autopay' : 'one-time',
+          startDate: joinDate,
+          endDate: member.status === 'cancelled' && statusChangedAt ? statusChangedAt : null,
           iqproSubscriptionId: isAutopay ? `seed_sub_${randomUUID()}` : null,
+          iqproHoldFeeSubscriptionId: hasRecurringHoldFee ? `seed_hold_${randomUUID()}` : null,
         }).onConflictDoNothing();
+      } else {
+        memberMembershipIdByIndex.push(null);
       }
+    } else {
+      memberMembershipIdByIndex.push(null);
     }
+  }
+
+  // 7b. Family relationships — link HOH ↔ family members bidirectionally so
+  // the HOH detail page shows family members and family-member detail pages
+  // resolve back to the HOH. Indexes refer to membersData.
+  console.info('  👨‍👩‍👧 Seeding family relationships...');
+  const familyLinks: Array<{ hohIdx: number; memberIdx: number; relationshipHohToMember: string; relationshipMemberToHoh: string }> = [
+    // Alex (idx 6) → Noah, Olivia (children), Maria (spouse)
+    { hohIdx: 6, memberIdx: 8, relationshipHohToMember: 'parent', relationshipMemberToHoh: 'child' },
+    { hohIdx: 6, memberIdx: 9, relationshipHohToMember: 'parent', relationshipMemberToHoh: 'child' },
+    { hohIdx: 6, memberIdx: 10, relationshipHohToMember: 'spouse', relationshipMemberToHoh: 'spouse' },
+    // Isabella (idx 7) → Ethan, Liam (children)
+    { hohIdx: 7, memberIdx: 11, relationshipHohToMember: 'parent', relationshipMemberToHoh: 'child' },
+    { hohIdx: 7, memberIdx: 12, relationshipHohToMember: 'parent', relationshipMemberToHoh: 'child' },
+  ];
+  let familyLinkCount = 0;
+  for (const link of familyLinks) {
+    const hohId = memberIds[link.hohIdx]!;
+    const memberId = memberIds[link.memberIdx]!;
+    await db.insert(familyMemberSchema).values({
+      memberId: hohId,
+      relatedMemberId: memberId,
+      relationship: link.relationshipHohToMember,
+    }).onConflictDoNothing();
+    await db.insert(familyMemberSchema).values({
+      memberId,
+      relatedMemberId: hohId,
+      relationship: link.relationshipMemberToHoh,
+    }).onConflictDoNothing();
+    familyLinkCount += 2;
   }
 
   // 8. Seed Catalog Categories
@@ -1249,68 +1498,103 @@ async function seedOrganization(organizationId: string) {
     }
   }
 
-  // 11. Seed Signed Waivers for active/trial members
+  // 11. Seed Signed Waivers for every member with a membership.
+  //
+  // The waiver template matches the plan (kids → kids waiver, trial → trial
+  // waiver, everything else → standard adult). Each row includes the full
+  // membership-plan snapshot (price, frequency, signup fee, contract length,
+  // isTrial) and is linked to the actual member_membership row. A couple of
+  // members get a coupon snapshot too so the legal-snapshot UI has signal.
   console.info('  ✍️  Seeding signed waivers...');
-  const defaultWaiver = waiverTemplatesData.find(w => w.isDefault);
+  const placeholderSignature = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+  // Map plan-slug → waiver-template-slug. Plans not in the map fall back to
+  // the default waiver (set by isDefault in waiverTemplatesData).
+  const planToWaiverSlug: Record<string, string> = {
+    'kids-monthly': 'kids-program-waiver',
+    'kids-annual': 'kids-program-waiver',
+    '7-day-trial': 'free-trial-waiver',
+  };
+  const defaultWaiverSlug = waiverTemplatesData.find(w => w.isDefault)?.slug ?? 'standard-adult-waiver';
+
+  // Coupon snapshots stamped on a couple of members for legal-record variety.
+  const couponSnapshots: Record<number, { code: string; type: string; amount: string; discountedPrice: number }> = {
+    1: { code: 'NEWSTUDENT50', type: 'Fixed Amount', amount: '$50', discountedPrice: 129 }, // Sarah, $179 - $50
+    6: { code: 'CTA_FAMILY_1', type: 'Percentage', amount: '15%', discountedPrice: 254.15 }, // Alex (HOH), $299 * 0.85
+  };
+
   let signedWaiverCount = 0;
-  if (defaultWaiver) {
-    const defaultWaiverTemplateId = waiverIdMap[defaultWaiver.slug];
-    // Resolve placeholders in waiver content using default merge field values
-    const renderedContent = defaultWaiver.content
+  for (let i = 0; i < membersData.length; i++) {
+    const member = membersData[i]!;
+    const memberId = memberIds[i]!;
+    const mmId = memberMembershipIdByIndex[i];
+    if (!mmId || !member.planSlug) {
+      continue;
+    }
+    const plan = membershipPlansData.find(p => p.slug === member.planSlug);
+    if (!plan) {
+      continue;
+    }
+    const waiverSlug = planToWaiverSlug[member.planSlug] ?? defaultWaiverSlug;
+    const waiver = waiverTemplatesData.find(w => w.slug === waiverSlug);
+    const waiverTemplateId = waiverIdMap[waiverSlug];
+    if (!waiver || !waiverTemplateId) {
+      continue;
+    }
+
+    // Render placeholders with the default merge-field values.
+    const renderedContent = waiver.content
       .replace(/<academy>/g, 'Your Academy')
       .replace(/<academy_owners>/g, 'Academy Owners');
 
-    // Minimal valid 1x1 transparent PNG as signature placeholder
-    const placeholderSignature = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-
-    if (defaultWaiverTemplateId) {
-      for (let i = 0; i < membersData.length; i++) {
-        const member = membersData[i]!;
-        const memberIdValue = memberIds[i]!;
-
-        // Only create signed waivers for active/trial members (matches membership assignment logic)
-        if (member.status !== 'active' && member.status !== 'trial') {
-          continue;
-        }
-
-        const dob = member.dateOfBirth ? new Date(member.dateOfBirth) : null;
-        const signingDate = new Date('2025-09-01');
-        let ageAtSigning: number | null = null;
-        if (dob) {
-          ageAtSigning = signingDate.getFullYear() - dob.getFullYear();
-          const monthDiff = signingDate.getMonth() - dob.getMonth();
-          if (monthDiff < 0 || (monthDiff === 0 && signingDate.getDate() < dob.getDate())) {
-            ageAtSigning--;
-          }
-        }
-
-        const isMinor = ageAtSigning !== null && ageAtSigning < defaultWaiver.guardianAgeThreshold;
-
-        await db.insert(signedWaiverSchema).values({
-          id: randomUUID(),
-          organizationId,
-          waiverTemplateId: defaultWaiverTemplateId,
-          waiverTemplateVersion: defaultWaiver.version,
-          memberId: memberIdValue,
-          memberMembershipId: null,
-          signatureDataUrl: placeholderSignature,
-          signedByName: isMinor ? `Guardian of ${member.firstName}` : `${member.firstName} ${member.lastName}`,
-          signedByEmail: member.email,
-          signedByRelationship: isMinor ? 'parent' : null,
-          memberFirstName: member.firstName,
-          memberLastName: member.lastName,
-          memberEmail: member.email,
-          memberDateOfBirth: dob,
-          memberAgeAtSigning: ageAtSigning,
-          renderedContent,
-          ipAddress: '127.0.0.1',
-          userAgent: 'seed-script',
-          signedAt: signingDate,
-        }).onConflictDoNothing();
-
-        signedWaiverCount++;
+    const dob = member.dateOfBirth ? new Date(member.dateOfBirth) : null;
+    const signingDate = memberJoinDates[i]!;
+    let ageAtSigning: number | null = null;
+    if (dob) {
+      ageAtSigning = signingDate.getFullYear() - dob.getFullYear();
+      const monthDiff = signingDate.getMonth() - dob.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && signingDate.getDate() < dob.getDate())) {
+        ageAtSigning--;
       }
     }
+    const isMinor = ageAtSigning !== null && ageAtSigning < waiver.guardianAgeThreshold;
+    const coupon = couponSnapshots[i];
+
+    await db.insert(signedWaiverSchema).values({
+      id: randomUUID(),
+      organizationId,
+      waiverTemplateId,
+      waiverTemplateVersion: waiver.version,
+      memberId,
+      memberMembershipId: mmId,
+      // Plan snapshot — what the member legally signed up for.
+      membershipPlanName: plan.name,
+      membershipPlanPrice: plan.price,
+      membershipPlanFrequency: plan.frequency,
+      membershipPlanContractLength: plan.contractLength,
+      membershipPlanSignupFee: plan.signupFee,
+      membershipPlanIsTrial: plan.isTrial,
+      // Coupon snapshot (when applicable).
+      couponCode: coupon?.code ?? null,
+      couponType: coupon?.type ?? null,
+      couponAmount: coupon?.amount ?? null,
+      couponDiscountedPrice: coupon?.discountedPrice ?? null,
+      signatureDataUrl: placeholderSignature,
+      signedByName: isMinor ? `Guardian of ${member.firstName}` : `${member.firstName} ${member.lastName}`,
+      signedByEmail: member.email,
+      signedByRelationship: isMinor ? 'parent' : null,
+      memberFirstName: member.firstName,
+      memberLastName: member.lastName,
+      memberEmail: member.email,
+      memberDateOfBirth: dob,
+      memberAgeAtSigning: ageAtSigning,
+      renderedContent,
+      ipAddress: '127.0.0.1',
+      userAgent: 'seed-script',
+      signedAt: signingDate,
+    }).onConflictDoNothing();
+
+    signedWaiverCount++;
   }
 
   // 12. Seed Waiver Merge Fields
@@ -1331,42 +1615,38 @@ async function seedOrganization(organizationId: string) {
   }
 
   // 13. Seed Payment Methods
+  //
+  // One PM per member with a synthetic iqproPaymentMethodId so the vaulted-
+  // charge code paths have something to find. Last4 is a stable per-member
+  // value used in transaction descriptions below. Family members share a
+  // last4 with their HOH (since real-world they're billed to HOH's card).
   console.info('  💳 Seeding payment methods...');
-  const paymentMethodsData: Array<{ memberIndex: number; type: string; last4: string; isDefault: boolean }> = [
-    { memberIndex: 0, type: 'card', last4: '4242', isDefault: true }, // John Doe
-    { memberIndex: 1, type: 'card', last4: '5678', isDefault: true }, // Sarah Johnson
-    { memberIndex: 2, type: 'card', last4: '1111', isDefault: true }, // Mike Rodriguez (trial)
-    { memberIndex: 3, type: 'card', last4: '3456', isDefault: true }, // Emma Wilson
-    { memberIndex: 4, type: 'card', last4: '7890', isDefault: true }, // David Brown (cancelled)
-    { memberIndex: 5, type: 'card', last4: '2222', isDefault: true }, // Lisa Martinez (past_due)
-    { memberIndex: 6, type: 'card', last4: '9999', isDefault: true }, // Alex Thompson
-    { memberIndex: 7, type: 'card', last4: '8888', isDefault: true }, // Isabella Chen
-  ];
-  for (const pm of paymentMethodsData) {
-    const memberId = memberIds[pm.memberIndex];
-    if (memberId) {
-      await db.insert(paymentMethodSchema).values({
-        id: randomUUID(),
-        memberId,
-        type: pm.type,
-        last4: pm.last4,
-        isDefault: pm.isDefault,
-      }).onConflictDoNothing();
-    }
+  const last4ByIndex = ['4242', '5678', '1111', '3456', '7890', '2222', '9999', '8888', '9999', '9999', '9999', '8888', '8888', '4111'];
+  const pmTypeByIndex: Array<'card' | 'bank_transfer'> = ['card', 'card', 'card', 'card', 'card', 'card', 'card', 'card', 'card', 'card', 'card', 'card', 'card', 'bank_transfer'];
+  let paymentMethodCount = 0;
+  for (let i = 0; i < membersData.length; i++) {
+    const memberId = memberIds[i]!;
+    const type = pmTypeByIndex[i] ?? 'card';
+    const last4 = last4ByIndex[i] ?? '0000';
+    await db.insert(paymentMethodSchema).values({
+      id: randomUUID(),
+      memberId,
+      type,
+      last4: type === 'card' ? last4 : null,
+      iqproPaymentMethodId: `seed_pm_${randomUUID()}`,
+      isDefault: true,
+    }).onConflictDoNothing();
+    paymentMethodCount++;
   }
 
-  // 14. Update member_membership dates for realistic data
+  // 14. Update member_membership payment dates + member createdAt.
+  //
+  // The membership row was created in §7 with startDate set; here we compute
+  // firstPaymentDate + nextPaymentDate using the plan's actual frequency
+  // (weekly / monthly / semi-annual / annual / null). Active members with a
+  // recurring plan get nextPaymentDate projected into the future; trial /
+  // punchcard / cancelled / hold members get null.
   console.info('  📅 Updating membership dates...');
-  const memberJoinDates: Record<number, Date> = {
-    0: new Date('2024-01-10'), // John Doe - joined Jan 2024
-    1: new Date('2024-03-05'), // Sarah Johnson - joined Mar 2024
-    2: new Date('2025-12-01'), // Mike Rodriguez - trial, recent
-    3: new Date('2024-06-15'), // Emma Wilson - joined Jun 2024
-    4: new Date('2024-02-20'), // David Brown - joined Feb 2024, cancelled Aug 2025
-    5: new Date('2024-04-01'), // Lisa Martinez - joined Apr 2024, past_due
-    6: new Date('2024-08-10'), // Alex Thompson - joined Aug 2024
-    7: new Date('2024-05-20'), // Isabella Chen - joined May 2024
-  };
 
   // Helper: starting from joinDate, advance by one billing cycle at a time
   // until the next payment lands in the future. Mirrors what a real autopay
@@ -1378,12 +1658,11 @@ async function seedOrganization(organizationId: string) {
       return null;
     }
     let cursor = new Date(joinDate);
-    const now = new Date();
     // Cap iterations defensively (e.g. annual plan joined decades ago would
     // still terminate, but we don't want a runaway loop).
     for (let i = 0; i < 1000; i++) {
       cursor = computeNextPaymentDate(cursor, frequency);
-      if (cursor > now) {
+      if (cursor > seedNow) {
         return cursor;
       }
     }
@@ -1394,24 +1673,23 @@ async function seedOrganization(organizationId: string) {
     const member = membersData[i]!;
     const memberId = memberIds[i]!;
     const joinDate = memberJoinDates[i]!;
+    const mmId = memberMembershipIdByIndex[i];
 
-    if (member.status === 'active' || member.status === 'trial') {
-      // Use the plan's actual frequency to compute the next payment date,
-      // honoring weekly / monthly / semi-annual / annual cadences and
-      // end-of-month clamping. Trial members get null (no recurring cycle).
-      const planSlug = member.status === 'trial' ? '7-day-trial' : '12-month-gold';
-      const nextPayment = member.status === 'trial' ? null : projectNextPaymentDate(joinDate, planSlug);
+    if (mmId && member.planSlug) {
+      const plan = membershipPlansData.find(p => p.slug === member.planSlug);
+      // Only project a next payment for currently-billing memberships.
+      const billing = member.status === 'active' && plan?.frequency !== null && !plan?.isTrial
+        ? projectNextPaymentDate(joinDate, member.planSlug)
+        : null;
 
       await db.update(memberMembershipSchema)
         .set({
-          startDate: joinDate,
           firstPaymentDate: joinDate,
-          nextPaymentDate: nextPayment,
+          nextPaymentDate: billing,
         })
-        .where(eq(memberMembershipSchema.memberId, memberId));
+        .where(eq(memberMembershipSchema.id, mmId));
     }
 
-    // Update member createdAt to match join date
     await db.update(memberSchema)
       .set({ createdAt: joinDate })
       .where(eq(memberSchema.id, memberId));
@@ -1493,41 +1771,61 @@ async function seedOrganization(organizationId: string) {
     transactionCount++;
   }
 
-  // Get member_membership IDs for linking
-  const memberMembershipIds: Record<string, string> = {};
-  for (const memberId of memberIds) {
-    const mm = await db.select({ id: memberMembershipSchema.id })
-      .from(memberMembershipSchema)
-      .where(eq(memberMembershipSchema.memberId, memberId));
-    if (mm[0]) {
-      memberMembershipIds[memberId] = mm[0].id;
-    }
-  }
-
-  // Member data for transaction generation
+  // Derive transaction config from the member seed. Each member with a
+  // recurring plan gets monthly-payment rows from joinDate to either today
+  // or their lifecycleEventMonthsAgo (for cancelled members). past_due
+  // members get 2 trailing failedMonths so the dashboard reflects the
+  // status. Trial / punchcard / one-time-pay members get no recurring
+  // payment rows — just the signup_fee (or nothing for trial).
   type MemberTxConfig = {
     index: number;
     planSlug: string;
     price: number;
     signupFee: number;
     startMonth: Date;
-    endMonth: Date | null; // null = ongoing
-    paymentMethod: string;
+    endMonth: Date | null;
+    paymentMethod: 'card' | 'bank_transfer' | 'cash';
     last4: string;
-    failedMonths?: Date[]; // months where payment declined
+    failedMonths?: Date[];
   };
 
-  const now = new Date();
-  const memberTxConfigs: MemberTxConfig[] = [
-    { index: 0, planSlug: '12-month-gold', price: 149, signupFee: 99, startMonth: new Date('2024-01-15'), endMonth: null, paymentMethod: 'card', last4: '4242' },
-    { index: 1, planSlug: '12-month-gold', price: 149, signupFee: 99, startMonth: new Date('2024-03-15'), endMonth: null, paymentMethod: 'card', last4: '5678' },
-    { index: 2, planSlug: '7-day-trial', price: 0, signupFee: 0, startMonth: new Date('2025-12-01'), endMonth: new Date('2025-12-08'), paymentMethod: 'card', last4: '1111' },
-    { index: 3, planSlug: '12-month-gold', price: 149, signupFee: 99, startMonth: new Date('2024-06-15'), endMonth: null, paymentMethod: 'card', last4: '3456' },
-    { index: 4, planSlug: 'month-to-month-gold', price: 179, signupFee: 99, startMonth: new Date('2024-02-15'), endMonth: new Date('2025-08-15'), paymentMethod: 'card', last4: '7890' },
-    { index: 5, planSlug: '12-month-gold', price: 149, signupFee: 99, startMonth: new Date('2024-04-15'), endMonth: null, paymentMethod: 'card', last4: '2222', failedMonths: [new Date('2025-12-15'), new Date('2026-01-15')] },
-    { index: 6, planSlug: '12-month-gold', price: 149, signupFee: 99, startMonth: new Date('2024-08-15'), endMonth: null, paymentMethod: 'card', last4: '9999' },
-    { index: 7, planSlug: '12-month-gold', price: 149, signupFee: 99, startMonth: new Date('2024-05-15'), endMonth: null, paymentMethod: 'bank_transfer', last4: '' },
-  ];
+  const memberTxConfigs: MemberTxConfig[] = membersData
+    .map((m, idx): MemberTxConfig | null => {
+      if (!m.planSlug) {
+        return null;
+      }
+      const plan = membershipPlansData.find(p => p.slug === m.planSlug);
+      if (!plan) {
+        return null;
+      }
+      const startMonth = memberJoinDates[idx]!;
+      let endMonth: Date | null = null;
+      if (m.status === 'cancelled' && m.lifecycleEventMonthsAgo !== undefined) {
+        endMonth = monthsFromNow(-m.lifecycleEventMonthsAgo);
+      } else if (m.status === 'hold' && m.lifecycleEventMonthsAgo !== undefined) {
+        // Hold members stop receiving membership_payment rows at hold time.
+        endMonth = monthsFromNow(-m.lifecycleEventMonthsAgo);
+      } else if (plan.isTrial) {
+        // Trial — 7 days then ends.
+        endMonth = new Date(startMonth);
+        endMonth.setDate(endMonth.getDate() + 7);
+      }
+      const failedMonths = m.status === 'past_due'
+        ? [monthsFromNow(-1), monthsFromNow(0)]
+        : undefined;
+      return {
+        index: idx,
+        planSlug: m.planSlug,
+        price: plan.price,
+        signupFee: plan.signupFee,
+        startMonth,
+        endMonth,
+        paymentMethod: pmTypeByIndex[idx] === 'bank_transfer' ? 'bank_transfer' : 'card',
+        last4: last4ByIndex[idx] ?? '',
+        failedMonths,
+      };
+    })
+    .filter((c): c is MemberTxConfig => c !== null);
 
   // Generate membership payment transactions. The first charge (signup fee +
   // first month's membership payment) shares ONE iqproTransactionId — mirrors
@@ -1535,7 +1833,7 @@ async function seedOrganization(organizationId: string) {
   // recurring cycle gets its own iqproTransactionId.
   for (const config of memberTxConfigs) {
     const memberId = memberIds[config.index]!;
-    const mmId = memberMembershipIds[memberId];
+    const mmId = memberMembershipIdByIndex[config.index] ?? undefined;
 
     // Synthetic IQPro transaction id for the first-charge Sale that bundles
     // signup fee + first month. Same id on both rows; null when there's no
@@ -1567,7 +1865,7 @@ async function seedOrganization(organizationId: string) {
 
     // Monthly membership payments
     const startMonth = new Date(config.startMonth);
-    const endDate = config.endMonth || now;
+    const endDate = config.endMonth || seedNow;
     const totalMonths = (endDate.getFullYear() - startMonth.getFullYear()) * 12 + (endDate.getMonth() - startMonth.getMonth()) + 1;
 
     for (let mi = 0; mi < totalMonths; mi++) {
@@ -1617,27 +1915,49 @@ async function seedOrganization(organizationId: string) {
     }
   }
 
-  // Event registration transactions
-  const eventTxData = [
-    { memberIndex: 0, eventSlug: 'bjj-fundamentals-seminar-2026', billingIndex: 0, amount: 149.99, date: new Date('2025-12-20'), method: 'card', desc: 'BJJ Fundamentals Seminar - Card ending 4242', status: 'paid' },
-    { memberIndex: 1, eventSlug: 'bjj-fundamentals-seminar-2026', billingIndex: 0, amount: 149.99, date: new Date('2025-12-22'), method: 'card', desc: 'BJJ Fundamentals Seminar - Card ending 5678', status: 'paid' },
-    { memberIndex: 3, eventSlug: 'bjj-fundamentals-seminar-2026', billingIndex: 1, amount: 199.99, date: new Date('2026-01-05'), method: 'card', desc: 'BJJ Fundamentals Seminar - Card ending 3456', status: 'paid' },
-    { memberIndex: 6, eventSlug: 'bjj-fundamentals-seminar-2026', billingIndex: 0, amount: 149.99, date: new Date('2026-01-03'), method: 'card', desc: 'BJJ Fundamentals Seminar - Card ending 9999', status: 'paid' },
-    { memberIndex: 0, eventSlug: 'master-rodriguez-seminar-2026', billingIndex: 0, amount: 60, date: new Date('2026-01-25'), method: 'card', desc: 'Master Rodriguez Workshop - Card ending 4242', status: 'paid' },
-    { memberIndex: 1, eventSlug: 'master-rodriguez-seminar-2026', billingIndex: 0, amount: 60, date: new Date('2026-01-28'), method: 'card', desc: 'Master Rodriguez Workshop - Card ending 5678', status: 'paid' },
-    { memberIndex: 3, eventSlug: 'master-rodriguez-seminar-2026', billingIndex: 0, amount: 60, date: new Date('2026-01-20'), method: 'cash', desc: 'Master Rodriguez Workshop - Cash', status: 'paid' },
-    { memberIndex: 6, eventSlug: 'master-rodriguez-seminar-2026', billingIndex: 0, amount: 60, date: new Date('2026-01-22'), method: 'card', desc: 'Master Rodriguez Workshop - Card ending 9999', status: 'pending' },
-    { memberIndex: 7, eventSlug: 'master-rodriguez-seminar-2026', billingIndex: 1, amount: 75, date: new Date('2026-02-01'), method: 'bank_transfer', desc: 'Master Rodriguez Workshop - Bank transfer', status: 'processing' },
-    { memberIndex: 4, eventSlug: 'bjj-fundamentals-seminar-2026', billingIndex: 0, amount: 149.99, date: new Date('2025-06-10'), method: 'card', desc: 'BJJ Fundamentals Seminar - Card ending 7890', status: 'refunded' },
+  // Event registration transactions. Dates expressed as days-from-now so
+  // they stay fresh on re-seed. Mix of future events (signups happening now
+  // for upcoming events) and the past event (historical attendance).
+  type EventTxRow = {
+    memberIndex: number;
+    eventSlug: string;
+    billingIndex: number;
+    amount: number;
+    daysFromNow: number;
+    method: 'card' | 'bank_transfer' | 'cash';
+    desc: string;
+    status: string;
+  };
+  const eventTxData: EventTxRow[] = [
+    // Upcoming fundamentals seminar — recent signups by active members.
+    { memberIndex: 0, eventSlug: 'bjj-fundamentals-seminar', billingIndex: 0, amount: 149.99, daysFromNow: -10, method: 'card', desc: 'BJJ Fundamentals Seminar - Card ending 4242', status: 'paid' },
+    { memberIndex: 1, eventSlug: 'bjj-fundamentals-seminar', billingIndex: 0, amount: 149.99, daysFromNow: -8, method: 'card', desc: 'BJJ Fundamentals Seminar - Card ending 5678', status: 'paid' },
+    { memberIndex: 3, eventSlug: 'bjj-fundamentals-seminar', billingIndex: 1, amount: 199.99, daysFromNow: -5, method: 'card', desc: 'BJJ Fundamentals Seminar - Card ending 3456', status: 'paid' },
+    { memberIndex: 6, eventSlug: 'bjj-fundamentals-seminar', billingIndex: 0, amount: 149.99, daysFromNow: -7, method: 'card', desc: 'BJJ Fundamentals Seminar - Card ending 9999', status: 'paid' },
+    // Master Rodriguez workshop signups.
+    { memberIndex: 0, eventSlug: 'master-rodriguez-workshop', billingIndex: 0, amount: 60, daysFromNow: -3, method: 'card', desc: 'Master Rodriguez Workshop - Card ending 4242', status: 'paid' },
+    { memberIndex: 1, eventSlug: 'master-rodriguez-workshop', billingIndex: 0, amount: 60, daysFromNow: -2, method: 'card', desc: 'Master Rodriguez Workshop - Card ending 5678', status: 'paid' },
+    { memberIndex: 3, eventSlug: 'master-rodriguez-workshop', billingIndex: 0, amount: 60, daysFromNow: -4, method: 'cash', desc: 'Master Rodriguez Workshop - Cash', status: 'paid' },
+    { memberIndex: 6, eventSlug: 'master-rodriguez-workshop', billingIndex: 0, amount: 60, daysFromNow: -1, method: 'card', desc: 'Master Rodriguez Workshop - Card ending 9999', status: 'pending' },
+    { memberIndex: 7, eventSlug: 'master-rodriguez-workshop', billingIndex: 1, amount: 75, daysFromNow: 0, method: 'bank_transfer', desc: 'Master Rodriguez Workshop - Bank transfer', status: 'processing' },
+    // Refunded registration on the cancelled member.
+    { memberIndex: 4, eventSlug: 'bjj-fundamentals-seminar', billingIndex: 0, amount: 149.99, daysFromNow: -45, method: 'card', desc: 'BJJ Fundamentals Seminar - Card ending 7890', status: 'refunded' },
+    // Past women's self-defense workshop — historical signups for the −12-week event.
+    { memberIndex: 1, eventSlug: 'womens-self-defense-past', billingIndex: 0, amount: 0, daysFromNow: -95, method: 'card', desc: 'Women\'s Self-Defense Workshop - Member', status: 'paid' },
+    { memberIndex: 10, eventSlug: 'womens-self-defense-past', billingIndex: 0, amount: 0, daysFromNow: -92, method: 'card', desc: 'Women\'s Self-Defense Workshop - Member', status: 'paid' },
+    { memberIndex: 13, eventSlug: 'womens-self-defense-past', billingIndex: 1, amount: 40, daysFromNow: -90, method: 'card', desc: 'Women\'s Self-Defense Workshop - Non-member', status: 'paid' },
   ];
 
   for (const tx of eventTxData) {
     const memberId = memberIds[tx.memberIndex]!;
-    const eventId = eventIdMap[tx.eventSlug]!;
-    const billingIds = eventBillingIdMap[tx.eventSlug]!;
+    const eventId = eventIdMap[tx.eventSlug];
+    const billingIds = eventBillingIdMap[tx.eventSlug];
+    if (!eventId || !billingIds) {
+      continue;
+    }
     const billingId = billingIds[tx.billingIndex];
+    const txDate = daysFromNow(tx.daysFromNow);
 
-    // Create event registration record
     const registrationId = randomUUID();
     const regStatus = tx.status === 'refunded' ? 'cancelled' : 'registered';
     await db.insert(eventRegistrationSchema).values({
@@ -1647,8 +1967,8 @@ async function seedOrganization(organizationId: string) {
       eventBillingId: billingId ?? null,
       status: regStatus,
       amountPaid: tx.amount,
-      registeredAt: tx.date,
-      cancelledAt: tx.status === 'refunded' ? new Date(tx.date.getTime() + 86400000 * 7) : null,
+      registeredAt: txDate,
+      cancelledAt: tx.status === 'refunded' ? daysFromNow(tx.daysFromNow + 7) : null,
     }).onConflictDoNothing();
 
     await createTransaction({
@@ -1660,20 +1980,21 @@ async function seedOrganization(organizationId: string) {
       status: tx.status,
       paymentMethod: tx.method,
       description: tx.desc,
-      createdAt: tx.date,
-      processedAt: tx.status === 'paid' ? new Date(tx.date.getTime() + 86400000) : undefined,
+      createdAt: txDate,
+      processedAt: tx.status === 'paid' ? daysFromNow(tx.daysFromNow + 1) : undefined,
     });
   }
 
-  // Refund transactions
+  // Refund transactions (independent of event refunds above).
   const refundTxData = [
-    { memberIndex: 4, amount: -179, date: new Date('2025-09-01'), method: 'card', desc: 'Membership refund - Card ending 7890' },
-    { memberIndex: 0, amount: -75, date: new Date('2025-07-05'), method: 'card', desc: 'Event refund - Card ending 4242' },
-    { memberIndex: 3, amount: -149, date: new Date('2025-10-20'), method: 'card', desc: 'Membership overpayment refund - Card ending 3456' },
+    { memberIndex: 4, amount: -179, daysFromNow: -60, method: 'card', desc: 'Membership refund - Card ending 7890' },
+    { memberIndex: 0, amount: -75, daysFromNow: -120, method: 'card', desc: 'Event refund - Card ending 4242' },
+    { memberIndex: 3, amount: -149, daysFromNow: -45, method: 'card', desc: 'Membership overpayment refund - Card ending 3456' },
   ];
 
   for (const tx of refundTxData) {
     const memberId = memberIds[tx.memberIndex]!;
+    const txDate = daysFromNow(tx.daysFromNow);
     await createTransaction({
       organizationId,
       memberId,
@@ -1682,20 +2003,21 @@ async function seedOrganization(organizationId: string) {
       status: 'paid',
       paymentMethod: tx.method,
       description: tx.desc,
-      createdAt: tx.date,
-      processedAt: new Date(tx.date.getTime() + 86400000),
+      createdAt: txDate,
+      processedAt: daysFromNow(tx.daysFromNow + 1),
     });
   }
 
-  // Adjustment transactions
+  // Adjustment transactions.
   const adjustmentTxData = [
-    { memberIndex: 5, amount: -25, date: new Date('2025-06-10'), method: 'card', desc: 'Loyalty discount adjustment' },
-    { memberIndex: 0, amount: 15, date: new Date('2025-08-01'), method: 'card', desc: 'Late fee adjustment' },
-    { memberIndex: 7, amount: -10, date: new Date('2025-11-15'), method: 'bank_transfer', desc: 'Promo credit adjustment' },
+    { memberIndex: 5, amount: -25, daysFromNow: -150, method: 'card', desc: 'Loyalty discount adjustment' },
+    { memberIndex: 0, amount: 15, daysFromNow: -90, method: 'card', desc: 'Late fee adjustment' },
+    { memberIndex: 7, amount: -10, daysFromNow: -30, method: 'bank_transfer', desc: 'Promo credit adjustment' },
   ];
 
   for (const tx of adjustmentTxData) {
     const memberId = memberIds[tx.memberIndex]!;
+    const txDate = daysFromNow(tx.daysFromNow);
     await createTransaction({
       organizationId,
       memberId,
@@ -1704,52 +2026,261 @@ async function seedOrganization(organizationId: string) {
       status: 'paid',
       paymentMethod: tx.method,
       description: tx.desc,
-      createdAt: tx.date,
-      processedAt: tx.date,
+      createdAt: txDate,
+      processedAt: txDate,
     });
   }
 
-  // 16. Seed Attendance Records
-  // Spreads recent attendance across active/trial members, drawing from the
-  // class schedule instances created above. Past_due / cancelled members get
-  // no attendance (matches the signed-waiver seeding rule).
+  // Lifecycle-fee transactions. Mirror the same shape the real Cancel /
+  // Hold endpoints produce: cancellation_fee tied to the cancelled member,
+  // hold_fee tied to held members (one-time for kids plan, recurring monthly
+  // rows for the adult-12-month plan with monthly hold-fee).
+  for (let i = 0; i < membersData.length; i++) {
+    const m = membersData[i]!;
+    if (!m.planSlug || m.lifecycleEventMonthsAgo === undefined) {
+      continue;
+    }
+    const plan = membershipPlansData.find(p => p.slug === m.planSlug);
+    if (!plan) {
+      continue;
+    }
+    const memberId = memberIds[i]!;
+    const mmId = memberMembershipIdByIndex[i] ?? undefined;
+    const eventDate = monthsFromNow(-m.lifecycleEventMonthsAgo);
+    const last4 = last4ByIndex[i] ?? '';
+    const method = pmTypeByIndex[i] === 'bank_transfer' ? 'bank_transfer' : 'card';
+    const last4Suffix = method === 'card' ? `Card ending ${last4}` : 'Bank transfer';
+
+    if (m.status === 'cancelled' && plan.cancellationFee > 0) {
+      await createTransaction({
+        organizationId,
+        memberId,
+        memberMembershipId: mmId,
+        iqproTransactionId: `seed_tx_${randomUUID()}`,
+        transactionType: 'cancellation_fee',
+        amount: plan.cancellationFee,
+        status: 'paid',
+        paymentMethod: method,
+        description: `Cancellation fee (${plan.name}) - ${last4Suffix}`,
+        createdAt: eventDate,
+        processedAt: eventDate,
+      });
+    }
+
+    if (m.status === 'hold' && plan.holdFeeAmount > 0) {
+      if (plan.holdFeeFrequency === 'one-time') {
+        await createTransaction({
+          organizationId,
+          memberId,
+          memberMembershipId: mmId,
+          iqproTransactionId: `seed_tx_${randomUUID()}`,
+          transactionType: 'hold_fee',
+          amount: plan.holdFeeAmount,
+          status: 'paid',
+          paymentMethod: method,
+          description: `Hold fee (${plan.name}) - ${last4Suffix}`,
+          createdAt: eventDate,
+          processedAt: eventDate,
+        });
+      } else if (plan.holdFeeFrequency === 'Monthly') {
+        // One row per month the member has been on hold (capped at 12).
+        const monthsHeld = Math.min(12, m.lifecycleEventMonthsAgo);
+        for (let h = 0; h < monthsHeld; h++) {
+          const holdMonth = monthsFromNow(-m.lifecycleEventMonthsAgo + h);
+          await createTransaction({
+            organizationId,
+            memberId,
+            memberMembershipId: mmId,
+            iqproTransactionId: `seed_tx_${randomUUID()}`,
+            transactionType: 'hold_fee',
+            amount: plan.holdFeeAmount,
+            status: 'paid',
+            paymentMethod: method,
+            description: `Recurring hold fee (${plan.name}) - ${last4Suffix}`,
+            createdAt: holdMonth,
+            processedAt: holdMonth,
+          });
+        }
+      }
+    }
+  }
+
+  // 15b. Lifecycle audit events. The hold-limit check in
+  // MemberPaymentService.holdMembershipLifecycle reads from audit_event with
+  // action='memberMembership.hold' + entityId=memberMembershipId + status=
+  // 'success' over the trailing 12 months. Without these rows, the limit
+  // check has nothing to count against. We also write member.create rows
+  // for every seeded member so the audit-log report screen has signal.
+  console.info('  📓 Seeding lifecycle audit events...');
+  let auditEventCount = 0;
+  const writeAudit = async (values: {
+    userId?: string;
+    action: string;
+    entityType: string;
+    entityId: string | null;
+    timestamp: Date;
+  }) => {
+    await db.insert(auditEventSchema).values({
+      id: randomUUID(),
+      organizationId,
+      userId: values.userId ?? 'seed-system',
+      action: values.action,
+      entityType: values.entityType,
+      entityId: values.entityId,
+      role: 'org:admin',
+      status: 'success',
+      changes: null,
+      error: null,
+      ipAddress: '127.0.0.1',
+      userAgent: 'seed-script',
+      requestId: null,
+      timestamp: values.timestamp,
+    }).onConflictDoNothing();
+    auditEventCount++;
+  };
+
+  for (let i = 0; i < membersData.length; i++) {
+    const m = membersData[i]!;
+    const memberId = memberIds[i]!;
+    const joinDate = memberJoinDates[i]!;
+    const mmId = memberMembershipIdByIndex[i] ?? null;
+
+    // member.create on every member at their join date.
+    await writeAudit({
+      action: 'member.create',
+      entityType: 'member',
+      entityId: memberId,
+      timestamp: joinDate,
+    });
+
+    // Hold / cancel lifecycle events on the matching members.
+    if (m.lifecycleEventMonthsAgo !== undefined && mmId) {
+      const eventDate = monthsFromNow(-m.lifecycleEventMonthsAgo);
+      const plan = m.planSlug ? membershipPlansData.find(p => p.slug === m.planSlug) : null;
+
+      if (m.status === 'hold') {
+        await writeAudit({
+          action: 'memberMembership.hold',
+          entityType: 'membership',
+          entityId: mmId,
+          timestamp: eventDate,
+        });
+        if (plan && plan.holdFeeAmount > 0) {
+          await writeAudit({
+            action: 'holdFee.charge',
+            entityType: 'membership',
+            entityId: mmId,
+            timestamp: eventDate,
+          });
+        }
+      }
+
+      if (m.status === 'cancelled') {
+        await writeAudit({
+          action: 'memberMembership.cancel',
+          entityType: 'membership',
+          entityId: mmId,
+          timestamp: eventDate,
+        });
+        if (plan && plan.cancellationFee > 0) {
+          await writeAudit({
+            action: 'cancellationFee.charge',
+            entityType: 'membership',
+            entityId: mmId,
+            timestamp: eventDate,
+          });
+        }
+      }
+    }
+  }
+
+  // Give John (idx 0, on 12-month-gold which has holdLimitPerYear=2) one
+  // prior memberMembership.hold audit row from 4 months ago so testers can
+  // verify the hold-limit check by holding him a second time (allowed) and
+  // a third time (should fail). Limit is checked against his current mmId.
+  const johnMmId = memberMembershipIdByIndex[0];
+  if (johnMmId) {
+    await writeAudit({
+      action: 'memberMembership.hold',
+      entityType: 'membership',
+      entityId: johnMmId,
+      timestamp: monthsFromNow(-4),
+    });
+  }
+
+  // 16. Seed Attendance Records.
+  //
+  // Spread realistic attendance across the last 8 weeks for active / trial /
+  // hold members. Cancelled and past_due get a handful of historical rows so
+  // their per-member attendance tab isn't empty either. Records include
+  // checkOutTime (class end), checkedInByClerkId (front desk for manual,
+  // null for kiosk), instructorClerkId rotated round-robin, and a short
+  // note on ~20% of rows.
   console.info('  📋 Seeding attendance records...');
   let attendanceCount = 0;
 
-  // Re-query the class schedule instances for this org since the IDs created
-  // earlier in this function were captured in a per-class local array.
+  // Re-query the class schedule instances for this org so we know the day-
+  // of-week and end time for each (used to compute attendanceDate +
+  // checkOutTime).
   const orgScheduleInstances = await db
     .select({
       id: classScheduleInstanceSchema.id,
       classId: classScheduleInstanceSchema.classId,
       dayOfWeek: classScheduleInstanceSchema.dayOfWeek,
+      startTime: classScheduleInstanceSchema.startTime,
+      endTime: classScheduleInstanceSchema.endTime,
     })
     .from(classScheduleInstanceSchema)
     .innerJoin(classSchema, eq(classScheduleInstanceSchema.classId, classSchema.id))
     .where(eq(classSchema.organizationId, organizationId));
 
+  const attendanceNotes = [
+    'Great class — worked on guard passes.',
+    'Tweaked left knee during sparring; cleared to roll next week.',
+    'New stripe earned today.',
+    'Stayed late for open mat.',
+  ];
+  const instructors = ['seed-instructor-1', 'seed-instructor-2', 'seed-instructor-3'];
+
   if (orgScheduleInstances.length > 0) {
-    const today = new Date();
+    const today = new Date(seedNow);
     today.setHours(0, 0, 0, 0);
 
     for (let i = 0; i < memberIds.length; i++) {
       const member = membersData[i]!;
       const memberId = memberIds[i]!;
-      if (member.status !== 'active' && member.status !== 'trial') {
-        continue;
+
+      // Active / trial / hold get a healthy 6-15 rows over 8 weeks.
+      // Cancelled / past_due get 2-3 rows so their history isn't empty.
+      let rowCount: number;
+      let maxDaysBack: number;
+      if (member.status === 'active' || member.status === 'trial' || member.status === 'hold') {
+        rowCount = 6 + (i % 10); // 6..15
+        maxDaysBack = 56; // 8 weeks
+      } else {
+        rowCount = 2 + (i % 2); // 2..3
+        maxDaysBack = 120;
       }
 
-      // 3 to 8 attendance rows per active member, deterministically based on index.
-      const rowCount = 3 + (i % 6);
       for (let n = 0; n < rowCount; n++) {
         const instance = orgScheduleInstances[(i * 7 + n) % orgScheduleInstances.length]!;
-        // Pick a date in the recent past (1..60 days ago) on the schedule's day-of-week.
-        const daysBack = ((i + n) % 60) + 1;
+        const daysBack = ((i * 3 + n * 5) % maxDaysBack) + 1;
         const attendanceDate = new Date(today);
         attendanceDate.setDate(attendanceDate.getDate() - daysBack);
-        // Nudge to the schedule instance's day-of-week so the row makes sense.
+        // Nudge to the schedule's day-of-week so the row lines up with a real session.
         const dayDelta = (attendanceDate.getDay() - instance.dayOfWeek + 7) % 7;
         attendanceDate.setDate(attendanceDate.getDate() - dayDelta);
+
+        // Set the check-in time to the class start time.
+        const [startH = '0', startM = '0'] = instance.startTime.split(':');
+        const [endH = '0', endM = '0'] = instance.endTime.split(':');
+        const checkInTime = new Date(attendanceDate);
+        checkInTime.setHours(Number.parseInt(startH, 10), Number.parseInt(startM, 10), 0, 0);
+        const checkOutTime = new Date(attendanceDate);
+        checkOutTime.setHours(Number.parseInt(endH, 10), Number.parseInt(endM, 10), 0, 0);
+
+        const checkInMethod = n % 4 === 0 ? 'kiosk' : 'manual';
+        const includeNote = (i + n) % 5 === 0;
 
         await db.insert(attendanceSchema).values({
           id: randomUUID(),
@@ -1757,15 +2288,19 @@ async function seedOrganization(organizationId: string) {
           memberId,
           classScheduleInstanceId: instance.id,
           attendanceDate,
-          checkInTime: attendanceDate,
-          checkInMethod: n % 4 === 0 ? 'kiosk' : 'manual',
+          checkInTime,
+          checkOutTime,
+          checkInMethod,
+          checkedInByClerkId: checkInMethod === 'manual' ? 'seed-frontdesk' : null,
+          instructorClerkId: instructors[(i + n) % instructors.length]!,
+          notes: includeNote ? attendanceNotes[(i + n) % attendanceNotes.length]! : null,
         }).onConflictDoNothing();
         attendanceCount++;
       }
     }
   }
 
-  console.info(`  ✅ Seeded ${programsData.length} programs, ${allTags.length} tags, ${classesData.length} classes, ${eventsData.length} events, ${couponsData.length} coupons, ${membershipPlansData.length} membership plans, ${membersData.length} members, ${catalogCategoriesData.length} catalog categories, ${catalogItemsData.length} catalog items, ${waiverTemplatesData.length} waiver templates, ${signedWaiverCount} signed waivers, ${mergeFieldsData.length} merge fields, ${paymentMethodsData.length} payment methods, ${transactionCount} transactions, ${attendanceCount} attendance records`);
+  console.info(`  ✅ Seeded ${programsData.length} programs, ${allTags.length} tags, ${classesData.length} classes, ${eventsData.length} events, ${couponsData.length} coupons, ${membershipPlansData.length} membership plans, ${membersData.length} members, ${familyLinkCount} family-member links, ${catalogCategoriesData.length} catalog categories, ${catalogItemsData.length} catalog items, ${waiverTemplatesData.length} waiver templates, ${signedWaiverCount} signed waivers, ${mergeFieldsData.length} merge fields, ${paymentMethodCount} payment methods, ${transactionCount} transactions, ${auditEventCount} audit events, ${attendanceCount} attendance records`);
 }
 
 async function main() {
@@ -1779,16 +2314,28 @@ async function main() {
     if (specificOrgId) {
       // Check if org exists, create if not (org is managed by Clerk, we just need the ID)
       const org = await db.select({ id: organizationSchema.id }).from(organizationSchema).where(eq(organizationSchema.id, specificOrgId));
+      // Synthetic SaaS-subscription fields so the dashboard layout's
+      // expired-subscription check (in src/app/[locale]/(auth)/dashboard/layout.tsx)
+      // doesn't redirect freshly-seeded orgs to /dashboard/subscription-expired.
+      // Period end is one month in the future from seed time.
+      const periodEnd = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30;
+      const saasFields = {
+        stripeSubscriptionStatus: 'active',
+        iqproSubscriptionId: `seed_org_sub_${randomUUID()}`,
+        iqproSubscriptionPlanId: 'basic',
+        iqproSubscriptionStatus: 'active',
+        iqproCurrentPeriodEnd: periodEnd,
+        iqproCustomerId: `seed_org_cus_${randomUUID()}`,
+      };
       if (org.length === 0) {
         console.info(`  📝 Creating organization record for ${specificOrgId}...`);
         await db.insert(organizationSchema).values({
           id: specificOrgId,
-          stripeSubscriptionStatus: 'active',
+          ...saasFields,
         }).onConflictDoNothing();
       } else {
-        // Ensure the org has an active subscription for development
         await db.update(organizationSchema)
-          .set({ stripeSubscriptionStatus: 'active' })
+          .set(saasFields)
           .where(eq(organizationSchema.id, specificOrgId));
       }
       organizations = [{ id: specificOrgId }];
