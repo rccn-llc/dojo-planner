@@ -19,6 +19,14 @@ export const Logo = (props: {
       <path d="M15.7226 3.46902C15.7226 4.10775 15.1919 4.62554 14.5372 4.62554C13.8825 4.62554 13.3517 4.10775 13.3517 3.46902C13.3517 2.83029 13.8825 2.3125 14.5372 2.3125C15.1919 2.3125 15.7226 2.83029 15.7226 3.46902Z" stroke="none" strokeWidth="0" />
       <path d="M10.8563 1.15652C10.8563 1.79525 10.3256 2.31304 9.67091 2.31304C9.01621 2.31304 8.48547 1.79525 8.48547 1.15652C8.48547 0.517792 9.01621 0 9.67091 0C10.3256 0 10.8563 0.517792 10.8563 1.15652Z" stroke="none" strokeWidth="0" />
     </svg>
-    {!props.isTextHidden && AppConfig.name}
+    {!props.isTextHidden && (
+      <div className="mt-1.5 flex flex-col leading-none">
+        <span>{AppConfig.name}</span>
+        <span className="text-right text-[0.625rem] font-normal">
+          v
+          {AppConfig.version}
+        </span>
+      </div>
+    )}
   </div>
 );
