@@ -11,16 +11,16 @@ const isDev = process.env.NODE_ENV === 'development';
 
 const contentSecurityPolicy = [
   'default-src \'self\'',
-  // Scripts: self + Clerk + Sentry + TokenEx/BasysPro (payment iframe) + unsafe-inline (required for Next.js theme/RSC scripts)
-  'script-src \'self\' \'unsafe-inline\' https://cdn.clerk.com https://*.clerk.accounts.dev https://www.sentry-cdn.com https://sandbox.api.basyspro.com https://api.basyspro.com',
+  // Scripts: self + Clerk + Sentry + TokenEx/BasysPro (payment iframe) + unsafe-inline (required for Next.js theme/RSC scripts).
+  // `unsafe-eval` is added in dev only — React/Turbopack use eval() for debugging features (callstack reconstruction); React never uses eval() in production.
+  `script-src 'self' 'unsafe-inline'${isDev ? ' \'unsafe-eval\'' : ''} https://cdn.clerk.com https://*.clerk.accounts.dev https://www.sentry-cdn.com https://sandbox.api.basyspro.com https://api.basyspro.com`,
   // Styles: self + unsafe-inline (required by Clerk inline styles - cannot be avoided) + Clerk domains
   'style-src \'self\' \'unsafe-inline\' https://cdn.clerk.com https://*.clerk.accounts.dev',
   // Fonts: self only (Inter is self-hosted via next/font)
   'font-src \'self\'',
-  // Images: self + Clerk image CDN (avatars + org images) + data URIs (catalog/member
-  // photos are stored inline as base64 data URLs) + blob (Clerk avatar processing).
-  // No blanket `https:` — catalog images never come from an external HTTPS host.
-  'img-src \'self\' https://img.clerk.com data: blob:',
+  // Images: self + any HTTPS host (catalog/event images are external URLs, e.g.
+  // placehold.co and user-supplied hosts) + data URIs + blob (Clerk avatar processing).
+  'img-src \'self\' https: data: blob:',
   // Frames: self + Clerk for OAuth flows + TokenEx/BasysPro for payment iframe
   'frame-src \'self\' https://*.clerk.com https://*.clerk.accounts.dev https://sandbox.api.basyspro.com https://api.basyspro.com https://*.tokenex.com',
   // Workers: self + blob (for Clerk)

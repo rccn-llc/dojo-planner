@@ -4,6 +4,7 @@ import type { AppLocale } from '@/types/AppConfig';
 import type { PricingPlan } from '@/types/Subscription';
 import { enUS, frFR } from '@clerk/localizations';
 import { BILLING_INTERVAL } from '@/types/Subscription';
+import { version as appVersion } from '../../package.json';
 
 const localePrefix: LocalePrefixMode = 'as-needed';
 const locales = [
@@ -22,6 +23,7 @@ const locales = [
 // FIXME: Update this configuration file based on your project information
 export const AppConfig = {
   name: 'Dojo Planner',
+  version: appVersion,
   sidebarCookieName: 'sidebar:state',
   locales,
   defaultLocale: 'en',
