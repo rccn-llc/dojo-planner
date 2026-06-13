@@ -122,7 +122,7 @@
   },
   "devDependencies": {
     "@antfu/eslint-config": "^6.2.0",
-    "@chromatic-com/playwright": "^0.12.8",
+    "@chromatic-com/playwright": "^0.14.8",
     "@clerk/testing": "^1.14.3",
     "@clerk/types": "^4.101.10",
     "@commitlint/cli": "^20.4.2",
@@ -133,7 +133,7 @@
     "@electric-sql/pglite-socket": "^0.0.21",
     "@eslint-react/eslint-plugin": "^2.13.0",
     "@faker-js/faker": "^10.3.0",
-    "@lingual/i18n-check": "^0.8.19",
+    "@lingual/i18n-check": "^0.9.5",
     "@next/bundle-analyzer": "^16.1.6",
     "@next/eslint-plugin-next": "^16.1.6",
     "@playwright/test": "^1.58.2",
