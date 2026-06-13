@@ -17,8 +17,10 @@ const contentSecurityPolicy = [
   'style-src \'self\' \'unsafe-inline\' https://cdn.clerk.com https://*.clerk.accounts.dev',
   // Fonts: self only (Inter is self-hosted via next/font)
   'font-src \'self\'',
-  // Images: self + all HTTPS + data URIs + blob (for Clerk avatars)
-  'img-src \'self\' https: data: blob:',
+  // Images: self + Clerk image CDN (avatars + org images) + data URIs (catalog/member
+  // photos are stored inline as base64 data URLs) + blob (Clerk avatar processing).
+  // No blanket `https:` — catalog images never come from an external HTTPS host.
+  'img-src \'self\' https://img.clerk.com data: blob:',
   // Frames: self + Clerk for OAuth flows + TokenEx/BasysPro for payment iframe
   'frame-src \'self\' https://*.clerk.com https://*.clerk.accounts.dev https://sandbox.api.basyspro.com https://api.basyspro.com https://*.tokenex.com',
   // Workers: self + blob (for Clerk)
