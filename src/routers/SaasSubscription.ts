@@ -5,6 +5,7 @@ import * as z from 'zod';
 import { getTokenizationConfig } from '@/libs/IQPro';
 import { logger } from '@/libs/Logger';
 import { audit } from '@/services/AuditService';
+import { getAcademyOwner } from '@/services/ClerkRolesService';
 import { resolvePlatformIQProConfig } from '@/services/IQProConfigService';
 import {
   cancelSubscription,
@@ -36,7 +37,22 @@ export const getCurrentPlan = os.handler(async () => {
   const { sessionClaims } = await auth();
   const username = (sessionClaims as Record<string, unknown>)?.username as string | undefined;
 
-  return getCurrentSubscription(context.orgId, username);
+  const subscription = await getCurrentSubscription(context.orgId, username);
+
+  // Resolve the responsible academy owner's display info for the UI. Best-effort:
+  // a missing owner (or Clerk error) just leaves the display fields null.
+  let responsibleOwner: { name: string | null; email: string | null } | null = null;
+  try {
+    const owner = await getAcademyOwner(context.orgId);
+    if (owner) {
+      const name = [owner.firstName, owner.lastName].filter(Boolean).join(' ').trim();
+      responsibleOwner = { name: name || null, email: owner.email || null };
+    }
+  } catch (error) {
+    logger.warn('[SaaSSubscription] Failed to resolve academy owner', { orgId: context.orgId, error });
+  }
+
+  return { ...subscription, responsibleOwner };
 });
 
 export const subscribeToPlan = os
@@ -45,11 +61,22 @@ export const subscribeToPlan = os
     const context = await guardRole(ORG_ROLE.ADMIN);
     const config = await requirePlatformConfig();
 
+    // The SaaS subscription must be tied to a responsible academy owner. If
+    // none is assigned in Clerk, the subscription cannot be created — and the
+    // org cannot access the dashboard until one exists (see the owner-aware
+    // gate in requireActiveSubscription).
+    const owner = await getAcademyOwner(context.orgId);
+    if (!owner) {
+      throw new ORPCError('An Academy Owner must be assigned in Clerk before subscribing.', { status: 409 });
+    }
+
     try {
       const result = await subscribe(config, {
         orgId: context.orgId,
         orgName: input.orgName,
-        adminEmail: input.adminEmail,
+        // Bill the responsible academy owner; fall back to the supplied email.
+        adminEmail: owner.email || input.adminEmail,
+        responsibleClerkUserId: owner.clerkUserId,
         planId: input.planId,
         billingCycle: input.billingCycle,
         cardToken: input.cardToken,

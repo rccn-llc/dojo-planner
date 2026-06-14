@@ -75,6 +75,59 @@ async function clerkApiRequest<T>(
   return response.json() as Promise<T>;
 }
 
+// Subset of Clerk's organization membership shape (BAPI snake_case) that we
+// need to identify the academy owner. Other fields are ignored.
+type ClerkOrganizationMembership = {
+  id: string;
+  role: string;
+  public_user_data?: {
+    user_id?: string;
+    first_name?: string | null;
+    last_name?: string | null;
+    identifier?: string | null;
+  } | null;
+};
+
+export type AcademyOwner = {
+  clerkUserId: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+};
+
+/**
+ * Resolves the academy owner responsible for an organization's SaaS
+ * subscription. Returns the first member with the `org:academy_owner` role
+ * who has fully accepted their invitation (has `public_user_data` with a
+ * `user_id`), or `null` if no such owner exists.
+ *
+ * Used to durably link `organization.iqproCustomerId` to a Clerk identity at
+ * subscribe time and to enforce the owner-aware dashboard access gate.
+ */
+export async function getAcademyOwner(orgId: string): Promise<AcademyOwner | null> {
+  const response = await clerkApiRequest<ClerkPaginatedResponse<ClerkOrganizationMembership>>(
+    `/organizations/${orgId}/memberships?limit=100`,
+  );
+
+  const ownerMembership = response.data.find(
+    membership =>
+      membership.role === 'org:academy_owner'
+      && !!membership.public_user_data?.user_id,
+  );
+
+  if (!ownerMembership?.public_user_data?.user_id) {
+    return null;
+  }
+
+  const data = ownerMembership.public_user_data;
+  return {
+    clerkUserId: data.user_id!,
+    email: data.identifier ?? '',
+    firstName: data.first_name ?? null,
+    lastName: data.last_name ?? null,
+  };
+}
+
 /**
  * Fetches all organization permissions from Clerk
  */

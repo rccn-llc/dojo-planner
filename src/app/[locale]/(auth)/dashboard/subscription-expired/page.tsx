@@ -3,14 +3,16 @@
 import { useOrganization } from '@clerk/nextjs';
 import { AlertTriangle } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import Link from 'next/link';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { SubscriptionDialog } from '@/features/billing/SubscriptionDialog';
 
 export default function SubscriptionExpiredPage() {
   const t = useTranslations('SubscriptionExpired');
   const { membership } = useOrganization();
   const isAdmin = membership?.role === 'org:admin';
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   return (
     <div className="flex min-h-[60vh] items-center justify-center">
@@ -22,13 +24,13 @@ export default function SubscriptionExpiredPage() {
           {isAdmin ? t('admin_message') : t('non_admin_message')}
         </p>
         {isAdmin && (
-          <Button asChild>
-            <Link href="subscription">
-              {t('resubscribe_button')}
-            </Link>
+          <Button onClick={() => setDialogOpen(true)}>
+            {t('resubscribe_button')}
           </Button>
         )}
       </Card>
+
+      {isAdmin && <SubscriptionDialog open={dialogOpen} onOpenChange={setDialogOpen} />}
     </div>
   );
 }

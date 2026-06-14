@@ -41,6 +41,11 @@ export const organizationSchema = pgTable(
       { mode: 'number' },
     ),
     iqproPaymentMethodId: text('iqpro_payment_method_id'),
+    // Clerk userId of the academy owner responsible for the SaaS subscription.
+    // Durably links organization.iqproCustomerId to a Clerk identity; set at
+    // subscribe time. The owner-aware access gate requires this person to still
+    // exist in Clerk as an academy_owner.
+    iqproSaasResponsibleClerkUserId: text('iqpro_saas_responsible_clerk_user_id'),
     locationAddress: text('location_address'),
     locationPhone: text('location_phone'),
     locationEmail: text('location_email'),

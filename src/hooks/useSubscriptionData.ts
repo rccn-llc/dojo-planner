@@ -27,11 +27,20 @@ function reducer(state: SubscriptionDataState, action: Action): SubscriptionData
   }
 }
 
-export function useSubscriptionData() {
+/**
+ * Fetches the org's SaaS subscription + billing history.
+ *
+ * @param enabled When `false`, the hook does NOT auto-fetch (use this to defer
+ *   the IQPro round-trips until the subscription dialog is actually opened).
+ *   When it transitions `false` → `true`, the data is (re)fetched, so passing
+ *   the dialog's `open` flag refetches fresh data each time it opens. Defaults
+ *   to `true` for callers that always want the data.
+ */
+export function useSubscriptionData(enabled: boolean = true) {
   const [state, dispatch] = useReducer(reducer, {
     currentPlan: null,
     billingHistory: [],
-    loading: true,
+    loading: enabled,
     error: null,
   });
 
@@ -55,8 +64,10 @@ export function useSubscriptionData() {
   }, []);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (enabled) {
+      fetchData();
+    }
+  }, [enabled, fetchData]);
 
   return { ...state, refetch: fetchData };
 }
