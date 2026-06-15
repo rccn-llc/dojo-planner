@@ -3,6 +3,7 @@
 import type { WizardStepData } from '@/hooks/useAddMemberWizard';
 import type { WaiverTemplate } from '@/services/WaiversService';
 import { useTranslations } from 'next-intl';
+import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -10,8 +11,14 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { SignatureCanvas } from '@/features/waivers/signing/SignatureCanvas';
 import { client } from '@/libs/Orpc';
+
+// react-signature-canvas is a client-only, DOM-heavy dependency. Load it lazily
+// so it is only fetched when the waiver step actually renders.
+const SignatureCanvas = dynamic(
+  () => import('@/features/waivers/signing/SignatureCanvas').then(m => m.SignatureCanvas),
+  { ssr: false },
+);
 
 type SignerRelationship = 'self' | 'parent' | 'guardian' | 'legal_guardian';
 

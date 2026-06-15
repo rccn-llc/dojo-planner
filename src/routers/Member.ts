@@ -652,16 +652,26 @@ export const listAllMembershipPlans = os
 export const listPaymentMethods = os
   .input(MemberPaymentMethodsValidation)
   .handler(async ({ input }) => {
-    await guardRole(ORG_ROLE.FRONT_DESK);
-    const paymentMethods = await getMemberPaymentMethods(input.memberId);
+    const context = await guardRole(ORG_ROLE.FRONT_DESK);
+    const paymentMethods = await getMemberPaymentMethods(input.memberId, context.orgId);
+    // SOC2 CC7.2: log read access to saved payment methods (sensitive financial data).
+    await audit(context, AUDIT_ACTION.PAYMENT_METHOD_VIEW, AUDIT_ENTITY_TYPE.MEMBER, {
+      entityId: input.memberId,
+      status: 'success',
+    });
     return { paymentMethods };
   });
 
 export const listMemberTransactions = os
   .input(MemberTransactionsValidation)
   .handler(async ({ input }) => {
-    const { orgId } = await guardRole(ORG_ROLE.FRONT_DESK);
-    const transactions = await getMemberTransactions(input.memberId, orgId, input.limit);
+    const context = await guardRole(ORG_ROLE.FRONT_DESK);
+    const transactions = await getMemberTransactions(input.memberId, context.orgId, input.limit);
+    // SOC2 CC7.2: log read access to a member's financial transaction history.
+    await audit(context, AUDIT_ACTION.TRANSACTION_VIEW, AUDIT_ENTITY_TYPE.MEMBER, {
+      entityId: input.memberId,
+      status: 'success',
+    });
     return { transactions };
   });
 
@@ -727,8 +737,8 @@ export const listFamily = os
 export const getHOHPaymentMethods = os
   .input(GetHOHPaymentMethodsValidation)
   .handler(async ({ input }) => {
-    await guardRole(ORG_ROLE.FRONT_DESK);
-    const paymentMethods = await getMemberPaymentMethods(input.hohMemberId);
+    const { orgId } = await guardRole(ORG_ROLE.FRONT_DESK);
+    const paymentMethods = await getMemberPaymentMethods(input.hohMemberId, orgId);
     return { paymentMethods };
   });
 

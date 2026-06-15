@@ -561,9 +561,14 @@ export type MemberPaymentMethodData = {
 /**
  * Get payment methods for a specific member
  * @param memberId - The member ID
+ * @param organizationId - The organization ID (tenant scope — payment_method has no
+ *   org column, so we join through the member to enforce isolation)
  * @returns Array of payment methods, default method first
  */
-export async function getMemberPaymentMethods(memberId: string): Promise<MemberPaymentMethodData[]> {
+export async function getMemberPaymentMethods(
+  memberId: string,
+  organizationId: string,
+): Promise<MemberPaymentMethodData[]> {
   return db
     .select({
       id: paymentMethodSchema.id,
@@ -572,7 +577,11 @@ export async function getMemberPaymentMethods(memberId: string): Promise<MemberP
       isDefault: paymentMethodSchema.isDefault,
     })
     .from(paymentMethodSchema)
-    .where(eq(paymentMethodSchema.memberId, memberId))
+    .innerJoin(memberSchema, eq(paymentMethodSchema.memberId, memberSchema.id))
+    .where(and(
+      eq(paymentMethodSchema.memberId, memberId),
+      eq(memberSchema.organizationId, organizationId),
+    ))
     .orderBy(desc(paymentMethodSchema.isDefault));
 }
 

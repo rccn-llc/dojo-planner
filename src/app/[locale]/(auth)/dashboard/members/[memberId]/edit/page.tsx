@@ -32,7 +32,8 @@ import { AddFamilyMembersModal } from '@/features/members/wizard/AddFamilyMember
 import { useCouponsCache } from '@/hooks/useCouponsCache';
 import { invalidateMembersCache, useMembersCache } from '@/hooks/useMembersCache';
 import { client } from '@/libs/Orpc';
-import { generateAndDownloadWaiverPdf, generatePdfFilename } from '@/services/WaiverPdfService';
+// WaiverPdfService pulls in jspdf (large). Imported dynamically inside the
+// download handler so it is excluded from this page's initial bundle.
 import {
   formatCurrency,
   formatTransactionType,
@@ -838,11 +839,12 @@ export default function EditMemberPage() {
     };
   }, [signedWaivers]);
 
-  const handleDownloadWaiver = useCallback((waiver: SignedWaiverWithTemplateName) => {
+  const handleDownloadWaiver = useCallback(async (waiver: SignedWaiverWithTemplateName) => {
     if (!organization?.name) {
       return;
     }
 
+    const { generateAndDownloadWaiverPdf, generatePdfFilename } = await import('@/services/WaiverPdfService');
     const signedAt = new Date(waiver.signedAt);
     generateAndDownloadWaiverPdf(
       {

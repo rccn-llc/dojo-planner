@@ -681,6 +681,56 @@ describe('ProcessPaymentValidation', () => {
       }
     });
   });
+
+  // ===========================================================================
+  // CARD EXPIRY / ROUTING NUMBER FORMAT
+  // ===========================================================================
+
+  describe('cardExpiry format', () => {
+    it('should accept MM/YY format', () => {
+      const result = ProcessPaymentValidation.safeParse({ ...validCardPayment, cardExpiry: '09/27' });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept MM/YYYY format', () => {
+      const result = ProcessPaymentValidation.safeParse({ ...validCardPayment, cardExpiry: '09/2027' });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should reject an invalid month', () => {
+      const result = ProcessPaymentValidation.safeParse({ ...validCardPayment, cardExpiry: '13/27' });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject a non-slash format', () => {
+      const result = ProcessPaymentValidation.safeParse({ ...validCardPayment, cardExpiry: '0927' });
+
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('achRoutingNumber format', () => {
+    it('should accept a 9-digit routing number', () => {
+      const result = ProcessPaymentValidation.safeParse({ ...validAchPayment, achRoutingNumber: '021000021' });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should reject a routing number that is not 9 digits', () => {
+      const result = ProcessPaymentValidation.safeParse({ ...validAchPayment, achRoutingNumber: '12345' });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject a routing number with non-digit characters', () => {
+      const result = ProcessPaymentValidation.safeParse({ ...validAchPayment, achRoutingNumber: '02100002X' });
+
+      expect(result.success).toBe(false);
+    });
+  });
 });
 
 // ===========================================================================

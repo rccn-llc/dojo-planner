@@ -21,15 +21,17 @@ describe('Audit Types', () => {
       // 8 member + 5 membership lifecycle (cancel + hold + reactivate
       //   + cancellation fee charge + hold fee charge)
       // + 3 membership plan + 3 program + 9 class (3+3+3 exception) + 6 event
-      // + 4 coupon + 4 enrollment/registration + 2 attendance + 3 transaction + 3 tag + 2 image
+      // + 4 coupon + 4 enrollment/registration + 2 attendance
+      // + 4 transaction (create + refund + update + view) + 3 tag + 2 image
       // + 12 catalog (6 item + 3 variant + 3 category + 1 stock + 2 image)
       // + 8 waiver (4 template + 1 signed + 3 membership waiver)
-      // + 3 merge field + 1 payment + 1 payment method register + 1 family member link
+      // + 3 merge field + 1 payment + 1 payment method register + 1 payment method view
+      // + 1 family member link
       // + 1 family member unlink + 1 member convert + 3 saas subscription
       // + 3 note (create + update + delete) + 3 staff (invite + update + remove)
       // + 3 role (create + update + delete) + 1 organization location update
-      // + 2 iqpro config (per-org + platform) = 95
-      expect(actionCount).toBe(95);
+      // + 2 iqpro config (per-org + platform) = 97
+      expect(actionCount).toBe(97);
     });
   });
 

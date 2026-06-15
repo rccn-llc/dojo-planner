@@ -1,7 +1,7 @@
 'use client';
 
 import type { Coupon } from '@/features/marketing';
-import type { AppliedCoupon, PaymentDeclineReason, PaymentMethod } from '@/hooks/useAddMemberWizard';
+import type { PaymentDeclineReason, PaymentMethod } from '@/hooks/useAddMemberWizard';
 import type { HOHData } from '@/hooks/useFamilyMemberWizard';
 import type { TokenizationIframeConfig } from '@/libs/IQPro';
 import { useOrganization, useUser } from '@clerk/nextjs';
@@ -16,27 +16,8 @@ import { FamilyPaymentStep } from './FamilyPaymentStep';
 import { MemberDetailsStep } from './MemberDetailsStep';
 import { MemberPhotoStep } from './MemberPhotoStep';
 import { MembershipStep } from './MembershipStep';
+import { buildSignedWaiverPayload, computeDiscountedPrice, fileToDataUrl } from './memberWizardUtils';
 import { WaiverStep } from './WaiverStep';
-
-function computeDiscountedPrice(price: number | undefined, coupon: AppliedCoupon): number | undefined {
-  if (price === undefined || price <= 0) {
-    return price;
-  }
-  switch (coupon.type) {
-    case 'Percentage': {
-      const percentageMatch = coupon.amount.match(/(\d+(?:\.\d+)?)/);
-      const pct = percentageMatch?.[1] ? Number.parseFloat(percentageMatch[1]) : Number.NaN;
-      return Number.isNaN(pct) ? price : Math.max(0, price - (price * pct / 100));
-    }
-    case 'Fixed Amount': {
-      const fixedMatch = coupon.amount.match(/(\d+(?:\.\d+)?)/);
-      const fixed = fixedMatch?.[1] ? Number.parseFloat(fixedMatch[1]) : Number.NaN;
-      return Number.isNaN(fixed) ? price : Math.max(0, price - fixed);
-    }
-    case 'Free Trial':
-      return 0;
-  }
-}
 
 type AddFamilyMembersModalProps = {
   isOpen: boolean;
@@ -246,12 +227,7 @@ export const AddFamilyMembersModal = ({
       // Convert photo to base64
       let photoUrl: string | undefined;
       if (wizard.data.photoFile) {
-        photoUrl = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(wizard.data.photoFile!);
-        });
+        photoUrl = await fileToDataUrl(wizard.data.photoFile);
       }
 
       // 1. Create the member
@@ -287,43 +263,9 @@ export const AddFamilyMembersModal = ({
         && wizard.data.waiverRenderedContent
         && !wizard.data.waiverSkipped
       ) {
-        let memberAgeAtSigning: number | undefined;
-        if (wizard.data.dateOfBirth) {
-          const today = new Date();
-          let age = today.getFullYear() - wizard.data.dateOfBirth.getFullYear();
-          const monthDiff = today.getMonth() - wizard.data.dateOfBirth.getMonth();
-          if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < wizard.data.dateOfBirth.getDate())) {
-            age--;
-          }
-          memberAgeAtSigning = age;
-        }
-
-        await client.waivers.createSignedWaiver({
-          waiverTemplateId: wizard.data.waiverTemplateId,
-          memberId: result.id,
-          signatureDataUrl: wizard.data.waiverSignatureDataUrl,
-          signedByName: wizard.data.waiverSignedByName || wizard.data.firstName,
-          signedByRelationship: wizard.data.waiverSignedByRelationship || 'self',
-          ...(wizard.data.waiverGuardianEmail && { signedByEmail: wizard.data.waiverGuardianEmail }),
-          memberFirstName: wizard.data.firstName,
-          memberLastName: wizard.data.lastName,
-          memberEmail: wizard.data.email,
-          ...(wizard.data.dateOfBirth && { memberDateOfBirth: wizard.data.dateOfBirth }),
-          ...(memberAgeAtSigning !== undefined && { memberAgeAtSigning }),
-          renderedContent: wizard.data.waiverRenderedContent,
-          ...(wizard.data.membershipPlanName && { membershipPlanName: wizard.data.membershipPlanName }),
-          ...(wizard.data.membershipPlanPrice !== undefined && { membershipPlanPrice: wizard.data.membershipPlanPrice }),
-          ...(wizard.data.membershipPlanFrequency && { membershipPlanFrequency: wizard.data.membershipPlanFrequency }),
-          ...(wizard.data.membershipPlanContractLength && { membershipPlanContractLength: wizard.data.membershipPlanContractLength }),
-          ...(wizard.data.membershipPlanSignupFee !== undefined && { membershipPlanSignupFee: wizard.data.membershipPlanSignupFee }),
-          ...(wizard.data.membershipPlanIsTrial !== undefined && { membershipPlanIsTrial: wizard.data.membershipPlanIsTrial }),
-          ...(wizard.data.appliedCoupon && {
-            couponCode: wizard.data.appliedCoupon.code,
-            couponType: wizard.data.appliedCoupon.type,
-            couponAmount: wizard.data.appliedCoupon.amount,
-            couponDiscountedPrice: computeDiscountedPrice(wizard.data.membershipPlanPrice, wizard.data.appliedCoupon),
-          }),
-        });
+        await client.waivers.createSignedWaiver(
+          buildSignedWaiverPayload(wizard.data, result.id),
+        );
       }
 
       // 3. Link family member to HOH
