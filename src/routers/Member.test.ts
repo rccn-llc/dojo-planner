@@ -274,8 +274,54 @@ describe('Member Router', () => {
       const result = await callHandler(getHOHPaymentMethods, { hohMemberId: 'hoh-member-123' });
 
       expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
-      expect(getMemberPaymentMethods).toHaveBeenCalledWith('hoh-member-123');
+      expect(getMemberPaymentMethods).toHaveBeenCalledWith('hoh-member-123', 'test-org-456');
       expect(result).toEqual({ paymentMethods: mockPaymentMethods });
+    });
+  });
+
+  describe('listPaymentMethods', () => {
+    it('should return org-scoped payment methods and audit the read access', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { getMemberPaymentMethods } = await import('@/services/MembersService');
+      const { audit } = await import('@/services/AuditService');
+
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
+      vi.mocked(getMemberPaymentMethods).mockResolvedValue([{ id: 'pm-1' }] as never);
+
+      const { listPaymentMethods } = await import('./Member');
+      const result = await callHandler(listPaymentMethods, { memberId: 'member-123' });
+
+      expect(getMemberPaymentMethods).toHaveBeenCalledWith('member-123', 'test-org-456');
+      expect(audit).toHaveBeenCalledWith(
+        mockFrontDeskContext,
+        AUDIT_ACTION.PAYMENT_METHOD_VIEW,
+        AUDIT_ENTITY_TYPE.MEMBER,
+        { entityId: 'member-123', status: 'success' },
+      );
+      expect(result).toEqual({ paymentMethods: [{ id: 'pm-1' }] });
+    });
+  });
+
+  describe('listMemberTransactions', () => {
+    it('should return member transactions and audit the read access', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { getMemberTransactions } = await import('@/services/MembersService');
+      const { audit } = await import('@/services/AuditService');
+
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
+      vi.mocked(getMemberTransactions).mockResolvedValue([{ id: 'txn-1' }] as never);
+
+      const { listMemberTransactions } = await import('./Member');
+      const result = await callHandler(listMemberTransactions, { memberId: 'member-123' });
+
+      expect(getMemberTransactions).toHaveBeenCalledWith('member-123', 'test-org-456', undefined);
+      expect(audit).toHaveBeenCalledWith(
+        mockFrontDeskContext,
+        AUDIT_ACTION.TRANSACTION_VIEW,
+        AUDIT_ENTITY_TYPE.MEMBER,
+        { entityId: 'member-123', status: 'success' },
+      );
+      expect(result).toEqual({ transactions: [{ id: 'txn-1' }] });
     });
   });
 

@@ -2,7 +2,7 @@
 
 import type { MemberFilters } from './MemberFilterBar';
 import { ArrowDown01, ArrowDownAZ, ArrowUp10, ArrowUpZA } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Pagination } from '@/components/ui/pagination/Pagination';
@@ -42,6 +42,93 @@ type MembersTableProps = {
 type SortField = 'firstName' | 'membershipType' | 'amountDue' | 'nextPayment' | 'status' | 'lastAccessedAt';
 type SortDirection = 'asc' | 'desc';
 
+// Pure presentation helpers — hoisted to module scope so they are not
+// re-allocated on every render and not recreated per row.
+function getInitials(firstName: string | null, lastName: string | null) {
+  if (!firstName || !lastName) {
+    return '?';
+  }
+  return `${firstName[0]}${lastName[0]}`.toUpperCase();
+}
+
+function formatDate(date: Date | null | undefined) {
+  if (!date) {
+    return '-';
+  }
+  const d = new Date(date);
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const year = d.getFullYear();
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+
+  const timeZone = new Intl.DateTimeFormat('en-US', {
+    timeZoneName: 'short',
+  }).formatToParts(d).find(part => part.type === 'timeZoneName')?.value || '';
+
+  return `${month}/${day}/${year} ${hours}${minutes} ${timeZone}`;
+}
+
+function formatCurrency(amount: string | undefined) {
+  if (!amount) {
+    return '-';
+  }
+  return Number.parseFloat(amount).toLocaleString('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  });
+}
+
+function getStatusColor(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
+  switch (status) {
+    case 'active':
+      return 'default';
+    case 'trial':
+      return 'outline';
+    case 'hold':
+      return 'secondary';
+    case 'cancelled':
+    case 'past_due':
+      return 'destructive';
+    default:
+      return 'secondary';
+  }
+}
+
+function getStatusLabel(status: string) {
+  switch (status) {
+    case 'past_due':
+      return 'Past Due';
+    default:
+      return status.charAt(0).toUpperCase() + status.slice(1);
+  }
+}
+
+function getMemberTypeLabel(memberType: string | null | undefined) {
+  switch (memberType) {
+    case 'individual':
+      return 'Individual';
+    case 'head-of-household':
+      return 'Head of Household';
+    case 'family-member':
+      return 'Family Member';
+    default:
+      return '-';
+  }
+}
+
+function getMemberTypeVariant(memberType: string | null | undefined): 'default' | 'secondary' | 'destructive' | 'outline' {
+  switch (memberType) {
+    case 'head-of-household':
+      return 'default';
+    case 'family-member':
+      return 'outline';
+    case 'individual':
+    default:
+      return 'secondary';
+  }
+}
+
 export function MembersTable({
   members,
   onRowClickAction,
@@ -60,15 +147,15 @@ export function MembersTable({
   const [currentPage, setCurrentPage] = useState(initialPage);
   const ROWS_PER_PAGE = 10;
 
-  const handlePageChange = (page: number) => {
+  const handlePageChange = useCallback((page: number) => {
     setCurrentPage(page);
     onPageChangeAction?.(page);
-  };
+  }, [onPageChangeAction]);
 
-  const handleFiltersChange = (newFilters: MemberFilters) => {
+  const handleFiltersChange = useCallback((newFilters: MemberFilters) => {
     setFilters(newFilters);
     handlePageChange(0);
-  };
+  }, [handlePageChange]);
 
   // Compute available statuses from actual member data
   const availableStatuses = useMemo(() => {
@@ -92,26 +179,28 @@ export function MembersTable({
     return Array.from(types).sort();
   }, [members]);
 
-  const filteredMembers = members.filter((member) => {
-    // Search filter
+  const filteredMembers = useMemo(() => {
     const searchLower = filters.search.toLowerCase();
-    const matchesSearch = filters.search === ''
-      || (member.firstName?.toLowerCase().includes(searchLower))
-      || (member.lastName?.toLowerCase().includes(searchLower))
-      || member.email.toLowerCase().includes(searchLower)
-      || (member.phone?.toLowerCase().includes(searchLower));
+    return members.filter((member) => {
+      // Search filter
+      const matchesSearch = filters.search === ''
+        || (member.firstName?.toLowerCase().includes(searchLower))
+        || (member.lastName?.toLowerCase().includes(searchLower))
+        || member.email.toLowerCase().includes(searchLower)
+        || (member.phone?.toLowerCase().includes(searchLower));
 
-    // Status filter
-    const matchesStatus = filters.status === 'all' || member.status === filters.status;
+      // Status filter
+      const matchesStatus = filters.status === 'all' || member.status === filters.status;
 
-    // Member type filter
-    const matchesMembershipType = filters.membershipType === 'all'
-      || member.memberType === filters.membershipType;
+      // Member type filter
+      const matchesMembershipType = filters.membershipType === 'all'
+        || member.memberType === filters.membershipType;
 
-    return matchesSearch && matchesStatus && matchesMembershipType;
-  });
+      return matchesSearch && matchesStatus && matchesMembershipType;
+    });
+  }, [members, filters]);
 
-  const sortedMembers = [...filteredMembers].sort((a, b) => {
+  const sortedMembers = useMemo(() => [...filteredMembers].sort((a, b) => {
     let aValue: string | number | Date | null | undefined;
     let bValue: string | number | Date | null | undefined;
 
@@ -152,7 +241,7 @@ export function MembersTable({
       return sortDirection === 'asc' ? 1 : -1;
     }
     return 0;
-  });
+  }), [filteredMembers, sortField, sortDirection]);
 
   const totalPages = Math.ceil(sortedMembers.length / ROWS_PER_PAGE);
   const paginatedMembers = sortedMembers.slice(
@@ -160,15 +249,13 @@ export function MembersTable({
     (currentPage + 1) * ROWS_PER_PAGE,
   );
 
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('asc');
-    }
+  const handleSort = useCallback((field: SortField) => {
+    setSortField((prevField) => {
+      setSortDirection(prevDir => (prevField === field ? (prevDir === 'asc' ? 'desc' : 'asc') : 'asc'));
+      return field;
+    });
     handlePageChange(0);
-  };
+  }, [handlePageChange]);
 
   const stats = useMemo(() => ({
     totalMembers: members.length,
@@ -177,91 +264,6 @@ export function MembersTable({
     paidMembers: members.filter(m => m.membershipType === 'monthly' || m.membershipType === 'annual').length,
     freeMembers: members.filter(m => m.membershipType === 'free-trial').length,
   }), [members]);
-
-  const getInitials = (firstName: string | null, lastName: string | null) => {
-    if (!firstName || !lastName) {
-      return '?';
-    }
-    return `${firstName[0]}${lastName[0]}`.toUpperCase();
-  };
-
-  const formatDate = (date: Date | null | undefined) => {
-    if (!date) {
-      return '-';
-    }
-    const d = new Date(date);
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    const year = d.getFullYear();
-    const hours = String(d.getHours()).padStart(2, '0');
-    const minutes = String(d.getMinutes()).padStart(2, '0');
-
-    const timeZone = new Intl.DateTimeFormat('en-US', {
-      timeZoneName: 'short',
-    }).formatToParts(d).find(part => part.type === 'timeZoneName')?.value || '';
-
-    return `${month}/${day}/${year} ${hours}${minutes} ${timeZone}`;
-  };
-
-  const formatCurrency = (amount: string | undefined) => {
-    if (!amount) {
-      return '-';
-    }
-    return Number.parseFloat(amount).toLocaleString('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    });
-  };
-
-  const getStatusColor = (status: string): 'default' | 'secondary' | 'destructive' | 'outline' => {
-    switch (status) {
-      case 'active':
-        return 'default';
-      case 'trial':
-        return 'outline';
-      case 'hold':
-        return 'secondary';
-      case 'cancelled':
-      case 'past_due':
-        return 'destructive';
-      default:
-        return 'secondary';
-    }
-  };
-
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'past_due':
-        return 'Past Due';
-      default:
-        return status.charAt(0).toUpperCase() + status.slice(1);
-    }
-  };
-
-  const getMemberTypeLabel = (memberType: string | null | undefined) => {
-    switch (memberType) {
-      case 'individual':
-        return 'Individual';
-      case 'head-of-household':
-        return 'Head of Household';
-      case 'family-member':
-        return 'Family Member';
-      default:
-        return '-';
-    }
-  };
-
-  const getMemberTypeVariant = (memberType: string | null | undefined): 'default' | 'secondary' | 'destructive' | 'outline' => {
-    switch (memberType) {
-      case 'head-of-household':
-        return 'default';
-      case 'family-member':
-        return 'outline';
-      case 'individual':
-      default:
-        return 'secondary';
-    }
-  };
 
   const statsData = useMemo(() => [
     { id: 'total', label: 'Total members', value: stats.totalMembers },

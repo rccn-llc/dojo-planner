@@ -156,10 +156,11 @@ export function useTokenExIframe({ containerId, cvvContainerId, config, theme = 
       });
 
       iframe.on('tokenize', (data: unknown) => {
-        if (process.env.NODE_ENV === 'development') {
-          console.info('[TokenEx] tokenize event received:', JSON.stringify(data));
-        }
         const tokenData = data as Record<string, unknown>;
+        if (process.env.NODE_ENV === 'development') {
+          // Never log token/PAN values — only the shape of the payload (keys present).
+          console.info('[TokenEx] tokenize event received. Fields:', Object.keys(tokenData ?? {}).join(', '));
+        }
         const token = (tokenData.token ?? tokenData.Token) as string | undefined;
         const firstSix = (tokenData.firstSix ?? tokenData.FirstSix
           ?? tokenData.firstsix ?? tokenData.cardBin) as string | undefined;
@@ -181,7 +182,8 @@ export function useTokenExIframe({ containerId, cvvContainerId, config, theme = 
 
       iframe.on('error', (data: unknown) => {
         if (process.env.NODE_ENV === 'development') {
-          console.warn('[TokenEx] error event received:', JSON.stringify(data));
+          // Log only the error message, never the full payload (may echo input).
+          console.warn('[TokenEx] error event received:', (data as { message?: string })?.message ?? 'unknown error');
         }
         if (!cancelled) {
           const errorData = data as { message?: string };

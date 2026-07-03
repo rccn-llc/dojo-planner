@@ -1,7 +1,7 @@
 'use client';
 
 import type { Coupon } from '@/features/marketing';
-import type { AppliedCoupon, MemberType, PaymentDeclineReason } from '@/hooks/useAddMemberWizard';
+import type { MemberType, PaymentDeclineReason } from '@/hooks/useAddMemberWizard';
 import type { ConversionType, ConvertMemberWizardData } from '@/hooks/useConvertMemberWizard';
 import type { TokenizationIframeConfig } from '@/libs/IQPro';
 import { useTranslations } from 'next-intl';
@@ -11,30 +11,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useConvertMemberWizard } from '@/hooks/useConvertMemberWizard';
 import { client } from '@/libs/Orpc';
 import { MembershipStep } from '../wizard/MembershipStep';
+import { buildSignedWaiverPayload, computeDiscountedPrice } from '../wizard/memberWizardUtils';
 import { PaymentStep } from '../wizard/PaymentStep';
 import { WaiverStep } from '../wizard/WaiverStep';
 import { ConvertConfirmStep } from './ConvertConfirmStep';
 import { ConvertSuccessStep } from './ConvertSuccessStep';
-
-function computeDiscountedPrice(price: number | undefined, coupon: AppliedCoupon): number | undefined {
-  if (price === undefined || price <= 0) {
-    return price;
-  }
-  switch (coupon.type) {
-    case 'Percentage': {
-      const percentageMatch = coupon.amount.match(/(\d+(?:\.\d+)?)/);
-      const pct = percentageMatch?.[1] ? Number.parseFloat(percentageMatch[1]) : Number.NaN;
-      return Number.isNaN(pct) ? price : Math.max(0, price - (price * pct / 100));
-    }
-    case 'Fixed Amount': {
-      const fixedMatch = coupon.amount.match(/(\d+(?:\.\d+)?)/);
-      const fixed = fixedMatch?.[1] ? Number.parseFloat(fixedMatch[1]) : Number.NaN;
-      return Number.isNaN(fixed) ? price : Math.max(0, price - fixed);
-    }
-    case 'Free Trial':
-      return 0;
-  }
-}
 
 type ConvertMemberModalProps = {
   isOpen: boolean;
@@ -203,46 +184,12 @@ export const ConvertMemberModal = ({
         && wizard.data.waiverRenderedContent
         && !wizard.data.waiverSkipped
       ) {
-        let memberAgeAtSigning: number | undefined;
-        if (wizard.data.memberDateOfBirth) {
-          const today = new Date();
-          let age = today.getFullYear() - wizard.data.memberDateOfBirth.getFullYear();
-          const monthDiff = today.getMonth() - wizard.data.memberDateOfBirth.getMonth();
-          if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < wizard.data.memberDateOfBirth.getDate())) {
-            age--;
-          }
-          memberAgeAtSigning = age;
-        }
-
         const [firstName = '', ...lastParts] = memberName.split(' ');
         const lastName = lastParts.join(' ');
 
-        await client.waivers.createSignedWaiver({
-          waiverTemplateId: wizard.data.waiverTemplateId,
-          memberId,
-          signatureDataUrl: wizard.data.waiverSignatureDataUrl,
-          signedByName: wizard.data.waiverSignedByName || firstName,
-          signedByRelationship: wizard.data.waiverSignedByRelationship || 'self',
-          ...(wizard.data.waiverGuardianEmail && { signedByEmail: wizard.data.waiverGuardianEmail }),
-          memberFirstName: firstName,
-          memberLastName: lastName,
-          memberEmail,
-          ...(wizard.data.memberDateOfBirth && { memberDateOfBirth: wizard.data.memberDateOfBirth }),
-          ...(memberAgeAtSigning !== undefined && { memberAgeAtSigning }),
-          renderedContent: wizard.data.waiverRenderedContent,
-          ...(wizard.data.membershipPlanName && { membershipPlanName: wizard.data.membershipPlanName }),
-          ...(wizard.data.membershipPlanPrice !== undefined && { membershipPlanPrice: wizard.data.membershipPlanPrice }),
-          ...(wizard.data.membershipPlanFrequency && { membershipPlanFrequency: wizard.data.membershipPlanFrequency }),
-          ...(wizard.data.membershipPlanContractLength && { membershipPlanContractLength: wizard.data.membershipPlanContractLength }),
-          ...(wizard.data.membershipPlanSignupFee !== undefined && { membershipPlanSignupFee: wizard.data.membershipPlanSignupFee }),
-          ...(wizard.data.membershipPlanIsTrial !== undefined && { membershipPlanIsTrial: wizard.data.membershipPlanIsTrial }),
-          ...(wizard.data.appliedCoupon && {
-            couponCode: wizard.data.appliedCoupon.code,
-            couponType: wizard.data.appliedCoupon.type,
-            couponAmount: wizard.data.appliedCoupon.amount,
-            couponDiscountedPrice: computeDiscountedPrice(wizard.data.membershipPlanPrice, wizard.data.appliedCoupon),
-          }),
-        });
+        await client.waivers.createSignedWaiver(
+          buildSignedWaiverPayload(wizard.data, memberId, { firstName, lastName, email: memberEmail }),
+        );
       }
 
       // 5. Process payment (family-to-individual, or HOH-to-individual

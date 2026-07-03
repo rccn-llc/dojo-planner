@@ -294,11 +294,12 @@ describe('MembersService', () => {
 
       const mockOrderBy = vi.fn(() => Promise.resolve(mockPaymentMethods));
       const mockWhere = vi.fn(() => ({ orderBy: mockOrderBy }));
-      const mockFrom = vi.fn(() => ({ where: mockWhere }));
+      const mockInnerJoin = vi.fn(() => ({ where: mockWhere }));
+      const mockFrom = vi.fn(() => ({ innerJoin: mockInnerJoin }));
       vi.mocked(db.select).mockReturnValue({ from: mockFrom } as never);
 
       const { getMemberPaymentMethods } = await import('./MembersService');
-      const result = await getMemberPaymentMethods('member-123');
+      const result = await getMemberPaymentMethods('member-123', 'org-123');
 
       expect(result).toEqual(mockPaymentMethods);
       expect(db.select).toHaveBeenCalled();
@@ -309,11 +310,12 @@ describe('MembersService', () => {
 
       const mockOrderBy = vi.fn(() => Promise.resolve([]));
       const mockWhere = vi.fn(() => ({ orderBy: mockOrderBy }));
-      const mockFrom = vi.fn(() => ({ where: mockWhere }));
+      const mockInnerJoin = vi.fn(() => ({ where: mockWhere }));
+      const mockFrom = vi.fn(() => ({ innerJoin: mockInnerJoin }));
       vi.mocked(db.select).mockReturnValue({ from: mockFrom } as never);
 
       const { getMemberPaymentMethods } = await import('./MembersService');
-      const result = await getMemberPaymentMethods('member-no-pm');
+      const result = await getMemberPaymentMethods('member-no-pm', 'org-123');
 
       expect(result).toEqual([]);
     });

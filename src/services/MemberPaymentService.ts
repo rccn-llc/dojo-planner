@@ -210,10 +210,14 @@ export async function processMemberPayment(
 
     if (vaulted) {
       // Vaulted-charge branch: look up the member's IQPro customer + saved PM.
+      // Scope to the caller's org so a saved card can never be charged across tenants.
       const memberRow = await db
         .select({ iqproCustomerId: memberSchema.iqproCustomerId })
         .from(memberSchema)
-        .where(eq(memberSchema.id, params.memberId))
+        .where(and(
+          eq(memberSchema.id, params.memberId),
+          eq(memberSchema.organizationId, params.organizationId),
+        ))
         .limit(1);
       const savedCustomerId = memberRow[0]?.iqproCustomerId;
       if (!savedCustomerId) {
@@ -283,7 +287,10 @@ export async function processMemberPayment(
       const existing = await db
         .select({ iqproCustomerId: memberSchema.iqproCustomerId })
         .from(memberSchema)
-        .where(eq(memberSchema.id, params.memberId))
+        .where(and(
+          eq(memberSchema.id, params.memberId),
+          eq(memberSchema.organizationId, params.organizationId),
+        ))
         .limit(1);
 
       let resolvedCustomerId = existing[0]?.iqproCustomerId ?? null;
@@ -479,11 +486,14 @@ export async function registerPaymentMethod(
   const provider = await getPaymentProvider();
 
   try {
-    // Step 1: Get or create customer
+    // Step 1: Get or create customer (scoped to the caller's org for tenant safety)
     const existing = await db
       .select({ iqproCustomerId: memberSchema.iqproCustomerId })
       .from(memberSchema)
-      .where(eq(memberSchema.id, params.memberId))
+      .where(and(
+        eq(memberSchema.id, params.memberId),
+        eq(memberSchema.organizationId, params.organizationId),
+      ))
       .limit(1);
 
     let customerId = existing[0]?.iqproCustomerId ?? null;

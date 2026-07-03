@@ -221,7 +221,8 @@ The Add Member flow is a multi-step modal wizard (`AddMemberModal.tsx`) using th
 - `src/features/members/wizard/MemberPaymentStep.tsx` — Payment form with HOH billing notice + `captureOnly` mode for HOH skip membership
 - `src/features/members/wizard/MemberMembershipStep.tsx` — Membership plan selection with "Skip for now" button for HOH
 - `src/features/members/wizard/MemberWaiverStep.tsx` — Fetches waivers for membership, resolves merge field placeholders, captures signature
-- `src/features/waivers/signing/SignatureCanvas.tsx` — Reusable signature capture (react-signature-canvas, supports mouse + touch)
+- `src/features/waivers/signing/SignatureCanvas.tsx` — Reusable signature capture (react-signature-canvas, supports mouse + touch). Loaded lazily via `next/dynamic` from `WaiverStep` so the canvas lib isn't in the wizard's initial bundle.
+- `src/features/members/wizard/memberWizardUtils.ts` — Shared, unit-tested wizard helpers used by all three wizards (Add Member, Add Family Members, Convert): `computeDiscountedPrice` (coupon → recurring price), `calculateAge` (age at waiver signing), `fileToDataUrl` (photo → base64), `buildSignedWaiverPayload` (assembles the `createSignedWaiver` request incl. plan + coupon snapshot). Previously these were copy-pasted across the three modals.
 - `src/hooks/useAddMemberWizard.ts` — Wizard state management hook with `getStepsForMemberType()` for conditional routing + HOH data fields + `membershipSkipped` flag
 - `src/services/WaiverPdfService.ts` — PDF generation: client-side Blob (`generateWaiverPdf`) + server-side Buffer (`generateWaiverPdfBuffer`)
 - `src/services/EmailService.ts` — Resend integration for confirmation emails with waiver PDF attachment
@@ -1103,7 +1104,7 @@ try {
 }
 ```
 
-**Audit Actions (71 total):**
+**Audit Actions (includes read-access events `TRANSACTION_VIEW` + `PAYMENT_METHOD_VIEW` for SOC2 CC7.2):**
 ```typescript
 // Member operations
 AUDIT_ACTION.MEMBER_CREATE;
@@ -1134,6 +1135,7 @@ AUDIT_ACTION.ATTENDANCE_CHECK_OUT;
 // Transaction operations
 AUDIT_ACTION.TRANSACTION_CREATE;
 AUDIT_ACTION.TRANSACTION_REFUND;
+AUDIT_ACTION.TRANSACTION_VIEW; // read-access logging (SOC2 CC7.2) — member transaction history
 
 // Waiver operations
 AUDIT_ACTION.WAIVER_TEMPLATE_CREATE;
@@ -1151,6 +1153,7 @@ AUDIT_ACTION.MERGE_FIELD_DELETE;
 // Payment operations
 AUDIT_ACTION.PAYMENT_PROCESS;
 AUDIT_ACTION.PAYMENT_METHOD_REGISTER;
+AUDIT_ACTION.PAYMENT_METHOD_VIEW; // read-access logging (SOC2 CC7.2) — saved payment methods
 
 // SaaS subscription operations
 AUDIT_ACTION.SAAS_SUBSCRIPTION_CREATE;

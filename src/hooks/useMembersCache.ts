@@ -86,6 +86,23 @@ let cacheStore: CacheEntry | null = null;
 const revalidateCallbacks: Array<() => void | Promise<void>> = [];
 
 /**
+ * Raw member row as returned by `members.list`, before display fields are
+ * derived. Only the fields read by `deriveMemberDisplayFields` are typed
+ * precisely; `nextPaymentDate` may arrive as a `Date` or an ISO string, and the
+ * rest of the row is carried through structurally.
+ */
+type RawMemberRow = {
+  currentMembership?: {
+    nextPaymentDate?: Date | string | null;
+    membershipPlan?: {
+      price?: number | null;
+      frequency?: string | null;
+      isTrial?: boolean | null;
+    } | null;
+  } | null;
+} & Record<string, unknown>;
+
+/**
  * Derives the display-only fields (`membershipType`, `amountDue`, `nextPayment`)
  * on a member row for the members table. Pure — exported so unit tests can
  * cover the "amountDue should be empty when the next payment is in the future"
@@ -96,7 +113,7 @@ const revalidateCallbacks: Array<() => void | Promise<void>> = [];
  * For a freshly-paid autopay member whose next charge is in the future, the
  * cell is empty.
  */
-export function deriveMemberDisplayFields(member: any, now: Date = new Date()): Member {
+export function deriveMemberDisplayFields(member: RawMemberRow, now: Date = new Date()): Member {
   const plan = member.currentMembership?.membershipPlan;
   const membership = member.currentMembership;
 
@@ -122,12 +139,14 @@ export function deriveMemberDisplayFields(member: any, now: Date = new Date()): 
     ? Number(plan.price).toFixed(2)
     : undefined;
 
+  // The raw row carries the full member fields at runtime; RawMemberRow only
+  // types the subset this function reads, so assert the enriched result is a Member.
   return {
     ...member,
     membershipType,
     amountDue,
     nextPayment,
-  };
+  } as Member;
 }
 
 function cacheReducer(state: CacheState, action: CacheAction): CacheState {
@@ -190,7 +209,7 @@ export const useMembersCache = (organizationId?: string | undefined) => {
       console.info('[Members Cache] Fetching fresh members data for organization:', organizationId);
 
       const membersData = await client.members.list();
-      const rawMembers = (membersData.members || []) as any[];
+      const rawMembers = (membersData.members || []) as RawMemberRow[];
 
       const detailedMembers: Member[] = rawMembers.map(member => deriveMemberDisplayFields(member));
 

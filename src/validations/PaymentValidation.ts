@@ -33,12 +33,20 @@ export const ProcessPaymentValidation = z.object({
   cardToken: z.string().optional(),
   cardFirstSix: z.string().max(6).optional(),
   cardLastFour: z.string().max(4).optional(),
-  cardExpiry: z.string().optional(),
+  // Expiry in MM/YY or MM/YYYY form (month 01-12). Optional — only validated when present.
+  cardExpiry: z
+    .string()
+    .regex(/^(0[1-9]|1[0-2])\/(\d{2}|\d{4})$/, 'Card expiry must be in MM/YY or MM/YYYY format')
+    .optional(),
   cardCvc: z.string().optional(),
 
   // ACH fields
   achAccountHolder: z.string().optional(),
-  achRoutingNumber: z.string().optional(),
+  // US ABA routing numbers are exactly 9 digits. Optional — only validated when present.
+  achRoutingNumber: z
+    .string()
+    .regex(/^\d{9}$/, 'Routing number must be 9 digits')
+    .optional(),
   achAccountNumber: z.string().optional(),
   achAccountType: z.enum(['Checking', 'Savings']).optional(),
 
@@ -95,12 +103,20 @@ export const RegisterPaymentMethodValidation = z.object({
   cardToken: z.string().optional(),
   cardFirstSix: z.string().max(6).optional(),
   cardLastFour: z.string().max(4).optional(),
-  cardExpiry: z.string().optional(),
+  // Expiry in MM/YY or MM/YYYY form (month 01-12). Optional — only validated when present.
+  cardExpiry: z
+    .string()
+    .regex(/^(0[1-9]|1[0-2])\/(\d{2}|\d{4})$/, 'Card expiry must be in MM/YY or MM/YYYY format')
+    .optional(),
   cardCvc: z.string().optional(),
 
   // ACH fields
   achAccountHolder: z.string().optional(),
-  achRoutingNumber: z.string().optional(),
+  // US ABA routing numbers are exactly 9 digits. Optional — only validated when present.
+  achRoutingNumber: z
+    .string()
+    .regex(/^\d{9}$/, 'Routing number must be 9 digits')
+    .optional(),
   achAccountNumber: z.string().optional(),
   achAccountType: z.enum(['Checking', 'Savings']).optional(),
 });

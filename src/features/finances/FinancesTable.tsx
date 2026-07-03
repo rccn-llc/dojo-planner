@@ -128,24 +128,26 @@ export function FinancesTable({
     return Array.from(statuses);
   }, [transactions, filters.origin, filters.search]);
 
-  const filteredTransactions = transactions.filter((transaction) => {
+  const filteredTransactions = useMemo(() => {
     const searchLower = filters.search.toLowerCase();
-    const matchesSearch = filters.search === ''
-      || transaction.date.toLowerCase().includes(searchLower)
-      || transaction.amount.toLowerCase().includes(searchLower)
-      || transaction.purpose.toLowerCase().includes(searchLower)
-      || transaction.method.toLowerCase().includes(searchLower)
-      || transaction.transactionId.toLowerCase().includes(searchLower)
-      || transaction.memberName.toLowerCase().includes(searchLower)
-      || transaction.status.toLowerCase().includes(searchLower);
+    return transactions.filter((transaction) => {
+      const matchesSearch = filters.search === ''
+        || transaction.date.toLowerCase().includes(searchLower)
+        || transaction.amount.toLowerCase().includes(searchLower)
+        || transaction.purpose.toLowerCase().includes(searchLower)
+        || transaction.method.toLowerCase().includes(searchLower)
+        || transaction.transactionId.toLowerCase().includes(searchLower)
+        || transaction.memberName.toLowerCase().includes(searchLower)
+        || transaction.status.toLowerCase().includes(searchLower);
 
-    const matchesOrigin = filters.origin === 'all' || transaction.purpose === filters.origin;
-    const matchesStatus = filters.status === 'all' || transaction.status === filters.status;
+      const matchesOrigin = filters.origin === 'all' || transaction.purpose === filters.origin;
+      const matchesStatus = filters.status === 'all' || transaction.status === filters.status;
 
-    return matchesSearch && matchesOrigin && matchesStatus;
-  });
+      return matchesSearch && matchesOrigin && matchesStatus;
+    });
+  }, [transactions, filters]);
 
-  const sortedTransactions = [...filteredTransactions].sort((a, b) => {
+  const sortedTransactions = useMemo(() => [...filteredTransactions].sort((a, b) => {
     let aValue: string | number;
     let bValue: string | number;
 
@@ -190,7 +192,7 @@ export function FinancesTable({
       return sortDirection === 'asc' ? 1 : -1;
     }
     return 0;
-  });
+  }), [filteredTransactions, sortField, sortDirection]);
 
   const totalPages = Math.ceil(sortedTransactions.length / ROWS_PER_PAGE);
   const paginatedTransactions = sortedTransactions.slice(

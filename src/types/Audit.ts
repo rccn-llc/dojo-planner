@@ -69,10 +69,14 @@ export const AUDIT_ACTION = {
   TRANSACTION_CREATE: 'transaction.create',
   TRANSACTION_REFUND: 'transaction.refund',
   TRANSACTION_UPDATE: 'transaction.update',
+  // Read-access logging for sensitive financial data (SOC2 CC7.2)
+  TRANSACTION_VIEW: 'transaction.view',
 
   // Payment operations
   PAYMENT_PROCESS: 'payment.process',
   PAYMENT_METHOD_REGISTER: 'paymentMethod.register',
+  // Read-access logging for saved payment methods (SOC2 CC7.2)
+  PAYMENT_METHOD_VIEW: 'paymentMethod.view',
 
   // Tag operations
   TAG_CREATE: 'tag.create',
