@@ -8,13 +8,35 @@
  *   npx tsx src/scripts/seed.ts              # Seed all organizations
  *   npx tsx src/scripts/seed.ts --orgId=org_xxx  # Seed specific organization
  *   npx tsx src/scripts/seed.ts --reset      # Clear and re-seed
+ *
+ * SaaS subscription provisioning (for --orgId):
+ *   By default the seed writes an ACTIVE SaaS subscription onto the org so the
+ *   dashboard access gate doesn't redirect freshly-seeded orgs. When platform
+ *   IQPro credentials resolve (Platform Settings or IQPRO_* env) AND
+ *   CLERK_SECRET_KEY is set, it attempts REAL provisioning via subscribe():
+ *   it looks up the org's academy_owner in Clerk, creates a real IQPro
+ *   customer + subscription, and stores the owner's Clerk userId on the org.
+ *   If creds/owner are unavailable (e.g. local PGLite) it falls back to
+ *   synthetic IDs plus a synthetic responsible owner so the owner-aware gate
+ *   doesn't lock out local orgs.
+ *
+ *   SaaS flags:
+ *     --skipSaas               Don't touch SaaS fields at all
+ *     --saasPlan=basic|growth  Plan to provision (default: basic)
+ *     --saasCycle=monthly|annual (default: monthly)
+ *     --saasEmail=<email>      Billing email for the IQPro customer
+ *     --saasOrgName=<name>     Org display name for the IQPro customer
+ *     --ownerClerkId=<id>      Synthetic responsible owner userId for the fallback
+ *     --saasCard=<pan>         Sandbox test PAN for real provisioning (default 4111...)
+ *     --saasExpiry=<MMYY>      Card expiry for real provisioning (default 1230)
  */
 
+import type { SaasPlanId } from '../utils/SaasPlans';
 import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { Pool } from 'pg';
 
+import { Pool } from 'pg';
 import {
   addressSchema,
   attendanceSchema,
@@ -61,6 +83,20 @@ const args = process.argv.slice(2);
 const orgIdArg = args.find(arg => arg.startsWith('--orgId='));
 const specificOrgId = orgIdArg ? orgIdArg.split('=')[1] : undefined;
 const shouldReset = args.includes('--reset');
+
+// SaaS-subscription seed options
+function argValue(name: string): string | undefined {
+  const found = args.find(arg => arg.startsWith(`${name}=`));
+  return found ? found.split('=')[1] : undefined;
+}
+const skipSaas = args.includes('--skipSaas');
+const saasPlan = (argValue('--saasPlan') ?? 'basic') as SaasPlanId;
+const saasCycle = (argValue('--saasCycle') ?? 'monthly') as 'monthly' | 'annual';
+const saasEmail = argValue('--saasEmail');
+const saasOrgName = argValue('--saasOrgName');
+const ownerClerkIdArg = argValue('--ownerClerkId');
+const saasCard = argValue('--saasCard') ?? '4111111111111111';
+const saasExpiry = argValue('--saasExpiry') ?? '1230';
 
 // Database connection
 const connectionString = process.env.DATABASE_URL;
@@ -2303,6 +2339,105 @@ async function seedOrganization(organizationId: string) {
   console.info(`  ✅ Seeded ${programsData.length} programs, ${allTags.length} tags, ${classesData.length} classes, ${eventsData.length} events, ${couponsData.length} coupons, ${membershipPlansData.length} membership plans, ${membersData.length} members, ${familyLinkCount} family-member links, ${catalogCategoriesData.length} catalog categories, ${catalogItemsData.length} catalog items, ${waiverTemplatesData.length} waiver templates, ${signedWaiverCount} signed waivers, ${mergeFieldsData.length} merge fields, ${paymentMethodCount} payment methods, ${transactionCount} transactions, ${auditEventCount} audit events, ${attendanceCount} attendance records`);
 }
 
+/**
+ * Provisions an active SaaS subscription on the org so the dashboard
+ * owner-aware access gate doesn't lock out a freshly-seeded org.
+ *
+ * Attempts REAL provisioning (real IQPro customer + subscription + Clerk owner
+ * lookup) when platform IQPro creds resolve and an academy_owner exists.
+ * Otherwise writes synthetic IDs + a synthetic responsible owner so the gate
+ * passes locally. The org row must already exist (subscribe() does an UPDATE).
+ */
+// Real provisioning needs platform IQPro creds + Clerk. We detect these from
+// raw process.env (NOT @/libs/Env) so the synthetic local path stays free of
+// the app's strict env validation — importing the SaaS services (which pull in
+// @/libs/Env) only happens when these are present.
+function hasRealSaasPrereqs(): boolean {
+  return Boolean(
+    process.env.CLERK_SECRET_KEY
+    && (process.env.IQPRO_CLIENT_ID || process.env.IQPRO_SAAS_CLIENT_ID)
+    && process.env.IQPRO_SCOPE
+    && process.env.IQPRO_OAUTH_URL
+    && process.env.IQPRO_BASE_URL,
+  );
+}
+
+async function provisionSaasSubscription(orgId: string): Promise<void> {
+  if (skipSaas) {
+    console.info('  ⏭️  Skipping SaaS subscription (--skipSaas)');
+    return;
+  }
+
+  // Try real provisioning only when the prerequisite env is present. The
+  // SaaS-service imports are lazy so the common synthetic path doesn't require
+  // full app env validation.
+  if (hasRealSaasPrereqs()) {
+    try {
+      const { resolvePlatformIQProConfig } = await import('../services/IQProConfigService');
+      const { getAcademyOwner } = await import('../services/ClerkRolesService');
+      const { subscribe } = await import('../services/SaasSubscriptionService');
+
+      const platformConfig = await resolvePlatformIQProConfig().catch(() => null);
+      if (!platformConfig) {
+        console.info('  ℹ️  Platform IQPro config did not resolve; using synthetic SaaS subscription');
+      } else {
+        const owner = await getAcademyOwner(orgId);
+        if (!owner) {
+          console.info('  ⚠️  No academy_owner found in Clerk; falling back to synthetic SaaS subscription');
+        } else {
+          const result = await subscribe(platformConfig, {
+            orgId,
+            orgName: saasOrgName ?? `Seed Org ${orgId.slice(-6)}`,
+            adminEmail: owner.email || saasEmail || `seed+${orgId}@dojoplanner.test`,
+            responsibleClerkUserId: owner.clerkUserId,
+            planId: saasPlan,
+            billingCycle: saasCycle,
+            cardNumber: saasCard,
+            cardExpiry: saasExpiry,
+          });
+          if (result.success) {
+            console.info(`  💳 Provisioned REAL SaaS subscription (owner ${owner.clerkUserId})`);
+            return;
+          }
+          console.info(`  ⚠️  Real SaaS provisioning failed (${result.error}); falling back to synthetic`);
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'unknown error';
+      console.info(`  ⚠️  Real SaaS provisioning errored (${message}); falling back to synthetic`);
+    }
+  } else {
+    console.info('  ℹ️  Platform IQPro creds not available; using synthetic SaaS subscription');
+  }
+
+  // Synthetic fallback. We do NOT fabricate a paid subscription: there is no
+  // real IQPro customer/subscription/payment method behind a seeded org, so
+  // pretending it's `active` (with fake IQPro IDs) would let change/cancel
+  // masquerade as real billing. Instead we seed an honest, time-boxed `trial`
+  // (which the access gate counts as active) with null IQPro IDs. A trial is
+  // NOT tied to a plan — `iqproSubscriptionPlanId`/`iqproBillingCycle` stay null
+  // so the dialog shows every plan as a fresh "Subscribe" rather than implying
+  // a chosen plan. The only way to get a real `active` paid subscription is the
+  // card-collecting subscribe flow. Period end is one month out, in
+  // MILLISECONDS to match subscribe() and the IQPro webhook (and the expiry
+  // backstop in hasActiveSubscription).
+  const trialEnd = Date.now() + 30 * 24 * 60 * 60 * 1000;
+  await db.update(organizationSchema)
+    .set({
+      stripeSubscriptionStatus: null,
+      iqproSubscriptionId: null,
+      iqproSubscriptionPlanId: null,
+      iqproSubscriptionStatus: 'trial',
+      iqproBillingCycle: null,
+      iqproCurrentPeriodEnd: trialEnd,
+      iqproCustomerId: null,
+      iqproPaymentMethodId: null,
+      iqproSaasResponsibleClerkUserId: ownerClerkIdArg ?? `seed_owner_user_${randomUUID()}`,
+    })
+    .where(eq(organizationSchema.id, orgId));
+  console.info('  💳 Wrote synthetic SaaS trial (plan-agnostic, no real IQPro payment; subscribe via the app for a real paid plan)');
+}
+
 async function main() {
   console.info('🌱 Dojo Planner Database Seed Script');
   console.info('====================================\n');
@@ -2312,32 +2447,15 @@ async function main() {
     let organizations: { id: string }[];
 
     if (specificOrgId) {
-      // Check if org exists, create if not (org is managed by Clerk, we just need the ID)
+      // Ensure the org row exists (org is managed by Clerk, we just need the ID).
+      // subscribe() does an UPDATE, so the row must pre-exist for real
+      // provisioning; provisionSaasSubscription handles the SaaS fields.
       const org = await db.select({ id: organizationSchema.id }).from(organizationSchema).where(eq(organizationSchema.id, specificOrgId));
-      // Synthetic SaaS-subscription fields so the dashboard layout's
-      // expired-subscription check (in src/app/[locale]/(auth)/dashboard/layout.tsx)
-      // doesn't redirect freshly-seeded orgs to /dashboard/subscription-expired.
-      // Period end is one month in the future from seed time.
-      const periodEnd = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30;
-      const saasFields = {
-        stripeSubscriptionStatus: 'active',
-        iqproSubscriptionId: `seed_org_sub_${randomUUID()}`,
-        iqproSubscriptionPlanId: 'basic',
-        iqproSubscriptionStatus: 'active',
-        iqproCurrentPeriodEnd: periodEnd,
-        iqproCustomerId: `seed_org_cus_${randomUUID()}`,
-      };
       if (org.length === 0) {
         console.info(`  📝 Creating organization record for ${specificOrgId}...`);
-        await db.insert(organizationSchema).values({
-          id: specificOrgId,
-          ...saasFields,
-        }).onConflictDoNothing();
-      } else {
-        await db.update(organizationSchema)
-          .set(saasFields)
-          .where(eq(organizationSchema.id, specificOrgId));
+        await db.insert(organizationSchema).values({ id: specificOrgId }).onConflictDoNothing();
       }
+      await provisionSaasSubscription(specificOrgId);
       organizations = [{ id: specificOrgId }];
     } else {
       // Get all organizations

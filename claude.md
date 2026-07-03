@@ -151,7 +151,6 @@ docs/                      # Documentation
 | `/dashboard/waivers` | `waivers/page.tsx` | Waiver templates list |
 | `/dashboard/user-profile` | `user-profile/[[...user-profile]]/page.tsx` | Clerk UserProfile |
 | `/dashboard/organization-profile` | `organization-profile/[[...organization-profile]]/page.tsx` | Clerk OrgProfile |
-| `/dashboard/subscription` | `subscription/page.tsx` | SaaS subscription management |
 | `/dashboard/subscription-expired` | `subscription-expired/page.tsx` | Subscription expired — re-subscribe prompt |
 | `/dashboard/preferences` | `preferences/page.tsx` | User preferences |
 | `/dashboard/security` | `security/page.tsx` | Security settings |
@@ -558,18 +557,25 @@ Organization-level SaaS subscriptions use IQPro (same SDK as member payments). A
 
 **Super admins:** `aguilanegra`, `richardhoppes`, `nhaloski`, `rtoupin` — auto-granted Basic plan for free (no IQPro API call, written directly to DB).
 
+**Responsible academy owner:** Each org's SaaS subscription is tied to a **responsible academy owner** — the Clerk user with the `org:academy_owner` role (academy owners are NOT `member` rows). `getAcademyOwner(orgId)` in `ClerkRolesService.ts` resolves them via Clerk's org-membership API. `subscribeToPlan` requires an academy owner to exist (else 409), bills the IQPro SaaS customer to the owner's email, and stores the owner's Clerk userId in `organization.iqproSaasResponsibleClerkUserId`. The subscription page (`getCurrentPlan` → `responsibleOwner`) displays the owner's name/email.
+
 **Key files:**
 - `src/utils/SaasPlans.ts` — Plan config (prices, features, IDs)
 - `src/utils/SuperAdmins.ts` — Super admin username list
-- `src/services/SaasSubscriptionService.ts` — Service layer (subscribe, change, cancel, billing history, super admin auto-grant)
-- `src/routers/SaasSubscription.ts` — ORPC endpoints (all require `ORG_ROLE.ADMIN`)
+- `src/services/ClerkRolesService.ts` — `getAcademyOwner(orgId)` resolves the responsible academy owner from Clerk
+- `src/services/SaasSubscriptionService.ts` — Service layer (subscribe, change, cancel, billing history, super admin auto-grant); `subscribe` persists `responsibleClerkUserId`, `getCurrentSubscription` returns it
+- `src/routers/SaasSubscription.ts` — ORPC endpoints (view: `ACADEMY_OWNER`; mutate subscribe/change/cancel/tokenization: `ADMIN`). `subscribeToPlan` requires an academy owner and passes it to `subscribe`
 - `src/validations/SaasSubscriptionValidation.ts` — Zod schemas
+- `src/utils/Auth.ts` — `requireActiveSubscription(pathname)` server-side owner-aware gate
 - `src/hooks/useSubscriptionData.ts` — Client hook for fetching subscription + billing history
-- `src/features/billing/SubscriptionDialog.tsx` — Subscription management dialog (from UserMenu)
-- `src/app/[locale]/(auth)/dashboard/subscription/page.tsx` — Full subscription page
-- `src/app/[locale]/(auth)/dashboard/subscription-expired/page.tsx` — Expired subscription page
+- `src/features/billing/SubscriptionDialog.tsx` — Subscription management dialog (opened from UserMenu, and from the subscription-expired page's re-subscribe button). **This is the only user-facing subscription surface** — it shows current plan, plan cards, subscribe/change/cancel, billing history, and the responsible academy owner.
+- `src/app/[locale]/(auth)/dashboard/subscription-expired/page.tsx` — Expired subscription page; admins re-subscribe by opening the `SubscriptionDialog` from here
 
-**Access enforcement:** Dashboard layout checks org subscription status. If no active subscription (and not super admin), redirects to `/dashboard/subscription-expired`. Subscription and subscription-expired pages are exempt from this check.
+**Access enforcement (owner-aware, server-side):** The dashboard server layout (`src/app/[locale]/(auth)/dashboard/layout.tsx`) calls `requireActiveSubscription(pathname)` BEFORE rendering protected content. An org may access the dashboard only when it has an active (or trial) subscription AND the responsible academy owner still exists in Clerk — a missing owner OR inactive subscription redirects (server-side) to `/dashboard/subscription-expired`. Super admins, exempt orgs, and fresh orgs without a DB row bypass; `/dashboard/subscription-expired` stays reachable (the exempt-segment list still includes `/subscription` defensively). The pathname is read from an `x-pathname` request header stamped by `src/proxy.ts`. The client `useEffect` redirect in `DashboardLayoutClient` remains as a UX fallback, and uses the same `hasActiveSubscription` source of truth as the server gate.
+
+**Expiry backstop (recharge safety):** `hasActiveSubscription` / `getCurrentSubscription` ([SaasSubscriptionService.ts](src/services/SaasSubscriptionService.ts), `isSubscriptionActive` helper) treat a subscription as active only when the status is `active`/`trial` **AND** `iqproCurrentPeriodEnd` is within a `SUBSCRIPTION_GRACE_MS` (3-day) window — so a missed/late IQPro renewal webhook can't keep an expired org active indefinitely. A null period end never blocks (defensive). Note: `iqproCurrentPeriodEnd` is stored in **milliseconds** everywhere (`subscribe()`, the IQPro webhook, and the seed) — keep it ms.
+
+**Real vs synthetic subscriptions:** A real subscription is created only via the card-collecting subscribe flow (TokenEx → `subscribe()` registers the IQPro payment method, creates the subscription with `isAutoRenewed`/`isAutoCharged`, so renewals + plan changes auto-charge the stored method with no re-collection). The seed does **not** fabricate a paid subscription — it writes an honest `trial` with null IQPro IDs (see seed section). `changePlan`/`cancelSubscription` reject unbacked subscriptions (null or `seed_org_`-prefixed `iqproSubscriptionId`) via `isRealSubscriptionId` with a clear "subscribe with a payment method first" error, instead of firing doomed IQPro calls or silently mutating state.
 
 **Cancel flow:** Cancels at end of billing period. All org members lose dashboard access. Admins can re-subscribe from the subscription-expired page.
 
@@ -733,7 +739,7 @@ await deleteUserWithOrganization();
 **Schema:** `src/models/Schema.ts`
 
 **Key Tables:**
-- `organization` - Multi-tenant orgs with Stripe IDs + IQPro SaaS subscription fields (iqproCustomerId, iqproSubscriptionId, iqproSubscriptionPlanId, iqproBillingCycle, iqproSubscriptionStatus, iqproCurrentPeriodEnd, iqproPaymentMethodId) + location settings (locationName, locationAddress, locationPhone, locationEmail — nullable, set via the location-settings page; `locationTaxRate` real defaulting to 0, applied to taxable transactions) + per-org IQPro merchant credentials (iqproConfigClientId, iqproConfigClientSecretEncrypted, iqproConfigGatewayId — set via Payment Settings; `clientSecret` AES-GCM encrypted at rest)
+- `organization` - Multi-tenant orgs with Stripe IDs + IQPro SaaS subscription fields (iqproCustomerId, iqproSubscriptionId, iqproSubscriptionPlanId, iqproBillingCycle, iqproSubscriptionStatus, iqproCurrentPeriodEnd, iqproPaymentMethodId, `iqproSaasResponsibleClerkUserId` — Clerk userId of the academy owner responsible for the SaaS subscription; set at subscribe time, durably links the IQPro SaaS customer to a Clerk identity and is required by the owner-aware access gate) + location settings (locationName, locationAddress, locationPhone, locationEmail — nullable, set via the location-settings page; `locationTaxRate` real defaulting to 0, applied to taxable transactions) + per-org IQPro merchant credentials (iqproConfigClientId, iqproConfigClientSecretEncrypted, iqproConfigGatewayId — set via Payment Settings; `clientSecret` AES-GCM encrypted at rest)
 - `platform_config` - Singleton row (`id = 'singleton'` enforced by CHECK constraint) holding the platform's own IQPro credentials used for SaaS billing (iqproSaasClientId, iqproSaasClientSecretEncrypted, iqproSaasGatewayId). Set via Platform Settings (super admin only).
 - `member` - Member records with dateOfBirth, optional `clerkUserId` for kiosk auth, optional `iqproCustomerId`
 - `membership_plan` - Pricing tiers, including `frequency` (nullable: null = one-time / punchcard / trial; otherwise `Weekly` | `Monthly` | `Semi-Annual` | `Annual`), `cancellationFee` (real, default 0), `holdFeeAmount` (real, default 0), `holdFeeFrequency` (nullable: `one-time` | `Weekly` | `Monthly` | `Semi-Annual` | `Annual`), `holdLimitPerYear` (integer, nullable; null or 0 = unlimited; enforced server-side by `holdMembershipLifecycle` via a 12-month-window audit-log count)
@@ -940,7 +946,7 @@ DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/postgres" npx tsx sr
 - Signed waivers for every member with a membership — each row has the full plan snapshot (price, frequency, signup fee, contract length, isTrial) and 2 members get a coupon snapshot too. Kids members get the Kids waiver; trial member gets the Trial waiver; everyone else gets the standard Adult waiver
 - 2 waiver merge fields (academy, academy_owners)
 - Rich attendance records — 6-15 per active/trial/hold member spanning the last 8 weeks (2-3 for cancelled/past_due), with `checkOutTime`, `instructorClerkId` (3-instructor rotation), `checkedInByClerkId` for manual check-ins, and a short `notes` string on ~20% of rows
-- Active SaaS subscription on the seeded organization — `stripeSubscriptionStatus='active'` + synthetic IQPro SaaS fields with period end +30 days, so the dashboard layout's expired-subscription gate doesn't redirect freshly seeded orgs to `/dashboard/subscription-expired`
+- SaaS subscription on the seeded organization (`--orgId` only) — provisioned by `provisionSaasSubscription()`. When the real-provisioning prerequisites are present in the seed env (`CLERK_SECRET_KEY` + IQPRO platform creds, detected from raw `process.env` so the synthetic path stays free of strict env validation) AND an academy owner exists in Clerk (`getAcademyOwner`), it lazily imports and calls `subscribe()` for REAL provisioning (real IQPro customer + subscription + `iqproSaasResponsibleClerkUserId`). Otherwise it writes an **honest synthetic `trial`** — `iqproSubscriptionStatus='trial'`, null `iqproCustomerId`/`iqproSubscriptionId`/`iqproPaymentMethodId` (no fake paid sub), `iqproBillingCycle`, a synthetic responsible owner, and `iqproCurrentPeriodEnd` ~30 days out in **milliseconds**. The trial counts as active in the gate (so freshly seeded local orgs aren't redirected) but cannot be changed/cancelled (unbacked) — a real paid plan requires the in-app subscribe flow. SaaS flags: `--skipSaas`, `--saasPlan`, `--saasCycle`, `--saasEmail`, `--saasOrgName`, `--ownerClerkId`, `--saasCard`, `--saasExpiry` (see the seed-script header).
 
 **Dynamic dates:** every date in the seeded data — event sessions, schedule exceptions, member join dates, transactions, attendance, waiver signings — is computed relative to `seedNow` (the script's run time). Re-seeding 6 months from now produces the same shape of data, just shifted forward — no stale 2025/2026 literals.
 

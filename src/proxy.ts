@@ -26,6 +26,12 @@ export default async function middleware(
   request: NextRequest,
   event: NextFetchEvent,
 ) {
+  // Stamp the current pathname onto a request header so Server Components
+  // (which don't receive the pathname directly) can read it via `headers()`.
+  // Used by the dashboard layout's owner-aware subscription gate to know which
+  // path is being requested (and skip enforcement on exempt subscription pages).
+  request.headers.set('x-pathname', request.nextUrl.pathname);
+
   // Clerk keyless mode doesn't work with i18n, this is why we need to run the middleware conditionally
   if (
     isAuthPage(request) || isProtectedRoute(request)

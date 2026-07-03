@@ -2,11 +2,13 @@ import type { Metadata } from 'next';
 import { auth } from '@clerk/nextjs/server';
 import { eq } from 'drizzle-orm';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { DashboardLayoutClient } from '@/features/dashboard/DashboardLayoutClient';
 import { db } from '@/libs/DB';
 import { organizationSchema } from '@/models/Schema';
+import { hasActiveSubscription } from '@/services/SaasSubscriptionService';
 import { AppConfig } from '@/utils/AppConfig';
+import { requireActiveSubscription } from '@/utils/Auth';
 import { isExemptOrg, isSuperAdmin } from '@/utils/SuperAdmins';
 
 type ILayoutProps = {
@@ -34,26 +36,25 @@ export default async function DashboardLayout(props: ILayoutProps) {
   const { orgId, orgRole, sessionClaims } = await auth();
   const username = (sessionClaims as Record<string, unknown>)?.username as string | undefined;
 
-  // Determine subscription status for the org
+  // Server-side, owner-aware subscription gate. Redirects BEFORE rendering any
+  // protected content when the org lacks an active subscription or a matched
+  // academy owner. The client redirect below remains as a UX fallback.
+  const headerList = await headers();
+  const pathname = headerList.get('x-pathname') ?? '';
+  await requireActiveSubscription(pathname);
+
+  // Determine subscription status for the client UX fallback. Uses the same
+  // `hasActiveSubscription` source of truth as the server gate above (so the
+  // expiry backstop applies here too). A fresh Clerk org without a DB row is
+  // not enforced.
   let subscriptionActive = true;
   if (orgId && !isSuperAdmin(username) && !isExemptOrg(orgId)) {
     const org = await db.query.organizationSchema.findFirst({
       where: eq(organizationSchema.id, orgId),
-      columns: {
-        iqproSubscriptionStatus: true,
-        stripeSubscriptionStatus: true,
-      },
+      columns: { id: true },
     });
 
-    // If org has no DB record yet, don't enforce subscription (fresh Clerk org)
-    if (!org) {
-      subscriptionActive = true;
-    } else {
-      subscriptionActive
-        = org.iqproSubscriptionStatus === 'active'
-          || org.iqproSubscriptionStatus === 'trial'
-          || org.stripeSubscriptionStatus === 'active';
-    }
+    subscriptionActive = org ? await hasActiveSubscription(orgId) : true;
   }
 
   // Get the persisted sidebar state from the cookie

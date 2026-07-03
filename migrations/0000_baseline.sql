@@ -393,6 +393,7 @@ CREATE TABLE "organization" (
 	"iqpro_subscription_status" text,
 	"iqpro_current_period_end" bigint,
 	"iqpro_payment_method_id" text,
+	"iqpro_saas_responsible_clerk_user_id" text,
 	"location_address" text,
 	"location_phone" text,
 	"location_email" text,

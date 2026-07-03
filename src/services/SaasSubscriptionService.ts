@@ -9,11 +9,58 @@ import type { IQProConfig } from '@/libs/IQPro';
 import type { SaasPlanId } from '@/utils/SaasPlans';
 import { eq } from 'drizzle-orm';
 import { db } from '@/libs/DB';
-import { getGatewayProcessors, iqproGet, iqproPost, iqproPut } from '@/libs/IQPro';
+import { getGatewayProcessors, iqproPost, iqproPut } from '@/libs/IQPro';
 import { logger } from '@/libs/Logger';
 import { organizationSchema } from '@/models/Schema';
 import { getPlanTotalPrice, getSaasPlan } from '@/utils/SaasPlans';
 import { isExemptOrg, isSuperAdmin } from '@/utils/SuperAdmins';
+
+// Grace window applied to `iqproCurrentPeriodEnd` before an otherwise-active
+// subscription is treated as expired. Absorbs IQPro webhook lag so a paying
+// customer isn't locked out the instant a renewal webhook is late. Expiry is
+// normally driven by webhooks flipping the status; this is a time-based
+// backstop for when a webhook is missed/delayed.
+const SUBSCRIPTION_GRACE_MS = 3 * 24 * 60 * 60 * 1000;
+
+// IQPro requires a valid US state code on addresses where country === 'US'
+// (it rejects 'N/A'). SaaS billing doesn't collect the org's address, so we
+// send a neutral placeholder state. This only labels the billing record; it
+// does not affect tax (SaaS line items are non-taxable here).
+const SAAS_DEFAULT_STATE = 'KS';
+
+// Error surfaced when a change/cancel is attempted on an org that has no real
+// IQPro-backed subscription (null id, or a legacy synthetic `seed_org_*` id).
+const NO_PAID_SUBSCRIPTION_ERROR
+  = 'This organization has no active paid subscription. Please subscribe with a payment method first.';
+
+/**
+ * A subscription id only counts as IQPro-backed when it's present and not a
+ * synthetic seed placeholder. Seeded/local orgs have no real IQPro subscription,
+ * so change/cancel must not fire doomed IQPro calls (or silently mutate state)
+ * against them.
+ */
+function isRealSubscriptionId(subscriptionId: string | null | undefined): subscriptionId is string {
+  return !!subscriptionId && !subscriptionId.startsWith('seed_org_');
+}
+
+/**
+ * Whether a subscription with the given status + period end should count as
+ * active. Active requires the status to be `active`/`trial` AND the period end
+ * (if known) to be within the grace window. A null period end never blocks
+ * (defensive — older rows or super-admin grants may lack it).
+ */
+function isSubscriptionActive(
+  status: string | null | undefined,
+  currentPeriodEnd: number | null | undefined,
+): boolean {
+  if (status !== 'active' && status !== 'trial') {
+    return false;
+  }
+  if (currentPeriodEnd == null) {
+    return true;
+  }
+  return currentPeriodEnd + SUBSCRIPTION_GRACE_MS > Date.now();
+}
 
 // ===== Types =====
 
@@ -25,6 +72,9 @@ export type CurrentSubscription = {
   currentPeriodEnd: number | null;
   isSuperAdmin: boolean;
   hasActiveSubscription: boolean;
+  responsibleClerkUserId: string | null;
+  /** Display info for the responsible academy owner, resolved at the router layer. */
+  responsibleOwner?: { name: string | null; email: string | null } | null;
 };
 
 export type SubscribeParams = {
@@ -33,6 +83,8 @@ export type SubscribeParams = {
   adminEmail: string;
   planId: SaasPlanId;
   billingCycle: 'monthly' | 'annual';
+  /** Clerk userId of the academy owner responsible for this subscription. */
+  responsibleClerkUserId?: string;
   cardToken?: string;
   cardFirstSix?: string;
   cardLastFour?: string;
@@ -62,12 +114,13 @@ export async function getCurrentSubscription(
       iqproSubscriptionStatus: true,
       iqproBillingCycle: true,
       iqproCurrentPeriodEnd: true,
+      iqproSaasResponsibleClerkUserId: true,
     },
   });
 
   const planId = org?.iqproSubscriptionPlanId as SaasPlanId | null;
   const status = org?.iqproSubscriptionStatus ?? null;
-  const isActive = status === 'active' || status === 'trial';
+  const isActive = isSubscriptionActive(status, org?.iqproCurrentPeriodEnd);
   const superAdmin = isSuperAdmin(username) || isExemptOrg(orgId);
 
   // Super admin auto-grant: if no active plan, grant Basic for free
@@ -90,6 +143,7 @@ export async function getCurrentSubscription(
       currentPeriodEnd: null,
       isSuperAdmin: true,
       hasActiveSubscription: true,
+      responsibleClerkUserId: org?.iqproSaasResponsibleClerkUserId ?? null,
     };
   }
 
@@ -103,6 +157,7 @@ export async function getCurrentSubscription(
     currentPeriodEnd: org?.iqproCurrentPeriodEnd ?? null,
     isSuperAdmin: superAdmin,
     hasActiveSubscription: isActive,
+    responsibleClerkUserId: org?.iqproSaasResponsibleClerkUserId ?? null,
   };
 }
 
@@ -135,7 +190,7 @@ export async function subscribe(
             email: params.adminEmail,
             isBilling: true,
             country: 'US',
-            state: 'N/A',
+            state: SAAS_DEFAULT_STATE,
           }],
         },
       );
@@ -225,7 +280,7 @@ export async function subscribe(
           isRemittance: false,
           email: params.adminEmail,
           country: 'US',
-          state: 'N/A',
+          state: SAAS_DEFAULT_STATE,
         },
         {
           isBilling: false,
@@ -233,6 +288,7 @@ export async function subscribe(
           isRemittance: true,
           email: params.adminEmail,
           country: 'US',
+          state: SAAS_DEFAULT_STATE,
         },
       ],
       lineItems: [{
@@ -255,6 +311,69 @@ export async function subscribe(
     const subData = data as Record<string, unknown>;
     const subscriptionId = (subData.subscriptionId ?? subData.id ?? '') as string;
 
+    // Step 4: Immediate first-period charge. IQPro subscriptions do NOT
+    // auto-charge on creation (same as member subscriptions), so without this
+    // the org would be marked active but never billed and Billing History would
+    // be empty. Run a vaulted Sale against the saved payment method for the
+    // first period's amount. SaaS plans are non-taxable; a ServiceFee % applies
+    // to every transaction.
+    const serviceFeePct = Number(process.env.SERVICE_FEE_PCT ?? '0') || 0;
+    const salePayload = {
+      type: 'Sale',
+      remit: {
+        baseAmount: amount,
+        taxAmount: 0,
+        isTaxExempt: true,
+        currencyCode: 'USD',
+        addTaxToTotal: true,
+        paymentAdjustments: [
+          { type: 'ServiceFee', percentage: serviceFeePct, flatAmount: null },
+        ],
+      },
+      paymentMethod: {
+        customer: {
+          customerId,
+          customerPaymentMethodId: paymentMethodId,
+        },
+      },
+      lineItems: [{
+        name: `${plan.name} Plan`,
+        description: `${params.billingCycle} SaaS subscription`,
+        quantity: 1,
+        unitPrice: amount,
+        discount: 0,
+        freightAmount: 0,
+        unitOfMeasureId: 1,
+        localTaxPercent: 0,
+        nationalTaxPercent: 0,
+      }],
+      caption: `Dojo Planner ${plan.name}`.substring(0, 19),
+    };
+
+    const saleRes = await iqproPost<{ data?: Record<string, unknown> }>(
+      config,
+      `/api/gateway/${gatewayId}/transaction`,
+      salePayload,
+    );
+    const saleRaw = (saleRes.data ?? saleRes) as Record<string, unknown>;
+    const saleTx = (saleRaw.transaction ?? saleRaw) as Record<string, unknown>;
+    const saleStatus = ((saleTx.status ?? '') as string).toLowerCase();
+    const saleApproved = ['captured', 'settled', 'authorized', 'pendingsettlement'].includes(saleStatus);
+
+    if (!saleApproved) {
+      // Subscription exists in IQPro but the first charge didn't go through. Do
+      // NOT mark the org active — surface the failure so the admin can retry.
+      const reason = (saleTx.processorResponseText ?? saleTx.processorResponseMessage ?? saleStatus) as string;
+      logger.error('[SaaS] Subscription created but initial charge failed', {
+        orgId: params.orgId,
+        subscriptionId,
+        status: saleStatus,
+      });
+      return { success: false, error: `Subscription created but the first charge failed: ${reason}` };
+    }
+
+    logger.info('[SaaS] Initial charge approved', { orgId: params.orgId, subscriptionId, status: saleStatus });
+
     // Calculate next period end
     const nextPeriodEnd = params.billingCycle === 'annual'
       ? new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000)
@@ -268,6 +387,9 @@ export async function subscribe(
         iqproBillingCycle: params.billingCycle,
         iqproSubscriptionStatus: 'active',
         iqproCurrentPeriodEnd: nextPeriodEnd.getTime(),
+        ...(params.responsibleClerkUserId && {
+          iqproSaasResponsibleClerkUserId: params.responsibleClerkUserId,
+        }),
       })
       .where(eq(organizationSchema.id, params.orgId));
 
@@ -298,8 +420,8 @@ export async function changePlan(
       columns: { iqproSubscriptionId: true },
     });
 
-    if (!org?.iqproSubscriptionId) {
-      return { success: false, error: 'No active subscription to change' };
+    if (!isRealSubscriptionId(org?.iqproSubscriptionId)) {
+      return { success: false, error: NO_PAID_SUBSCRIPTION_ERROR };
     }
 
     const plan = getSaasPlan(newPlanId);
@@ -357,8 +479,14 @@ export async function cancelSubscription(
       columns: { iqproSubscriptionId: true },
     });
 
-    // If there's an IQPro subscription, cancel it
-    if (org?.iqproSubscriptionId && config) {
+    // No real IQPro subscription (null id or a synthetic seed placeholder):
+    // there's nothing to cancel and we must not silently flip local status.
+    if (!isRealSubscriptionId(org?.iqproSubscriptionId)) {
+      return { success: false, error: NO_PAID_SUBSCRIPTION_ERROR };
+    }
+
+    // Cancel the IQPro subscription (best-effort when config is present).
+    if (config) {
       const gatewayId = config.gatewayId;
       await iqproPost(
         config,
@@ -396,40 +524,44 @@ export async function getBillingHistory(
 ): Promise<BillingHistoryItem[]> {
   const org = await db.query.organizationSchema.findFirst({
     where: eq(organizationSchema.id, orgId),
-    columns: { iqproSubscriptionId: true },
+    columns: { iqproCustomerId: true },
   });
 
-  if (!org?.iqproSubscriptionId || !config) {
+  // SaaS charges (the immediate first-period Sale + IQPro's scheduled renewals)
+  // are all tied to the org's IQPro customer. Since they are org-level they
+  // aren't recorded in the member-scoped `transaction` table, so we read them
+  // back from IQPro by searching transactions for this customer.
+  if (!org?.iqproCustomerId || !config) {
     return [];
   }
 
   try {
     const gatewayId = config.gatewayId;
-    const subscription = await iqproGet<Record<string, unknown>>(
+    const res = await iqproPost<{ data?: Record<string, unknown> }>(
       config,
-      `/api/gateway/${gatewayId}/subscription/${org.iqproSubscriptionId}`,
+      `/api/gateway/${gatewayId}/transaction/search`,
+      {
+        customerId: { operator: 'Equal', value: org.iqproCustomerId },
+        limit: 100,
+        offset: 0,
+        sortColumn: 'CreatedDateTime',
+        sortDirection: 'DESC',
+      },
     );
 
-    const data = (subscription as Record<string, unknown>).data ?? subscription;
-    const sub = data as Record<string, unknown>;
-    const invoices = (sub.invoices ?? []) as Array<Record<string, unknown>>;
+    const data = (res.data ?? res) as Record<string, unknown>;
+    const results = (data.results ?? []) as Array<Record<string, unknown>>;
 
-    // Extract payment method last4 from the subscription
-    const paymentMethod = sub.paymentMethod as Record<string, unknown> | undefined;
-    const customerPM = paymentMethod?.customerPaymentMethod as Record<string, unknown> | undefined;
-    const card = customerPM?.card as Record<string, unknown> | undefined;
-    const maskedCard = (card?.maskedCard as string) ?? null;
-    const last4 = maskedCard?.slice(-4) ?? null;
-
-    return invoices.map((invoice) => {
-      const status = invoice.status as Record<string, unknown> | undefined;
+    return results.map((tx) => {
+      const maskedCard = (tx.maskedCard as string) ?? null;
+      const amount = (tx.amountCaptured ?? tx.amountSettled ?? tx.amount ?? 0) as number;
       return {
-        invoiceId: (invoice.invoiceId ?? '') as string,
-        status: (status?.name ?? null) as string | null,
-        amount: (invoice.amountCaptured ?? 0) as number,
-        invoiceDate: (invoice.invoiceDate ?? null) as string | null,
-        dueDate: (invoice.dueDate ?? null) as string | null,
-        paymentMethodLast4: last4,
+        invoiceId: (tx.transactionId ?? '') as string,
+        status: (tx.statusDescription ?? tx.status ?? null) as string | null,
+        amount,
+        invoiceDate: (tx.createdDateTime ?? null) as string | null,
+        dueDate: null,
+        paymentMethodLast4: maskedCard ? maskedCard.slice(-4) : null,
       };
     });
   } catch (error) {
@@ -445,6 +577,7 @@ export async function hasActiveSubscription(orgId: string): Promise<boolean> {
     where: eq(organizationSchema.id, orgId),
     columns: {
       iqproSubscriptionStatus: true,
+      iqproCurrentPeriodEnd: true,
       stripeSubscriptionStatus: true,
     },
   });
@@ -453,12 +586,13 @@ export async function hasActiveSubscription(orgId: string): Promise<boolean> {
     return false;
   }
 
-  // Check IQPro subscription first
-  if (org.iqproSubscriptionStatus === 'active' || org.iqproSubscriptionStatus === 'trial') {
+  // Check IQPro subscription first, including a time-based expiry backstop so a
+  // missed renewal webhook doesn't keep an expired org active indefinitely.
+  if (isSubscriptionActive(org.iqproSubscriptionStatus, org.iqproCurrentPeriodEnd)) {
     return true;
   }
 
-  // Fallback to Stripe subscription
+  // Fallback to Stripe subscription (legacy, status-only)
   if (org.stripeSubscriptionStatus === 'active') {
     return true;
   }

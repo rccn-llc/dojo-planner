@@ -32,7 +32,15 @@ export function SubscriptionDialog({ open, onOpenChange }: SubscriptionDialogPro
   const { resolvedTheme } = useTheme();
   const { user } = useUser();
   const { organization } = useOrganization();
-  const { currentPlan, billingHistory, loading, error, refetch } = useSubscriptionData();
+  // Only fetch (and refetch) when the dialog is open — avoids unconditional
+  // IQPro round-trips on every dashboard load, and refreshes data each open.
+  const { currentPlan, billingHistory, loading, error, refetch } = useSubscriptionData(open);
+
+  // A trial is not a paid subscription: the org hasn't subscribed yet, so every
+  // plan is a fresh "Subscribe" (nothing is the locked "Current Plan") and the
+  // payment form / cancel button follow paid-subscriber state, not trial.
+  const isTrial = currentPlan?.status === 'trial';
+  const isPaidSubscriber = !!currentPlan?.hasActiveSubscription && !isTrial;
 
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
@@ -54,7 +62,7 @@ export function SubscriptionDialog({ open, onOpenChange }: SubscriptionDialogPro
   // Pass `config: null` to the hook until the container exists; otherwise
   // useTokenExIframe's effect runs while the div doesn't exist yet and the
   // iframe never mounts (#160).
-  const showPaymentForm = !!selectedPlanId && !currentPlan?.hasActiveSubscription;
+  const showPaymentForm = !!selectedPlanId && !isPaidSubscriber;
 
   const { isLoaded: iframeLoaded, isValid: iframeValid, tokenize } = useTokenExIframe({
     containerId: TOKENEX_CONTAINER_ID,
@@ -81,10 +89,10 @@ export function SubscriptionDialog({ open, onOpenChange }: SubscriptionDialogPro
   // renders, the config is already cached and the iframe can mount without
   // a visible loading delay (#160).
   useEffect(() => {
-    if (open && !currentPlan?.hasActiveSubscription) {
+    if (open && !isPaidSubscriber) {
       void loadTokenizationConfig();
     }
-  }, [open, currentPlan?.hasActiveSubscription, loadTokenizationConfig]);
+  }, [open, isPaidSubscriber, loadTokenizationConfig]);
 
   const handleSubscribe = async (planId: SaasPlanId) => {
     const plan = SaasPlanList[planId];
@@ -92,14 +100,15 @@ export function SubscriptionDialog({ open, onOpenChange }: SubscriptionDialogPro
       return;
     }
 
-    // If no existing subscription, we need payment info
-    if (!currentPlan?.hasActiveSubscription) {
+    // No paid subscription yet (never subscribed, or only on a trial): collect
+    // payment and subscribe rather than attempting a plan change.
+    if (!isPaidSubscriber) {
       setSelectedPlanId(planId);
       loadTokenizationConfig();
       return;
     }
 
-    // Change plan (already subscribed)
+    // Change plan (already a paid subscriber)
     setSubscribing(true);
     setActionError(null);
     try {
@@ -206,14 +215,16 @@ export function SubscriptionDialog({ open, onOpenChange }: SubscriptionDialogPro
       return { text: t('contact_us_button'), disabled: false };
     }
 
-    const isCurrentPlan = currentPlan?.planId === planId
+    const isCurrentPlan = isPaidSubscriber
+      && currentPlan?.planId === planId
       && currentPlan?.billingCycle === billingCycle;
 
     if (isCurrentPlan) {
       return { text: t('current_plan_button'), disabled: true };
     }
 
-    if (!currentPlan?.hasActiveSubscription) {
+    // Not a paid subscriber (no subscription, or on a trial) → fresh subscribe.
+    if (!isPaidSubscriber) {
       return { text: t('subscribe_button'), disabled: false };
     }
 
@@ -242,7 +253,7 @@ export function SubscriptionDialog({ open, onOpenChange }: SubscriptionDialogPro
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="flex max-h-[90vh] w-full max-w-[calc(100vw-2rem)] flex-col overflow-hidden p-0 sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
+        <DialogContent className="flex max-h-[92vh] w-full max-w-[calc(100vw-2rem)] flex-col overflow-hidden p-0 sm:max-h-[88vh] sm:min-h-150 sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
           <DialogHeader className="px-4 pt-4 sm:px-6 sm:pt-6">
             <DialogTitle>{t('title')}</DialogTitle>
           </DialogHeader>
@@ -265,6 +276,28 @@ export function SubscriptionDialog({ open, onOpenChange }: SubscriptionDialogPro
 
             {!loading && !error && (
               <>
+                {/* Trial notice — a trial is not a paid subscription yet */}
+                {isTrial && (
+                  <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-200">
+                    {t('trial_notice')}
+                  </div>
+                )}
+
+                {/* Responsible Academy Owner */}
+                <Card className="p-4">
+                  <p className="text-sm font-semibold text-foreground">{t('responsible_owner_heading')}</p>
+                  {currentPlan?.responsibleOwner
+                    ? (
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {currentPlan.responsibleOwner.name ?? t('responsible_owner_unknown_name')}
+                          {currentPlan.responsibleOwner.email ? ` · ${currentPlan.responsibleOwner.email}` : ''}
+                        </p>
+                      )
+                    : (
+                        <p className="mt-1 text-sm text-muted-foreground">{t('responsible_owner_none')}</p>
+                      )}
+                </Card>
+
                 {/* Billing Cycle Toggle */}
                 <ButtonGroupRoot value={billingCycle} onValueChange={v => setBillingCycle(v as 'monthly' | 'annual')} className="w-full">
                   <ButtonGroupItem value="monthly" className="flex-1">
@@ -282,10 +315,21 @@ export function SubscriptionDialog({ open, onOpenChange }: SubscriptionDialogPro
                     if (!plan) {
                       return null;
                     }
-                    const isCurrentPlan = currentPlan?.planId === planId && currentPlan?.billingCycle === billingCycle;
+                    const isCurrentPlan = isPaidSubscriber && currentPlan?.planId === planId && currentPlan?.billingCycle === billingCycle;
+                    // Highlight the plan the user has chosen to subscribe to (before payment).
+                    const isSelected = !isCurrentPlan && selectedPlanId === planId;
                     const btnProps = getPlanButtonProps(planId);
                     return (
-                      <Card key={planId} className={`flex flex-col p-4 ${isCurrentPlan ? 'border-green-500 bg-green-50 dark:bg-green-950/30' : ''}`}>
+                      <Card
+                        key={planId}
+                        className={`flex flex-col p-4 transition-colors ${
+                          isCurrentPlan
+                            ? 'border-green-500 bg-green-50 dark:bg-green-950/30'
+                            : isSelected
+                              ? 'border-foreground ring-1 ring-foreground'
+                              : ''
+                        }`}
+                      >
                         <div className="flex items-start justify-between gap-2 lg:flex-col lg:items-stretch">
                           <div className="min-w-0 flex-1">
                             <h3 className="text-lg font-bold text-foreground">{plan.name}</h3>
@@ -319,8 +363,8 @@ export function SubscriptionDialog({ open, onOpenChange }: SubscriptionDialogPro
                   })}
                 </div>
 
-                {/* Payment form for first-time subscription */}
-                {selectedPlanId && !currentPlan?.hasActiveSubscription && (
+                {/* Payment form for first-time subscription (incl. trial → paid) */}
+                {showPaymentForm && (
                   <Card className="space-y-4 p-4">
                     <h3 className="text-base font-semibold">{t('payment_section_title')}</h3>
 
@@ -329,7 +373,7 @@ export function SubscriptionDialog({ open, onOpenChange }: SubscriptionDialogPro
                       <label className="mb-1 block text-sm font-medium">{t('card_number_label')}</label>
                       <div
                         id={TOKENEX_CONTAINER_ID}
-                        className="h-10 rounded-md border border-input bg-background"
+                        className="h-9 w-full overflow-hidden rounded-md border border-neutral-600 bg-neutral-100 shadow-xs dark:bg-input/30 [&_iframe]:block [&_iframe]:h-full [&_iframe]:w-full [&_iframe]:border-none [&_iframe]:bg-transparent"
                       />
                       {!iframeLoaded && tokenizationConfig && (
                         <p className="mt-1 text-xs text-muted-foreground">
@@ -391,7 +435,7 @@ export function SubscriptionDialog({ open, onOpenChange }: SubscriptionDialogPro
                   )}
 
                   {billingHistory.length > 0 && (
-                    <div className="space-y-2">
+                    <div className="max-h-[40vh] space-y-2 overflow-y-auto">
                       {paginatedHistory.map(item => (
                         <Card key={item.invoiceId} className="px-3 py-2">
                           <div className="flex items-center text-sm">
@@ -441,7 +485,7 @@ export function SubscriptionDialog({ open, onOpenChange }: SubscriptionDialogPro
 
                 {/* Bottom Action Buttons */}
                 <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-                  {currentPlan?.hasActiveSubscription && !currentPlan.isSuperAdmin && (
+                  {isPaidSubscriber && !currentPlan?.isSuperAdmin && (
                     <Button
                       variant="destructive"
                       size="sm"

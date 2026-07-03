@@ -13,6 +13,7 @@ const mockCurrentPlan: {
   currentPeriodEnd: number | null;
   isSuperAdmin: boolean;
   hasActiveSubscription: boolean;
+  responsibleOwner?: { name: string | null; email: string | null } | null;
 } = {
   planId: 'basic',
   planName: 'Basic',
@@ -21,6 +22,7 @@ const mockCurrentPlan: {
   currentPeriodEnd: null,
   isSuperAdmin: false,
   hasActiveSubscription: true,
+  responsibleOwner: { name: 'Owen Er', email: 'owner@example.com' },
 };
 
 const mockBillingHistory = [
@@ -80,6 +82,10 @@ vi.mock('next-intl', () => ({
       monthly_button: 'Monthly',
       annual_button: 'Annual',
       billing_history_heading: 'My Billing History',
+      responsible_owner_heading: 'Responsible Academy Owner',
+      responsible_owner_none: 'No Academy Owner is assigned. Assign one in Clerk to manage billing.',
+      responsible_owner_unknown_name: 'Academy Owner',
+      trial_notice: 'You\'re on a free trial. Choose a plan and subscribe to continue access.',
       table_date: 'Date',
       table_method: 'Method',
       table_payment_id: 'Payment ID',
@@ -151,6 +157,94 @@ describe('SubscriptionDialog', () => {
     const dialog = page.getByRole('dialog');
 
     expect(dialog).toBeTruthy();
+  });
+
+  it('should display the responsible academy owner name and email', async () => {
+    render(
+      <SubscriptionDialog
+        open={true}
+        onOpenChange={mockHandlers.onOpenChange}
+      />,
+    );
+
+    await expect.element(page.getByText('Responsible Academy Owner')).toBeInTheDocument();
+    await expect.element(page.getByText(/Owen Er/)).toBeInTheDocument();
+    await expect.element(page.getByText(/owner@example.com/)).toBeInTheDocument();
+  });
+
+  it('should show the no-owner message when no academy owner is assigned', async () => {
+    mockSubscriptionData = {
+      ...mockSubscriptionData,
+      currentPlan: { ...mockCurrentPlan, responsibleOwner: null },
+    };
+
+    render(
+      <SubscriptionDialog
+        open={true}
+        onOpenChange={mockHandlers.onOpenChange}
+      />,
+    );
+
+    await expect.element(page.getByText(/No Academy Owner is assigned/)).toBeInTheDocument();
+  });
+
+  describe('trial state', () => {
+    const trialPlan = {
+      ...mockCurrentPlan,
+      status: 'trial',
+      planId: null, // a trial is not tied to a plan
+      billingCycle: null,
+      hasActiveSubscription: true, // trial counts as active for the access gate
+    };
+
+    beforeEach(() => {
+      mockSubscriptionData = {
+        ...mockSubscriptionData,
+        currentPlan: trialPlan,
+      };
+    });
+
+    it('shows a trial notice banner (and no per-plan Trial badge)', async () => {
+      render(<SubscriptionDialog open={true} onOpenChange={mockHandlers.onOpenChange} />);
+
+      await expect.element(page.getByText(/free trial/i)).toBeInTheDocument();
+      // A trial is plan-agnostic: no "Trial" badge on any plan card.
+      expect(page.getByText('Trial', { exact: true }).elements().length).toBe(0);
+    });
+
+    it('does NOT lock the trial plan as Current Plan and offers Subscribe instead', async () => {
+      render(<SubscriptionDialog open={true} onOpenChange={mockHandlers.onOpenChange} />);
+
+      // No plan should show the locked "Current Plan" button while on trial.
+      expect(page.getByRole('button', { name: /current plan/i }).elements().length).toBe(0);
+
+      // Every plan offers Subscribe (selectable).
+      const subscribeButtons = page.getByRole('button', { name: /^subscribe$/i }).elements();
+
+      expect(subscribeButtons.length).toBeGreaterThan(0);
+      expect(subscribeButtons.every(b => !b.hasAttribute('disabled'))).toBe(true);
+    });
+
+    it('does not show the cancel button while on trial (no paid subscription)', () => {
+      render(<SubscriptionDialog open={true} onOpenChange={mockHandlers.onOpenChange} />);
+
+      expect(page.getByRole('button', { name: /cancel membership/i }).elements().length).toBe(0);
+    });
+
+    it('highlights the chosen plan card when its Subscribe button is clicked', async () => {
+      render(<SubscriptionDialog open={true} onOpenChange={mockHandlers.onOpenChange} />);
+
+      const subscribeButtons = page.getByRole('button', { name: /^subscribe$/i }).elements();
+      const firstButton = subscribeButtons[0] as HTMLElement;
+      // The plan card is an ancestor of its Subscribe button.
+      const card = firstButton.closest('[data-slot="card"]') as HTMLElement;
+
+      expect(card.className).not.toMatch(/ring-foreground/);
+
+      await userEvent.click(firstButton);
+
+      expect(card.className).toMatch(/ring-foreground/);
+    });
   });
 
   it('should display dialog title', () => {

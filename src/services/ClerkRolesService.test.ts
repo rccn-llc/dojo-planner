@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createOrganizationRole,
   deleteOrganizationRole,
+  getAcademyOwner,
   getOrganizationPermission,
   getOrganizationPermissions,
   getOrganizationRole,
@@ -376,6 +377,83 @@ describe('ClerkRolesService', () => {
       });
 
       await expect(getOrganizationPermission('nonexistent')).rejects.toThrow('Clerk API error: 404 - Permission not found');
+    });
+  });
+
+  describe('getAcademyOwner', () => {
+    const orgId = 'test-org-123';
+
+    it('should return the academy owner when one exists', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          data: [
+            { id: 'mem-1', role: 'org:admin', public_user_data: { user_id: 'user-admin', identifier: 'admin@example.com', first_name: 'Ad', last_name: 'Min' } },
+            { id: 'mem-2', role: 'org:academy_owner', public_user_data: { user_id: 'user-owner', identifier: 'owner@example.com', first_name: 'Owen', last_name: 'Er' } },
+          ],
+          total_count: 2,
+        }),
+      });
+
+      const result = await getAcademyOwner(orgId);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `https://api.clerk.com/v1/organizations/${orgId}/memberships?limit=100`,
+        expect.objectContaining({ method: 'GET' }),
+      );
+      expect(result).toEqual({
+        clerkUserId: 'user-owner',
+        email: 'owner@example.com',
+        firstName: 'Owen',
+        lastName: 'Er',
+      });
+    });
+
+    it('should return null when no academy owner exists', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          data: [
+            { id: 'mem-1', role: 'org:admin', public_user_data: { user_id: 'user-admin', identifier: 'admin@example.com' } },
+          ],
+          total_count: 1,
+        }),
+      });
+
+      expect(await getAcademyOwner(orgId)).toBeNull();
+    });
+
+    it('should ignore academy owner invitations without public_user_data (not yet accepted)', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          data: [
+            { id: 'mem-2', role: 'org:academy_owner', public_user_data: null },
+          ],
+          total_count: 1,
+        }),
+      });
+
+      expect(await getAcademyOwner(orgId)).toBeNull();
+    });
+
+    it('should default missing name fields to null and email to empty string', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          data: [
+            { id: 'mem-2', role: 'org:academy_owner', public_user_data: { user_id: 'user-owner' } },
+          ],
+          total_count: 1,
+        }),
+      });
+
+      expect(await getAcademyOwner(orgId)).toEqual({
+        clerkUserId: 'user-owner',
+        email: '',
+        firstName: null,
+        lastName: null,
+      });
     });
   });
 });
