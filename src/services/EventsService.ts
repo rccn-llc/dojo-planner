@@ -58,11 +58,11 @@ export type EventData = {
  * Get all events for an organization with their sessions, billing, and tags
  */
 export async function getOrganizationEvents(organizationId: string): Promise<EventData[]> {
-  // Fetch all events for the organization
+  // Fetch all active events for the organization (exclude soft-deleted)
   const events = await db
     .select()
     .from(eventSchema)
-    .where(eq(eventSchema.organizationId, organizationId));
+    .where(and(eq(eventSchema.organizationId, organizationId), eq(eventSchema.isActive, true)));
 
   if (events.length === 0) {
     return [];

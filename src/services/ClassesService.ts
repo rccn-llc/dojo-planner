@@ -72,11 +72,11 @@ export type ClassData = {
  * Get all classes for an organization with their schedules, tags, and exceptions
  */
 export async function getOrganizationClasses(organizationId: string): Promise<ClassData[]> {
-  // Fetch all classes for the organization
+  // Fetch all active classes for the organization (exclude soft-deleted)
   const classes = await db
     .select()
     .from(classSchema)
-    .where(eq(classSchema.organizationId, organizationId));
+    .where(and(eq(classSchema.organizationId, organizationId), eq(classSchema.isActive, true)));
 
   if (classes.length === 0) {
     return [];

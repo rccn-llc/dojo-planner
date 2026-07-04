@@ -185,6 +185,7 @@ export async function getOrganizationWaiverTemplates(organizationId: string): Pr
     .where(and(
       eq(waiverTemplateSchema.organizationId, organizationId),
       isNull(waiverTemplateSchema.parentId),
+      eq(waiverTemplateSchema.isActive, true),
     ));
 
   if (templates.length === 0) {
@@ -435,14 +436,26 @@ export async function deleteWaiverTemplate(templateId: string, organizationId: s
     .from(signedWaiverSchema)
     .where(eq(signedWaiverSchema.waiverTemplateId, templateId));
 
-  if (signedWaivers.length > 0) {
-    throw new Error('Cannot delete waiver template that has signed waivers. Deactivate it instead.');
-  }
-
-  // Remove membership associations first
+  // Remove membership associations first — the template should no longer be
+  // offered for new memberships regardless of which delete path we take.
   await db.delete(membershipWaiverSchema).where(eq(membershipWaiverSchema.waiverTemplateId, templateId));
 
-  // Delete archive versions and the root template
+  if (signedWaivers.length > 0) {
+    // Signed waivers are legally immutable and reference this template, so we
+    // cannot hard-delete it. Soft-delete instead: mark the root (and its
+    // archive versions) inactive so it disappears from the templates list
+    // while preserving the records the signed waivers point at.
+    await db
+      .update(waiverTemplateSchema)
+      .set({ isActive: false })
+      .where(and(
+        eq(waiverTemplateSchema.organizationId, organizationId),
+        or(eq(waiverTemplateSchema.id, templateId), eq(waiverTemplateSchema.parentId, templateId)),
+      ));
+    return;
+  }
+
+  // No signed waivers — safe to hard-delete archive versions and the root template.
   await db
     .delete(waiverTemplateSchema)
     .where(and(
