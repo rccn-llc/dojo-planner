@@ -47,8 +47,7 @@ export const InviteStaffFormContent = ({
     = data.firstName.trim() !== ''
       && data.lastName.trim() !== ''
       && isValidEmail(data.email)
-      && data.roleKey !== null
-      && data.phone.trim() !== '';
+      && data.roleKey !== null;
 
   // Find the selected role to display its description
   const selectedRole = roles.find(role => role.key === data.roleKey);
@@ -58,7 +57,6 @@ export const InviteStaffFormContent = ({
   const isLastNameInvalid = touched.lastName && fieldErrors.lastName;
   const isEmailInvalid = touched.email && fieldErrors.email;
   const isRoleInvalid = touched.roleKey && fieldErrors.roleKey;
-  const isPhoneInvalid = touched.phone && fieldErrors.phone;
 
   return (
     <div className="space-y-6">
@@ -187,26 +185,6 @@ export const InviteStaffFormContent = ({
           <p className="text-xs text-muted-foreground">
             {selectedRole.description}
           </p>
-        )}
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor="invite-staff-phone">
-          {t('phone_label')}
-        </Label>
-        <Input
-          id="invite-staff-phone"
-          type="tel"
-          data-testid="invite-staff-phone"
-          placeholder={t('phone_placeholder')}
-          value={data.phone}
-          onChange={e => onUpdate({ phone: e.target.value })}
-          onBlur={() => onFieldBlur('phone')}
-          disabled={isLoading}
-          error={isPhoneInvalid}
-        />
-        {isPhoneInvalid && (
-          <p className="text-xs text-destructive">{t('phone_error')}</p>
         )}
       </div>
 

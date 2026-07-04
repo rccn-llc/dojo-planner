@@ -124,7 +124,6 @@ export async function inviteStaffMember(params: {
   roleKey: string;
   firstName?: string;
   lastName?: string;
-  phone?: string;
 }): Promise<InviteStaffResult> {
   try {
     const { userId, orgId } = await auth();
@@ -149,7 +148,6 @@ export async function inviteStaffMember(params: {
       publicMetadata: {
         invitedFirstName: params.firstName,
         invitedLastName: params.lastName,
-        invitedPhone: params.phone,
       },
     });
 
@@ -206,7 +204,6 @@ export async function updateStaffMember(params: {
   roleKey: string;
   firstName?: string;
   lastName?: string;
-  phone?: string;
 }): Promise<UpdateStaffResult> {
   try {
     const { userId: currentUserId, orgId } = await auth();
@@ -227,13 +224,10 @@ export async function updateStaffMember(params: {
       role: params.roleKey,
     });
 
-    // Update the user's profile metadata (firstName, lastName, phone)
+    // Update the user's profile (firstName, lastName)
     await authClient.users.updateUser(params.userId, {
       firstName: params.firstName,
       lastName: params.lastName,
-      publicMetadata: {
-        phone: params.phone,
-      },
     });
 
     console.info('[updateStaffMember] Staff member updated successfully:', {

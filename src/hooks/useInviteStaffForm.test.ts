@@ -28,7 +28,6 @@ describe('useInviteStaffForm', () => {
       expect(result.current.data.lastName).toBe('');
       expect(result.current.data.email).toBe('');
       expect(result.current.data.roleKey).toBeNull();
-      expect(result.current.data.phone).toBe('');
     });
 
     it('should have no error initially', async () => {
@@ -92,16 +91,6 @@ describe('useInviteStaffForm', () => {
       expect(result.current.data.roleKey).toBe('org:admin');
     });
 
-    it('should update phone', async () => {
-      const { result, act } = await renderHook(() => useInviteStaffForm());
-
-      act(() => {
-        result.current.updateData({ phone: '555-123-4567' });
-      });
-
-      expect(result.current.data.phone).toBe('555-123-4567');
-    });
-
     it('should update multiple fields at once', async () => {
       const { result, act } = await renderHook(() => useInviteStaffForm());
 
@@ -150,7 +139,6 @@ describe('useInviteStaffForm', () => {
           lastName: 'Doe',
           email: 'john@example.com',
           roleKey: 'org:admin',
-          phone: '555-123-4567',
         });
       });
 
@@ -165,7 +153,6 @@ describe('useInviteStaffForm', () => {
           firstName: 'John',
           email: 'john@example.com',
           roleKey: 'org:admin',
-          phone: '555-123-4567',
         });
       });
 
@@ -181,7 +168,6 @@ describe('useInviteStaffForm', () => {
           lastName: 'Doe',
           email: 'invalid-email',
           roleKey: 'org:admin',
-          phone: '555-123-4567',
         });
       });
 
@@ -196,22 +182,6 @@ describe('useInviteStaffForm', () => {
           firstName: 'John',
           lastName: 'Doe',
           email: 'john@example.com',
-          phone: '555-123-4567',
-        });
-      });
-
-      expect(result.current.isValid()).toBe(false);
-    });
-
-    it('should return false if phone is missing', async () => {
-      const { result, act } = await renderHook(() => useInviteStaffForm());
-
-      act(() => {
-        result.current.updateData({
-          firstName: 'John',
-          lastName: 'Doe',
-          email: 'john@example.com',
-          roleKey: 'org:admin',
         });
       });
 
@@ -227,7 +197,6 @@ describe('useInviteStaffForm', () => {
           lastName: 'Doe',
           email: 'john@example.com',
           roleKey: 'org:admin',
-          phone: '555-123-4567',
         });
       });
 
@@ -241,7 +210,6 @@ describe('useInviteStaffForm', () => {
         firstName: 'John',
         lastName: 'Doe',
         roleKey: 'org:admin',
-        phone: '555-123-4567',
       };
 
       // Invalid emails
@@ -276,7 +244,6 @@ describe('useInviteStaffForm', () => {
           lastName: 'Doe',
           email: 'john@example.com',
           roleKey: 'org:admin',
-          phone: '555-123-4567',
         });
       });
 
@@ -288,7 +255,6 @@ describe('useInviteStaffForm', () => {
       expect(result.current.data.lastName).toBe('');
       expect(result.current.data.email).toBe('');
       expect(result.current.data.roleKey).toBeNull();
-      expect(result.current.data.phone).toBe('');
     });
 
     it('should clear error on reset', async () => {
@@ -392,7 +358,6 @@ describe('useInviteStaffForm', () => {
       expect(result.current.touched.lastName).toBe(false);
       expect(result.current.touched.email).toBe(false);
       expect(result.current.touched.roleKey).toBe(false);
-      expect(result.current.touched.phone).toBe(false);
     });
 
     it('should set field as touched', async () => {
@@ -482,7 +447,6 @@ describe('useInviteStaffForm', () => {
         lastName: 'Doe',
         email: 'john@example.com',
         roleKey: 'org:admin',
-        phone: '555-123-4567',
       };
 
       const { result } = await renderHook(() => useInviteStaffForm(initialData));
@@ -502,14 +466,12 @@ describe('InviteStaffFormData type', () => {
       lastName: 'Doe',
       email: 'john@example.com',
       roleKey: 'org:admin',
-      phone: '555-123-4567',
     };
 
     expect(testData.firstName).toBe('John');
     expect(testData.lastName).toBe('Doe');
     expect(testData.email).toBe('john@example.com');
     expect(testData.roleKey).toBe('org:admin');
-    expect(testData.phone).toBe('555-123-4567');
   });
 
   it('should allow null roleKey', () => {
@@ -518,7 +480,6 @@ describe('InviteStaffFormData type', () => {
       lastName: '',
       email: '',
       roleKey: null,
-      phone: '',
     };
 
     expect(testData.roleKey).toBeNull();
@@ -530,12 +491,10 @@ describe('InviteStaffFormData type', () => {
       lastName: '',
       email: '',
       roleKey: null,
-      phone: '',
     };
 
     expect(testData.firstName).toBe('');
     expect(testData.lastName).toBe('');
     expect(testData.email).toBe('');
-    expect(testData.phone).toBe('');
   });
 });

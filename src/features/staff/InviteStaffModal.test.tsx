@@ -104,13 +104,11 @@ describe('InviteStaffModal', () => {
       const firstNameInput = page.getByTestId('invite-staff-first-name');
       const lastNameInput = page.getByTestId('invite-staff-last-name');
       const emailInput = page.getByTestId('invite-staff-email');
-      const phoneInput = page.getByTestId('invite-staff-phone');
       const roleSelect = page.getByTestId('invite-staff-role');
 
       expect(firstNameInput).toBeTruthy();
       expect(lastNameInput).toBeTruthy();
       expect(emailInput).toBeTruthy();
-      expect(phoneInput).toBeTruthy();
       expect(roleSelect).toBeTruthy();
     });
 
@@ -146,13 +144,9 @@ describe('InviteStaffModal', () => {
       const emailInput = page.getByTestId('invite-staff-email');
       await userEvent.fill(emailInput, 'john@example.com');
 
-      const phoneInput = page.getByTestId('invite-staff-phone');
-      await userEvent.fill(phoneInput, '555-123-4567');
-
       expect(firstNameInput.element()).toHaveProperty('value', 'John');
       expect(lastNameInput.element()).toHaveProperty('value', 'Doe');
       expect(emailInput.element()).toHaveProperty('value', 'john@example.com');
-      expect(phoneInput.element()).toHaveProperty('value', '555-123-4567');
     });
   });
 
@@ -328,9 +322,6 @@ describe('InviteStaffModal', () => {
       const emailInput = page.getByTestId('invite-staff-email');
       await userEvent.fill(emailInput, 'john@example.com');
 
-      const phoneInput = page.getByTestId('invite-staff-phone');
-      await userEvent.fill(phoneInput, '555-123-4567');
-
       // Select a role
       const roleSelect = page.getByTestId('invite-staff-role');
       await userEvent.click(roleSelect);
@@ -349,7 +340,6 @@ describe('InviteStaffModal', () => {
           roleKey: 'org:admin',
           firstName: 'John',
           lastName: 'Doe',
-          phone: '555-123-4567',
         });
       });
     });
@@ -371,7 +361,6 @@ describe('InviteStaffModal', () => {
       await userEvent.fill(page.getByTestId('invite-staff-first-name'), 'John');
       await userEvent.fill(page.getByTestId('invite-staff-last-name'), 'Doe');
       await userEvent.fill(page.getByTestId('invite-staff-email'), 'john@example.com');
-      await userEvent.fill(page.getByTestId('invite-staff-phone'), '555-123-4567');
 
       // Select a role
       await userEvent.click(page.getByTestId('invite-staff-role'));
@@ -409,7 +398,6 @@ describe('InviteStaffModal', () => {
       await userEvent.fill(page.getByTestId('invite-staff-first-name'), 'John');
       await userEvent.fill(page.getByTestId('invite-staff-last-name'), 'Doe');
       await userEvent.fill(page.getByTestId('invite-staff-email'), 'john@example.com');
-      await userEvent.fill(page.getByTestId('invite-staff-phone'), '555-123-4567');
 
       // Select a role
       await userEvent.click(page.getByTestId('invite-staff-role'));

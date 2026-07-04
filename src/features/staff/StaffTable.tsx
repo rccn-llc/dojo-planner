@@ -25,7 +25,6 @@ type StaffMember = {
   emailAddress: string;
   role: string;
   status: 'Active' | 'Invitation sent' | 'Inactive';
-  phone?: string | null;
 };
 
 type StaffTableProps = {
@@ -81,8 +80,7 @@ export function StaffTable({
       const matchesSearch = filters.search === ''
         || (member.firstName?.toLowerCase().includes(searchLower))
         || (member.lastName?.toLowerCase().includes(searchLower))
-        || member.email.toLowerCase().includes(searchLower)
-        || (member.phone?.toLowerCase().includes(searchLower));
+        || member.email.toLowerCase().includes(searchLower);
 
       // Role filter
       const matchesRole = filters.role === 'all' || member.role === filters.role;
@@ -99,7 +97,6 @@ export function StaffTable({
         lastName: staff.lastName || '',
         email: staff.email,
         roleKey: staff.role,
-        phone: staff.phone || '',
       });
     } else {
       console.warn('[Staff] Edit staff action triggered for staff ID:', staff.id);
