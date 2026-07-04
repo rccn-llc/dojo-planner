@@ -35,14 +35,23 @@ vi.mock('next-intl', () => ({
 vi.mock('@/libs/Orpc', () => ({
   client: {
     waivers: {
-      listActiveTemplates: {
-        query: vi.fn().mockResolvedValue({
-          templates: [
-            { id: 'waiver-1', name: 'Standard Adult Waiver', version: 1 },
-            { id: 'waiver-2', name: 'Kids Waiver', version: 1 },
-          ],
-        }),
-      },
+      listActiveTemplates: vi.fn().mockResolvedValue({
+        templates: [
+          { id: 'waiver-1', name: 'Standard Adult Waiver', version: 1 },
+          { id: 'waiver-2', name: 'Kids Waiver', version: 1 },
+        ],
+      }),
+    },
+    programs: {
+      list: vi.fn().mockResolvedValue({
+        programs: [
+          { id: 'prog-1', name: 'Adult Brazilian Jiu-jitsu', slug: 'adult-bjj', isActive: true },
+          { id: 'prog-2', name: 'Kids Program', slug: 'kids', isActive: true },
+          { id: 'prog-3', name: 'Competition Team', slug: 'competition', isActive: true },
+          { id: 'prog-4', name: 'Judo Fundamentals', slug: 'judo', isActive: true },
+          { id: 'prog-5', name: 'Wrestling Fundamentals', slug: 'wrestling', isActive: false },
+        ],
+      }),
     },
   },
 }));
@@ -270,7 +279,7 @@ describe('MembershipProgramAssociationStep', () => {
     expect(errorMessage).toBeTruthy();
   });
 
-  it('should call onUpdate when a program is selected', async () => {
+  it('should call onUpdate with the real program id when a program is selected', async () => {
     render(
       <MembershipProgramAssociationStep
         data={mockData}
@@ -281,22 +290,20 @@ describe('MembershipProgramAssociationStep', () => {
       />,
     );
 
-    // Find the select trigger and click it
-    const selectTrigger = document.querySelector('[role="combobox"]');
-    if (selectTrigger) {
-      await userEvent.click(selectTrigger);
+    // Wait for the async programs.list() fetch to enable the program trigger
+    const programTrigger = page.getByRole('combobox').first();
 
-      // Wait for dropdown to open and select an option
-      const option = page.getByText('Adult Brazilian Jiu-jitsu');
-      if (option) {
-        await userEvent.click(option);
+    await expect.element(programTrigger).toBeEnabled();
 
-        expect(mockHandlers.onUpdate).toHaveBeenCalledWith({
-          associatedProgramId: '1',
-          associatedProgramName: 'Adult Brazilian Jiu-jitsu',
-        });
-      }
-    }
+    await userEvent.click(programTrigger);
+
+    const option = page.getByRole('option', { name: 'Adult Brazilian Jiu-jitsu' });
+    await userEvent.click(option);
+
+    expect(mockHandlers.onUpdate).toHaveBeenCalledWith({
+      associatedProgramId: 'prog-1',
+      associatedProgramName: 'Adult Brazilian Jiu-jitsu',
+    });
   });
 
   it('should display helper text', () => {
@@ -315,7 +322,7 @@ describe('MembershipProgramAssociationStep', () => {
     expect(helpText).toBeTruthy();
   });
 
-  it('should only show active programs in dropdown', async () => {
+  it('should only show active programs from the API in the dropdown', async () => {
     render(
       <MembershipProgramAssociationStep
         data={mockData}
@@ -326,25 +333,24 @@ describe('MembershipProgramAssociationStep', () => {
       />,
     );
 
-    // Open the dropdown
-    const selectTrigger = document.querySelector('[role="combobox"]');
-    if (selectTrigger) {
-      await userEvent.click(selectTrigger);
+    // Wait for the async programs.list() fetch to enable the program trigger
+    const programTrigger = page.getByRole('combobox').first();
 
-      // Active programs should be visible
-      const activeProgram = page.getByText('Adult Brazilian Jiu-jitsu');
+    await expect.element(programTrigger).toBeEnabled();
 
-      expect(activeProgram).toBeTruthy();
+    await userEvent.click(programTrigger);
 
-      // Inactive program (Wrestling Fundamentals) should NOT be visible
-      const allOptions = Array.from(document.querySelectorAll('[role="option"]'));
-      const wrestlingOption = allOptions.find(opt => opt.textContent?.includes('Wrestling Fundamentals'));
+    // Active program should be visible
+    await expect.element(page.getByRole('option', { name: 'Adult Brazilian Jiu-jitsu' })).toBeInTheDocument();
 
-      expect(wrestlingOption).toBeUndefined();
-    }
+    // Inactive program (Wrestling Fundamentals) is filtered out
+    const allOptions = Array.from(document.querySelectorAll('[role="option"]'));
+    const wrestlingOption = allOptions.find(opt => opt.textContent?.includes('Wrestling Fundamentals'));
+
+    expect(wrestlingOption).toBeUndefined();
   });
 
-  it('should show all active programs in dropdown', async () => {
+  it('should show all active programs returned by the API', async () => {
     render(
       <MembershipProgramAssociationStep
         data={mockData}
@@ -355,16 +361,38 @@ describe('MembershipProgramAssociationStep', () => {
       />,
     );
 
-    // Open the dropdown
-    const selectTrigger = document.querySelector('[role="combobox"]');
-    if (selectTrigger) {
-      await userEvent.click(selectTrigger);
+    // Wait for the async programs.list() fetch to enable the program trigger
+    const programTrigger = page.getByRole('combobox').first();
 
-      // Count the options - should be 4 active programs (not 5 total)
-      const allOptions = Array.from(document.querySelectorAll('[role="option"]'));
+    await expect.element(programTrigger).toBeEnabled();
 
-      expect(allOptions.length).toBe(4);
-    }
+    await userEvent.click(programTrigger);
+
+    // 4 active programs of the 5 returned (Wrestling is inactive)
+    await expect.element(page.getByRole('option', { name: 'Adult Brazilian Jiu-jitsu' })).toBeInTheDocument();
+
+    const allOptions = Array.from(document.querySelectorAll('[role="option"]'));
+
+    expect(allOptions.length).toBe(4);
+  });
+
+  it('should not contain any hardcoded mock program ids', () => {
+    // Regression guard for the FK-violation 500 bug: the dropdown must be
+    // sourced from the API, never from a hardcoded integer-id list.
+    render(
+      <MembershipProgramAssociationStep
+        data={mockData}
+        onUpdate={mockHandlers.onUpdate}
+        onNext={mockHandlers.onNext}
+        onBack={mockHandlers.onBack}
+        onCancel={mockHandlers.onCancel}
+      />,
+    );
+
+    const legacyMockOption = Array.from(document.querySelectorAll('[role="option"]'))
+      .find(opt => opt.getAttribute('data-value') === '1');
+
+    expect(legacyMockOption).toBeUndefined();
   });
 
   it('should render waiver dropdown', () => {

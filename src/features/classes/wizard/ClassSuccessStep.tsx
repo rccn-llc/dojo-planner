@@ -2,8 +2,10 @@
 
 import type { AddClassWizardData } from '@/hooks/useAddClassWizard';
 import type { Tag } from '@/hooks/useTagsCache';
+import { useOrganization } from '@clerk/nextjs';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
+import { useInstructorsCache } from '@/hooks/useInstructorsCache';
 
 type ClassSuccessStepProps = {
   data: AddClassWizardData;
@@ -11,34 +13,18 @@ type ClassSuccessStepProps = {
   classTags: Tag[];
 };
 
-const MOCK_PROGRAMS: Record<string, string> = {
-  'adult-bjj': 'Adult Brazilian Jiu-Jitsu',
-  'kids-bjj': 'Kids Brazilian Jiu-Jitsu',
-  'womens-bjj': 'Women\'s Brazilian Jiu-Jitsu',
-  'competition': 'Competition Team',
-  'judo': 'Judo',
-  'wrestling': 'Wrestling',
-};
-
-const MOCK_STAFF: Record<string, string> = {
-  'collin-grayson': 'Collin Grayson',
-  'coach-alex': 'Coach Alex',
-  'professor-jessica': 'Professor Jessica',
-  'professor-joao': 'Professor Joao',
-  'coach-liza': 'Coach Liza',
-  'professor-ivan': 'Professor Ivan',
-};
-
 export const ClassSuccessStep = ({ data, onDone, classTags }: ClassSuccessStepProps) => {
   const t = useTranslations('AddClassWizard.ClassSuccessStep');
+  const { organization } = useOrganization();
+  const { instructorLookup } = useInstructorsCache(organization?.id);
 
   const selectedTags = classTags.filter(tag => data.tags.includes(tag.id));
-  const programName = MOCK_PROGRAMS[data.program] || data.program;
+  const programName = data.programName || data.program;
 
   // Get unique instructors from all schedule instances
   const getUniqueInstructors = () => {
     const staffIds = [...new Set(data.schedule.instances.flatMap(i => [i.staffMember, i.assistantStaff].filter(Boolean)))];
-    return staffIds.map(id => MOCK_STAFF[id] || id).filter(Boolean);
+    return staffIds.map(id => instructorLookup.get(id)?.name || id).filter(Boolean);
   };
 
   const formatScheduleSummary = () => {

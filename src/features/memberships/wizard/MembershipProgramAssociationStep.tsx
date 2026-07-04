@@ -19,6 +19,11 @@ type WaiverOption = {
   version: number;
 };
 
+type ProgramOption = {
+  id: string;
+  name: string;
+};
+
 type MembershipProgramAssociationStepProps = {
   data: AddMembershipWizardData;
   onUpdate: (updates: Partial<AddMembershipWizardData>) => void;
@@ -27,18 +32,6 @@ type MembershipProgramAssociationStepProps = {
   onCancel: () => void;
   error?: string | null;
 };
-
-// Mock programs data - in real app, this would come from API
-const MOCK_PROGRAMS = [
-  { id: '1', name: 'Adult Brazilian Jiu-jitsu', status: 'active' as const },
-  { id: '2', name: 'Kids Program', status: 'active' as const },
-  { id: '3', name: 'Competition Team', status: 'active' as const },
-  { id: '4', name: 'Judo Fundamentals', status: 'active' as const },
-  { id: '5', name: 'Wrestling Fundamentals', status: 'inactive' as const },
-];
-
-// Only show active programs in the dropdown
-const ACTIVE_PROGRAMS = MOCK_PROGRAMS.filter(p => p.status === 'active');
 
 export const MembershipProgramAssociationStep = ({
   data,
@@ -51,6 +44,8 @@ export const MembershipProgramAssociationStep = ({
   const t = useTranslations('AddMembershipWizard.MembershipProgramAssociationStep');
   const [waiverOptions, setWaiverOptions] = useState<WaiverOption[]>([]);
   const [waiversLoading, setWaiversLoading] = useState(true);
+  const [programOptions, setProgramOptions] = useState<ProgramOption[]>([]);
+  const [programsLoading, setProgramsLoading] = useState(true);
 
   useEffect(() => {
     const fetchWaivers = async () => {
@@ -73,8 +68,27 @@ export const MembershipProgramAssociationStep = ({
     fetchWaivers();
   }, []);
 
+  useEffect(() => {
+    const fetchPrograms = async () => {
+      try {
+        setProgramsLoading(true);
+        const result = await client.programs.list();
+        const options: ProgramOption[] = (result.programs || [])
+          .filter(program => program.isActive)
+          .map(program => ({ id: program.id, name: program.name }));
+        setProgramOptions(options);
+      } catch {
+        setProgramOptions([]);
+      } finally {
+        setProgramsLoading(false);
+      }
+    };
+
+    fetchPrograms();
+  }, []);
+
   const handleProgramChange = (programId: string) => {
-    const selectedProgram = ACTIVE_PROGRAMS.find(p => p.id === programId);
+    const selectedProgram = programOptions.find(p => p.id === programId);
     onUpdate({
       associatedProgramId: programId,
       associatedProgramName: selectedProgram?.name ?? null,
@@ -113,12 +127,13 @@ export const MembershipProgramAssociationStep = ({
           <Select
             value={data.associatedProgramId ?? ''}
             onValueChange={handleProgramChange}
+            disabled={programsLoading}
           >
             <SelectTrigger>
-              <SelectValue placeholder={t('program_placeholder')} />
+              <SelectValue placeholder={programsLoading ? t('program_loading') : t('program_placeholder')} />
             </SelectTrigger>
             <SelectContent>
-              {ACTIVE_PROGRAMS.map(program => (
+              {programOptions.map(program => (
                 <SelectItem key={program.id} value={program.id}>
                   {program.name}
                 </SelectItem>

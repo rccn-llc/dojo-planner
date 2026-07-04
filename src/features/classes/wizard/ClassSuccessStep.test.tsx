@@ -39,6 +39,27 @@ vi.mock('next-intl', () => ({
   },
 }));
 
+const mockInstructors = [
+  { id: 'ins-1', name: 'Ann Lee', photoUrl: null },
+  { id: 'ins-2', name: 'Bob Ng', photoUrl: null },
+  { id: 'coach-alex', name: 'Coach Alex', photoUrl: null },
+];
+
+vi.mock('@clerk/nextjs', () => ({
+  useOrganization: () => ({ organization: { id: 'test-org' } }),
+}));
+
+vi.mock('@/hooks/useInstructorsCache', () => ({
+  useInstructorsCache: () => ({
+    instructors: mockInstructors,
+    instructorLookup: new Map(mockInstructors.map(i => [i.id, i])),
+    loading: false,
+    error: null,
+    revalidate: vi.fn(),
+  }),
+  invalidateInstructorsCache: vi.fn(),
+}));
+
 describe('ClassSuccessStep', () => {
   const baseInstance = createMockScheduleInstance({
     timeHour: 6,
@@ -51,7 +72,8 @@ describe('ClassSuccessStep', () => {
 
   const mockData = createMockWizardData({
     className: 'Morning BJJ',
-    program: 'adult-bjj',
+    program: 'prog-1',
+    programName: 'Adult Brazilian Jiu-Jitsu',
     description: 'A great class for adults',
     schedule: {
       instances: [
@@ -232,10 +254,11 @@ describe('ClassSuccessStep', () => {
     expect(mockOnDone).toHaveBeenCalled();
   });
 
-  it('should handle unknown program gracefully', () => {
+  it('should fall back to the raw program value when no display name is set', () => {
     const dataWithUnknownProgram: AddClassWizardData = {
       ...mockData,
       program: 'unknown-program',
+      programName: '',
     };
 
     render(<ClassSuccessStep data={dataWithUnknownProgram} onDone={mockOnDone} classTags={mockClassTags} />);

@@ -25,6 +25,7 @@ import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EditEventModal } from '@/features/events/details/EditEventModal';
 import { invalidateEventsCache, useEventsCache } from '@/hooks/useEventsCache';
+import { useInstructorsCache } from '@/hooks/useInstructorsCache';
 import { client } from '@/libs/Orpc';
 import { formatPrice, getInitials } from './eventData';
 
@@ -42,10 +43,23 @@ function formatSessionTime(startTime: string, endTime: string): string {
   return `${formatTime(startTime)} - ${formatTime(endTime)}`;
 }
 
-function transformEventData(event: EventData): EventDetailData {
+function transformEventData(
+  event: EventData,
+  instructorLookup?: Map<string, { name: string; photoUrl: string | null }>,
+): EventDetailData {
   const sortedSessions = [...event.sessions].sort(
     (a, b) => new Date(a.sessionDate).getTime() - new Date(b.sessionDate).getTime(),
   );
+
+  // Resolve unique session instructors to display cards.
+  const seenInstructors = new Set<string>();
+  const instructors = sortedSessions
+    .map(s => s.instructorClerkId)
+    .filter((id): id is string => !!id && !seenInstructors.has(id) && (seenInstructors.add(id), true))
+    .map((id) => {
+      const match = instructorLookup?.get(id);
+      return { id, name: match?.name ?? 'Instructor', photoUrl: match?.photoUrl ?? '' };
+    });
 
   const startDate = sortedSessions.length > 0 ? formatSessionDate(new Date(sortedSessions[0]!.sessionDate)) : '';
   const endDate = sortedSessions.length > 0 ? formatSessionDate(new Date(sortedSessions[sortedSessions.length - 1]!.sessionDate)) : '';
@@ -65,7 +79,7 @@ function transformEventData(event: EventData): EventDetailData {
       time: formatSessionTime(s.startTime, s.endTime),
     })),
     location: '',
-    instructors: [],
+    instructors,
     price: regularBilling?.price ?? (event.billing[0]?.price ?? null),
     maxCapacity: event.maxCapacity,
     currentRegistrations: 0,
@@ -89,6 +103,7 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
   const searchParams = useSearchParams();
   const { organization } = useOrganization();
   const { events, loading } = useEventsCache(organization?.id);
+  const { instructorLookup } = useInstructorsCache(organization?.id);
 
   // Get the view param to preserve when navigating back
   const viewParam = searchParams.get('view');
@@ -103,7 +118,10 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
     () => events.find(e => e.id === resolvedParams.eventId) ?? null,
     [events, resolvedParams.eventId],
   );
-  const eventData = useMemo(() => (rawEvent ? transformEventData(rawEvent) : null), [rawEvent]);
+  const eventData = useMemo(
+    () => (rawEvent ? transformEventData(rawEvent, instructorLookup) : null),
+    [rawEvent, instructorLookup],
+  );
 
   // Handler for deleting event — soft-delete on the server then navigate.
   const handleDeleteEvent = async () => {

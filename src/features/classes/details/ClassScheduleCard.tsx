@@ -1,6 +1,7 @@
 'use client';
 
 import type { DayOfWeek, ScheduleException, ScheduleInstance } from '@/hooks/useAddClassWizard';
+import { useOrganization } from '@clerk/nextjs';
 import { AlertCircle, Calendar, Edit, Pencil, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
@@ -19,6 +20,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { useInstructorsCache } from '@/hooks/useInstructorsCache';
 
 type ClassScheduleCardProps = {
   scheduleInstances: ScheduleInstance[];
@@ -27,15 +29,6 @@ type ClassScheduleCardProps = {
   calendarColor: string;
   onEdit?: () => void;
   onEditInstance?: (instance: ScheduleInstance, date: string, existingException?: ScheduleException) => void;
-};
-
-const MOCK_STAFF: Record<string, string> = {
-  'collin-grayson': 'Collin Grayson',
-  'coach-alex': 'Coach Alex',
-  'professor-jessica': 'Professor Jessica',
-  'professor-joao': 'Professor Joao',
-  'coach-liza': 'Coach Liza',
-  'professor-ivan': 'Professor Ivan',
 };
 
 const EMPTY_EXCEPTIONS: ScheduleException[] = [];
@@ -49,6 +42,8 @@ export function ClassScheduleCard({
   onEditInstance,
 }: ClassScheduleCardProps) {
   const t = useTranslations('ClassDetailPage.ScheduleCard');
+  const { organization } = useOrganization();
+  const { instructorLookup } = useInstructorsCache(organization?.id);
   const [datePickerOpen, setDatePickerOpen] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>('');
 
@@ -116,7 +111,7 @@ export function ClassScheduleCard({
   };
 
   const getStaffName = (staffValue: string): string => {
-    return MOCK_STAFF[staffValue] || staffValue;
+    return instructorLookup.get(staffValue)?.name || staffValue;
   };
 
   const formatExceptionDate = (dateStr: string): string => {

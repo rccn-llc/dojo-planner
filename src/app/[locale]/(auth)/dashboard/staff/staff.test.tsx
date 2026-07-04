@@ -8,6 +8,17 @@ vi.mock('next-intl', () => ({
   useTranslations: () => (key: string) => key,
 }));
 
+// StaffTable uses useRouter for post-photo-upload refresh
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
+}));
+
+// The instructor photo modal pulls in the ORPC client; stub it out — it only
+// renders when a photo edit is opened, which these tests don't exercise.
+vi.mock('@/features/staff/EditInstructorPhotoModal', () => ({
+  EditInstructorPhotoModal: () => null,
+}));
+
 const mockStaffMembers = [
   {
     id: 'user_1',

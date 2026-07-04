@@ -51,6 +51,7 @@ export type ClassData = {
   minAge: number | null;
   maxAge: number | null;
   maxCapacity: number | null;
+  allowWalkIns: string | null;
   isActive: boolean | null;
   program: {
     id: string;
@@ -178,6 +179,7 @@ export async function getOrganizationClasses(organizationId: string): Promise<Cl
       minAge: cls.minAge,
       maxAge: cls.maxAge,
       maxCapacity: cls.maxCapacity,
+      allowWalkIns: cls.allowWalkIns,
       isActive: cls.isActive,
       program: program
         ? {
@@ -247,6 +249,7 @@ export type CreateClassServiceInput = {
   maxCapacity?: number | null;
   minAge?: number | null;
   maxAge?: number | null;
+  allowWalkIns?: string | null;
   isActive: boolean;
   schedule: ScheduleInstanceInput[];
   tagIds: string[];
@@ -276,6 +279,7 @@ export async function createClass(input: CreateClassServiceInput, organizationId
       maxCapacity: input.maxCapacity ?? null,
       minAge: input.minAge ?? null,
       maxAge: input.maxAge ?? null,
+      allowWalkIns: input.allowWalkIns ?? 'Yes',
       isActive: input.isActive,
     });
   } catch (error) {
@@ -349,6 +353,7 @@ export async function updateClass(
         maxCapacity: input.maxCapacity ?? null,
         minAge: input.minAge ?? null,
         maxAge: input.maxAge ?? null,
+        allowWalkIns: input.allowWalkIns ?? 'Yes',
         isActive: input.isActive,
       })
       .where(and(eq(classSchema.id, classId), eq(classSchema.organizationId, organizationId)));

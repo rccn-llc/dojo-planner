@@ -239,7 +239,11 @@ export default function MembershipsPage() {
     { id: 'members', label: t('total_members_label'), value: stats.totalMembers },
   ], [stats, t]);
 
-  if (loading) {
+  // Only show the full-page skeleton on the INITIAL load (no data yet). On a
+  // background revalidation (e.g. after creating a plan, which invalidates the
+  // cache), keep the page — and any open modal — mounted so the Add Membership
+  // wizard's success step isn't unmounted mid-flow and remounted at step 1.
+  if (loading && plans.length === 0) {
     return (
       <div className="w-full space-y-6">
         <div className="grid gap-4 md:grid-cols-4">

@@ -60,6 +60,33 @@ vi.mock('@clerk/nextjs', () => ({
   useOrganization: () => ({ organization: { id: 'test-org-123' } }),
 }));
 
+// Mock ORPC client — ClassBasicsStep fetches programs on mount
+vi.mock('@/libs/Orpc', () => ({
+  client: {
+    programs: {
+      list: vi.fn().mockResolvedValue({
+        programs: [
+          { id: 'prog-1', name: 'Adult Brazilian Jiu-Jitsu', slug: 'adult-bjj', isActive: true },
+        ],
+      }),
+    },
+    classes: {
+      create: vi.fn().mockResolvedValue({ class: { id: 'class-1', name: 'Test Class' } }),
+    },
+    events: {
+      create: vi.fn().mockResolvedValue({ event: { id: 'event-1', name: 'Test Event' } }),
+    },
+    instructors: {
+      list: vi.fn().mockResolvedValue({
+        instructors: [
+          { id: 'ins-1', name: 'Ann Lee', photoUrl: null },
+          { id: 'ins-2', name: 'Bob Ng', photoUrl: null },
+        ],
+      }),
+    },
+  },
+}));
+
 // Mock the tags cache
 vi.mock('@/hooks/useTagsCache', () => ({
   useTagsCache: () => ({

@@ -39,6 +39,7 @@ const mockClasses: ClassData[] = [
     minAge: null,
     maxAge: null,
     maxCapacity: 20,
+    allowWalkIns: 'Yes',
     isActive: true,
     program: { id: 'prog-1', name: 'Adult BJJ', slug: 'adult-bjj', color: '#22c55e' },
     tags: [

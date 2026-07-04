@@ -8,6 +8,7 @@ import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useAddClassWizard } from '@/hooks/useAddClassWizard';
+import { useInstructorsCache } from '@/hooks/useInstructorsCache';
 import { useTagsCache } from '@/hooks/useTagsCache';
 import { client } from '@/libs/Orpc';
 import { ClassBasicsStep } from './ClassBasicsStep';
@@ -24,24 +25,6 @@ type AddClassModalProps = {
   onCloseAction: () => void;
   onClassCreated?: (newClass: ClassCardProps) => void;
   onEventCreated?: (newEvent: EventCardProps) => void;
-};
-
-const MOCK_PROGRAMS: Record<string, string> = {
-  'adult-bjj': 'Adult Brazilian Jiu-Jitsu',
-  'kids-bjj': 'Kids Brazilian Jiu-Jitsu',
-  'womens-bjj': 'Women\'s Brazilian Jiu-Jitsu',
-  'competition': 'Competition Team',
-  'judo': 'Judo',
-  'wrestling': 'Wrestling',
-};
-
-const MOCK_STAFF: Record<string, { name: string; photoUrl: string }> = {
-  'collin-grayson': { name: 'Collin Grayson', photoUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Collin' },
-  'coach-alex': { name: 'Coach Alex', photoUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Alex' },
-  'professor-jessica': { name: 'Professor Jessica', photoUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Jessica' },
-  'professor-joao': { name: 'Professor Joao', photoUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Joao' },
-  'coach-liza': { name: 'Coach Liza', photoUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Liza' },
-  'professor-ivan': { name: 'Professor Ivan', photoUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ivan' },
 };
 
 const DAY_OF_WEEK_INDEX: Record<DayOfWeek, number> = {
@@ -90,6 +73,7 @@ export const AddClassModal = ({ isOpen, onCloseAction, onClassCreated, onEventCr
   const t = useTranslations('AddClassWizard');
   const { organization } = useOrganization();
   const { classTags } = useTagsCache(organization?.id);
+  const { instructorLookup } = useInstructorsCache(organization?.id);
 
   const handleCancel = () => {
     wizard.reset();
@@ -195,8 +179,9 @@ export const AddClassModal = ({ isOpen, onCloseAction, onClassCreated, onEventCr
 
         const uniqueStaffIds = [...new Set(wizard.data.eventSchedule.sessions.flatMap(s => [s.staffMember, s.assistantStaff].filter(Boolean)))];
         const eventInstructors = uniqueStaffIds
-          .map(id => MOCK_STAFF[id])
-          .filter((staff): staff is { name: string; photoUrl: string } => staff !== undefined);
+          .map(id => instructorLookup.get(id))
+          .filter((instructor): instructor is NonNullable<typeof instructor> => instructor !== undefined)
+          .map(instructor => ({ name: instructor.name, photoUrl: instructor.photoUrl ?? '' }));
 
         const formatDate = (dateStr: string) => {
           const dateObj = new Date(dateStr);
@@ -238,6 +223,8 @@ export const AddClassModal = ({ isOpen, onCloseAction, onClassCreated, onEventCr
           color: wizard.data.calendarColor || null,
           maxCapacity: wizard.data.maximumCapacity ?? null,
           minAge: wizard.data.minimumAge ?? null,
+          programId: wizard.data.program || null,
+          allowWalkIns: wizard.data.allowWalkIns,
           isActive: true,
           schedule,
           tagIds: wizard.data.tags,
@@ -260,15 +247,16 @@ export const AddClassModal = ({ isOpen, onCloseAction, onClassCreated, onEventCr
 
         const uniqueStaffIds = [...new Set(wizard.data.schedule.instances.flatMap(i => [i.staffMember, i.assistantStaff].filter(Boolean)))];
         const classInstructors = uniqueStaffIds
-          .map(id => MOCK_STAFF[id])
-          .filter((staff): staff is { name: string; photoUrl: string } => staff !== undefined);
+          .map(id => instructorLookup.get(id))
+          .filter((instructor): instructor is NonNullable<typeof instructor> => instructor !== undefined)
+          .map(instructor => ({ name: instructor.name, photoUrl: instructor.photoUrl ?? '' }));
 
         const newClass: ClassCardProps = {
           id: result.class.id,
           name: result.class.name,
           description: wizard.data.description,
           level: 'All Levels',
-          type: MOCK_PROGRAMS[wizard.data.program]?.split(' ')[0] || 'Adults',
+          type: wizard.data.programName?.split(' ')[0] || 'Adults',
           style: 'Gi',
           schedule: formatSchedule(),
           location: wizard.data.schedule.location || 'Current Location',

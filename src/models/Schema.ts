@@ -465,6 +465,7 @@ export const classSchema = pgTable(
     maxCapacity: integer('max_capacity'), // null = unlimited
     minAge: integer('min_age'),
     maxAge: integer('max_age'),
+    allowWalkIns: text('allow_walk_ins').default('Yes'), // 'Yes' | 'No'
     isActive: boolean('is_active').default(true),
     createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { mode: 'date' })
@@ -476,6 +477,28 @@ export const classSchema = pgTable(
     index('class_org_idx').on(table.organizationId),
     index('class_program_idx').on(table.programId),
     uniqueIndex('class_org_slug_idx').on(table.organizationId, table.slug),
+  ],
+);
+
+// Per-org, in-app instructor photo overrides. Instructors are Clerk users
+// (role org:instructor / org:academy_owner); their name/default avatar come
+// from Clerk, but an admin can upload a headshot here (base64 data URL) which
+// takes precedence over the Clerk image. Keyed by (organizationId, clerkUserId).
+export const instructorProfileSchema = pgTable(
+  'instructor_profile',
+  {
+    id: text('id').primaryKey(), // UUID v4
+    organizationId: text('organization_id').notNull(),
+    clerkUserId: text('clerk_user_id').notNull(),
+    photoUrl: text('photo_url'), // base64 data URL; null = no override
+    createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { mode: 'date' })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  table => [
+    uniqueIndex('instructor_profile_org_user_idx').on(table.organizationId, table.clerkUserId),
   ],
 );
 

@@ -1,6 +1,7 @@
 'use client';
 
 import type { DayOfWeek, ScheduleException, ScheduleInstance } from '@/hooks/useAddClassWizard';
+import { useOrganization } from '@clerk/nextjs';
 import { Calendar, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
@@ -20,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useInstructorsCache } from '@/hooks/useInstructorsCache';
 import { cn } from '@/utils/Helpers';
 
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 1);
@@ -37,15 +39,6 @@ const DURATION_OPTIONS = [
   { value: '5-0', hours: 5, minutes: 0, label: '5h' },
   { value: '5-30', hours: 5, minutes: 30, label: '5h 30m' },
   { value: '6-0', hours: 6, minutes: 0, label: '6h' },
-];
-
-const MOCK_STAFF = [
-  { value: 'collin-grayson', label: 'Collin Grayson' },
-  { value: 'coach-alex', label: 'Coach Alex' },
-  { value: 'professor-jessica', label: 'Professor Jessica' },
-  { value: 'professor-joao', label: 'Professor Joao' },
-  { value: 'coach-liza', label: 'Coach Liza' },
-  { value: 'professor-ivan', label: 'Professor Ivan' },
 ];
 
 function generateExceptionId(): string {
@@ -73,6 +66,8 @@ function EditScheduleInstanceModalContent({
   existingException,
 }: Omit<EditScheduleInstanceModalProps, 'isOpen'>) {
   const t = useTranslations('ClassDetailPage.EditInstanceModal');
+  const { organization } = useOrganization();
+  const { instructors, loading: instructorsLoading } = useInstructorsCache(organization?.id);
 
   const dayLabels: Record<DayOfWeek, string> = {
     Monday: t('day_monday'),
@@ -299,15 +294,16 @@ function EditScheduleInstanceModalContent({
               <Select
                 value={staffMember || 'none'}
                 onValueChange={value => setStaffMember(value === 'none' ? '' : value)}
+                disabled={instructorsLoading}
               >
                 <SelectTrigger className="h-9 w-full text-sm" data-testid="instructor-select">
                   <SelectValue placeholder={t('instructor_placeholder')} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none" className="text-sm">{t('instructor_none')}</SelectItem>
-                  {MOCK_STAFF.map(staff => (
-                    <SelectItem key={staff.value} value={staff.value} className="text-sm">
-                      {staff.label}
+                  {instructors.map(instructor => (
+                    <SelectItem key={instructor.id} value={instructor.id} className="text-sm">
+                      {instructor.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -319,15 +315,16 @@ function EditScheduleInstanceModalContent({
               <Select
                 value={assistantStaff || 'none'}
                 onValueChange={value => setAssistantStaff(value === 'none' ? '' : value)}
+                disabled={instructorsLoading}
               >
                 <SelectTrigger className="h-9 w-full text-sm" data-testid="assistant-select">
                   <SelectValue placeholder={t('assistant_none')} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none" className="text-sm">{t('assistant_none')}</SelectItem>
-                  {MOCK_STAFF.map(staff => (
-                    <SelectItem key={staff.value} value={staff.value} className="text-sm">
-                      {staff.label}
+                  {instructors.map(instructor => (
+                    <SelectItem key={instructor.id} value={instructor.id} className="text-sm">
+                      {instructor.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -37,8 +37,27 @@ vi.mock('@/libs/Orpc', () => ({
       listActiveTemplates: vi.fn(),
       setMembershipWaivers: vi.fn(),
     },
+    programs: {
+      list: vi.fn(),
+    },
   },
 }));
+
+function makeProgram(id: string, name: string, slug: string, isActive: boolean) {
+  return {
+    id,
+    organizationId: 'test-org',
+    name,
+    slug,
+    description: null,
+    color: null,
+    isActive,
+    sortOrder: 0,
+    classCount: 0,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+}
 
 describe('EditAssociatedProgramModal', () => {
   const mockOnClose = vi.fn();
@@ -90,6 +109,15 @@ describe('EditAssociatedProgramModal', () => {
       ],
     });
     vi.mocked(client.waivers.setMembershipWaivers).mockResolvedValue({});
+    vi.mocked(client.programs.list).mockResolvedValue({
+      programs: [
+        makeProgram('prog-1', 'Adult Brazilian Jiu-jitsu', 'adult-bjj', true),
+        makeProgram('prog-2', 'Kids Program', 'kids', true),
+        makeProgram('prog-3', 'Competition Team', 'competition', true),
+        makeProgram('prog-4', 'Judo Fundamentals', 'judo', true),
+        makeProgram('prog-5', 'Wrestling Fundamentals', 'wrestling', false),
+      ],
+    });
   });
 
   it('should render modal with title when open', () => {
@@ -97,7 +125,7 @@ describe('EditAssociatedProgramModal', () => {
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
-        associatedProgramId="1"
+        associatedProgramId="prog-1"
         associatedWaiverId={null}
         membershipPlanId="test-plan-1"
         onSave={mockOnSave}
@@ -114,7 +142,7 @@ describe('EditAssociatedProgramModal', () => {
       <EditAssociatedProgramModal
         isOpen={false}
         onClose={mockOnClose}
-        associatedProgramId="1"
+        associatedProgramId="prog-1"
         associatedWaiverId={null}
         membershipPlanId="test-plan-1"
         onSave={mockOnSave}
@@ -131,7 +159,7 @@ describe('EditAssociatedProgramModal', () => {
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
-        associatedProgramId="1"
+        associatedProgramId="prog-1"
         associatedWaiverId={null}
         membershipPlanId="test-plan-1"
         onSave={mockOnSave}
@@ -148,7 +176,7 @@ describe('EditAssociatedProgramModal', () => {
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
-        associatedProgramId="1"
+        associatedProgramId="prog-1"
         associatedWaiverId={null}
         membershipPlanId="test-plan-1"
         onSave={mockOnSave}
@@ -165,7 +193,7 @@ describe('EditAssociatedProgramModal', () => {
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
-        associatedProgramId="1"
+        associatedProgramId="prog-1"
         associatedWaiverId={null}
         membershipPlanId="test-plan-1"
         onSave={mockOnSave}
@@ -182,7 +210,7 @@ describe('EditAssociatedProgramModal', () => {
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
-        associatedProgramId="1"
+        associatedProgramId="prog-1"
         associatedWaiverId={null}
         membershipPlanId="test-plan-1"
         onSave={mockOnSave}
@@ -199,7 +227,7 @@ describe('EditAssociatedProgramModal', () => {
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
-        associatedProgramId="1"
+        associatedProgramId="prog-1"
         associatedWaiverId={null}
         membershipPlanId="test-plan-1"
         onSave={mockOnSave}
@@ -235,7 +263,7 @@ describe('EditAssociatedProgramModal', () => {
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
-        associatedProgramId="1"
+        associatedProgramId="prog-1"
         associatedWaiverId={null}
         membershipPlanId="test-plan-1"
         onSave={mockOnSave}
@@ -253,7 +281,7 @@ describe('EditAssociatedProgramModal', () => {
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
-        associatedProgramId="1"
+        associatedProgramId="prog-1"
         associatedWaiverId={null}
         membershipPlanId="test-plan-1"
         onSave={mockOnSave}
@@ -270,21 +298,21 @@ describe('EditAssociatedProgramModal', () => {
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
-        associatedProgramId="1"
+        associatedProgramId="prog-1"
         associatedWaiverId={null}
         membershipPlanId="test-plan-1"
         onSave={mockOnSave}
       />,
     );
 
-    const selectTrigger = document.querySelector('[role="combobox"]');
-    if (selectTrigger) {
-      await userEvent.click(selectTrigger);
+    // Wait for the async programs.list() fetch to enable the program trigger
+    const programTrigger = page.getByRole('combobox').first();
 
-      const adultProgram = page.getByText('Adult Brazilian Jiu-jitsu');
+    await expect.element(programTrigger).toBeEnabled();
 
-      expect(adultProgram).toBeTruthy();
-    }
+    await userEvent.click(programTrigger);
+
+    await expect.element(page.getByRole('option', { name: 'Adult Brazilian Jiu-jitsu' })).toBeInTheDocument();
   });
 
   it('should call onSave with selected program when Save is clicked', async () => {
@@ -292,34 +320,33 @@ describe('EditAssociatedProgramModal', () => {
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
-        associatedProgramId="1"
+        associatedProgramId="prog-1"
         associatedWaiverId={null}
         membershipPlanId="test-plan-1"
         onSave={mockOnSave}
       />,
     );
 
-    const buttons = Array.from(document.querySelectorAll('button'));
-    const saveButton = buttons.find(btn => btn.textContent?.includes('Save Changes'));
+    // Wait for the async programs.list() fetch so the program name resolves
+    await expect.element(page.getByRole('combobox').first()).toBeEnabled();
 
-    if (saveButton) {
-      await userEvent.click(saveButton);
+    const saveButton = page.getByText('Save Changes');
+    await userEvent.click(saveButton);
 
-      // Wait for async operation
-      await new Promise(resolve => setTimeout(resolve, 600));
+    // Wait for async operation
+    await new Promise(resolve => setTimeout(resolve, 600));
 
-      expect(client.waivers.setMembershipWaivers).toHaveBeenCalledWith({
-        membershipPlanId: 'test-plan-1',
-        waiverTemplateIds: [],
-      });
+    expect(client.waivers.setMembershipWaivers).toHaveBeenCalledWith({
+      membershipPlanId: 'test-plan-1',
+      waiverTemplateIds: [],
+    });
 
-      expect(mockOnSave).toHaveBeenCalledWith({
-        associatedProgramId: '1',
-        associatedProgramName: 'Adult Brazilian Jiu-jitsu',
-        associatedWaiverId: null,
-        associatedWaiverName: null,
-      });
-    }
+    expect(mockOnSave).toHaveBeenCalledWith({
+      associatedProgramId: 'prog-1',
+      associatedProgramName: 'Adult Brazilian Jiu-jitsu',
+      associatedWaiverId: null,
+      associatedWaiverName: null,
+    });
   });
 
   it('should select a different program and save', async () => {
@@ -327,37 +354,35 @@ describe('EditAssociatedProgramModal', () => {
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
-        associatedProgramId="1"
+        associatedProgramId="prog-1"
         associatedWaiverId={null}
         membershipPlanId="test-plan-1"
         onSave={mockOnSave}
       />,
     );
 
-    const selectTrigger = document.querySelector('[role="combobox"]');
-    if (selectTrigger) {
-      await userEvent.click(selectTrigger);
+    // Wait for the async programs.list() fetch to enable the program trigger
+    const programTrigger = page.getByRole('combobox').first();
 
-      const kidsProgram = page.getByText('Kids Program');
-      await userEvent.click(kidsProgram);
+    await expect.element(programTrigger).toBeEnabled();
 
-      const buttons = Array.from(document.querySelectorAll('button'));
-      const saveButton = buttons.find(btn => btn.textContent?.includes('Save Changes'));
+    await userEvent.click(programTrigger);
 
-      if (saveButton) {
-        await userEvent.click(saveButton);
+    const kidsProgram = page.getByRole('option', { name: 'Kids Program' });
+    await userEvent.click(kidsProgram);
 
-        // Wait for async operation
-        await new Promise(resolve => setTimeout(resolve, 600));
+    const saveButton = page.getByText('Save Changes');
+    await userEvent.click(saveButton);
 
-        expect(mockOnSave).toHaveBeenCalledWith({
-          associatedProgramId: '2',
-          associatedProgramName: 'Kids Program',
-          associatedWaiverId: null,
-          associatedWaiverName: null,
-        });
-      }
-    }
+    // Wait for async operation
+    await new Promise(resolve => setTimeout(resolve, 600));
+
+    expect(mockOnSave).toHaveBeenCalledWith({
+      associatedProgramId: 'prog-2',
+      associatedProgramName: 'Kids Program',
+      associatedWaiverId: null,
+      associatedWaiverName: null,
+    });
   });
 
   it('should reset to initial program when dialog is closed via backdrop', async () => {
@@ -365,20 +390,21 @@ describe('EditAssociatedProgramModal', () => {
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
-        associatedProgramId="1"
+        associatedProgramId="prog-1"
         associatedWaiverId={null}
         membershipPlanId="test-plan-1"
         onSave={mockOnSave}
       />,
     );
 
-    // Change the program selection first
-    const selectTrigger = document.querySelector('[role="combobox"]');
-    if (selectTrigger) {
-      await userEvent.click(selectTrigger);
-      const kidsProgram = page.getByText('Kids Program');
-      await userEvent.click(kidsProgram);
-    }
+    // Change the program selection first (wait for the fetch to enable it)
+    const programTrigger = page.getByRole('combobox').first();
+
+    await expect.element(programTrigger).toBeEnabled();
+
+    await userEvent.click(programTrigger);
+    const kidsProgram = page.getByRole('option', { name: 'Kids Program' });
+    await userEvent.click(kidsProgram);
 
     // Close dialog by pressing Escape (simulates closing via backdrop or close button)
     await userEvent.keyboard('{Escape}');
@@ -392,7 +418,7 @@ describe('EditAssociatedProgramModal', () => {
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
-        associatedProgramId="1"
+        associatedProgramId="prog-1"
         associatedWaiverId={null}
         membershipPlanId="test-plan-1"
         onSave={mockOnSave}
@@ -418,28 +444,28 @@ describe('EditAssociatedProgramModal', () => {
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
-        associatedProgramId="1"
+        associatedProgramId="prog-1"
         associatedWaiverId={null}
         membershipPlanId="test-plan-1"
         onSave={mockOnSave}
       />,
     );
 
-    const selectTrigger = document.querySelector('[role="combobox"]');
-    if (selectTrigger) {
-      await userEvent.click(selectTrigger);
+    // Wait for the async programs.list() fetch to enable the program trigger
+    const programTrigger = page.getByRole('combobox').first();
 
-      // Active programs should be visible
-      const judoProgram = page.getByText('Judo Fundamentals');
+    await expect.element(programTrigger).toBeEnabled();
 
-      expect(judoProgram).toBeTruthy();
+    await userEvent.click(programTrigger);
 
-      // Inactive program (Wrestling Fundamentals) should NOT be visible
-      const allOptions = Array.from(document.querySelectorAll('[role="option"]'));
-      const wrestlingOption = allOptions.find(opt => opt.textContent?.includes('Wrestling Fundamentals'));
+    // Active program should be visible
+    await expect.element(page.getByRole('option', { name: 'Judo Fundamentals' })).toBeInTheDocument();
 
-      expect(wrestlingOption).toBeUndefined();
-    }
+    // Inactive program (Wrestling Fundamentals) should NOT be visible
+    const allOptions = Array.from(document.querySelectorAll('[role="option"]'));
+    const wrestlingOption = allOptions.find(opt => opt.textContent?.includes('Wrestling Fundamentals'));
+
+    expect(wrestlingOption).toBeUndefined();
   });
 
   it('should show 4 active programs in dropdown', async () => {
@@ -447,22 +473,26 @@ describe('EditAssociatedProgramModal', () => {
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
-        associatedProgramId="1"
+        associatedProgramId="prog-1"
         associatedWaiverId={null}
         membershipPlanId="test-plan-1"
         onSave={mockOnSave}
       />,
     );
 
-    const selectTrigger = document.querySelector('[role="combobox"]');
-    if (selectTrigger) {
-      await userEvent.click(selectTrigger);
+    // Wait for the async programs.list() fetch to enable the program trigger
+    const programTrigger = page.getByRole('combobox').first();
 
-      // Count the options - should be 4 active programs
-      const allOptions = Array.from(document.querySelectorAll('[role="option"]'));
+    await expect.element(programTrigger).toBeEnabled();
 
-      expect(allOptions.length).toBe(4);
-    }
+    await userEvent.click(programTrigger);
+
+    // Count the options - should be 4 active programs (Wrestling is inactive)
+    await expect.element(page.getByRole('option', { name: 'Adult Brazilian Jiu-jitsu' })).toBeInTheDocument();
+
+    const allOptions = Array.from(document.querySelectorAll('[role="option"]'));
+
+    expect(allOptions.length).toBe(4);
   });
 
   it('should render waiver dropdown', async () => {
@@ -470,7 +500,7 @@ describe('EditAssociatedProgramModal', () => {
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
-        associatedProgramId="1"
+        associatedProgramId="prog-1"
         associatedWaiverId={null}
         membershipPlanId="test-plan-1"
         onSave={mockOnSave}
@@ -490,7 +520,7 @@ describe('EditAssociatedProgramModal', () => {
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
-        associatedProgramId="1"
+        associatedProgramId="prog-1"
         associatedWaiverId={null}
         membershipPlanId="test-plan-1"
         onSave={mockOnSave}
@@ -517,7 +547,7 @@ describe('EditAssociatedProgramModal', () => {
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
-        associatedProgramId="1"
+        associatedProgramId="prog-1"
         associatedWaiverId="waiver-1"
         membershipPlanId="test-plan-1"
         onSave={mockOnSave}
@@ -542,11 +572,31 @@ describe('EditAssociatedProgramModal', () => {
       });
 
       expect(mockOnSave).toHaveBeenCalledWith({
-        associatedProgramId: '1',
+        associatedProgramId: 'prog-1',
         associatedProgramName: 'Adult Brazilian Jiu-jitsu',
         associatedWaiverId: 'waiver-1',
         associatedWaiverName: 'Standard Adult Waiver (v1)',
       });
     }
+  });
+
+  it('should source programs from the API, not a hardcoded mock list', async () => {
+    // Regression guard for the FK-violation 500 bug: options must come from
+    // client.programs.list() with real program ids.
+    render(
+      <EditAssociatedProgramModal
+        isOpen={true}
+        onClose={mockOnClose}
+        associatedProgramId="prog-1"
+        associatedWaiverId={null}
+        membershipPlanId="test-plan-1"
+        onSave={mockOnSave}
+      />,
+    );
+
+    // The trigger only becomes enabled once client.programs.list() resolves
+    await expect.element(page.getByRole('combobox').first()).toBeEnabled();
+
+    expect(client.programs.list).toHaveBeenCalled();
   });
 });

@@ -1,5 +1,6 @@
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { getTranslations } from 'next-intl/server';
+import { getInstructorPhotoOverrides } from '@/services/InstructorsService';
 import { StaffPageClient } from './StaffPageClient';
 
 type ClerkStaffMember = {
@@ -54,21 +55,32 @@ export async function CustomStaffPage() {
       );
     }
 
-    // Filter and map org:admin and org:academy_owner members with status
+    // In-app instructor photo overrides take precedence over the Clerk avatar.
+    const photoOverrides = await getInstructorPhotoOverrides(orgId);
+
+    // Filter and map org:admin, org:academy_owner, and org:instructor members
+    // with status. (Instructors are staff too, so they appear here for
+    // management alongside admins/owners.)
     const staffMembers: ClerkStaffMember[] = memberships.data
-      .filter(membership => membership.role === 'org:admin' || membership.role === 'org:academy_owner')
+      .filter(membership =>
+        membership.role === 'org:admin'
+        || membership.role === 'org:academy_owner'
+        || membership.role === 'org:instructor')
       .map((membership) => {
         // Determine status based on whether user has fully set up their account
         const status: 'Active' | 'Invitation sent' | 'Inactive' = membership.publicUserData
           ? 'Active'
           : 'Invitation sent';
 
+        const userId = membership.publicUserData?.userId;
+        const overridePhoto = userId ? photoOverrides.get(userId) : undefined;
+
         return {
-          id: membership.publicUserData?.userId || membership.id,
+          id: userId || membership.id,
           firstName: membership.publicUserData?.firstName || null,
           lastName: membership.publicUserData?.lastName || null,
           email: membership.publicUserData?.identifier || '',
-          photoUrl: membership.publicUserData?.imageUrl || null,
+          photoUrl: overridePhoto ?? membership.publicUserData?.imageUrl ?? null,
           emailAddress: membership.publicUserData?.identifier || '',
           role: membership.role,
           status,

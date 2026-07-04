@@ -51,6 +51,27 @@ vi.mock('next-intl', () => ({
   },
 }));
 
+const mockInstructors = [
+  { id: 'ins-1', name: 'Ann Lee', photoUrl: null },
+  { id: 'ins-2', name: 'Bob Ng', photoUrl: null },
+  { id: 'coach-alex', name: 'Coach Alex', photoUrl: null },
+];
+
+vi.mock('@clerk/nextjs', () => ({
+  useOrganization: () => ({ organization: { id: 'test-org' } }),
+}));
+
+vi.mock('@/hooks/useInstructorsCache', () => ({
+  useInstructorsCache: () => ({
+    instructors: mockInstructors,
+    instructorLookup: new Map(mockInstructors.map(i => [i.id, i])),
+    loading: false,
+    error: null,
+    revalidate: vi.fn(),
+  }),
+  invalidateInstructorsCache: vi.fn(),
+}));
+
 describe('ClassScheduleStep', () => {
   const mockData = createMockWizardData({
     className: 'Test Class',

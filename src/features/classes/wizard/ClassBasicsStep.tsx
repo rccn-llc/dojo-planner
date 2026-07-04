@@ -2,7 +2,7 @@
 
 import type { AddClassWizardData } from '@/hooks/useAddClassWizard';
 import { useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { client } from '@/libs/Orpc';
 
 type ClassBasicsStepProps = {
   data: AddClassWizardData;
@@ -22,23 +23,48 @@ type ClassBasicsStepProps = {
   error?: string | null;
 };
 
-const MOCK_PROGRAMS = [
-  { value: 'adult-bjj', label: 'Adult Brazilian Jiu-Jitsu' },
-  { value: 'kids-bjj', label: 'Kids Brazilian Jiu-Jitsu' },
-  { value: 'womens-bjj', label: 'Women\'s Brazilian Jiu-Jitsu' },
-  { value: 'competition', label: 'Competition Team' },
-  { value: 'judo', label: 'Judo' },
-  { value: 'wrestling', label: 'Wrestling' },
-];
+type ProgramOption = {
+  id: string;
+  name: string;
+};
 
 const MAX_DESCRIPTION_LENGTH = 2000;
 
 export const ClassBasicsStep = ({ data, onUpdate, onNext, onCancel, error }: ClassBasicsStepProps) => {
   const t = useTranslations('AddClassWizard.ClassBasicsStep');
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [programOptions, setProgramOptions] = useState<ProgramOption[]>([]);
+  const [programsLoading, setProgramsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchPrograms = async () => {
+      try {
+        setProgramsLoading(true);
+        const result = await client.programs.list();
+        const options: ProgramOption[] = (result.programs || [])
+          .filter(program => program.isActive)
+          .map(program => ({ id: program.id, name: program.name }));
+        setProgramOptions(options);
+      } catch {
+        setProgramOptions([]);
+      } finally {
+        setProgramsLoading(false);
+      }
+    };
+
+    fetchPrograms();
+  }, []);
 
   const handleInputChange = (field: keyof AddClassWizardData, value: string | number | null) => {
     onUpdate({ [field]: value });
+  };
+
+  const handleProgramChange = (programId: string) => {
+    const selectedProgram = programOptions.find(p => p.id === programId);
+    onUpdate({
+      program: programId,
+      programName: selectedProgram?.name ?? '',
+    });
   };
 
   const handleInputBlur = (field: string) => {
@@ -90,19 +116,20 @@ export const ClassBasicsStep = ({ data, onUpdate, onNext, onCancel, error }: Cla
             <label className="text-sm font-medium text-foreground">{t('program_label')}</label>
             <Select
               value={data.program}
-              onValueChange={value => handleInputChange('program', value)}
+              onValueChange={handleProgramChange}
+              disabled={programsLoading}
             >
               <SelectTrigger
                 aria-invalid={isProgramInvalid}
                 onBlur={() => handleInputBlur('program')}
                 className="w-full truncate"
               >
-                <SelectValue placeholder={t('program_placeholder')} className="truncate" />
+                <SelectValue placeholder={programsLoading ? t('program_loading') : t('program_placeholder')} className="truncate" />
               </SelectTrigger>
               <SelectContent>
-                {MOCK_PROGRAMS.map(program => (
-                  <SelectItem key={program.value} value={program.value}>
-                    {program.label}
+                {programOptions.map(program => (
+                  <SelectItem key={program.id} value={program.id}>
+                    {program.name}
                   </SelectItem>
                 ))}
               </SelectContent>

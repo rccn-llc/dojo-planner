@@ -176,6 +176,34 @@ describe('AuthGuards', () => {
       });
     });
 
+    it('should place org:instructor between FRONT_DESK and MEMBER in the hierarchy', async () => {
+      const { auth } = await import('@clerk/nextjs/server');
+      // User is ONLY an instructor.
+      const mockHas = vi.fn().mockImplementation(({ role }) => role === ORG_ROLE.INSTRUCTOR);
+
+      vi.mocked(auth).mockResolvedValue({
+        userId: 'test-user-123',
+        orgId: 'test-org-456',
+        has: mockHas,
+      } as any);
+
+      const { guardRole } = await import('./AuthGuards');
+
+      // An instructor satisfies INSTRUCTOR and the lower MEMBER role...
+      const asMember = await guardRole(ORG_ROLE.MEMBER);
+
+      expect(asMember.role).toBe(ORG_ROLE.MEMBER);
+
+      const asInstructor = await guardRole(ORG_ROLE.INSTRUCTOR);
+
+      expect(asInstructor.role).toBe(ORG_ROLE.INSTRUCTOR);
+
+      // ...but NOT the higher FRONT_DESK role.
+      await expect(guardRole(ORG_ROLE.FRONT_DESK)).rejects.toMatchObject({
+        status: 403,
+      });
+    });
+
     it('should work with all defined roles', async () => {
       const { auth } = await import('@clerk/nextjs/server');
       const mockHas = vi.fn().mockReturnValue(true);
@@ -192,6 +220,7 @@ describe('AuthGuards', () => {
         ORG_ROLE.ADMIN,
         ORG_ROLE.ACADEMY_OWNER,
         ORG_ROLE.FRONT_DESK,
+        ORG_ROLE.INSTRUCTOR,
         ORG_ROLE.MEMBER,
         ORG_ROLE.INDIVIDUAL_MEMBER,
       ];

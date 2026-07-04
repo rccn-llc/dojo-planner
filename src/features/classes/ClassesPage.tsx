@@ -14,6 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { invalidateClassesCache, useClassesCache } from '@/hooks/useClassesCache';
 import { invalidateEventsCache, useEventsCache } from '@/hooks/useEventsCache';
 import { useHasRole } from '@/hooks/useHasRole';
+import { useInstructorsCache } from '@/hooks/useInstructorsCache';
 import { useOrganizationLocation } from '@/hooks/useOrganizationLocation';
 import { ClassCard } from '@/templates/ClassCard';
 import { EventCard } from '@/templates/EventCard';
@@ -40,11 +41,12 @@ export function ClassesPage() {
   const { classes: rawClasses, loading: classesLoading } = useClassesCache(organization?.id);
   const { events: rawEvents, loading: eventsLoading } = useEventsCache(organization?.id);
   const { location: orgLocation } = useOrganizationLocation();
+  const { instructorLookup } = useInstructorsCache(organization?.id);
   const locationLabel = orgLocation.address ?? '';
 
   // Transform database data to card props format
-  const classes = useMemo(() => transformClassesToCardProps(rawClasses, locationLabel), [rawClasses, locationLabel]);
-  const events = useMemo(() => transformEventsToCardProps(rawEvents, locationLabel), [rawEvents, locationLabel]);
+  const classes = useMemo(() => transformClassesToCardProps(rawClasses, locationLabel, instructorLookup), [rawClasses, locationLabel, instructorLookup]);
+  const events = useMemo(() => transformEventsToCardProps(rawEvents, locationLabel, instructorLookup), [rawEvents, locationLabel, instructorLookup]);
 
   const loading = classesLoading || eventsLoading;
 
@@ -149,7 +151,11 @@ export function ClassesPage() {
   ], [stats, t]);
 
   // Loading skeleton
-  if (loading) {
+  // Only show the full-page skeleton on the INITIAL load. On a background
+  // revalidation (e.g. after the Add Class/Event wizard invalidates the cache),
+  // keep the page and the open wizard modal mounted so its success step isn't
+  // unmounted mid-flow and remounted at step 1.
+  if (loading && rawClasses.length === 0 && rawEvents.length === 0) {
     return (
       <div className="space-y-6">
         <div className="grid gap-4 md:grid-cols-4">

@@ -2,7 +2,7 @@
 
 import type { ClassLevel, ClassStyle, ClassType } from '@/app/[locale]/(auth)/dashboard/classes/[classId]/page';
 import { useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -19,17 +19,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { client } from '@/libs/Orpc';
 
 const MAX_DESCRIPTION_LENGTH = 2000;
-
-const PROGRAMS = [
-  { value: 'adult-bjj', label: 'Adult Brazilian Jiu-Jitsu' },
-  { value: 'kids-bjj', label: 'Kids Brazilian Jiu-Jitsu' },
-  { value: 'womens-bjj', label: 'Women\'s Brazilian Jiu-Jitsu' },
-  { value: 'competition', label: 'Competition Team' },
-  { value: 'judo', label: 'Judo' },
-  { value: 'wrestling', label: 'Wrestling' },
-];
 
 const LEVELS: ClassLevel[] = ['Beginner', 'Intermediate', 'Advanced', 'All Levels'];
 const TYPES: ClassType[] = ['Adults', 'Kids', 'Women', 'Open', 'Competition'];
@@ -51,7 +43,7 @@ type EditClassBasicsModalProps = {
     level: ClassLevel;
     type: ClassType;
     style: ClassStyle;
-  }) => void;
+  }) => void | Promise<void>;
 };
 
 export function EditClassBasicsModal({
@@ -75,6 +67,31 @@ export function EditClassBasicsModal({
   const [style, setStyle] = useState<ClassStyle>(initialStyle);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [programOptions, setProgramOptions] = useState<string[]>([]);
+  const [programsLoading, setProgramsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const fetchPrograms = async () => {
+      try {
+        setProgramsLoading(true);
+        const result = await client.programs.list();
+        const names = (result.programs || [])
+          .filter(program => program.isActive)
+          .map(program => program.name);
+        setProgramOptions(names);
+      } catch {
+        setProgramOptions([]);
+      } finally {
+        setProgramsLoading(false);
+      }
+    };
+
+    fetchPrograms();
+  }, [isOpen]);
 
   const handleInputBlur = (field: string) => {
     setTouched(prev => ({ ...prev, [field]: true }));
@@ -88,17 +105,18 @@ export function EditClassBasicsModal({
 
   const handleSubmit = async () => {
     setIsLoading(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500));
-    onSave({
-      className,
-      program,
-      description,
-      level,
-      type,
-      style,
-    });
-    setIsLoading(false);
+    try {
+      await onSave({
+        className,
+        program,
+        description,
+        level,
+        type,
+        style,
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleCancel = () => {
@@ -156,17 +174,18 @@ export function EditClassBasicsModal({
             <Select
               value={program}
               onValueChange={setProgram}
+              disabled={programsLoading}
             >
               <SelectTrigger
                 aria-invalid={isProgramInvalid}
                 onBlur={() => handleInputBlur('program')}
               >
-                <SelectValue placeholder={t('program_placeholder')} />
+                <SelectValue placeholder={programsLoading ? t('program_loading') : t('program_placeholder')} />
               </SelectTrigger>
               <SelectContent>
-                {PROGRAMS.map(p => (
-                  <SelectItem key={p.value} value={p.value}>
-                    {p.label}
+                {(program && !programOptions.includes(program) ? [program, ...programOptions] : programOptions).map(name => (
+                  <SelectItem key={name} value={name}>
+                    {name}
                   </SelectItem>
                 ))}
               </SelectContent>

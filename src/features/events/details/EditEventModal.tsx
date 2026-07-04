@@ -1,6 +1,7 @@
 'use client';
 
 import type { EventData } from '@/hooks/useEventsCache';
+import { useOrganization } from '@clerk/nextjs';
 import { Plus, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
@@ -22,6 +23,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { invalidateEventsCache } from '@/hooks/useEventsCache';
+import { useInstructorsCache } from '@/hooks/useInstructorsCache';
 import { client } from '@/libs/Orpc';
 
 const MAX_DESCRIPTION_LENGTH = 2000;
@@ -41,6 +43,7 @@ type SessionRow = {
   sessionDate: string; // YYYY-MM-DD
   startTime: string; // HH:MM
   endTime: string; // HH:MM
+  primaryInstructorClerkId: string | null;
 };
 
 type BillingRow = {
@@ -65,7 +68,7 @@ function dateToInputValue(date: Date): string {
 }
 
 function emptySession(): SessionRow {
-  return { id: crypto.randomUUID(), sessionDate: '', startTime: '10:00', endTime: '12:00' };
+  return { id: crypto.randomUUID(), sessionDate: '', startTime: '10:00', endTime: '12:00', primaryInstructorClerkId: null };
 }
 
 function emptyBilling(): BillingRow {
@@ -98,6 +101,7 @@ function buildFormState(event: EventData, initialTab: EditEventModalTab): FormSt
           sessionDate: dateToInputValue(new Date(s.sessionDate)),
           startTime: s.startTime,
           endTime: s.endTime,
+          primaryInstructorClerkId: s.instructorClerkId ?? null,
         }))
       : [emptySession()],
     billing: event.billing.length > 0
@@ -120,6 +124,8 @@ export function EditEventModal({
   onSavedAction,
 }: EditEventModalProps) {
   const t = useTranslations('EventDetailPage.EditEventModal');
+  const { organization } = useOrganization();
+  const { instructors, loading: instructorsLoading } = useInstructorsCache(organization?.id);
 
   // Single state object so the parent reopening the modal with a different
   // event or tab triggers exactly one re-sync (during render) instead of an
@@ -164,6 +170,7 @@ export function EditEventModal({
           sessionDate: new Date(`${s.sessionDate}T00:00:00Z`),
           startTime: s.startTime,
           endTime: s.endTime,
+          primaryInstructorClerkId: s.primaryInstructorClerkId,
         })),
         billing: form.billing.map((b, idx) => ({
           name: b.name.trim(),
@@ -303,40 +310,62 @@ export function EditEventModal({
           <TabsContent value="sessions" className="space-y-4 py-4">
             <div className="space-y-3">
               {form.sessions.map(s => (
-                <div key={s.id} className="flex items-end gap-2">
-                  <div className="flex-1 space-y-1.5">
-                    <label className="text-sm font-medium">{t('session_date_label')}</label>
-                    <Input
-                      type="date"
-                      value={s.sessionDate}
-                      onChange={e => updateForm('sessions', form.sessions.map(row => (row.id === s.id ? { ...row, sessionDate: e.target.value } : row)))}
-                    />
+                <div key={s.id} className="space-y-2 rounded-lg border border-border p-3">
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1 space-y-1.5">
+                      <label className="text-sm font-medium">{t('session_date_label')}</label>
+                      <Input
+                        type="date"
+                        value={s.sessionDate}
+                        onChange={e => updateForm('sessions', form.sessions.map(row => (row.id === s.id ? { ...row, sessionDate: e.target.value } : row)))}
+                      />
+                    </div>
+                    <div className="w-28 space-y-1.5">
+                      <label className="text-sm font-medium">{t('session_start_label')}</label>
+                      <Input
+                        type="time"
+                        value={s.startTime}
+                        onChange={e => updateForm('sessions', form.sessions.map(row => (row.id === s.id ? { ...row, startTime: e.target.value } : row)))}
+                      />
+                    </div>
+                    <div className="w-28 space-y-1.5">
+                      <label className="text-sm font-medium">{t('session_end_label')}</label>
+                      <Input
+                        type="time"
+                        value={s.endTime}
+                        onChange={e => updateForm('sessions', form.sessions.map(row => (row.id === s.id ? { ...row, endTime: e.target.value } : row)))}
+                      />
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => updateForm('sessions', form.sessions.filter(row => row.id !== s.id))}
+                      disabled={form.sessions.length <= 1}
+                      aria-label={t('remove_session_aria')}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
-                  <div className="w-28 space-y-1.5">
-                    <label className="text-sm font-medium">{t('session_start_label')}</label>
-                    <Input
-                      type="time"
-                      value={s.startTime}
-                      onChange={e => updateForm('sessions', form.sessions.map(row => (row.id === s.id ? { ...row, startTime: e.target.value } : row)))}
-                    />
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">{t('session_instructor_label')}</label>
+                    <Select
+                      value={s.primaryInstructorClerkId ?? 'none'}
+                      onValueChange={value => updateForm('sessions', form.sessions.map(row => (row.id === s.id ? { ...row, primaryInstructorClerkId: value === 'none' ? null : value } : row)))}
+                      disabled={instructorsLoading}
+                    >
+                      <SelectTrigger data-testid={`event-instructor-select-${s.id}`}>
+                        <SelectValue placeholder={t('session_instructor_placeholder')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">{t('session_instructor_none')}</SelectItem>
+                        {instructors.map(instructor => (
+                          <SelectItem key={instructor.id} value={instructor.id}>
+                            {instructor.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <div className="w-28 space-y-1.5">
-                    <label className="text-sm font-medium">{t('session_end_label')}</label>
-                    <Input
-                      type="time"
-                      value={s.endTime}
-                      onChange={e => updateForm('sessions', form.sessions.map(row => (row.id === s.id ? { ...row, endTime: e.target.value } : row)))}
-                    />
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => updateForm('sessions', form.sessions.filter(row => row.id !== s.id))}
-                    disabled={form.sessions.length <= 1}
-                    aria-label={t('remove_session_aria')}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
                 </div>
               ))}
               <Button

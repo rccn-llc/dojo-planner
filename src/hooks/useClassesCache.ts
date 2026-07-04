@@ -41,6 +41,7 @@ export type ClassData = {
   minAge: number | null;
   maxAge: number | null;
   maxCapacity: number | null;
+  allowWalkIns: string | null;
   isActive: boolean | null;
   program: {
     id: string;

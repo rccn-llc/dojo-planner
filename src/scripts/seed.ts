@@ -196,6 +196,7 @@ const classesData = [
     color: '#a855f7',
     programSlug: 'adult-bjj',
     defaultDurationMinutes: 60,
+    allowWalkIns: 'No', // Blue-belt+ prerequisite — not open to walk-ins.
     tags: ['advanced', 'adults', 'no-gi'],
     schedule: [
       { dayOfWeek: 3, startTime: '19:00', endTime: '20:00' }, // Wednesday 7 PM
@@ -263,6 +264,7 @@ const classesData = [
     color: '#a855f7',
     programSlug: 'competition-team',
     defaultDurationMinutes: 60,
+    allowWalkIns: 'No', // Competition training is invite/roster only — no drop-ins.
     tags: ['advanced', 'competition', 'gi'],
     schedule: [
       { dayOfWeek: 1, startTime: '20:00', endTime: '21:00' }, // Monday 8 PM
@@ -1171,6 +1173,7 @@ async function seedOrganization(organizationId: string) {
       defaultDurationMinutes: classData.defaultDurationMinutes,
       minAge: classData.minAge,
       maxAge: classData.maxAge,
+      allowWalkIns: 'allowWalkIns' in classData ? classData.allowWalkIns : 'Yes',
     }).onConflictDoNothing();
 
     // Link tags to class

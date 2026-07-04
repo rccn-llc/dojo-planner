@@ -23,6 +23,7 @@ function makeClass(overrides: Partial<ClassData> & Pick<ClassData, 'id' | 'name'
     minAge: null,
     maxAge: null,
     maxCapacity: null,
+    allowWalkIns: 'Yes',
     isActive: true,
     program: null,
     tags: [],
@@ -358,5 +359,74 @@ describe('location threading', () => {
 
     expect(result).toHaveLength(2);
     expect(result.every(e => e.location === '1 Pine Ave')).toBe(true);
+  });
+});
+
+// =============================================================================
+// INSTRUCTOR RESOLUTION
+// =============================================================================
+
+describe('instructor resolution', () => {
+  it('falls back to a generic "Instructor" with empty photoUrl when no lookup is provided', () => {
+    const cls = makeClass({
+      id: 'c1',
+      name: 'Class',
+      schedule: [{ id: 's1', dayOfWeek: 1, startTime: '09:00', endTime: '10:00', instructorClerkId: 'coach-1' }],
+    });
+
+    const result = transformClassToCardProps(cls);
+
+    expect(result.instructors).toHaveLength(1);
+    expect(result.instructors[0]!.name).toBe('Instructor');
+    expect(result.instructors[0]!.photoUrl).toBe('');
+  });
+
+  it('falls back to the TBD placeholder when a class has no instructor clerk ids', () => {
+    const cls = makeClass({
+      id: 'c1',
+      name: 'Class',
+      schedule: [{ id: 's1', dayOfWeek: 1, startTime: '09:00', endTime: '10:00', instructorClerkId: null }],
+    });
+
+    const result = transformClassToCardProps(cls);
+
+    expect(result.instructors).toHaveLength(1);
+    expect(result.instructors[0]!.name).toBe('TBD');
+    expect(result.instructors[0]!.photoUrl).toBe('');
+  });
+
+  it('uses the real name and photoUrl from the instructorLookup map when provided', () => {
+    const cls = makeClass({
+      id: 'c1',
+      name: 'Class',
+      schedule: [{ id: 's1', dayOfWeek: 1, startTime: '09:00', endTime: '10:00', instructorClerkId: 'coach-1' }],
+    });
+    const lookup = new Map([
+      ['coach-1', { name: 'Coach Alex', photoUrl: 'https://example.com/alex.jpg' }],
+    ]);
+
+    const result = transformClassToCardProps(cls, '', lookup);
+
+    expect(result.instructors).toHaveLength(1);
+    expect(result.instructors[0]!.name).toBe('Coach Alex');
+    expect(result.instructors[0]!.photoUrl).toBe('https://example.com/alex.jpg');
+  });
+
+  it('resolves event instructors from the instructorLookup map when provided', () => {
+    const event = {
+      ...baseEvent,
+      sessions: [
+        { id: 'sess-1', sessionDate: '2026-02-05', startTime: '09:00', endTime: '10:00', instructorClerkId: 'coach-2' },
+      ],
+    } as unknown as EventData;
+    const lookup = new Map([
+      ['coach-2', { name: 'Coach Sam', photoUrl: 'https://example.com/sam.jpg' }],
+    ]);
+
+    const result = transformEventToCardProps(event, '', lookup);
+
+    expect(result.instructors).toHaveLength(1);
+    expect(result.instructors[0]!.name).toBe('Coach Sam');
+    expect(result.instructors[0]!.photoUrl).toBe('https://example.com/sam.jpg');
   });
 });

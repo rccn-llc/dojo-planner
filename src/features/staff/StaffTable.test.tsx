@@ -8,6 +8,17 @@ vi.mock('next-intl', () => ({
   useTranslations: () => (key: string) => key,
 }));
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
+}));
+
+// Render a lightweight stand-in for the photo modal so we can assert it opened
+// without pulling in the real ORPC / instructors-cache dependencies.
+vi.mock('./EditInstructorPhotoModal', () => ({
+  EditInstructorPhotoModal: ({ isOpen, clerkUserId }: { isOpen: boolean; clerkUserId: string }) =>
+    isOpen ? <div data-testid="edit-instructor-photo-modal">{clerkUserId}</div> : null,
+}));
+
 describe('StaffTable', () => {
   const mockOnEditStaff = vi.fn();
   const mockOnRemoveStaff = vi.fn();
@@ -181,6 +192,47 @@ describe('StaffTable', () => {
       await userEvent.click(removeButton);
 
       expect(mockOnRemoveStaff).toHaveBeenCalledWith('user_1');
+    });
+  });
+
+  describe('Instructor photo action', () => {
+    it('shows the photo button for an instructor row and opens the photo modal on click', async () => {
+      render(
+        <StaffTable
+          staffMembers={mockStaffMembers}
+          currentUserRole="org:admin"
+          currentUserId="other_user"
+          onEditStaff={mockOnEditStaff}
+          onRemoveStaff={mockOnRemoveStaff}
+        />,
+      );
+
+      // Jane Smith (user_2) has role org:instructor -> photo button present.
+      const photoButton = page.getByRole('button', { name: 'edit_photo_aria' }).first();
+
+      await expect.element(photoButton).toBeVisible();
+
+      await userEvent.click(photoButton);
+
+      const modal = page.getByTestId('edit-instructor-photo-modal').first();
+
+      await expect.element(modal).toBeVisible();
+      await expect.element(modal).toHaveTextContent('user_2');
+    });
+
+    it('does not show the photo button for an admin row', async () => {
+      render(
+        <StaffTable
+          staffMembers={[mockStaffMembers[0]!]}
+          currentUserRole="org:admin"
+          currentUserId="other_user"
+          onEditStaff={mockOnEditStaff}
+          onRemoveStaff={mockOnRemoveStaff}
+        />,
+      );
+
+      // Only John Doe (org:admin) is rendered — no photo button.
+      expect(page.getByRole('button', { name: 'edit_photo_aria' }).elements().length).toBe(0);
     });
   });
 

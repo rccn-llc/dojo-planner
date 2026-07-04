@@ -149,6 +149,9 @@ export const AUDIT_ACTION = {
   STAFF_UPDATE: 'staff.update',
   STAFF_REMOVE: 'staff.remove',
 
+  // Instructor operations
+  INSTRUCTOR_PHOTO_UPDATE: 'instructor.photoUpdate',
+
   // Role operations (Clerk organization roles)
   ROLE_CREATE: 'role.create',
   ROLE_UPDATE: 'role.update',
@@ -190,6 +193,7 @@ export const AUDIT_ENTITY_TYPE = {
   ORGANIZATION: 'organization',
   NOTE: 'note',
   STAFF: 'staff',
+  INSTRUCTOR: 'instructor',
   ROLE: 'role',
 } as const;
 

@@ -14,11 +14,15 @@ import type { EventCardProps, EventSession as EventCardSession } from '@/templat
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-// Default instructor when none assigned (Clerk ID not available)
+// Default instructor shown when none is assigned. No avatar URL — the card's
+// AvatarFallback renders initials when photoUrl is empty.
 const DEFAULT_INSTRUCTOR = {
   name: 'TBD',
-  photoUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=default',
+  photoUrl: '',
 };
+
+/** Resolves a stored `primaryInstructorClerkId` to a display name + photo. */
+export type InstructorLookup = Map<string, { name: string; photoUrl: string | null }>;
 
 // =============================================================================
 // HELPER FUNCTIONS
@@ -74,11 +78,32 @@ function extractStyle(tags: { name: string }[]): string {
 }
 
 /**
- * Generate avatar URL from name
+ * Resolve a list of instructor Clerk IDs to unique display cards
+ * ({ name, photoUrl }) via the org instructor lookup. Unknown/unresolved IDs
+ * fall back to a generic "Instructor" entry; an empty list yields the TBD
+ * placeholder. `photoUrl` is empty when unknown — the card shows initials.
  */
-function getAvatarUrl(name: string): string {
-  const seed = name.replace(/\s+/g, '');
-  return `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}`;
+function resolveInstructors(
+  clerkIds: (string | null)[],
+  instructorLookup?: InstructorLookup,
+): Array<{ name: string; photoUrl: string }> {
+  const seen = new Set<string>();
+  const resolved: Array<{ name: string; photoUrl: string }> = [];
+  for (const id of clerkIds) {
+    if (!id || seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    const match = instructorLookup?.get(id);
+    resolved.push({
+      name: match?.name ?? 'Instructor',
+      photoUrl: match?.photoUrl ?? '',
+    });
+  }
+  if (resolved.length === 0) {
+    resolved.push(DEFAULT_INSTRUCTOR);
+  }
+  return resolved;
 }
 
 // =============================================================================
@@ -86,23 +111,18 @@ function getAvatarUrl(name: string): string {
 // =============================================================================
 
 /**
- * Transform database ClassData to ClassCardProps
+ * Transform database ClassData to ClassCardProps. Pass `instructorLookup`
+ * (from `useInstructorsCache`) to resolve instructor names/photos.
  */
-export function transformClassToCardProps(classData: ClassData, location: string = ''): ClassCardProps {
-  // For now, we don't have instructor data from Clerk, so we use placeholders
-  // In a full implementation, you would fetch instructor details from Clerk API
-  const instructors = classData.schedule
-    .filter(s => s.instructorClerkId)
-    .map(s => ({
-      name: `Instructor`, // Would be fetched from Clerk
-      photoUrl: getAvatarUrl(s.instructorClerkId || 'default'),
-    }))
-    .filter((v, i, a) => a.findIndex(t => t.name === v.name) === i); // Dedupe
-
-  // If no instructors assigned, show TBD
-  if (instructors.length === 0) {
-    instructors.push(DEFAULT_INSTRUCTOR);
-  }
+export function transformClassToCardProps(
+  classData: ClassData,
+  location: string = '',
+  instructorLookup?: InstructorLookup,
+): ClassCardProps {
+  const instructors = resolveInstructors(
+    classData.schedule.map(s => s.instructorClerkId),
+    instructorLookup,
+  );
 
   return {
     id: classData.id,
@@ -120,7 +140,11 @@ export function transformClassToCardProps(classData: ClassData, location: string
 /**
  * Transform database EventData to EventCardProps
  */
-export function transformEventToCardProps(eventData: EventData, location: string = ''): EventCardProps {
+export function transformEventToCardProps(
+  eventData: EventData,
+  location: string = '',
+  instructorLookup?: InstructorLookup,
+): EventCardProps {
   // Get date range from sessions
   const sortedSessions = [...eventData.sessions].sort(
     (a, b) => new Date(a.sessionDate).getTime() - new Date(b.sessionDate).getTime(),
@@ -149,18 +173,10 @@ export function transformEventToCardProps(eventData: EventData, location: string
     ? Math.min(...eventData.billing.map(b => b.price))
     : null;
 
-  // Instructors placeholder
-  const instructors = eventData.sessions
-    .filter(s => s.instructorClerkId)
-    .map(s => ({
-      name: `Instructor`,
-      photoUrl: getAvatarUrl(s.instructorClerkId || 'default'),
-    }))
-    .filter((v, i, a) => a.findIndex(t => t.name === v.name) === i);
-
-  if (instructors.length === 0) {
-    instructors.push(DEFAULT_INSTRUCTOR);
-  }
+  const instructors = resolveInstructors(
+    eventData.sessions.map(s => s.instructorClerkId),
+    instructorLookup,
+  );
 
   return {
     id: eventData.id,
@@ -179,19 +195,27 @@ export function transformEventToCardProps(eventData: EventData, location: string
 /**
  * Transform array of classes
  */
-export function transformClassesToCardProps(classes: ClassData[], location: string = ''): ClassCardProps[] {
+export function transformClassesToCardProps(
+  classes: ClassData[],
+  location: string = '',
+  instructorLookup?: InstructorLookup,
+): ClassCardProps[] {
   return classes
     .filter(c => c.isActive !== false)
-    .map(c => transformClassToCardProps(c, location));
+    .map(c => transformClassToCardProps(c, location, instructorLookup));
 }
 
 /**
  * Transform array of events
  */
-export function transformEventsToCardProps(events: EventData[], location: string = ''): EventCardProps[] {
+export function transformEventsToCardProps(
+  events: EventData[],
+  location: string = '',
+  instructorLookup?: InstructorLookup,
+): EventCardProps[] {
   return events
     .filter(e => e.isActive !== false)
-    .map(e => transformEventToCardProps(e, location));
+    .map(e => transformEventToCardProps(e, location, instructorLookup));
 }
 
 // =============================================================================
