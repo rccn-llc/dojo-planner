@@ -591,20 +591,32 @@ describe('WaiversService', () => {
   // ===========================================================================
 
   describe('deleteWaiverTemplate', () => {
-    it('should throw when template has signed waivers', async () => {
+    it('should soft-delete (deactivate) when template has signed waivers', async () => {
       const { db } = await import('@/libs/DB');
 
+      // Signed waivers exist for this template.
       vi.mocked(db.select).mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockResolvedValue([{ waiverTemplateId: 'template-1', memberId: 'member-1' }]),
         }),
       } as any);
 
+      const deleteWhere = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(db.delete).mockReturnValue({ where: deleteWhere } as any);
+
+      const updateSet = vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
+      vi.mocked(db.update).mockReturnValue({ set: updateSet } as any);
+
       const { deleteWaiverTemplate } = await import('./WaiversService');
 
-      await expect(
-        deleteWaiverTemplate('template-1', 'test-org-123'),
-      ).rejects.toThrow('Cannot delete waiver template that has signed waivers. Deactivate it instead.');
+      // Does not throw — the template is deactivated instead of hard-deleted.
+      await expect(deleteWaiverTemplate('template-1', 'test-org-123')).resolves.toBeUndefined();
+
+      // Membership associations are removed (one delete), and the template rows
+      // are soft-deleted via update({ isActive: false }) rather than hard-deleted.
+      expect(db.delete).toHaveBeenCalledTimes(1);
+      expect(db.update).toHaveBeenCalledTimes(1);
+      expect(updateSet).toHaveBeenCalledWith({ isActive: false });
     });
 
     it('should delete membership associations, archive versions, and root template', async () => {
