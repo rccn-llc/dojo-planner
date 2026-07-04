@@ -191,7 +191,6 @@ describe('Staff Actions', () => {
         roleKey: 'org:admin',
         firstName: 'John',
         lastName: 'Doe',
-        phone: '555-123-4567',
       });
 
       expect(result.success).toBe(true);
@@ -204,7 +203,6 @@ describe('Staff Actions', () => {
         publicMetadata: {
           invitedFirstName: 'John',
           invitedLastName: 'Doe',
-          invitedPhone: '555-123-4567',
         },
       });
     });
@@ -300,7 +298,6 @@ describe('Staff Actions', () => {
         roleKey: 'org:instructor',
         firstName: 'John',
         lastName: 'Doe',
-        phone: '555-123-4567',
       });
 
       expect(result.success).toBe(true);
@@ -312,9 +309,6 @@ describe('Staff Actions', () => {
       expect(mockUpdateUser).toHaveBeenCalledWith('user_456', {
         firstName: 'John',
         lastName: 'Doe',
-        publicMetadata: {
-          phone: '555-123-4567',
-        },
       });
     });
 

@@ -20,7 +20,6 @@ type StaffMember = {
   emailAddress: string;
   role: string;
   status: 'Active' | 'Invitation sent' | 'Inactive';
-  phone?: string | null;
 };
 
 type StaffPageClientProps = {

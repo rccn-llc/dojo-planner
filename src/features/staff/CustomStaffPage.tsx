@@ -1,6 +1,7 @@
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { getTranslations } from 'next-intl/server';
 import { getInstructorPhotoOverrides } from '@/services/InstructorsService';
+import { ORG_ROLE } from '@/types/Auth';
 import { StaffPageClient } from './StaffPageClient';
 
 type ClerkStaffMember = {
@@ -12,8 +13,18 @@ type ClerkStaffMember = {
   emailAddress: string;
   role: string;
   status: 'Active' | 'Invitation sent' | 'Inactive';
-  phone?: string | null;
 };
+
+// Roles that count as "staff" for the staff page. Everyone except plain members
+// is a staff member (admins, academy owners, front desk, instructors). Filtering
+// to a hardcoded subset previously hid front-desk staff entirely — e.g. an
+// academy owner switched to front desk vanished from the list.
+const STAFF_ROLES = new Set<string>([
+  ORG_ROLE.ADMIN,
+  ORG_ROLE.ACADEMY_OWNER,
+  ORG_ROLE.FRONT_DESK,
+  ORG_ROLE.INSTRUCTOR,
+]);
 
 export async function CustomStaffPage() {
   const t = await getTranslations('Staff');
@@ -58,14 +69,11 @@ export async function CustomStaffPage() {
     // In-app instructor photo overrides take precedence over the Clerk avatar.
     const photoOverrides = await getInstructorPhotoOverrides(orgId);
 
-    // Filter and map org:admin, org:academy_owner, and org:instructor members
-    // with status. (Instructors are staff too, so they appear here for
-    // management alongside admins/owners.)
+    // Keep only staff-role memberships (admins, academy owners, front desk,
+    // instructors). Pending invitations are intentionally NOT shown here —
+    // only accepted org memberships appear.
     const staffMembers: ClerkStaffMember[] = memberships.data
-      .filter(membership =>
-        membership.role === 'org:admin'
-        || membership.role === 'org:academy_owner'
-        || membership.role === 'org:instructor')
+      .filter(membership => membership.role != null && STAFF_ROLES.has(membership.role))
       .map((membership) => {
         // Determine status based on whether user has fully set up their account
         const status: 'Active' | 'Invitation sent' | 'Inactive' = membership.publicUserData
@@ -77,14 +85,13 @@ export async function CustomStaffPage() {
 
         return {
           id: userId || membership.id,
-          firstName: membership.publicUserData?.firstName || null,
-          lastName: membership.publicUserData?.lastName || null,
+          firstName: membership.publicUserData?.firstName ?? null,
+          lastName: membership.publicUserData?.lastName ?? null,
           email: membership.publicUserData?.identifier || '',
           photoUrl: overridePhoto ?? membership.publicUserData?.imageUrl ?? null,
           emailAddress: membership.publicUserData?.identifier || '',
           role: membership.role,
           status,
-          phone: null,
         };
       });
 

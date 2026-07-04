@@ -72,7 +72,6 @@ export const InviteStaffModal = ({
           roleKey: form.data.roleKey,
           firstName: form.data.firstName,
           lastName: form.data.lastName,
-          phone: form.data.phone,
         });
 
         if (!result.success) {
@@ -97,7 +96,6 @@ export const InviteStaffModal = ({
           roleKey: form.data.roleKey,
           firstName: form.data.firstName,
           lastName: form.data.lastName,
-          phone: form.data.phone,
         });
 
         if (!result.success) {

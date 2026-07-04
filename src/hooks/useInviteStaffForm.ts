@@ -10,7 +10,6 @@ export type StaffMemberData = {
   lastName: string;
   email: string;
   roleKey: string | null;
-  phone: string;
 };
 
 export type InviteStaffFormData = StaffMemberData;
@@ -20,7 +19,6 @@ export type TouchedFields = {
   lastName: boolean;
   email: boolean;
   roleKey: boolean;
-  phone: boolean;
 };
 
 const defaultFormData: InviteStaffFormData = {
@@ -28,7 +26,6 @@ const defaultFormData: InviteStaffFormData = {
   lastName: '',
   email: '',
   roleKey: null,
-  phone: '',
 };
 
 const defaultTouched: TouchedFields = {
@@ -36,7 +33,6 @@ const defaultTouched: TouchedFields = {
   lastName: false,
   email: false,
   roleKey: false,
-  phone: false,
 };
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@][^\s.@]*\.[^\s@]+$/;
@@ -52,7 +48,6 @@ const createFormDataFromStaffMember = (staffMember: StaffMemberData): InviteStaf
   lastName: staffMember.lastName,
   email: staffMember.email,
   roleKey: staffMember.roleKey,
-  phone: staffMember.phone,
 });
 
 export const useInviteStaffForm = (initialData?: StaffMemberData | null) => {
@@ -129,7 +124,6 @@ export const useInviteStaffForm = (initialData?: StaffMemberData | null) => {
       lastName: true,
       email: true,
       roleKey: true,
-      phone: true,
     });
   }, []);
 
@@ -150,7 +144,6 @@ export const useInviteStaffForm = (initialData?: StaffMemberData | null) => {
     lastName: data.lastName.trim() === '',
     email: !isValidEmail(data.email),
     roleKey: data.roleKey === null,
-    phone: data.phone.trim() === '',
   }), [data]);
 
   const isValid = useCallback(() => {
@@ -159,7 +152,6 @@ export const useInviteStaffForm = (initialData?: StaffMemberData | null) => {
       && data.lastName.trim() !== ''
       && isValidEmail(data.email)
       && data.roleKey !== null
-      && data.phone.trim() !== ''
     );
   }, [data]);
 

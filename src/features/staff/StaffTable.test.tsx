@@ -33,7 +33,6 @@ describe('StaffTable', () => {
       emailAddress: 'john@example.com',
       role: 'org:admin',
       status: 'Active' as const,
-      phone: '555-123-4567',
     },
     {
       id: 'user_2',
@@ -44,7 +43,6 @@ describe('StaffTable', () => {
       emailAddress: 'jane@example.com',
       role: 'org:instructor',
       status: 'Active' as const,
-      phone: '555-987-6543',
     },
     {
       id: 'user_3',
@@ -55,7 +53,6 @@ describe('StaffTable', () => {
       emailAddress: 'bob@example.com',
       role: 'org:front_desk',
       status: 'Invitation sent' as const,
-      phone: null,
     },
   ];
 
@@ -170,7 +167,6 @@ describe('StaffTable', () => {
         lastName: 'Doe',
         email: 'john@example.com',
         roleKey: 'org:admin',
-        phone: '555-123-4567',
       });
     });
   });

@@ -29,7 +29,6 @@ const mockStaffMembers = [
     emailAddress: 'charlie@dojo.com',
     role: 'org:admin',
     status: 'Active' as const,
-    phone: null,
   },
   {
     id: 'user_2',
@@ -40,7 +39,6 @@ const mockStaffMembers = [
     emailAddress: 'jessica@dojo.com',
     role: 'org:admin',
     status: 'Invitation sent' as const,
-    phone: null,
   },
 ];
 
@@ -54,7 +52,6 @@ const mockMixedRoleStaff = [
     emailAddress: 'charlie@dojo.com',
     role: 'org:admin',
     status: 'Active' as const,
-    phone: null,
   },
   {
     id: 'user_2',
@@ -65,7 +62,6 @@ const mockMixedRoleStaff = [
     emailAddress: 'sarah@dojo.com',
     role: 'org:academy_owner',
     status: 'Active' as const,
-    phone: null,
   },
 ];
 
