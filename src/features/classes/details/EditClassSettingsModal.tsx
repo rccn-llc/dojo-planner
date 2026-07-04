@@ -29,7 +29,7 @@ type EditClassSettingsModalProps = {
     maximumCapacity: number | null;
     minimumAge: number | null;
     allowWalkIns: AllowWalkIns;
-  }) => void;
+  }) => void | Promise<void>;
 };
 
 export function EditClassSettingsModal({
@@ -49,14 +49,15 @@ export function EditClassSettingsModal({
 
   const handleSubmit = async () => {
     setIsLoading(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500));
-    onSave({
-      maximumCapacity,
-      minimumAge,
-      allowWalkIns,
-    });
-    setIsLoading(false);
+    try {
+      await onSave({
+        maximumCapacity,
+        minimumAge,
+        allowWalkIns,
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleCancel = () => {

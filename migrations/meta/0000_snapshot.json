@@ -1,5 +1,5 @@
 {
-  "id": "f6293606-374e-4d79-93aa-8e5daa5bc7b7",
+  "id": "dfac82cb-5e86-4b86-a553-51bc36d67e73",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1578,6 +1578,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "allow_walk_ins": {
+          "name": "allow_walk_ins",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'Yes'"
+        },
         "is_active": {
           "name": "is_active",
           "type": "boolean",
@@ -2844,6 +2851,79 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.instructor_profile": {
+      "name": "instructor_profile",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "clerk_user_id": {
+          "name": "clerk_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "photo_url": {
+          "name": "photo_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "instructor_profile_org_user_idx": {
+          "name": "instructor_profile_org_user_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "clerk_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.member_membership": {
       "name": "member_membership",
       "schema": "",
@@ -3720,6 +3800,12 @@
         },
         "iqpro_payment_method_id": {
           "name": "iqpro_payment_method_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "iqpro_saas_responsible_clerk_user_id": {
+          "name": "iqpro_saas_responsible_clerk_user_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false

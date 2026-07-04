@@ -43,7 +43,7 @@ type ClerkApiRequestOptions = {
  * Makes an authenticated request to the Clerk Backend API. Defaults to GET;
  * pass `{ method, body }` for create/update/delete calls.
  */
-async function clerkApiRequest<T>(
+export async function clerkApiRequest<T>(
   endpoint: string,
   options: ClerkApiRequestOptions = {},
 ): Promise<T> {

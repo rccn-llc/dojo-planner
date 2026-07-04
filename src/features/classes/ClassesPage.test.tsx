@@ -41,6 +41,7 @@ const mockClasses: ClassData[] = [
     minAge: null,
     maxAge: null,
     maxCapacity: 20,
+    allowWalkIns: 'Yes',
     isActive: true,
     program: { id: 'prog-1', name: 'Adult BJJ', slug: 'adult-bjj', color: '#22c55e' },
     tags: [
@@ -61,6 +62,7 @@ const mockClasses: ClassData[] = [
     minAge: null,
     maxAge: null,
     maxCapacity: 20,
+    allowWalkIns: 'Yes',
     isActive: true,
     program: { id: 'prog-1', name: 'Adult BJJ', slug: 'adult-bjj', color: '#22c55e' },
     tags: [
@@ -81,6 +83,7 @@ const mockClasses: ClassData[] = [
     minAge: null,
     maxAge: null,
     maxCapacity: 15,
+    allowWalkIns: 'Yes',
     isActive: true,
     program: { id: 'prog-1', name: 'Adult BJJ', slug: 'adult-bjj', color: '#22c55e' },
     tags: [
@@ -101,6 +104,7 @@ const mockClasses: ClassData[] = [
     minAge: 16,
     maxAge: null,
     maxCapacity: 12,
+    allowWalkIns: 'Yes',
     isActive: true,
     program: { id: 'prog-1', name: 'Adult BJJ', slug: 'adult-bjj', color: '#22c55e' },
     tags: [
@@ -121,6 +125,7 @@ const mockClasses: ClassData[] = [
     minAge: 5,
     maxAge: 12,
     maxCapacity: 15,
+    allowWalkIns: 'Yes',
     isActive: true,
     program: { id: 'prog-2', name: 'Kids Program', slug: 'kids-program', color: '#06b6d4' },
     tags: [
@@ -141,6 +146,7 @@ const mockClasses: ClassData[] = [
     minAge: null,
     maxAge: null,
     maxCapacity: 20,
+    allowWalkIns: 'Yes',
     isActive: true,
     program: { id: 'prog-1', name: 'Adult BJJ', slug: 'adult-bjj', color: '#22c55e' },
     tags: [
@@ -161,6 +167,7 @@ const mockClasses: ClassData[] = [
     minAge: null,
     maxAge: null,
     maxCapacity: null,
+    allowWalkIns: 'Yes',
     isActive: true,
     program: { id: 'prog-1', name: 'Adult BJJ', slug: 'adult-bjj', color: '#22c55e' },
     tags: [
@@ -180,6 +187,7 @@ const mockClasses: ClassData[] = [
     minAge: null,
     maxAge: null,
     maxCapacity: 15,
+    allowWalkIns: 'Yes',
     isActive: true,
     program: { id: 'prog-1', name: 'Adult BJJ', slug: 'adult-bjj', color: '#22c55e' },
     tags: [
@@ -200,6 +208,7 @@ const mockClasses: ClassData[] = [
     minAge: 16,
     maxAge: null,
     maxCapacity: 10,
+    allowWalkIns: 'Yes',
     isActive: true,
     program: { id: 'prog-3', name: 'Competition Team', slug: 'competition-team', color: '#a855f7' },
     tags: [

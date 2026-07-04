@@ -33,6 +33,7 @@ const ClassShape = z.object({
   maxCapacity: z.number().int().min(1).nullable().optional(),
   minAge: z.number().int().min(0).max(120).nullable().optional(),
   maxAge: z.number().int().min(0).max(120).nullable().optional(),
+  allowWalkIns: z.enum(['Yes', 'No']).optional(),
   isActive: z.boolean(),
   schedule: z.array(ScheduleInstanceShape).optional().default([]),
   tagIds: z.array(z.string().min(1)).optional().default([]),

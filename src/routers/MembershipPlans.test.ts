@@ -110,6 +110,24 @@ describe('MembershipPlans Router', () => {
 
       await expect(callHandler(create, validInput)).rejects.toBeInstanceOf(ORPCError);
     });
+
+    it('maps an invalid program reference to a 400 ORPCError and audits failure', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { createMembershipPlan, InvalidProgramReferenceError } = await import('@/services/MembershipPlansService');
+      const { audit } = await import('@/services/AuditService');
+      vi.mocked(guardRole).mockResolvedValue(academyOwnerContext);
+      vi.mocked(createMembershipPlan).mockRejectedValue(new InvalidProgramReferenceError('nope'));
+
+      const { create } = await import('./MembershipPlans');
+
+      await expect(callHandler(create, validInput)).rejects.toMatchObject({ status: 400 });
+      expect(audit).toHaveBeenCalledWith(
+        academyOwnerContext,
+        AUDIT_ACTION.MEMBERSHIP_PLAN_CREATE,
+        AUDIT_ENTITY_TYPE.MEMBERSHIP_PLAN,
+        expect.objectContaining({ status: 'failure' }),
+      );
+    });
   });
 
   describe('update', () => {
@@ -142,6 +160,24 @@ describe('MembershipPlans Router', () => {
         expect.objectContaining({ entityId: 'plan-1', status: 'success' }),
       );
       expect(result).toEqual({ plan: fakePlan });
+    });
+
+    it('maps an invalid program reference to a 400 ORPCError and audits failure', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { updateMembershipPlan, InvalidProgramReferenceError } = await import('@/services/MembershipPlansService');
+      const { audit } = await import('@/services/AuditService');
+      vi.mocked(guardRole).mockResolvedValue(academyOwnerContext);
+      vi.mocked(updateMembershipPlan).mockRejectedValue(new InvalidProgramReferenceError('nope'));
+
+      const { update } = await import('./MembershipPlans');
+
+      await expect(callHandler(update, { id: 'plan-1', ...validInput })).rejects.toMatchObject({ status: 400 });
+      expect(audit).toHaveBeenCalledWith(
+        academyOwnerContext,
+        AUDIT_ACTION.MEMBERSHIP_PLAN_UPDATE,
+        AUDIT_ENTITY_TYPE.MEMBERSHIP_PLAN,
+        expect.objectContaining({ entityId: 'plan-1', status: 'failure' }),
+      );
     });
   });
 

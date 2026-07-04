@@ -21,6 +21,8 @@ import { EditClassSettingsModal } from '@/features/classes/details/EditClassSett
 import { EditScheduleInstanceModal } from '@/features/classes/details/EditScheduleInstanceModal';
 import { invalidateClassesCache, useClassesCache } from '@/hooks/useClassesCache';
 import { useHasRole } from '@/hooks/useHasRole';
+import { useProgramsCache } from '@/hooks/useProgramsCache';
+import { useTagsCache } from '@/hooks/useTagsCache';
 import { client } from '@/libs/Orpc';
 import { ORG_ROLE } from '@/types/Auth';
 
@@ -170,7 +172,7 @@ function transformClassData(classData: ClassData): ClassDetailData {
     instructors: [],
     maximumCapacity: classData.maxCapacity,
     minimumAge: classData.minAge,
-    allowWalkIns: 'Yes',
+    allowWalkIns: classData.allowWalkIns === 'No' ? 'No' : 'Yes',
     activeEnrollments: 0,
     averageAttendance: 0,
     totalSessions: 0,
@@ -195,6 +197,8 @@ export default function ClassDetailPage({ params }: { params: Promise<PageParams
   const searchParams = useSearchParams();
   const { organization } = useOrganization();
   const { classes, loading } = useClassesCache(organization?.id);
+  const { classTags } = useTagsCache(organization?.id);
+  const { programs } = useProgramsCache(organization?.id);
 
   // Get the view param to preserve when navigating back
   const viewParam = searchParams.get('view');
@@ -223,12 +227,72 @@ export default function ClassDetailPage({ params }: { params: Promise<PageParams
     setLastInitialId(initialClassData.id);
   }
 
-  // Handler for updating class data — currently only the local detail state
-  // is updated. The Edit Basics / Schedule / Settings modals don't post back
-  // to the server yet (out of scope for this PR; tracked separately).
-  const handleUpdateClass = (updates: Partial<ClassDetailData>) => {
-    if (classData) {
-      setClassData({ ...classData, ...updates });
+  const rawClass = useMemo(
+    () => classes.find(c => c.id === resolvedParams.classId) ?? null,
+    [classes, resolvedParams.classId],
+  );
+
+  // Merge edits from an Edit Basics / Settings / Schedule modal into local
+  // state, then persist the whole class via client.classes.update. The update
+  // endpoint takes the full class, so we rebuild the payload from the merged
+  // detail data: level/type/style map back to tag ids, program slug -> id, and
+  // scheduleInstances -> the 24h schedule array with instructor clerk ids.
+  const persistClass = async (updates: Partial<ClassDetailData>) => {
+    if (!classData || !rawClass) {
+      return;
+    }
+    const merged = { ...classData, ...updates };
+    setClassData(merged);
+
+    // Resolve level/type/style display values back to class-tag ids. Preserve
+    // any existing tags that aren't one of those three categories.
+    const findTagId = (name: string): string | null => {
+      const match = classTags.find(tag => tag.name.toLowerCase() === name.toLowerCase());
+      return match?.id ?? null;
+    };
+    const categoryTagIds = [merged.level, merged.type, merged.style]
+      .map(findTagId)
+      .filter((id): id is string => id !== null);
+    const preservedTagIds = rawClass.tags
+      .filter(tag => !LEVEL_TAGS.has(tag.name.toLowerCase())
+        && !TYPE_TAGS.has(tag.name.toLowerCase())
+        && !STYLE_TAGS.has(tag.name.toLowerCase()))
+      .map(tag => tag.id);
+    const tagIds = [...new Set([...preservedTagIds, ...categoryTagIds])];
+
+    // Resolve program slug -> id (fall back to the class's current programId).
+    const programId = programs.find(p => p.slug === merged.program)?.id ?? rawClass.program?.id ?? null;
+
+    // scheduleInstances (12h) -> DB schedule (24h) with instructor clerk id.
+    const schedule = merged.scheduleInstances.map((instance) => {
+      const start = exceptionTo24h(instance.timeHour, instance.timeMinute, instance.timeAmPm) ?? '00:00';
+      const end = add24hDuration(start, instance.durationHours, instance.durationMinutes) ?? start;
+      return {
+        dayOfWeek: DAY_NAMES.indexOf(instance.dayOfWeek),
+        startTime: start,
+        endTime: end,
+        primaryInstructorClerkId: instance.staffMember || null,
+        room: null,
+      };
+    });
+
+    try {
+      await client.classes.update({
+        id: merged.id,
+        name: merged.className,
+        description: merged.description || null,
+        programId,
+        color: merged.calendarColor || null,
+        maxCapacity: merged.maximumCapacity ?? null,
+        minAge: merged.minimumAge ?? null,
+        allowWalkIns: merged.allowWalkIns,
+        isActive: rawClass.isActive ?? true,
+        schedule,
+        tagIds,
+      });
+      await invalidateClassesCache();
+    } catch (err) {
+      console.error('[Class Detail] Failed to persist class update:', err);
     }
   };
 
@@ -422,8 +486,8 @@ export default function ClassDetailPage({ params }: { params: Promise<PageParams
         level={classData.level}
         type={classData.type}
         style={classData.style}
-        onSave={(data) => {
-          handleUpdateClass(data);
+        onSave={async (data) => {
+          await persistClass(data);
           setIsEditBasicsOpen(false);
         }}
       />
@@ -434,8 +498,8 @@ export default function ClassDetailPage({ params }: { params: Promise<PageParams
         scheduleInstances={classData.scheduleInstances}
         location={classData.location}
         calendarColor={classData.calendarColor}
-        onSave={(data) => {
-          handleUpdateClass(data);
+        onSave={async (data) => {
+          await persistClass(data);
           setIsEditScheduleOpen(false);
         }}
       />
@@ -446,8 +510,8 @@ export default function ClassDetailPage({ params }: { params: Promise<PageParams
         maximumCapacity={classData.maximumCapacity}
         minimumAge={classData.minimumAge}
         allowWalkIns={classData.allowWalkIns}
-        onSave={(data) => {
-          handleUpdateClass(data);
+        onSave={async (data) => {
+          await persistClass(data);
           setIsEditSettingsOpen(false);
         }}
       />

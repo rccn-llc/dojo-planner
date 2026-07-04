@@ -1,6 +1,7 @@
 'use client';
 
 import type { AddClassWizardData, ClassSchedule, DayOfWeek, ScheduleInstance } from '@/hooks/useAddClassWizard';
+import { useOrganization } from '@clerk/nextjs';
 import { Plus, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
@@ -12,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useInstructorsCache } from '@/hooks/useInstructorsCache';
 
 type ClassScheduleStepProps = {
   data: AddClassWizardData;
@@ -43,15 +45,6 @@ const DURATION_OPTIONS = [
   { value: '6-0', hours: 6, minutes: 0, label: '6h' },
 ];
 
-const MOCK_STAFF = [
-  { value: 'collin-grayson', label: 'Collin Grayson' },
-  { value: 'coach-alex', label: 'Coach Alex' },
-  { value: 'professor-jessica', label: 'Professor Jessica' },
-  { value: 'professor-joao', label: 'Professor Joao' },
-  { value: 'coach-liza', label: 'Coach Liza' },
-  { value: 'professor-ivan', label: 'Professor Ivan' },
-];
-
 function generateInstanceId(): string {
   return `instance-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
@@ -67,6 +60,8 @@ export const ClassScheduleStep = ({
 }: ClassScheduleStepProps) => {
   const t = useTranslations('AddClassWizard.ClassScheduleStep');
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const { organization } = useOrganization();
+  const { instructors, loading: instructorsLoading } = useInstructorsCache(organization?.id);
 
   const handleAddInstance = () => {
     const newInstance: ScheduleInstance = {
@@ -282,15 +277,16 @@ export const ClassScheduleStep = ({
                               <Select
                                 value={instance.staffMember || 'none'}
                                 onValueChange={value => handleUpdateInstance(instance.id, { staffMember: value === 'none' ? '' : value })}
+                                disabled={instructorsLoading}
                               >
                                 <SelectTrigger className="h-8 w-full text-xs" data-testid={`staff-select-${instance.id}`}>
                                   <SelectValue placeholder={t('staff_member_placeholder')} />
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="none" className="text-xs">{t('staff_member_placeholder')}</SelectItem>
-                                  {MOCK_STAFF.map(staff => (
-                                    <SelectItem key={staff.value} value={staff.value} className="text-xs">
-                                      {staff.label}
+                                  {instructors.map(instructor => (
+                                    <SelectItem key={instructor.id} value={instructor.id} className="text-xs">
+                                      {instructor.name}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
@@ -302,15 +298,16 @@ export const ClassScheduleStep = ({
                               <Select
                                 value={instance.assistantStaff || 'none'}
                                 onValueChange={value => handleUpdateInstance(instance.id, { assistantStaff: value === 'none' ? '' : value })}
+                                disabled={instructorsLoading}
                               >
                                 <SelectTrigger className="h-8 w-full text-xs">
                                   <SelectValue placeholder={t('assistant_staff_none')} />
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="none" className="text-xs">{t('assistant_staff_none')}</SelectItem>
-                                  {MOCK_STAFF.map(staff => (
-                                    <SelectItem key={staff.value} value={staff.value} className="text-xs">
-                                      {staff.label}
+                                  {instructors.map(instructor => (
+                                    <SelectItem key={instructor.id} value={instructor.id} className="text-xs">
+                                      {instructor.name}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>

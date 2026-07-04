@@ -96,6 +96,20 @@ describe('MembershipPlansService.createMembershipPlan', () => {
     await expect(createMembershipPlan(validInput, 'org-1')).rejects.toBeInstanceOf(MembershipPlanSlugAlreadyExistsError);
   });
 
+  it('throws InvalidProgramReferenceError on Postgres foreign-key violation', async () => {
+    const fkViolation: Error & { code: string } = Object.assign(
+      new Error('insert or update violates foreign key constraint'),
+      { code: '23503' },
+    );
+    dbMock.insert.mockReturnValueOnce({
+      values: () => ({ returning: () => Promise.reject(fkViolation) }),
+    });
+
+    const { createMembershipPlan, InvalidProgramReferenceError } = await import('./MembershipPlansService');
+
+    await expect(createMembershipPlan({ ...validInput, programId: 'nope' }, 'org-1')).rejects.toBeInstanceOf(InvalidProgramReferenceError);
+  });
+
   it('rethrows non-unique-violation errors', async () => {
     dbMock.insert.mockReturnValueOnce({
       values: () => ({ returning: () => Promise.reject(new Error('boom')) }),
@@ -156,6 +170,23 @@ describe('MembershipPlansService.updateMembershipPlan', () => {
     const { updateMembershipPlan, MembershipPlanSlugAlreadyExistsError } = await import('./MembershipPlansService');
 
     await expect(updateMembershipPlan('plan-1', validInput, 'org-1')).rejects.toBeInstanceOf(MembershipPlanSlugAlreadyExistsError);
+  });
+
+  it('throws InvalidProgramReferenceError on foreign-key violation', async () => {
+    dbMock.select.mockReturnValueOnce({
+      from: () => ({ where: () => ({ limit: () => Promise.resolve([baseRow]) }) }),
+    });
+    const fkViolation: Error & { code: string } = Object.assign(
+      new Error('insert or update violates foreign key constraint'),
+      { code: '23503' },
+    );
+    dbMock.update.mockReturnValueOnce({
+      set: () => ({ where: () => ({ returning: () => Promise.reject(fkViolation) }) }),
+    });
+
+    const { updateMembershipPlan, InvalidProgramReferenceError } = await import('./MembershipPlansService');
+
+    await expect(updateMembershipPlan('plan-1', { ...validInput, programId: 'nope' }, 'org-1')).rejects.toBeInstanceOf(InvalidProgramReferenceError);
   });
 });
 

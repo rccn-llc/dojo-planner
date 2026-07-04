@@ -3,6 +3,7 @@ import { audit } from '@/services/AuditService';
 import {
   createMembershipPlan,
   deleteMembershipPlan,
+  InvalidProgramReferenceError,
   MembershipPlanInUseError,
   MembershipPlanSlugAlreadyExistsError,
   updateMembershipPlan,
@@ -56,6 +57,9 @@ export const create = os
       if (error instanceof MembershipPlanSlugAlreadyExistsError) {
         throw new ORPCError('Conflict', { status: 409, message: error.message });
       }
+      if (error instanceof InvalidProgramReferenceError) {
+        throw new ORPCError('Bad Request', { status: 400, message: error.message });
+      }
       throw error;
     }
   });
@@ -104,6 +108,9 @@ export const update = os
       });
       if (error instanceof MembershipPlanSlugAlreadyExistsError) {
         throw new ORPCError('Conflict', { status: 409, message: error.message });
+      }
+      if (error instanceof InvalidProgramReferenceError) {
+        throw new ORPCError('Bad Request', { status: 400, message: error.message });
       }
       throw error;
     }

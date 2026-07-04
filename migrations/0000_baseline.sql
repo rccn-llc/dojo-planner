@@ -162,11 +162,22 @@ CREATE TABLE "class" (
 	"max_capacity" integer,
 	"min_age" integer,
 	"max_age" integer,
+	"allow_walk_ins" text DEFAULT 'Yes',
 	"is_active" boolean DEFAULT true,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "instructor_profile" (
+	"id" text PRIMARY KEY NOT NULL,
+	"organization_id" text NOT NULL,
+	"clerk_user_id" text NOT NULL,
+	"photo_url" text,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	"updated_at" timestamp DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX "instructor_profile_org_user_idx" ON "instructor_profile" USING btree ("organization_id","clerk_user_id");--> statement-breakpoint
 CREATE TABLE "class_tag" (
 	"class_id" text NOT NULL,
 	"tag_id" text NOT NULL,

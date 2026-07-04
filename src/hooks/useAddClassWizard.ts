@@ -93,7 +93,8 @@ export type AddClassWizardData = {
 
   // Step 1: Class Basics (for classes)
   className: string;
-  program: string;
+  program: string; // real program.id (FK) of the selected program
+  programName: string; // display name of the selected program
   maximumCapacity: number | null;
   minimumAge: number | null;
   allowWalkIns: AllowWalkIns;
@@ -159,6 +160,7 @@ const initialData: AddClassWizardData = {
   itemType: 'class',
   className: '',
   program: '',
+  programName: '',
   maximumCapacity: null,
   minimumAge: null,
   allowWalkIns: 'Yes',

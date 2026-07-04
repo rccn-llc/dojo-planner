@@ -1,6 +1,7 @@
 'use client';
 
 import type { DayOfWeek, ScheduleInstance } from '@/hooks/useAddClassWizard';
+import { useOrganization } from '@clerk/nextjs';
 import { Plus, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
@@ -19,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useInstructorsCache } from '@/hooks/useInstructorsCache';
 
 const DAYS_OF_WEEK: DayOfWeek[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 1);
@@ -37,15 +39,6 @@ const DURATION_OPTIONS = [
   { value: '5-0', hours: 5, minutes: 0, label: '5h' },
   { value: '5-30', hours: 5, minutes: 30, label: '5h 30m' },
   { value: '6-0', hours: 6, minutes: 0, label: '6h' },
-];
-
-const MOCK_STAFF = [
-  { value: 'collin-grayson', label: 'Collin Grayson' },
-  { value: 'coach-alex', label: 'Coach Alex' },
-  { value: 'professor-jessica', label: 'Professor Jessica' },
-  { value: 'professor-joao', label: 'Professor Joao' },
-  { value: 'coach-liza', label: 'Coach Liza' },
-  { value: 'professor-ivan', label: 'Professor Ivan' },
 ];
 
 const AVAILABLE_COLORS = [
@@ -75,7 +68,7 @@ type EditClassScheduleModalProps = {
     scheduleInstances: ScheduleInstance[];
     location: string;
     calendarColor: string;
-  }) => void;
+  }) => void | Promise<void>;
 };
 
 // Separate inner component to allow key-based remounting
@@ -93,6 +86,8 @@ function EditClassScheduleModalContent({
   onClose: () => void;
 }) {
   const t = useTranslations('ClassDetailPage.EditScheduleModal');
+  const { organization } = useOrganization();
+  const { instructors, loading: instructorsLoading } = useInstructorsCache(organization?.id);
 
   const [scheduleInstances, setScheduleInstances] = useState<ScheduleInstance[]>(initialScheduleInstances);
   const [location, setLocation] = useState(initialLocation);
@@ -144,14 +139,15 @@ function EditClassScheduleModalContent({
 
   const handleSubmit = async () => {
     setIsLoading(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500));
-    onSave({
-      scheduleInstances,
-      location,
-      calendarColor,
-    });
-    setIsLoading(false);
+    try {
+      await onSave({
+        scheduleInstances,
+        location,
+        calendarColor,
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleCancel = () => {
@@ -316,15 +312,16 @@ function EditClassScheduleModalContent({
                               <Select
                                 value={instance.staffMember || 'none'}
                                 onValueChange={value => handleUpdateInstance(instance.id, { staffMember: value === 'none' ? '' : value })}
+                                disabled={instructorsLoading}
                               >
                                 <SelectTrigger className="h-8 w-full text-xs">
                                   <SelectValue placeholder={t('staff_placeholder')} />
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="none" className="text-xs">{t('staff_placeholder')}</SelectItem>
-                                  {MOCK_STAFF.map(staff => (
-                                    <SelectItem key={staff.value} value={staff.value} className="text-xs">
-                                      {staff.label}
+                                  {instructors.map(instructor => (
+                                    <SelectItem key={instructor.id} value={instructor.id} className="text-xs">
+                                      {instructor.name}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
@@ -336,15 +333,16 @@ function EditClassScheduleModalContent({
                               <Select
                                 value={instance.assistantStaff || 'none'}
                                 onValueChange={value => handleUpdateInstance(instance.id, { assistantStaff: value === 'none' ? '' : value })}
+                                disabled={instructorsLoading}
                               >
                                 <SelectTrigger className="h-8 w-full text-xs">
                                   <SelectValue placeholder={t('assistant_none')} />
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="none" className="text-xs">{t('assistant_none')}</SelectItem>
-                                  {MOCK_STAFF.map(staff => (
-                                    <SelectItem key={staff.value} value={staff.value} className="text-xs">
-                                      {staff.label}
+                                  {instructors.map(instructor => (
+                                    <SelectItem key={instructor.id} value={instructor.id} className="text-xs">
+                                      {instructor.name}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>

@@ -64,6 +64,26 @@ vi.mock('@/hooks/useEventsCache', () => ({
   invalidateEventsCache: () => mockInvalidate(),
 }));
 
+const mockInstructors = [
+  { id: 'ins-1', name: 'Ann Lee', photoUrl: null },
+  { id: 'ins-2', name: 'Bob Ng', photoUrl: null },
+];
+
+vi.mock('@clerk/nextjs', () => ({
+  useOrganization: () => ({ organization: { id: 'test-org' } }),
+}));
+
+vi.mock('@/hooks/useInstructorsCache', () => ({
+  useInstructorsCache: () => ({
+    instructors: mockInstructors,
+    instructorLookup: new Map(mockInstructors.map(i => [i.id, i])),
+    loading: false,
+    error: null,
+    revalidate: vi.fn(),
+  }),
+  invalidateInstructorsCache: vi.fn(),
+}));
+
 const baseEvent: EventData = {
   id: 'event-123',
   name: 'Black Belt Seminar',
@@ -167,6 +187,40 @@ describe('EditEventModal', () => {
 
     expect(mockInvalidate).toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('includes the chosen per-session instructor in the update payload', async () => {
+    render(
+      <EditEventModal
+        isOpen={true}
+        event={baseEvent}
+        onCloseAction={vi.fn()}
+        initialTab="sessions"
+      />,
+    );
+
+    // Session ids are regenerated (crypto.randomUUID) when the form is built,
+    // so target the single session's instructor Select by its testid prefix.
+    const instructorTrigger = document.querySelector(
+      '[data-testid^="event-instructor-select-"]',
+    ) as HTMLElement;
+
+    expect(instructorTrigger).not.toBeNull();
+
+    await userEvent.click(instructorTrigger);
+
+    await userEvent.click(page.getByRole('option', { name: 'Ann Lee' }));
+
+    const saveButton = Array.from(document.querySelectorAll('button')).find(
+      btn => btn.textContent === 'Save Changes',
+    ) as HTMLButtonElement;
+    await userEvent.click(saveButton);
+
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+
+    const payload = mockUpdate.mock.calls[0]![0] as { sessions: Array<{ primaryInstructorClerkId: string | null }> };
+
+    expect(payload.sessions[0]!.primaryInstructorClerkId).toBe('ins-1');
   });
 
   it('coerces unknown event types to "other" on open', () => {

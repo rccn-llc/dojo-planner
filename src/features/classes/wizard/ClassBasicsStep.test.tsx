@@ -44,6 +44,21 @@ vi.mock('next-intl', () => ({
   },
 }));
 
+// Mock ORPC client — the program dropdown is now sourced from the API
+vi.mock('@/libs/Orpc', () => ({
+  client: {
+    programs: {
+      list: vi.fn().mockResolvedValue({
+        programs: [
+          { id: 'prog-1', name: 'Adult Brazilian Jiu-Jitsu', slug: 'adult-bjj', isActive: true },
+          { id: 'prog-2', name: 'Kids Brazilian Jiu-Jitsu', slug: 'kids-bjj', isActive: true },
+          { id: 'prog-3', name: 'Competition Team', slug: 'competition', isActive: false },
+        ],
+      }),
+    },
+  },
+}));
+
 describe('ClassBasicsStep', () => {
   const mockData = createMockWizardData();
 

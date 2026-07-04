@@ -45,8 +45,9 @@ src/
 │   ├── Catalog.ts         # Catalog items, variants, categories, images
 │   ├── Member.ts          # Member CRUD, family linking/unlinking, HOH search, member type conversion, confirmation email, membership lifecycle (cancelMembership, holdMembership, reactivateMembership)
 │   ├── Members.ts         # Members list ops
-│   ├── Classes.ts         # Classes list & tags
+│   ├── Classes.ts         # Classes list & tags (create/update persist allowWalkIns + schedule instructor clerk ids)
 │   ├── Events.ts          # Events list
+│   ├── Instructors.ts     # Instructor list (org:instructor + org:academy_owner) + updatePhoto (in-app headshot upload)
 │   ├── Tags.ts            # Tags (class, membership, all)
 │   ├── Coupons.ts         # Coupons list & active, total savings aggregation
 │   ├── Organization.ts    # Per-org location settings (getLocation, updateLocation)
@@ -61,9 +62,10 @@ src/
 │   ├── BillingService.ts  # Stripe integration
 │   ├── CatalogService.ts  # Catalog items, variants, categories, images
 │   ├── ClassesService.ts  # Class & schedule queries
-│   ├── ClerkRolesService.ts # Clerk Backend API
+│   ├── ClerkRolesService.ts # Clerk Backend API (exports `clerkApiRequest` helper)
 │   ├── CouponsService.ts  # Coupon queries + organization-wide total savings aggregation
 │   ├── EventsService.ts   # Event queries
+│   ├── InstructorsService.ts # Org instructors from Clerk (org:instructor + org:academy_owner), DB photo overrides (instructor_profile) preferred over Clerk avatar
 │   ├── MembersService.ts  # Member operations
 │   ├── OrganizationService.ts # Org & Stripe customer storage + per-org location settings (name, address, phone, email, tax rate)
 │   ├── TagsService.ts     # Tag queries with usage counts
@@ -135,7 +137,7 @@ docs/                      # Documentation
 | `/dashboard/members/[memberId]` | `members/[memberId]/page.tsx` | Member detail |
 | `/dashboard/members/[memberId]/edit` | `members/[memberId]/edit/page.tsx` | Edit member — contact info, membership details (actual dates), signed waivers with version, billing |
 | `/dashboard/classes` | `classes/page.tsx` | Classes list |
-| `/dashboard/classes/[classId]` | `classes/[classId]/page.tsx` | Class detail |
+| `/dashboard/classes/[classId]` | `classes/[classId]/page.tsx` | Class detail — Edit Basics/Settings/Schedule modals persist via `persistClass` → `client.classes.update` (rebuilds the full payload: level/type/style → tag ids, program slug → programId, scheduleInstances → 24h schedule with instructor clerk ids, allowWalkIns). Instructor names/photos resolved via `useInstructorsCache`. |
 | `/dashboard/programs` | `programs/page.tsx` | Programs list |
 | `/dashboard/memberships` | `memberships/page.tsx` | Memberships list |
 | `/dashboard/memberships/[membershipId]` | `memberships/[membershipId]/page.tsx` | Membership detail |
@@ -375,15 +377,18 @@ Semi-annual is not a native IQPro `billingPeriodId`; we emulate it by using the 
 ORG_ROLE.ADMIN            -> org:admin
 ORG_ROLE.ACADEMY_OWNER    -> org:academy_owner
 ORG_ROLE.FRONT_DESK       -> org:front_desk
+ORG_ROLE.INSTRUCTOR       -> org:instructor
 ORG_ROLE.MEMBER           -> org:member
 ORG_ROLE.INDIVIDUAL_MEMBER -> org:individual_member
 ```
 
 **Role Hierarchy:**
 ```
-ADMIN > ACADEMY_OWNER > FRONT_DESK > MEMBER > INDIVIDUAL_MEMBER
+ADMIN > ACADEMY_OWNER > FRONT_DESK > INSTRUCTOR > MEMBER > INDIVIDUAL_MEMBER
 ```
 Higher roles inherit all permissions of lower roles. An admin can access any endpoint that requires `FRONT_DESK` or lower.
+
+**Instructors (`org:instructor`):** a distinct Clerk role for people who teach classes/events but aren't front-desk/admin staff. Created once in the Clerk dashboard (instance-wide role, key `org:instructor`). Assignable instructors on class/event schedules come from `org:instructor` **plus** `org:academy_owner` (owners are masters who run their own classes); admin/front-desk are excluded. The instructor's Clerk user id is stored on `class_schedule_instance.primary_instructor_clerk_id` / `event_session.primary_instructor_clerk_id`. Managed via the existing Staff page (invite with the Instructor role). A freshly-seeded org has no instructors until someone is invited as `org:instructor` (or an academy owner exists) — instructor dropdowns will be empty until then.
 
 **Auth Patterns:**
 ```
@@ -745,11 +750,12 @@ await deleteUserWithOrganization();
 - `membership_plan` - Pricing tiers, including `frequency` (nullable: null = one-time / punchcard / trial; otherwise `Weekly` | `Monthly` | `Semi-Annual` | `Annual`), `cancellationFee` (real, default 0), `holdFeeAmount` (real, default 0), `holdFeeFrequency` (nullable: `one-time` | `Weekly` | `Monthly` | `Semi-Annual` | `Annual`), `holdLimitPerYear` (integer, nullable; null or 0 = unlimited; enforced server-side by `holdMembershipLifecycle` via a 12-month-window audit-log count)
 - `member_membership` - Member-plan associations with startDate, endDate, firstPaymentDate, nextPaymentDate, optional `iqproSubscriptionId`, optional `iqproHoldFeeSubscriptionId` (set when a recurring hold-fee subscription is created at hold time; cleared on reactivate/cancel)
 - `program` - Training programs (Adult BJJ, Kids, Competition)
-- `class` - Class definitions
-- `class_schedule_instance` - Recurring schedule patterns
+- `class` - Class definitions, including `allow_walk_ins` (text, default `'Yes'`; `'Yes' | 'No'`)
+- `class_schedule_instance` - Recurring schedule patterns (`primary_instructor_clerk_id` → a Clerk instructor)
 - `class_schedule_exception` - Schedule overrides (cancellations, modifications)
+- `instructor_profile` - Per-org in-app instructor photo overrides (`organization_id`, `clerk_user_id`, `photo_url` base64 data URL; unique on the pair). Preferred over the Clerk avatar. Set via the Staff page instructor-photo modal.
 - `event` - Special events (seminars, workshops)
-- `event_session` - Event time slots
+- `event_session` - Event time slots (`primary_instructor_clerk_id` → a Clerk instructor)
 - `event_billing` - Event pricing tiers
 - `tag` - Polymorphic tags for classes/memberships/events
 - `coupon` - Discount codes
@@ -1172,6 +1178,9 @@ AUDIT_ACTION.ORGANIZATION_LOCATION_UPDATE;
 // IQPro merchant configuration
 AUDIT_ACTION.IQPRO_CONFIG_UPDATE; // per-org Payment Settings
 AUDIT_ACTION.PLATFORM_IQPRO_CONFIG_UPDATE; // platform Platform Settings (super admin)
+
+// Instructor operations
+AUDIT_ACTION.INSTRUCTOR_PHOTO_UPDATE; // in-app instructor headshot upload/clear
 
 // Family member operations
 AUDIT_ACTION.FAMILY_MEMBER_LINK;

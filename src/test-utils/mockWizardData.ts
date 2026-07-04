@@ -9,6 +9,7 @@ export function createMockWizardData(overrides?: Partial<AddClassWizardData>): A
     itemType: 'class',
     className: '',
     program: '',
+    programName: '',
     maximumCapacity: null,
     minimumAge: null,
     allowWalkIns: 'Yes',

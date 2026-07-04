@@ -68,6 +68,13 @@ export class MembershipPlanInUseError extends Error {
   }
 }
 
+export class InvalidProgramReferenceError extends Error {
+  constructor(programId: string | null) {
+    super(`The selected program (${programId ?? 'unknown'}) does not exist. Refresh and choose a program from the list.`);
+    this.name = 'InvalidProgramReferenceError';
+  }
+}
+
 // =============================================================================
 // HELPERS
 // =============================================================================
@@ -78,6 +85,15 @@ function isUniqueViolation(error: unknown): boolean {
     && error !== null
     && 'code' in error
     && (error as { code: string }).code === '23505'
+  );
+}
+
+function isForeignKeyViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object'
+    && error !== null
+    && 'code' in error
+    && (error as { code: string }).code === '23503'
   );
 }
 
@@ -175,6 +191,9 @@ export async function createMembershipPlan(input: MembershipPlanInput, organizat
     if (isUniqueViolation(error)) {
       throw new MembershipPlanSlugAlreadyExistsError(input.slug);
     }
+    if (isForeignKeyViolation(error)) {
+      throw new InvalidProgramReferenceError(input.programId ?? null);
+    }
     throw error;
   }
 }
@@ -229,6 +248,9 @@ export async function updateMembershipPlan(
   } catch (error) {
     if (isUniqueViolation(error)) {
       throw new MembershipPlanSlugAlreadyExistsError(input.slug);
+    }
+    if (isForeignKeyViolation(error)) {
+      throw new InvalidProgramReferenceError(input.programId ?? null);
     }
     throw error;
   }

@@ -69,6 +69,7 @@ function formatRole(role: string): string {
     'org:admin': 'Admin',
     'org:academy_owner': 'Academy Owner',
     'org:front_desk': 'Front Desk',
+    'org:instructor': 'Instructor',
     'org:member': 'Member',
     'org:individual_member': 'Individual Member',
     'front-desk': 'Front Desk',

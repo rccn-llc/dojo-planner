@@ -21,6 +21,7 @@ import { tags as classTags, create as createClass, list as listClasses, remove a
 import { create as createCoupon, getTotalSavings as getCouponTotalSavings, listActive as listActiveCoupons, list as listCoupons, remove as removeCoupon, update as updateCoupon } from './Coupons';
 import { earningsChart, financialStats, memberAverageChart, membershipStats } from './Dashboard';
 import { create as createEvent, list as listEvents, remove as removeEvent, update as updateEvent } from './Events';
+import { list as listInstructors, updatePhoto as updateInstructorPhoto } from './Instructors';
 import { addMembership, cancelMembership, changeMembership, create as createMember, getHOHForMember, getHOHPaymentMethods, holdMembership, linkFamily, listAllMembershipPlans, listFamily, listMembershipPlans, listMemberTransactions, listPaymentMethods, reactivateMembership, removeFullyMember, remove as removeMember, restore as restoreMember, searchHOH, sendConfirmationEmail, unlinkFamily, updateLastAccessed, update as updateMember, updateContactInfo as updateMemberContactInfo, updatePhoto as updateMemberPhoto, updateMemberType } from './Member';
 import { list as listMembers } from './Members';
 import { create as createMembershipPlan, remove as removeMembershipPlan, update as updateMembershipPlan } from './MembershipPlans';
@@ -104,6 +105,10 @@ export const router = {
     create: createEvent,
     update: updateEvent,
     remove: removeEvent,
+  },
+  instructors: {
+    list: listInstructors,
+    updatePhoto: updateInstructorPhoto,
   },
   attendance: {
     list: listAttendance,

@@ -30,8 +30,8 @@ describe('Audit Types', () => {
       // + 1 family member unlink + 1 member convert + 3 saas subscription
       // + 3 note (create + update + delete) + 3 staff (invite + update + remove)
       // + 3 role (create + update + delete) + 1 organization location update
-      // + 2 iqpro config (per-org + platform) = 97
-      expect(actionCount).toBe(97);
+      // + 2 iqpro config (per-org + platform) + 1 instructor photo update = 98
+      expect(actionCount).toBe(98);
     });
   });
 
@@ -48,8 +48,8 @@ describe('Audit Types', () => {
       // event, eventSession, coupon, classEnrollment, eventRegistration, attendance, transaction, tag, image
       // + catalogItem, catalogVariant, catalogCategory, catalogImage
       // + waiverTemplate, signedWaiver, membershipWaiver, waiverMergeField + familyMember + paymentMethod + organization
-      // + note + staff + role = 30
-      expect(entityCount).toBe(30);
+      // + note + staff + instructor + role = 31
+      expect(entityCount).toBe(31);
     });
   });
 
