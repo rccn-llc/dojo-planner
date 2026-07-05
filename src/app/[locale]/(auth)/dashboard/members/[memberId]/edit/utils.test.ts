@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatCurrency,
+  formatPaymentMethodDetail,
   formatTransactionType,
   getInitials,
   getPaymentTypeIcon,
@@ -100,6 +101,41 @@ describe('Member Detail Page Utilities', () => {
 
     it('returns raw type for unknown type', () => {
       expect(getPaymentTypeLabel('crypto')).toBe('crypto');
+    });
+
+    it('returns "Bank Transfer" for ach', () => {
+      expect(getPaymentTypeLabel('ach')).toBe('Bank Transfer');
+    });
+  });
+
+  describe('formatPaymentMethodDetail', () => {
+    it('shows BIN(6) + last4 for a card when the BIN is known', () => {
+      expect(formatPaymentMethodDetail({ type: 'card', firstSix: '424242', last4: '4242' }))
+        .toBe('424242 •••••• 4242');
+    });
+
+    it('falls back to •••• last4 for a card with no BIN', () => {
+      expect(formatPaymentMethodDetail({ type: 'card', firstSix: null, last4: '4242' }))
+        .toBe('•••• 4242');
+    });
+
+    it('returns empty string for a card with no last4', () => {
+      expect(formatPaymentMethodDetail({ type: 'card', firstSix: null, last4: null })).toBe('');
+    });
+
+    it('shows the account type + last4 for an ACH method', () => {
+      expect(formatPaymentMethodDetail({ type: 'ach', accountType: 'Checking', last4: '4111' }))
+        .toBe('Checking •••• 4111');
+    });
+
+    it('handles the legacy bank_transfer type the same as ach', () => {
+      expect(formatPaymentMethodDetail({ type: 'bank_transfer', accountType: 'Savings', last4: '9999' }))
+        .toBe('Savings •••• 9999');
+    });
+
+    it('omits the account type for ACH when it is unknown', () => {
+      expect(formatPaymentMethodDetail({ type: 'ach', accountType: null, last4: '4111' }))
+        .toBe('•••• 4111');
     });
   });
 

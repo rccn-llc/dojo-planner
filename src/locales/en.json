@@ -147,6 +147,7 @@
     "variant_name_required": "Please enter a variant name.",
     "variant_name_duplicate": "A variant with this name already exists.",
     "max_variants_reached": "Maximum of {max} variants allowed.",
+    "max_variants_notice": "You've reached the maximum of {max} variants. Remove one to add another.",
     "track_inventory_label": "Track Inventory",
     "low_stock_threshold_label": "Low Stock Alert Threshold",
     "is_active_label": "Active",
@@ -2058,7 +2059,8 @@
       "confirm_button": "Confirm cancellation",
       "confirming_button": "Cancelling...",
       "error_generic": "Failed to cancel the membership. Please try again.",
-      "partial_success": "Membership cancelled, but the fee charge failed: {error}"
+      "partial_success": "Membership cancelled, but the fee charge failed: {error}",
+      "done_button": "Done"
     },
     "HoldMembershipModal": {
       "title": "Place Membership on Hold",

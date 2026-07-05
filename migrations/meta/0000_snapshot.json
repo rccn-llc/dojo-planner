@@ -1,5 +1,5 @@
 {
-  "id": "dfac82cb-5e86-4b86-a553-51bc36d67e73",
+  "id": "0f7ccf58-ad42-43c0-9947-fc375575b1d3",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -3941,8 +3941,20 @@
           "primaryKey": false,
           "notNull": true
         },
+        "first_six": {
+          "name": "first_six",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "last4": {
           "name": "last4",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "account_type": {
+          "name": "account_type",
           "type": "text",
           "primaryKey": false,
           "notNull": false

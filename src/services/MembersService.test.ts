@@ -48,7 +48,9 @@ vi.mock('@/models/Schema', () => ({
     id: 'id',
     memberId: 'member_id',
     type: 'type',
+    firstSix: 'first_six',
     last4: 'last4',
+    accountType: 'account_type',
     isDefault: 'is_default',
   },
   transactionSchema: {
@@ -285,11 +287,11 @@ describe('MembersService', () => {
   });
 
   describe('getMemberPaymentMethods', () => {
-    it('should return payment methods for a member', async () => {
+    it('should return payment methods for a member, including firstSix + accountType', async () => {
       const { db } = await import('@/libs/DB');
       const mockPaymentMethods = [
-        { id: 'pm-1', type: 'card', last4: '4242', isDefault: true },
-        { id: 'pm-2', type: 'bank_transfer', last4: '6789', isDefault: false },
+        { id: 'pm-1', type: 'card', firstSix: '424242', last4: '4242', accountType: null, isDefault: true },
+        { id: 'pm-2', type: 'bank_transfer', firstSix: null, last4: '6789', accountType: 'Checking', isDefault: false },
       ];
 
       const mockOrderBy = vi.fn(() => Promise.resolve(mockPaymentMethods));
@@ -302,7 +304,14 @@ describe('MembersService', () => {
       const result = await getMemberPaymentMethods('member-123', 'org-123');
 
       expect(result).toEqual(mockPaymentMethods);
-      expect(db.select).toHaveBeenCalled();
+      // The BIN + account-type columns must be part of the projection so the
+      // member detail page can render the masked card / Checking-Savings label.
+      expect(db.select).toHaveBeenCalledWith(
+        expect.objectContaining({
+          firstSix: expect.anything(),
+          accountType: expect.anything(),
+        }),
+      );
     });
 
     it('should return empty array when no payment methods exist', async () => {

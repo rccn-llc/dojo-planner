@@ -276,7 +276,10 @@ function renderChart(
         <BarChart {...commonProps}>
           <XAxis {...xAxisProps} />
           <YAxis {...yAxisProps} />
-          <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} formatter={tooltipFormatter} />
+          {/* Hover cursor: #cccccc is fine in light mode but too bright in dark
+              mode, so drop to #666666 there via a dark: variant (#213). */}
+          <Tooltip cursor={{ className: 'fill-[#cccccc] dark:fill-[#666666]' }} contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} formatter={tooltipFormatter} />
+
           {hasPreviousYearData && (
             <Legend
               wrapperStyle={{ paddingTop: '10px' }}

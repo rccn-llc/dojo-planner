@@ -532,6 +532,14 @@ function CatalogItemFormContent({
                     </div>
                   )}
 
+                  {/* At the limit, explain why the add form is gone instead of
+                      silently hiding it (#272). */}
+                  {formData.variants.length >= MAX_VARIANTS_PER_ITEM && (
+                    <p className="border-t pt-3 text-sm text-muted-foreground">
+                      {t('max_variants_notice', { max: MAX_VARIANTS_PER_ITEM })}
+                    </p>
+                  )}
+
                   <p className="text-xs text-muted-foreground">{t('variants_help')}</p>
                 </div>
 

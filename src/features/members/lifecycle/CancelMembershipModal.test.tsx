@@ -90,4 +90,27 @@ describe('CancelMembershipModal', () => {
 
     await expect.element(page.getByText('boom')).toBeInTheDocument();
   });
+
+  it('keeps the modal open with a warning when the fee charge fails (#240)', async () => {
+    cancelMembership.mockResolvedValue({ feeChargeError: 'card declined' });
+    const onSuccess = vi.fn();
+    const onClose = vi.fn();
+    render(<CancelMembershipModal {...baseProps} onSuccess={onSuccess} onClose={onClose} />);
+
+    await userEvent.click(page.getByText('confirm_button'));
+
+    // The cancellation still succeeded, so the parent is refreshed...
+    await vi.waitFor(() => expect(onSuccess).toHaveBeenCalled());
+
+    // ...but the modal stays open showing the partial-success warning (it used
+    // to close instantly, so the warning was never seen), with a Done button.
+    await expect.element(page.getByText(/partial_success/)).toBeInTheDocument();
+    await expect.element(page.getByText('done_button')).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+
+    // Acknowledging via Done closes the modal.
+    await userEvent.click(page.getByText('done_button'));
+
+    expect(onClose).toHaveBeenCalled();
+  });
 });

@@ -1667,11 +1667,16 @@ async function seedOrganization(organizationId: string) {
     const memberId = memberIds[i]!;
     const type = pmTypeByIndex[i] ?? 'card';
     const last4 = last4ByIndex[i] ?? '0000';
+    const isCard = type === 'card';
     await db.insert(paymentMethodSchema).values({
       id: randomUUID(),
       memberId,
       type,
-      last4: type === 'card' ? last4 : null,
+      // Cards store a BIN (first 6) for the BIN(6)+last4 masked display; the
+      // bank_transfer member stores a Checking/Savings account type + last4.
+      firstSix: isCard ? '424242' : null,
+      last4,
+      accountType: isCard ? null : 'Checking',
       iqproPaymentMethodId: `seed_pm_${randomUUID()}`,
       isDefault: true,
     }).onConflictDoNothing();

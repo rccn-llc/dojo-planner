@@ -13,6 +13,7 @@ import { db } from '@/libs/DB';
 import { organizationSchema } from '@/models/Schema';
 import { getAcademyOwner } from '@/services/ClerkRolesService';
 import { hasActiveSubscription } from '@/services/SaasSubscriptionService';
+import { ORG_ROLE } from '@/types/Auth';
 import { isExemptOrg, isSuperAdmin } from '@/utils/SuperAdmins';
 
 /**
@@ -58,7 +59,7 @@ export const requireActiveSubscription = async (pathname: string) => {
     return;
   }
 
-  const { orgId, sessionClaims } = await auth();
+  const { orgId, orgRole, sessionClaims } = await auth();
   if (!orgId) {
     return; // org enforcement is handled elsewhere (requireOrganization / proxy)
   }
@@ -78,9 +79,13 @@ export const requireActiveSubscription = async (pathname: string) => {
   }
 
   const active = await hasActiveSubscription(orgId);
-  const owner = active ? await getAcademyOwner(orgId) : null;
+  // The org needs a person responsible for the subscription. That's normally the
+  // academy owner, but an org admin also qualifies — an admin managing the org
+  // shouldn't be locked out just because the academy_owner role isn't assigned.
+  const hasResponsiblePerson
+    = orgRole === ORG_ROLE.ADMIN || (active && !!(await getAcademyOwner(orgId)));
 
-  if (!active || !owner) {
+  if (!active || !hasResponsiblePerson) {
     const localePrefix = pathname.match(/^(\/[^/]+)\/dashboard/)?.[1] ?? '';
     redirect(`${localePrefix}/dashboard/subscription-expired`);
   }

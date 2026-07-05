@@ -55,13 +55,18 @@ export function CancelMembershipModal({
         waiveFee,
       });
 
-      if (result.feeChargeError) {
-        // Cancellation succeeded but the fee charge failed — surface as a
-        // warning rather than rolling back, since the kiosk behaves the same.
-        setResultMessage(t('partial_success', { error: result.feeChargeError }));
-      }
+      // The cancellation itself has succeeded at this point; refresh the parent.
       onSuccess?.();
-      onClose();
+
+      if (result.feeChargeError) {
+        // Cancellation succeeded but the fee charge failed. Keep the modal open
+        // showing the warning so it's actually seen — previously we set the
+        // message and immediately closed, so the user never saw it. The user
+        // acknowledges it via the "Done" button (see resultMessage branch below).
+        setResultMessage(t('partial_success', { error: result.feeChargeError }));
+      } else {
+        onClose();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : t('error_generic'));
     } finally {
@@ -69,12 +74,16 @@ export function CancelMembershipModal({
     }
   };
 
+  const handleClose = () => {
+    setWaiveFee(false);
+    setError(null);
+    setResultMessage(null);
+    onClose();
+  };
+
   const handleOpenChange = (open: boolean) => {
     if (!open && !isLoading) {
-      setWaiveFee(false);
-      setError(null);
-      setResultMessage(null);
-      onClose();
+      handleClose();
     }
   };
 
@@ -137,12 +146,22 @@ export function CancelMembershipModal({
         </div>
 
         <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={isLoading}>
-            {t('back_button')}
-          </Button>
-          <Button variant="destructive" onClick={handleConfirm} disabled={isLoading}>
-            {isLoading ? t('confirming_button') : t('confirm_button')}
-          </Button>
+          {resultMessage
+            ? (
+                <Button variant="outline" onClick={handleClose}>
+                  {t('done_button')}
+                </Button>
+              )
+            : (
+                <>
+                  <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={isLoading}>
+                    {t('back_button')}
+                  </Button>
+                  <Button variant="destructive" onClick={handleConfirm} disabled={isLoading}>
+                    {isLoading ? t('confirming_button') : t('confirm_button')}
+                  </Button>
+                </>
+              )}
         </div>
       </DialogContent>
     </Dialog>
