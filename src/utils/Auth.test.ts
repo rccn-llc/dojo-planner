@@ -60,9 +60,10 @@ const mockIsExemptOrg = vi.mocked(isExemptOrg);
 
 const owner = { clerkUserId: 'user-owner', email: 'o@e.com', firstName: 'O', lastName: 'E' };
 
-function setAuth(orgId: string | null, username?: string) {
+function setAuth(orgId: string | null, username?: string, orgRole: string = 'org:front_desk') {
   mockAuth.mockResolvedValue({
     orgId,
+    orgRole,
     sessionClaims: username ? { username } : {},
   } as any);
 }
@@ -144,10 +145,26 @@ describe('requireActiveSubscription', () => {
     expect(mockGetAcademyOwner).not.toHaveBeenCalled();
   });
 
-  it('redirects when active but no academy owner exists', async () => {
-    setAuth('org-1');
+  it('redirects a non-admin when active but no academy owner exists', async () => {
+    setAuth('org-1', undefined, 'org:front_desk');
     mockHasActiveSubscription.mockResolvedValue(true);
     mockGetAcademyOwner.mockResolvedValue(null);
+
+    await expect(requireActiveSubscription('/en/dashboard/members')).rejects.toThrow('REDIRECT:/en/dashboard/subscription-expired');
+  });
+
+  it('lets an admin through even when no academy owner exists', async () => {
+    setAuth('org-1', undefined, 'org:admin');
+    mockHasActiveSubscription.mockResolvedValue(true);
+    mockGetAcademyOwner.mockResolvedValue(null);
+
+    await expect(requireActiveSubscription('/en/dashboard/members')).resolves.toBeUndefined();
+    expect(mockRedirect).not.toHaveBeenCalled();
+  });
+
+  it('still redirects an admin when the subscription is inactive', async () => {
+    setAuth('org-1', undefined, 'org:admin');
+    mockHasActiveSubscription.mockResolvedValue(false);
 
     await expect(requireActiveSubscription('/en/dashboard/members')).rejects.toThrow('REDIRECT:/en/dashboard/subscription-expired');
   });

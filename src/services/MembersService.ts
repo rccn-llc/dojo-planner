@@ -554,7 +554,9 @@ export async function getAllMembershipPlans(organizationId: string): Promise<Mem
 export type MemberPaymentMethodData = {
   id: string;
   type: string;
+  firstSix: string | null;
   last4: string | null;
+  accountType: string | null;
   isDefault: boolean | null;
 };
 
@@ -573,7 +575,9 @@ export async function getMemberPaymentMethods(
     .select({
       id: paymentMethodSchema.id,
       type: paymentMethodSchema.type,
+      firstSix: paymentMethodSchema.firstSix,
       last4: paymentMethodSchema.last4,
+      accountType: paymentMethodSchema.accountType,
       isDefault: paymentMethodSchema.isDefault,
     })
     .from(paymentMethodSchema)

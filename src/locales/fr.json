@@ -147,6 +147,7 @@
     "variant_name_required": "Veuillez entrer un nom de variante.",
     "variant_name_duplicate": "Une variante avec ce nom existe déjà.",
     "max_variants_reached": "Maximum de {max} variantes autorisées.",
+    "max_variants_notice": "Vous avez atteint le maximum de {max} variantes. Supprimez-en une pour en ajouter une autre.",
     "track_inventory_label": "Suivre l'inventaire",
     "low_stock_threshold_label": "Seuil d'alerte stock faible",
     "is_active_label": "Actif",
@@ -2063,7 +2064,8 @@
       "confirm_button": "Confirmer l'annulation",
       "confirming_button": "Annulation...",
       "error_generic": "Échec de l'annulation de l'adhésion. Veuillez réessayer.",
-      "partial_success": "Adhésion annulée, mais le prélèvement des frais a échoué : {error}"
+      "partial_success": "Adhésion annulée, mais le prélèvement des frais a échoué : {error}",
+      "done_button": "Terminé"
     },
     "HoldMembershipModal": {
       "title": "Suspendre l'adhésion",

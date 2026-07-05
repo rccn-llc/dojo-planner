@@ -107,6 +107,7 @@ export default function DashboardCharts({ memberAverageData, earningsData }: Das
             <XAxis dataKey={memberAverageXKey} axisLine={false} tickLine={false} />
             <YAxis axisLine={false} tickLine={false} width={60} />
             <Tooltip
+              cursor={{ className: 'fill-[#cccccc] dark:fill-[#666666]' }}
               contentStyle={{
                 backgroundColor: 'hsl(222.2 84% 4.9%)',
                 border: '1px solid hsl(217.2 32.6% 17.5%)',
@@ -184,6 +185,7 @@ export default function DashboardCharts({ memberAverageData, earningsData }: Das
             <XAxis dataKey={earningsXKey} axisLine={false} tickLine={false} />
             <YAxis axisLine={false} tickLine={false} width={60} tickFormatter={value => value >= 1000 ? `${(value / 1000).toFixed(0)}k` : value} />
             <Tooltip
+              cursor={{ className: 'fill-[#cccccc] dark:fill-[#666666]' }}
               contentStyle={{
                 backgroundColor: 'hsl(222.2 84% 4.9%)',
                 border: '1px solid hsl(217.2 32.6% 17.5%)',

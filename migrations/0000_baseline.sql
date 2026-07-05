@@ -431,7 +431,9 @@ CREATE TABLE "payment_method" (
 	"stripe_payment_method_id" text,
 	"iqpro_payment_method_id" text,
 	"type" text NOT NULL,
+	"first_six" text,
 	"last4" text,
+	"account_type" text,
 	"is_default" boolean DEFAULT false
 );
 --> statement-breakpoint

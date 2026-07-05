@@ -549,6 +549,36 @@ describe('AddEditCatalogItemModal', () => {
       await expect.element(page.getByTestId('variant-row-0')).toBeVisible();
       await expect.element(page.getByTestId('variant-row-1')).not.toBeInTheDocument();
     });
+
+    it('hides the add form and shows a notice at the max variant limit (#272)', async () => {
+      // Build an item already at the 8-variant maximum.
+      const maxedItem = {
+        ...mockItem,
+        variants: Array.from({ length: 8 }, (_, i) => ({
+          id: `v${i}`,
+          catalogItemId: 'item-1',
+          name: `V${i}`,
+          price: 10,
+          stockQuantity: 1,
+          sortOrder: i,
+        })),
+      };
+
+      render(
+        <AddEditCatalogItemModal
+          isOpen={true}
+          onCloseAction={mockHandlers.onCloseAction}
+          onSaveAction={mockHandlers.onSaveAction}
+          item={maxedItem}
+          categories={mockCategories}
+          events={mockEvents}
+        />,
+      );
+
+      // Add form is gone, and a notice explains why (rather than nothing).
+      await expect.element(page.getByText('max_variants_notice')).toBeVisible();
+      expect(page.getByTestId('add-variant-button').elements()).toHaveLength(0);
+    });
   });
 
   describe('Categories', () => {

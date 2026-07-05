@@ -7,7 +7,7 @@ import type { Member } from '@/hooks/useMembersCache';
 import type { MemberPaymentMethodData } from '@/services/MembersService';
 import type { SignedWaiverWithTemplateName } from '@/services/WaiversService';
 import { useOrganization } from '@clerk/nextjs';
-import { ArrowRightLeft, Download, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArrowRightLeft, Download, MoreVertical, Pencil, Plus, Unlink } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
@@ -36,6 +36,7 @@ import { client } from '@/libs/Orpc';
 // download handler so it is excluded from this page's initial bundle.
 import {
   formatCurrency,
+  formatPaymentMethodDetail,
   formatTransactionType,
   getInitials,
   getPaymentTypeIcon,
@@ -1381,12 +1382,10 @@ export default function EditMemberPage() {
                                 <div className="min-w-0 flex-1">
                                   <p className="font-medium text-foreground">
                                     {getPaymentTypeLabel(pm.type).toUpperCase()}
-                                    {pm.last4 && (
+                                    {formatPaymentMethodDetail(pm) && (
                                       <>
                                         {' '}
-                                        ••••
-                                        {' '}
-                                        {pm.last4}
+                                        {formatPaymentMethodDetail(pm)}
                                       </>
                                     )}
                                   </p>
@@ -1542,14 +1541,15 @@ export default function EditMemberPage() {
                   {familyMembersData.map((member: FamilyMember) => (
                     <Card key={member.id} className="relative p-6">
                       <Button
-                        variant="destructive"
+                        variant="outline"
                         size="sm"
                         className="absolute top-4 right-4"
                         onClick={() => handleRemoveFamilyMember(member.id)}
-                        aria-label={`Remove ${member.name}`}
-                        title={`Remove ${member.name}`}
+                        aria-label={`Unlink ${member.name}`}
+                        title={`Unlink ${member.name} from this household`}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Unlink className="mr-1 h-4 w-4" />
+                        Unlink
                       </Button>
 
                       <div className="mb-4 flex flex-col gap-3 pr-10">

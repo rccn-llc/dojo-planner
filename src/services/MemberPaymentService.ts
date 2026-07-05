@@ -342,7 +342,9 @@ export async function processMemberPayment(
         memberId: params.memberId,
         iqproPaymentMethodId: pmResult.paymentMethodId,
         type: params.paymentMethod,
+        firstSix: params.paymentMethod === 'card' ? params.cardFirstSix ?? null : null,
         last4: pmResult.last4,
+        accountType: params.paymentMethod === 'ach' ? params.achAccountType ?? null : null,
         isDefault: true,
       });
       logger.info('[MemberPayment] Payment method saved', { paymentMethodDbId });
@@ -541,7 +543,9 @@ export async function registerPaymentMethod(
       memberId: params.memberId,
       iqproPaymentMethodId: pmResult.paymentMethodId,
       type: params.paymentMethod,
+      firstSix: params.paymentMethod === 'card' ? params.cardFirstSix ?? null : null,
       last4: pmResult.last4,
+      accountType: params.paymentMethod === 'ach' ? params.achAccountType ?? null : null,
       isDefault: true,
     });
 

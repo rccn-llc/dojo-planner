@@ -26,6 +26,7 @@ export const formatCurrency = (amount: number): string => {
 export const getPaymentTypeIcon = (type: string): string => {
   const iconMap: Record<string, string> = {
     card: '💳',
+    ach: '🏦',
     bank_transfer: '🏦',
     cash: '💵',
     check: '📝',
@@ -39,11 +40,52 @@ export const getPaymentTypeIcon = (type: string): string => {
 export const getPaymentTypeLabel = (type: string): string => {
   const labelMap: Record<string, string> = {
     card: 'Card',
+    ach: 'Bank Transfer',
     bank_transfer: 'Bank Transfer',
     cash: 'Cash',
     check: 'Check',
   };
   return labelMap[type.toLowerCase()] || type;
+};
+
+/**
+ * True when a payment method type is a bank account (ACH), for which we show
+ * the Checking/Savings account type.
+ */
+const isBankTransfer = (type: string): boolean => {
+  const t = type.toLowerCase();
+  return t === 'ach' || t === 'bank_transfer';
+};
+
+/**
+ * Build the masked payment-method detail line for the member detail page.
+ *
+ * - Card: BIN(6) + last4 when the BIN is known (e.g. `424242 •••••• 4242`),
+ *   otherwise just `•••• 4242`.
+ * - ACH: the account's Checking/Savings type plus the last 4 (e.g.
+ *   `Checking •••• 4242`), so the card no longer shows a bare "ACH".
+ */
+export const formatPaymentMethodDetail = (pm: {
+  type: string;
+  firstSix?: string | null;
+  last4?: string | null;
+  accountType?: string | null;
+}): string => {
+  if (isBankTransfer(pm.type)) {
+    const parts = [pm.accountType?.trim()].filter(Boolean) as string[];
+    if (pm.last4) {
+      parts.push(`•••• ${pm.last4}`);
+    }
+    return parts.join(' ');
+  }
+
+  if (!pm.last4) {
+    return '';
+  }
+  if (pm.firstSix) {
+    return `${pm.firstSix} •••••• ${pm.last4}`;
+  }
+  return `•••• ${pm.last4}`;
 };
 
 /**

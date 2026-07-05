@@ -434,7 +434,9 @@ export const paymentMethodSchema = pgTable('payment_method', {
   stripePaymentMethodId: text('stripe_payment_method_id'),
   iqproPaymentMethodId: text('iqpro_payment_method_id'), // IQPro payment method ID
   type: text('type').notNull(),
+  firstSix: text('first_six'), // Card BIN — first 6 digits, for the BIN(6)+last4 masked display. Null for ACH.
   last4: text('last4'),
+  accountType: text('account_type'), // ACH bank account type: 'Checking' | 'Savings'. Null for cards.
   isDefault: boolean('is_default').default(false),
 });
 
