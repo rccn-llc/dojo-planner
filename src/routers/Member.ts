@@ -7,7 +7,7 @@ import { audit } from '@/services/AuditService';
 import { sendMemberConfirmationEmail } from '@/services/EmailService';
 import { resolveIQProConfig } from '@/services/IQProConfigService';
 import { cancelMembershipLifecycle, getLifecycleContext, HoldLimitReachedError, holdMembershipLifecycle, reactivateMembershipLifecycle } from '@/services/MemberPaymentService';
-import { addMemberMembership, changeMemberMembership, createMember, getAllMembershipPlans, getFamilyMembers, getHeadOfHouseholdMembers, getHOHForFamilyMember, getMemberPaymentMethods, getMembershipPlans, getMemberTransactions, linkFamilyMember, removeFully, unlinkFamilyMember, updateMember, updateMemberContactInfo, updateMemberPhoto, updateMemberStatus } from '@/services/MembersService';
+import { addMemberMembership, changeMemberMembership, createMember, getAllMembershipPlans, getFamilyMembers, getHeadOfHouseholdMembers, getHOHForFamilyMember, getMemberPaymentMethods, getMembershipPlans, getMemberTransactions, linkFamilyMember, MemberOnHoldError, removeFully, unlinkFamilyMember, updateMember, updateMemberContactInfo, updateMemberPhoto, updateMemberStatus } from '@/services/MembersService';
 import { generatePdfFilename } from '@/services/WaiverPdfService';
 import { generateWaiverPdfBuffer } from '@/services/WaiverPdfService.server';
 import { AUDIT_ACTION, AUDIT_ENTITY_TYPE } from '@/types/Audit';
@@ -580,6 +580,12 @@ export const addMembership = os
         status: 'failure',
         error: errorMessage,
       });
+
+      // A member on hold can't take a new membership — surface as a 409 with a
+      // clear message instead of a generic 500 (#262).
+      if (error instanceof MemberOnHoldError) {
+        throw new ORPCError('Conflict', { status: 409, message: error.message });
+      }
 
       throw error instanceof ORPCError ? error : new ORPCError('Failed to add membership. Please try again.', { status: 500 });
     }

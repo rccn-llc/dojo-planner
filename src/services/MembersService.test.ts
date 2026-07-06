@@ -91,6 +91,48 @@ describe('MembersService', () => {
     vi.clearAllMocks();
   });
 
+  describe('addMemberMembership', () => {
+    it('throws MemberOnHoldError when the member is on hold', async () => {
+      const { db } = await import('@/libs/DB');
+      // The member-status lookup returns a held member.
+      vi.mocked(db.select).mockReturnValue({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({ limit: vi.fn(() => Promise.resolve([{ status: 'hold' }])) })),
+        })),
+      } as never);
+
+      const { addMemberMembership, MemberOnHoldError } = await import('./MembersService');
+
+      await expect(addMemberMembership('member-123', 'plan-1')).rejects.toBeInstanceOf(MemberOnHoldError);
+      // The insert must not run for a held member.
+      expect(db.insert).not.toHaveBeenCalled();
+    });
+
+    it('inserts an active membership when the member is not on hold', async () => {
+      const { db } = await import('@/libs/DB');
+      vi.mocked(db.select).mockReturnValue({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({ limit: vi.fn(() => Promise.resolve([{ status: 'active' }])) })),
+        })),
+      } as never);
+
+      const returning = vi.fn(() => Promise.resolve([{ id: 'mm-1' }]));
+      const values = vi.fn(() => ({ returning }));
+      vi.mocked(db.insert).mockReturnValue({ values } as never);
+
+      const { addMemberMembership } = await import('./MembersService');
+      const result = await addMemberMembership('member-123', 'plan-1');
+
+      expect(db.insert).toHaveBeenCalled();
+      expect(values).toHaveBeenCalledWith(expect.objectContaining({
+        memberId: 'member-123',
+        membershipPlanId: 'plan-1',
+        status: 'active',
+      }));
+      expect(result).toEqual([{ id: 'mm-1' }]);
+    });
+  });
+
   describe('updateMemberContactInfo', () => {
     it('should update member email and phone', async () => {
       const { updateMemberContactInfo } = await import('./MembersService');
