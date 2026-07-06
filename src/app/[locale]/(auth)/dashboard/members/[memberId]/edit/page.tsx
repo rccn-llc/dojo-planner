@@ -508,6 +508,9 @@ export default function EditMemberPage() {
   const currentMember: Member | undefined = members?.find(m => m.id === memberId);
   const currentMembership = currentMember?.currentMembership;
   const hasActiveMembership = currentMembership?.status === 'active';
+  // A held member can't take on a new membership until reactivated (#262) —
+  // otherwise they'd be both on hold and active at once.
+  const isOnHold = currentMember?.status === 'hold';
 
   // Build HOH data for family member modal
   const hohMemberData = useMemo(() => {
@@ -1309,14 +1312,20 @@ export default function EditMemberPage() {
                         </Button>
                       </>
                     )
-                  : (
-                      <Button
-                        className="w-fit bg-foreground text-background hover:bg-foreground/90"
-                        onClick={() => handleOpenMembershipModal('add')}
-                      >
-                        Add Membership
-                      </Button>
-                    )}
+                  : isOnHold
+                    ? (
+                        <p className="text-sm text-muted-foreground">
+                          Reactivate this member's membership before adding a new one.
+                        </p>
+                      )
+                    : (
+                        <Button
+                          className="w-fit bg-foreground text-background hover:bg-foreground/90"
+                          onClick={() => handleOpenMembershipModal('add')}
+                        >
+                          Add Membership
+                        </Button>
+                      )}
               </div>
             </Card>
 

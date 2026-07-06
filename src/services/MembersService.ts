@@ -428,12 +428,37 @@ export async function updateMemberContactInfo(input: UpdateMemberContactInfoInpu
 }
 
 /**
+ * Thrown when a new membership is added to a member who is currently on hold.
+ * Held members must be reactivated before taking on a new active membership,
+ * otherwise they'd be both 'hold' and 'active' at once. Mapped to a 409 by the
+ * router.
+ */
+export class MemberOnHoldError extends Error {
+  constructor() {
+    super('This member is on hold. Reactivate their membership before adding a new one.');
+    this.name = 'MemberOnHoldError';
+  }
+}
+
+/**
  * Add a membership to a member
  * @param memberId - The member ID
  * @param membershipPlanId - The membership plan ID
  * @returns The created membership record
  */
 export async function addMemberMembership(memberId: string, membershipPlanId: string) {
+  // A held member can't take on a new active membership — that would leave them
+  // simultaneously on hold and active (#262). Require a reactivation first.
+  const member = await db
+    .select({ status: memberSchema.status })
+    .from(memberSchema)
+    .where(eq(memberSchema.id, memberId))
+    .limit(1);
+
+  if (member[0]?.status === 'hold') {
+    throw new MemberOnHoldError();
+  }
+
   const result = await db
     .insert(memberMembershipSchema)
     .values({
