@@ -1,7 +1,7 @@
 import type { Transaction, TransactionStatus } from './FinancesTable';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { TransactionDetailModal } from './TransactionDetailModal';
 
 // Mock next-intl
@@ -11,12 +11,25 @@ vi.mock('next-intl', () => ({
 
 // Mock ORPC client
 const mockGetTransaction = vi.fn();
+const mockRefundTransaction = vi.fn();
 vi.mock('@/libs/Orpc', () => ({
   client: {
     transactions: {
       get: (...args: unknown[]) => mockGetTransaction(...args),
+      refund: (...args: unknown[]) => mockRefundTransaction(...args),
     },
   },
+}));
+
+// Refund button is ADMIN-gated; default the hook to true so it renders.
+const mockUseHasRole = vi.fn(() => true);
+vi.mock('@/hooks/useHasRole', () => ({
+  useHasRole: () => mockUseHasRole(),
+}));
+
+const mockInvalidateTransactionsCache = vi.fn();
+vi.mock('@/hooks/useTransactionsCache', () => ({
+  invalidateTransactionsCache: () => mockInvalidateTransactionsCache(),
 }));
 
 // Helper to create mock transactions
@@ -706,6 +719,59 @@ describe('TransactionDetailModal', () => {
       );
 
       await expect.element(page.getByText('type_label')).toBeInTheDocument();
+    });
+  });
+
+  describe('Refund (#273)', () => {
+    beforeEach(() => {
+      mockUseHasRole.mockReturnValue(true);
+      mockRefundTransaction.mockReset();
+      mockInvalidateTransactionsCache.mockReset();
+      mockGetTransaction.mockResolvedValue({ transaction: mockMembershipDetails });
+    });
+
+    it('shows a Refund button for an admin on a paid, refundable transaction', async () => {
+      render(
+        <TransactionDetailModal isOpen={true} onCloseAction={() => {}} transaction={createMockTransaction()} />,
+      );
+
+      await expect.element(page.getByText('refund_button')).toBeInTheDocument();
+    });
+
+    it('hides the Refund button for non-admins', async () => {
+      mockUseHasRole.mockReturnValue(false);
+      render(
+        <TransactionDetailModal isOpen={true} onCloseAction={() => {}} transaction={createMockTransaction()} />,
+      );
+
+      await expect.element(page.getByText('close_button')).toBeInTheDocument();
+      expect(page.getByText('refund_button').elements()).toHaveLength(0);
+    });
+
+    it('hides the Refund button for an already-refunded transaction', async () => {
+      render(
+        <TransactionDetailModal
+          isOpen={true}
+          onCloseAction={() => {}}
+          transaction={createMockTransaction({ status: 'refunded' })}
+        />,
+      );
+
+      await expect.element(page.getByText('close_button')).toBeInTheDocument();
+      expect(page.getByText('refund_button').elements()).toHaveLength(0);
+    });
+
+    it('calls the refund endpoint and invalidates the cache when clicked', async () => {
+      mockRefundTransaction.mockResolvedValue({ refundTransactionId: 'r1' });
+      render(
+        <TransactionDetailModal isOpen={true} onCloseAction={() => {}} transaction={createMockTransaction()} />,
+      );
+
+      await userEvent.click(page.getByText('refund_button'));
+
+      await vi.waitFor(() => expect(mockRefundTransaction).toHaveBeenCalledWith({ transactionId: 'txn-uuid-1' }));
+
+      expect(mockInvalidateTransactionsCache).toHaveBeenCalled();
     });
   });
 });

@@ -224,10 +224,18 @@ export async function getOrganizationMembers(
     history.push(memberMembership);
     membershipHistoryMap.set(membership.memberId, history);
 
-    // Set current membership (active status, most recent)
-    if (membership.status === 'active') {
+    // Set current membership. A held membership is still the member's current
+    // one — excluding it made the detail page's "Actions" menu (which owns the
+    // Reactivate action) disappear exactly when the member was on hold (#235).
+    // Prefer an active membership over a held one; otherwise take the most
+    // recent of the same kind.
+    if (membership.status === 'active' || membership.status === 'hold') {
       const current = currentMembershipMap.get(membership.memberId);
-      if (!current || membership.startDate > current.startDate) {
+      const isMoreCurrent
+        = !current
+          || (current.status === 'hold' && membership.status === 'active')
+          || (current.status === membership.status && membership.startDate > current.startDate);
+      if (isMoreCurrent) {
         currentMembershipMap.set(membership.memberId, memberMembership);
       }
     }

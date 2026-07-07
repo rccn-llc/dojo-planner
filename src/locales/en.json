@@ -985,6 +985,9 @@
     "subtotal_label": "Subtotal",
     "tax_label": "Tax",
     "total_label": "Total",
+    "refund_button": "Refund",
+    "refunding_button": "Refunding…",
+    "refund_error": "Refund failed. Please try again.",
     "close_button": "Close"
   },
   "ReportsPage": {

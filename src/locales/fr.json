@@ -1020,6 +1020,9 @@
     "subtotal_label": "Sous-total",
     "tax_label": "Taxe",
     "total_label": "Total",
+    "refund_button": "Rembourser",
+    "refunding_button": "Remboursement…",
+    "refund_error": "Le remboursement a échoué. Veuillez réessayer.",
     "close_button": "Fermer"
   },
   "MarketingPage": {
