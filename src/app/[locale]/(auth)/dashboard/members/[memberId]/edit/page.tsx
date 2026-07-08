@@ -30,8 +30,10 @@ import { CancelMembershipModal } from '@/features/members/lifecycle/CancelMember
 import { HoldMembershipModal } from '@/features/members/lifecycle/HoldMembershipModal';
 import { AddFamilyMembersModal } from '@/features/members/wizard/AddFamilyMembersModal';
 import { useCouponsCache } from '@/hooks/useCouponsCache';
+import { useHasRole } from '@/hooks/useHasRole';
 import { invalidateMembersCache, useMembersCache } from '@/hooks/useMembersCache';
 import { client } from '@/libs/Orpc';
+import { ORG_ROLE } from '@/types/Auth';
 // WaiverPdfService pulls in jspdf (large). Imported dynamically inside the
 // download handler so it is excluded from this page's initial bundle.
 import {
@@ -673,37 +675,58 @@ export default function EditMemberPage() {
     void reloadPaymentMethods();
   }, [reloadPaymentMethods]);
 
-  // Fetch billing history for this member
-  useEffect(() => {
-    const fetchBillingHistory = async () => {
-      if (!memberId) {
-        return;
-      }
-      setIsLoadingBilling(true);
-      try {
-        const result = await client.member.listMemberTransactions({ memberId, limit: 50 });
-        const items: BillingHistoryItem[] = result.transactions.map(tx => ({
-          id: tx.id,
-          date: new Date(tx.createdAt).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-          }),
-          member: `${tx.memberFirstName || ''} ${tx.memberLastName || ''}`.trim(),
-          amount: tx.amount,
-          purpose: formatTransactionType(tx.transactionType),
-          method: tx.paymentMethod || 'N/A',
-        }));
-        setBillingHistory(items);
-      } catch (err) {
-        console.warn('[Edit Member] Failed to fetch billing history:', err);
-        setBillingHistory([]);
-      } finally {
-        setIsLoadingBilling(false);
-      }
-    };
-    fetchBillingHistory();
+  // Fetch billing history for this member. Extracted into a useCallback so a
+  // refund can re-run it to reflect the reversed transaction immediately.
+  const reloadBillingHistory = useCallback(async () => {
+    if (!memberId) {
+      return;
+    }
+    setIsLoadingBilling(true);
+    try {
+      const result = await client.member.listMemberTransactions({ memberId, limit: 50 });
+      const items: BillingHistoryItem[] = result.transactions.map(tx => ({
+        id: tx.id,
+        date: new Date(tx.createdAt).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+        }),
+        member: `${tx.memberFirstName || ''} ${tx.memberLastName || ''}`.trim(),
+        amount: tx.amount,
+        purpose: formatTransactionType(tx.transactionType),
+        method: tx.paymentMethod || 'N/A',
+      }));
+      setBillingHistory(items);
+    } catch (err) {
+      console.warn('[Edit Member] Failed to fetch billing history:', err);
+      setBillingHistory([]);
+    } finally {
+      setIsLoadingBilling(false);
+    }
   }, [memberId]);
+
+  useEffect(() => {
+    void reloadBillingHistory();
+  }, [reloadBillingHistory]);
+
+  // Refunds are ADMIN-only (mirrors the transactions.refund guard). Non-admins
+  // don't see the Refund button at all (#233).
+  const canRefund = useHasRole(ORG_ROLE.ADMIN);
+  const [refundingId, setRefundingId] = useState<string | null>(null);
+  const [refundError, setRefundError] = useState<string | null>(null);
+
+  const handleRefund = useCallback(async (transactionId: string) => {
+    setRefundingId(transactionId);
+    setRefundError(null);
+    try {
+      await client.transactions.refund({ transactionId });
+      await reloadBillingHistory();
+    } catch (err) {
+      setRefundError(err instanceof Error ? err.message : 'Refund failed. Please try again.');
+    } finally {
+      setRefundingId(null);
+    }
+  }, [reloadBillingHistory]);
 
   // Fetch family members if this member is a head of household
   const isHOH = currentMember?.memberType === 'head-of-household';
@@ -1307,7 +1330,11 @@ export default function EditMemberPage() {
                         >
                           Change Membership
                         </Button>
-                        <Button variant="destructive" className="w-fit">
+                        <Button
+                          variant="destructive"
+                          className="w-fit"
+                          onClick={() => setIsHoldMembershipOpen(true)}
+                        >
                           Hold
                         </Button>
                       </>
@@ -1488,6 +1515,9 @@ export default function EditMemberPage() {
           {/* Billing History */}
           <Card className="p-6">
             <h2 className="mb-6 text-lg font-semibold text-foreground">Billing History</h2>
+            {refundError && (
+              <p className="mb-4 text-sm text-destructive">{refundError}</p>
+            )}
             {isLoadingBilling
               ? (
                   <p className="text-sm text-muted-foreground">Loading billing history...</p>
@@ -1524,13 +1554,16 @@ export default function EditMemberPage() {
                               <td className="px-4 py-4 text-sm text-muted-foreground">{item.purpose}</td>
                               <td className="hidden px-4 py-4 text-sm text-muted-foreground sm:table-cell">{item.method}</td>
                               <td className="px-4 py-4">
-                                <Button
-                                  size="sm"
-                                  onClick={() => console.info('Refund', item.id)}
-                                  className="w-fit bg-foreground text-background hover:bg-foreground/90"
-                                >
-                                  Refund
-                                </Button>
+                                {canRefund && (
+                                  <Button
+                                    size="sm"
+                                    disabled={refundingId === item.id}
+                                    onClick={() => handleRefund(item.id)}
+                                    className="w-fit bg-foreground text-background hover:bg-foreground/90"
+                                  >
+                                    {refundingId === item.id ? 'Refunding…' : 'Refund'}
+                                  </Button>
+                                )}
                               </td>
                             </tr>
                           ))}

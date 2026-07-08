@@ -54,6 +54,11 @@ vi.mock('@/libs/IQPro', () => ({
     cardProcessorId: 'card_proc_001',
     achProcessorId: 'ach_proc_001',
   }),
+  iqproGet: vi.fn(),
+  iqproPost: vi.fn(),
+  iqproPut: vi.fn(),
+  assertTransactionApproved: vi.fn(),
+  buildServiceFeeAdjustment: vi.fn(() => ({ type: 'ServiceFee', percentage: 3.75, flatAmount: null })),
 }));
 
 const testConfig = {
@@ -1082,5 +1087,53 @@ describe('computeNextPaymentDate', () => {
     expect(next.getFullYear()).toBe(2026);
     expect(next.getMonth()).toBe(5); // June
     expect(next.getDate()).toBe(30); // clamped to last day of June
+  });
+});
+
+describe('chargeOneTimeFee (resilience — #237)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns a captured error (never throws) when the subscription fetch fails', async () => {
+    const { iqproGet } = await import('@/libs/IQPro');
+    // A synthetic/seed subscription id makes IQPro reject the initial fetch —
+    // this used to throw straight through and 500 the hold/cancel endpoints.
+    vi.mocked(iqproGet).mockRejectedValue(new Error('IQPro 404: subscription not found'));
+
+    const { chargeOneTimeFee } = await import('./MemberPaymentService');
+    const result = await chargeOneTimeFee({
+      config: testConfig,
+      iqproSubscriptionId: 'seed_sub_does_not_exist',
+      iqproCustomerId: 'seed_cus_1',
+      orgId: 'org-1',
+      memberId: 'member-1',
+      memberMembershipId: 'mm-1',
+      amount: 25,
+      transactionType: 'hold_fee',
+      description: 'Hold fee',
+      caption: 'Hold fee',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('subscription not found');
+  });
+
+  it('short-circuits to success with no charge when the amount is zero', async () => {
+    const { chargeOneTimeFee } = await import('./MemberPaymentService');
+    const result = await chargeOneTimeFee({
+      config: testConfig,
+      iqproSubscriptionId: 'seed_sub_1',
+      iqproCustomerId: 'seed_cus_1',
+      orgId: 'org-1',
+      memberId: 'member-1',
+      memberMembershipId: 'mm-1',
+      amount: 0,
+      transactionType: 'hold_fee',
+      description: 'Hold fee',
+      caption: 'Hold fee',
+    });
+
+    expect(result).toEqual({ success: true, amountCharged: 0 });
   });
 });

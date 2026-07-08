@@ -14,13 +14,19 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Spinner } from '@/components/ui/spinner';
+import { useHasRole } from '@/hooks/useHasRole';
+import { invalidateTransactionsCache } from '@/hooks/useTransactionsCache';
 import { client } from '@/libs/Orpc';
+import { ORG_ROLE } from '@/types/Auth';
 
 type TransactionDetailModalProps = {
   isOpen: boolean;
   onCloseAction: () => void;
   transaction: Transaction | null;
 };
+
+// Transaction types that represent a real charge and can therefore be refunded.
+const REFUNDABLE_TYPES = new Set(['membership_payment', 'signup_fee', 'event_registration', 'product_purchase', 'adjustment']);
 
 const statusVariantMap: Record<TransactionStatus, 'default' | 'secondary' | 'destructive' | 'outline' | 'warning'> = {
   paid: 'default',
@@ -59,7 +65,13 @@ export function TransactionDetailModal({
   const t = useTranslations('TransactionDetailModal');
   const [details, setDetails] = useState<TransactionDetailData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [refunding, setRefunding] = useState(false);
+  const [refundError, setRefundError] = useState<string | null>(null);
   const prevTransactionIdRef = useRef<string | null>(null);
+
+  // Refunds are ADMIN-only (mirrors the transactions.refund guard). Only a
+  // paid charge (not an already-refunded/declined one) can be refunded (#273).
+  const canRefund = useHasRole(ORG_ROLE.ADMIN);
 
   const handleOpenChange = useCallback((open: boolean) => {
     if (!open) {
@@ -80,6 +92,25 @@ export function TransactionDetailModal({
     }
   }, []);
 
+  const handleRefund = useCallback(async () => {
+    if (!transaction) {
+      return;
+    }
+    setRefunding(true);
+    setRefundError(null);
+    try {
+      await client.transactions.refund({ transactionId: transaction.id });
+      // Refresh the modal's own view + the finances list so the reversed
+      // transaction and its 'refunded' status show up immediately.
+      await fetchDetails(transaction.id);
+      await invalidateTransactionsCache();
+    } catch (err) {
+      setRefundError(err instanceof Error ? err.message : t('refund_error'));
+    } finally {
+      setRefunding(false);
+    }
+  }, [transaction, fetchDetails, t]);
+
   useEffect(() => {
     if (!isOpen || !transaction) {
       prevTransactionIdRef.current = null;
@@ -95,6 +126,10 @@ export function TransactionDetailModal({
   if (!transaction) {
     return null;
   }
+
+  const isRefundable = canRefund
+    && transaction.status === 'paid'
+    && REFUNDABLE_TYPES.has(transaction.transactionType);
 
   const typeKey = TRANSACTION_TYPE_LABELS[transaction.transactionType] ?? transaction.transactionType;
   const hasMembershipDetails = details?.membershipPlanName
@@ -201,7 +236,16 @@ export function TransactionDetailModal({
           )}
         </div>
 
+        {refundError && (
+          <p className="text-sm text-destructive">{refundError}</p>
+        )}
+
         <DialogFooter>
+          {isRefundable && (
+            <Button variant="destructive" disabled={refunding} onClick={handleRefund}>
+              {refunding ? t('refunding_button') : t('refund_button')}
+            </Button>
+          )}
           <Button variant="outline" onClick={onCloseAction}>
             {t('close_button')}
           </Button>

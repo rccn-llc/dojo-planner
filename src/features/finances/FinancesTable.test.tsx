@@ -9,6 +9,26 @@ vi.mock('next-intl', () => ({
   useTranslations: () => (key: string) => key,
 }));
 
+// FinancesTable renders TransactionDetailModal, which pulls in Clerk (via
+// useHasRole) and the transactions cache. Mock them so the browser test env
+// doesn't try to read `process` at import time.
+vi.mock('@/hooks/useHasRole', () => ({
+  useHasRole: () => false,
+}));
+
+vi.mock('@/hooks/useTransactionsCache', () => ({
+  invalidateTransactionsCache: vi.fn(),
+}));
+
+vi.mock('@/libs/Orpc', () => ({
+  client: {
+    transactions: {
+      get: vi.fn(),
+      refund: vi.fn(),
+    },
+  },
+}));
+
 // Helper to create mock transactions
 const createMockTransaction = (overrides: Partial<Transaction> = {}): Transaction => ({
   id: '1',

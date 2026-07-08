@@ -1334,79 +1334,85 @@ export async function chargeOneTimeFee(args: {
     return { success: true, amountCharged: 0 };
   }
 
-  // Pull the subscription so we can resolve customerId + payment-method id
-  // exactly the way the kiosk does. IQPro lets us reference the saved PM
-  // by customerPaymentMethodId on the Sale payload.
-  const subRes = await iqproGet<{ data?: Record<string, unknown> }>(
-    config,
-    `/api/gateway/${gatewayId}/subscription/${iqproSubscriptionId}`,
-  );
-  const sub = (subRes.data ?? subRes) as Record<string, unknown>;
-  const subPM = sub.paymentMethod as Record<string, unknown> | undefined;
-  const custPM = subPM?.customerPaymentMethod as Record<string, unknown> | undefined;
-  const customerId = ((sub.customer as Record<string, unknown> | undefined)?.customerId ?? iqproCustomerId) as string;
-  const pmId = (custPM?.paymentMethodId ?? '') as string;
-
-  if (!pmId) {
-    return {
-      success: false,
-      error: 'No saved payment method on the existing subscription. Cannot charge fee.',
-    };
-  }
-
-  const paymentMethodName: 'card' | 'ach' = custPM?.card ? 'card' : 'ach';
-
-  // /calculatefees needs processorId + BIN for cards. Fall back to '400000'
-  // for the test BIN when the vault doesn't expose one — matches kiosk.
-  const { cardProcessorId, achProcessorId } = await getGatewayProcessors(config);
-  const processorId = paymentMethodName === 'card' ? cardProcessorId : achProcessorId;
-  if (!processorId) {
-    return { success: false, error: `No ${paymentMethodName} processor configured` };
-  }
-  const cardInfo = custPM?.card as Record<string, unknown> | undefined;
-  const maskedNumber = (cardInfo?.maskedNumber ?? cardInfo?.maskedCard ?? '') as string;
-  const bin = maskedNumber && maskedNumber.length >= 6 ? maskedNumber.slice(0, 6) : '400000';
-
-  // Cancellation / hold fees are NOT taxable (per Basys guidance on non-store charges).
-  const serverFees = await computeFeeBreakdown(config, baseAmount, /* isTaxable */ false, /* taxStatePct */ 0, {
-    processorId,
-    creditCardBin: paymentMethodName === 'card' ? bin : undefined,
-  });
-  const paymentAdjustments: Array<Record<string, unknown>> = [buildServiceFeeAdjustment(serverFees)];
-
-  const feeTxPayload = {
-    type: 'Sale',
-    remit: {
-      baseAmount: serverFees.baseAmount,
-      taxAmount: serverFees.taxAmount,
-      isTaxExempt: serverFees.taxAmount <= 0,
-      currencyCode: 'USD',
-      addTaxToTotal: true,
-      paymentAdjustments,
-    },
-    paymentMethod: {
-      customer: {
-        customerId,
-        customerPaymentMethodId: pmId,
-      },
-    },
-    lineItems: [
-      {
-        name: caption,
-        description,
-        quantity: 1,
-        unitPrice: baseAmount,
-        discount: 0,
-        freightAmount: 0,
-        unitOfMeasureId: 1,
-        localTaxPercent: 0,
-        nationalTaxPercent: 0,
-      },
-    ],
-    caption,
-  };
-
+  // Everything below talks to IQPro. Any failure here (including the initial
+  // subscription fetch against a synthetic/seed subscription id, the processor
+  // lookup, or the fee calculation) must be returned as a best-effort error
+  // rather than thrown — a fee-charge failure should degrade to a partial
+  // success in the caller, never a 500 (#237). Previously only the final
+  // charge POST was wrapped, so the earlier iqproGet threw straight through.
   try {
+    // Pull the subscription so we can resolve customerId + payment-method id
+    // exactly the way the kiosk does. IQPro lets us reference the saved PM
+    // by customerPaymentMethodId on the Sale payload.
+    const subRes = await iqproGet<{ data?: Record<string, unknown> }>(
+      config,
+      `/api/gateway/${gatewayId}/subscription/${iqproSubscriptionId}`,
+    );
+    const sub = (subRes.data ?? subRes) as Record<string, unknown>;
+    const subPM = sub.paymentMethod as Record<string, unknown> | undefined;
+    const custPM = subPM?.customerPaymentMethod as Record<string, unknown> | undefined;
+    const customerId = ((sub.customer as Record<string, unknown> | undefined)?.customerId ?? iqproCustomerId) as string;
+    const pmId = (custPM?.paymentMethodId ?? '') as string;
+
+    if (!pmId) {
+      return {
+        success: false,
+        error: 'No saved payment method on the existing subscription. Cannot charge fee.',
+      };
+    }
+
+    const paymentMethodName: 'card' | 'ach' = custPM?.card ? 'card' : 'ach';
+
+    // /calculatefees needs processorId + BIN for cards. Fall back to '400000'
+    // for the test BIN when the vault doesn't expose one — matches kiosk.
+    const { cardProcessorId, achProcessorId } = await getGatewayProcessors(config);
+    const processorId = paymentMethodName === 'card' ? cardProcessorId : achProcessorId;
+    if (!processorId) {
+      return { success: false, error: `No ${paymentMethodName} processor configured` };
+    }
+    const cardInfo = custPM?.card as Record<string, unknown> | undefined;
+    const maskedNumber = (cardInfo?.maskedNumber ?? cardInfo?.maskedCard ?? '') as string;
+    const bin = maskedNumber && maskedNumber.length >= 6 ? maskedNumber.slice(0, 6) : '400000';
+
+    // Cancellation / hold fees are NOT taxable (per Basys guidance on non-store charges).
+    const serverFees = await computeFeeBreakdown(config, baseAmount, /* isTaxable */ false, /* taxStatePct */ 0, {
+      processorId,
+      creditCardBin: paymentMethodName === 'card' ? bin : undefined,
+    });
+    const paymentAdjustments: Array<Record<string, unknown>> = [buildServiceFeeAdjustment(serverFees)];
+
+    const feeTxPayload = {
+      type: 'Sale',
+      remit: {
+        baseAmount: serverFees.baseAmount,
+        taxAmount: serverFees.taxAmount,
+        isTaxExempt: serverFees.taxAmount <= 0,
+        currencyCode: 'USD',
+        addTaxToTotal: true,
+        paymentAdjustments,
+      },
+      paymentMethod: {
+        customer: {
+          customerId,
+          customerPaymentMethodId: pmId,
+        },
+      },
+      lineItems: [
+        {
+          name: caption,
+          description,
+          quantity: 1,
+          unitPrice: baseAmount,
+          discount: 0,
+          freightAmount: 0,
+          unitOfMeasureId: 1,
+          localTaxPercent: 0,
+          nationalTaxPercent: 0,
+        },
+      ],
+      caption,
+    };
+
     const txRes = await iqproPost<{ data?: Record<string, unknown> }>(
       config,
       `/api/gateway/${gatewayId}/transaction`,
@@ -1799,9 +1805,15 @@ export async function holdMembershipLifecycle(args: {
     }
   }
 
-  // Pause the original membership subscription
+  // Pause the original membership subscription. A failure here (e.g. IQPro
+  // rejecting a synthetic/seed subscription id) must NOT abort the hold — the
+  // local status change still proceeds and the error is surfaced, matching the
+  // cancellation path's best-effort behaviour (#237).
   if (config && ctx.membership.iqproSubscriptionId) {
-    await setSubscriptionAutoRenewal(config, ctx.membership.iqproSubscriptionId, false);
+    const pauseResult = await setSubscriptionAutoRenewal(config, ctx.membership.iqproSubscriptionId, false);
+    if (!pauseResult.success && !chargeError) {
+      chargeError = pauseResult.error;
+    }
   }
 
   // Update local DB rows
@@ -1838,11 +1850,21 @@ export async function reactivateMembershipLifecycle(args: {
   const { config, ctx } = args;
   const now = new Date();
 
+  // Both IQPro calls are best-effort: a failure (e.g. a synthetic/seed
+  // subscription id IQPro rejects) is surfaced but never blocks the local
+  // reactivation, mirroring the hold/cancel paths (#237).
+  let error: string | undefined;
   if (config && ctx.membership.iqproHoldFeeSubscriptionId) {
-    await cancelIQProSubscription(config, ctx.membership.iqproHoldFeeSubscriptionId);
+    const cancelResult = await cancelIQProSubscription(config, ctx.membership.iqproHoldFeeSubscriptionId);
+    if (!cancelResult.success) {
+      error = cancelResult.error;
+    }
   }
   if (config && ctx.membership.iqproSubscriptionId) {
-    await setSubscriptionAutoRenewal(config, ctx.membership.iqproSubscriptionId, true);
+    const resumeResult = await setSubscriptionAutoRenewal(config, ctx.membership.iqproSubscriptionId, true);
+    if (!resumeResult.success && !error) {
+      error = resumeResult.error;
+    }
   }
 
   await db.update(memberMembershipSchema)
@@ -1856,5 +1878,5 @@ export async function reactivateMembershipLifecycle(args: {
     .set({ status: 'active', statusChangedAt: now })
     .where(eq(memberSchema.id, ctx.member.id));
 
-  return { success: true };
+  return { success: true, error };
 }
