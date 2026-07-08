@@ -1,9 +1,29 @@
 import type { Transaction } from '@/features/finances/FinancesTable';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { page, userEvent } from 'vitest/browser';
 import { FinancesTable } from '@/features/finances/FinancesTable';
 import { I18nWrapper } from '@/lib/test-utils';
+
+// FinancesTable renders TransactionDetailModal, which pulls in Clerk (via
+// useHasRole) and the transactions cache. Mock them so the browser test env
+// doesn't try to read `process` at import time.
+vi.mock('@/hooks/useHasRole', () => ({
+  useHasRole: () => false,
+}));
+
+vi.mock('@/hooks/useTransactionsCache', () => ({
+  invalidateTransactionsCache: vi.fn(),
+}));
+
+vi.mock('@/libs/Orpc', () => ({
+  client: {
+    transactions: {
+      get: vi.fn(),
+      refund: vi.fn(),
+    },
+  },
+}));
 
 // Note: Card numbers shown are masked display values (****1234), not actual card numbers
 const mockTransactions: Transaction[] = [
