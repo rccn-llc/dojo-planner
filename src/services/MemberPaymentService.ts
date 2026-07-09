@@ -538,15 +538,24 @@ export async function registerPaymentMethod(
     });
 
     const paymentMethodDbId = randomUUID();
-    await db.insert(paymentMethodSchema).values({
-      id: paymentMethodDbId,
-      memberId: params.memberId,
-      iqproPaymentMethodId: pmResult.paymentMethodId,
-      type: params.paymentMethod,
-      firstSix: params.paymentMethod === 'card' ? params.cardFirstSix ?? null : null,
-      last4: pmResult.last4,
-      accountType: params.paymentMethod === 'ach' ? params.achAccountType ?? null : null,
-      isDefault: true,
+    // The newly-added method becomes the default; clear the flag on any existing
+    // methods first so exactly one stays default (avoids multiple defaults when
+    // a member adds a second card/ACH).
+    await db.transaction(async (tx) => {
+      await tx
+        .update(paymentMethodSchema)
+        .set({ isDefault: false })
+        .where(eq(paymentMethodSchema.memberId, params.memberId));
+      await tx.insert(paymentMethodSchema).values({
+        id: paymentMethodDbId,
+        memberId: params.memberId,
+        iqproPaymentMethodId: pmResult.paymentMethodId,
+        type: params.paymentMethod,
+        firstSix: params.paymentMethod === 'card' ? params.cardFirstSix ?? null : null,
+        last4: pmResult.last4,
+        accountType: params.paymentMethod === 'ach' ? params.achAccountType ?? null : null,
+        isDefault: true,
+      });
     });
 
     logger.info('[MemberPayment] Payment method registered (no charge)', { paymentMethodDbId });

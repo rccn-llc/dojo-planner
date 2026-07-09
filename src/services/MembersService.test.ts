@@ -24,6 +24,7 @@ vi.mock('@/libs/DB', () => ({
         returning: vi.fn(() => Promise.resolve([])),
       })),
     })),
+    transaction: vi.fn(),
   },
 }));
 
@@ -369,6 +370,98 @@ describe('MembersService', () => {
       const result = await getMemberPaymentMethods('member-no-pm', 'org-123');
 
       expect(result).toEqual([]);
+    });
+  });
+
+  // Mocks the org-scoped ownership lookup (findOwnedPaymentMethod) to return the
+  // given row, and returns a `tx` recorder for db.transaction assertions.
+  function mockOwnershipAndTx(owned: { id: string; isDefault: boolean } | null) {
+    const ownershipChain = {
+      from: () => ({ innerJoin: () => ({ where: () => ({ limit: () => Promise.resolve(owned ? [owned] : []) }) }) }),
+    };
+    return ownershipChain;
+  }
+
+  describe('deleteMemberPaymentMethod', () => {
+    it('returns { deleted: false } when the method is not owned by the member/org', async () => {
+      const { db } = await import('@/libs/DB');
+      vi.mocked(db.select).mockReturnValue(mockOwnershipAndTx(null) as never);
+
+      const { deleteMemberPaymentMethod } = await import('./MembersService');
+      const result = await deleteMemberPaymentMethod('pm-x', 'member-1', 'org-1');
+
+      expect(result).toEqual({ deleted: false });
+      expect(db.transaction).not.toHaveBeenCalled();
+    });
+
+    it('deletes and promotes another method to default when the deleted one was default', async () => {
+      const { db } = await import('@/libs/DB');
+      vi.mocked(db.select).mockReturnValue(mockOwnershipAndTx({ id: 'pm-1', isDefault: true }) as never);
+
+      const txDelete = vi.fn(() => ({ where: vi.fn(() => Promise.resolve(undefined)) }));
+      const txUpdateWhere = vi.fn(() => Promise.resolve(undefined));
+      const txUpdate = vi.fn(() => ({ set: vi.fn(() => ({ where: txUpdateWhere })) }));
+      // Inside the tx, the "remaining methods" lookup returns one row to promote.
+      const txSelect = vi.fn(() => ({ from: () => ({ where: () => ({ limit: () => Promise.resolve([{ id: 'pm-2' }]) }) }) }));
+      vi.mocked(db.transaction).mockImplementation(async (cb: any) =>
+        cb({ delete: txDelete, update: txUpdate, select: txSelect }));
+
+      const { deleteMemberPaymentMethod } = await import('./MembersService');
+      const result = await deleteMemberPaymentMethod('pm-1', 'member-1', 'org-1');
+
+      expect(result).toEqual({ deleted: true });
+      expect(txDelete).toHaveBeenCalled();
+      // A remaining method is promoted to default.
+      expect(txUpdate).toHaveBeenCalled();
+    });
+
+    it('does not promote anything when a non-default method is deleted', async () => {
+      const { db } = await import('@/libs/DB');
+      vi.mocked(db.select).mockReturnValue(mockOwnershipAndTx({ id: 'pm-2', isDefault: false }) as never);
+
+      const txDelete = vi.fn(() => ({ where: vi.fn(() => Promise.resolve(undefined)) }));
+      const txUpdate = vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn() })) }));
+      const txSelect = vi.fn();
+      vi.mocked(db.transaction).mockImplementation(async (cb: any) =>
+        cb({ delete: txDelete, update: txUpdate, select: txSelect }));
+
+      const { deleteMemberPaymentMethod } = await import('./MembersService');
+      const result = await deleteMemberPaymentMethod('pm-2', 'member-1', 'org-1');
+
+      expect(result).toEqual({ deleted: true });
+      expect(txDelete).toHaveBeenCalled();
+      // No default was removed, so no promotion lookup/update runs.
+      expect(txSelect).not.toHaveBeenCalled();
+      expect(txUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('setPrimaryPaymentMethod', () => {
+    it('returns { updated: false } when the method is not owned', async () => {
+      const { db } = await import('@/libs/DB');
+      vi.mocked(db.select).mockReturnValue(mockOwnershipAndTx(null) as never);
+
+      const { setPrimaryPaymentMethod } = await import('./MembersService');
+      const result = await setPrimaryPaymentMethod('pm-x', 'member-1', 'org-1');
+
+      expect(result).toEqual({ updated: false });
+      expect(db.transaction).not.toHaveBeenCalled();
+    });
+
+    it('unsets all defaults then sets the chosen method as default', async () => {
+      const { db } = await import('@/libs/DB');
+      vi.mocked(db.select).mockReturnValue(mockOwnershipAndTx({ id: 'pm-2', isDefault: false }) as never);
+
+      const setWhere = vi.fn(() => Promise.resolve(undefined));
+      const txUpdate = vi.fn(() => ({ set: vi.fn(() => ({ where: setWhere })) }));
+      vi.mocked(db.transaction).mockImplementation(async (cb: any) => cb({ update: txUpdate }));
+
+      const { setPrimaryPaymentMethod } = await import('./MembersService');
+      const result = await setPrimaryPaymentMethod('pm-2', 'member-1', 'org-1');
+
+      expect(result).toEqual({ updated: true });
+      // Two updates: clear all defaults, then set the chosen one.
+      expect(txUpdate).toHaveBeenCalledTimes(2);
     });
   });
 

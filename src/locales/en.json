@@ -2220,7 +2220,8 @@
     }
   },
   "EditPaymentMethodModal": {
-    "title": "Edit payment method",
+    "title": "Add payment method",
+    "tabs_help": "Choose whether to add a card or a bank account (ACH).",
     "save_button": "Save",
     "saving_button": "Saving...",
     "cancel_button": "Cancel",

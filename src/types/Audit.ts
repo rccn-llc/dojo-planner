@@ -75,6 +75,8 @@ export const AUDIT_ACTION = {
   // Payment operations
   PAYMENT_PROCESS: 'payment.process',
   PAYMENT_METHOD_REGISTER: 'paymentMethod.register',
+  PAYMENT_METHOD_DELETE: 'paymentMethod.delete',
+  PAYMENT_METHOD_SET_PRIMARY: 'paymentMethod.setPrimary',
   // Read-access logging for saved payment methods (SOC2 CC7.2)
   PAYMENT_METHOD_VIEW: 'paymentMethod.view',
 

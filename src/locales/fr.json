@@ -2225,7 +2225,8 @@
     }
   },
   "EditPaymentMethodModal": {
-    "title": "Modifier le mode de paiement",
+    "title": "Ajouter un mode de paiement",
+    "tabs_help": "Choisissez d'ajouter une carte ou un compte bancaire (ACH).",
     "save_button": "Enregistrer",
     "saving_button": "Enregistrement...",
     "cancel_button": "Annuler",
