@@ -7,7 +7,7 @@ import type { Member } from '@/hooks/useMembersCache';
 import type { MemberPaymentMethodData } from '@/services/MembersService';
 import type { SignedWaiverWithTemplateName } from '@/services/WaiversService';
 import { useOrganization } from '@clerk/nextjs';
-import { ArrowRightLeft, Download, MoreVertical, Pencil, Plus, Unlink } from 'lucide-react';
+import { ArrowRightLeft, Download, MoreVertical, Pencil, Plus, Trash2, Unlink } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
@@ -670,6 +670,36 @@ export default function EditMemberPage() {
       setIsLoadingPayment(false);
     }
   }, [memberId]);
+
+  // Per-method mutation state for the payment-method list (delete / set-primary).
+  const [pmActionId, setPmActionId] = useState<string | null>(null);
+  const [pmError, setPmError] = useState<string | null>(null);
+
+  const handleSetPrimaryPaymentMethod = useCallback(async (paymentMethodId: string) => {
+    setPmActionId(paymentMethodId);
+    setPmError(null);
+    try {
+      await client.member.setPrimaryPaymentMethod({ memberId, paymentMethodId });
+      await reloadPaymentMethods();
+    } catch (err) {
+      setPmError(err instanceof Error ? err.message : 'Failed to update the default payment method.');
+    } finally {
+      setPmActionId(null);
+    }
+  }, [memberId, reloadPaymentMethods]);
+
+  const handleDeletePaymentMethod = useCallback(async (paymentMethodId: string) => {
+    setPmActionId(paymentMethodId);
+    setPmError(null);
+    try {
+      await client.member.deletePaymentMethod({ memberId, paymentMethodId });
+      await reloadPaymentMethods();
+    } catch (err) {
+      setPmError(err instanceof Error ? err.message : 'Failed to delete the payment method.');
+    } finally {
+      setPmActionId(null);
+    }
+  }, [memberId, reloadPaymentMethods]);
 
   useEffect(() => {
     void reloadPaymentMethods();
@@ -1378,23 +1408,11 @@ export default function EditMemberPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => setIsEditPaymentMethodOpen(true)}
-                      aria-label={paymentMethods.length === 0 ? 'Add payment method' : 'Edit payment method'}
+                      aria-label="Add payment method"
                     >
-                      {paymentMethods.length === 0
-                        ? (
-                            <>
-                              <Plus className="mr-1 h-4 w-4" />
-                              {' '}
-                              Add
-                            </>
-                          )
-                        : (
-                            <>
-                              <Pencil className="mr-1 h-4 w-4" />
-                              {' '}
-                              Edit
-                            </>
-                          )}
+                      <Plus className="mr-1 h-4 w-4" />
+                      {' '}
+                      Add
                     </Button>
                   )}
                 </div>
@@ -1408,10 +1426,12 @@ export default function EditMemberPage() {
                       )
                     : (
                         <>
-                          {(() => {
-                            const pm = paymentMethods.find(p => p.isDefault) || paymentMethods[0]!;
-                            return (
-                              <div className="flex items-start gap-4">
+                          {pmError && (
+                            <p className="mb-3 text-sm text-destructive">{pmError}</p>
+                          )}
+                          <div className="space-y-3">
+                            {paymentMethods.map(pm => (
+                              <div key={pm.id} className="flex items-center gap-4 rounded-lg border border-border p-3">
                                 <div className="rounded-lg bg-blue-600 p-3">
                                   <span className="text-2xl">{getPaymentTypeIcon(pm.type)}</span>
                                 </div>
@@ -1425,13 +1445,38 @@ export default function EditMemberPage() {
                                       </>
                                     )}
                                   </p>
-                                  <p className="mt-1 text-xs text-muted-foreground">
-                                    {pm.isDefault ? 'Default payment method' : ''}
-                                  </p>
+                                  {pm.isDefault && (
+                                    <p className="mt-1 text-xs text-muted-foreground">Default payment method</p>
+                                  )}
+                                </div>
+                                <div className="flex shrink-0 items-center gap-2">
+                                  {pm.isDefault
+                                    ? (
+                                        <Badge variant="secondary">Default</Badge>
+                                      )
+                                    : (
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          disabled={pmActionId === pm.id}
+                                          onClick={() => handleSetPrimaryPaymentMethod(pm.id)}
+                                        >
+                                          Set as primary
+                                        </Button>
+                                      )}
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={pmActionId === pm.id}
+                                    aria-label="Delete payment method"
+                                    onClick={() => handleDeletePaymentMethod(pm.id)}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
                                 </div>
                               </div>
-                            );
-                          })()}
+                            ))}
+                          </div>
                           {/* Applied Coupon Info */}
                           {appliedCoupon && (
                             <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950/30">

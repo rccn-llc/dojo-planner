@@ -257,6 +257,7 @@ export function EditPaymentMethodModal({
               <span className="font-medium">{t('ach_tab_label')}</span>
             </button>
           </div>
+          <p className="text-xs text-muted-foreground">{tEdit('tabs_help')}</p>
 
           {form.paymentMethod === 'card' && (
             <div className="space-y-3">

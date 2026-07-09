@@ -623,6 +623,96 @@ export async function getMemberPaymentMethods(
 }
 
 /**
+ * Look up a payment method by id and confirm it belongs to the given member in
+ * the given org (payment_method has no org column, so we join through member).
+ * Returns the row (id + isDefault) or null.
+ */
+async function findOwnedPaymentMethod(paymentMethodId: string, memberId: string, organizationId: string) {
+  const rows = await db
+    .select({ id: paymentMethodSchema.id, isDefault: paymentMethodSchema.isDefault })
+    .from(paymentMethodSchema)
+    .innerJoin(memberSchema, eq(paymentMethodSchema.memberId, memberSchema.id))
+    .where(and(
+      eq(paymentMethodSchema.id, paymentMethodId),
+      eq(paymentMethodSchema.memberId, memberId),
+      eq(memberSchema.organizationId, organizationId),
+    ))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/**
+ * Delete a saved payment method (#218). Org-scoped for safety. If the deleted
+ * method was the default and other methods remain, promotes the most-recent
+ * remaining one to default so the member always has a usable default.
+ *
+ * Returns `{ deleted: false }` when the method doesn't exist or isn't owned by
+ * this member/org. Local DB only — the IQPro vault entry is left in place
+ * (nothing else in the app deletes vault entries either).
+ */
+export async function deleteMemberPaymentMethod(
+  paymentMethodId: string,
+  memberId: string,
+  organizationId: string,
+): Promise<{ deleted: boolean }> {
+  const owned = await findOwnedPaymentMethod(paymentMethodId, memberId, organizationId);
+  if (!owned) {
+    return { deleted: false };
+  }
+
+  return db.transaction(async (tx) => {
+    await tx.delete(paymentMethodSchema).where(eq(paymentMethodSchema.id, paymentMethodId));
+
+    // If we removed the default, promote another remaining method so there's
+    // still a default to charge against.
+    if (owned.isDefault) {
+      const remaining = await tx
+        .select({ id: paymentMethodSchema.id })
+        .from(paymentMethodSchema)
+        .where(eq(paymentMethodSchema.memberId, memberId))
+        .limit(1);
+      const next = remaining[0];
+      if (next) {
+        await tx
+          .update(paymentMethodSchema)
+          .set({ isDefault: true })
+          .where(eq(paymentMethodSchema.id, next.id));
+      }
+    }
+
+    return { deleted: true };
+  });
+}
+
+/**
+ * Mark a saved payment method as the member's default (#226), unsetting the
+ * default flag on all their other methods so exactly one is default.
+ * Org-scoped. Returns `{ updated: false }` when the method isn't owned.
+ */
+export async function setPrimaryPaymentMethod(
+  paymentMethodId: string,
+  memberId: string,
+  organizationId: string,
+): Promise<{ updated: boolean }> {
+  const owned = await findOwnedPaymentMethod(paymentMethodId, memberId, organizationId);
+  if (!owned) {
+    return { updated: false };
+  }
+
+  return db.transaction(async (tx) => {
+    await tx
+      .update(paymentMethodSchema)
+      .set({ isDefault: false })
+      .where(eq(paymentMethodSchema.memberId, memberId));
+    await tx
+      .update(paymentMethodSchema)
+      .set({ isDefault: true })
+      .where(eq(paymentMethodSchema.id, paymentMethodId));
+    return { updated: true };
+  });
+}
+
+/**
  * Get transactions for a specific member within an organization
  * @param memberId - The member ID
  * @param organizationId - The organization ID

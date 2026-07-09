@@ -7,12 +7,12 @@ import { audit } from '@/services/AuditService';
 import { sendMemberConfirmationEmail } from '@/services/EmailService';
 import { resolveIQProConfig } from '@/services/IQProConfigService';
 import { cancelMembershipLifecycle, getLifecycleContext, HoldLimitReachedError, holdMembershipLifecycle, reactivateMembershipLifecycle } from '@/services/MemberPaymentService';
-import { addMemberMembership, changeMemberMembership, createMember, getAllMembershipPlans, getFamilyMembers, getHeadOfHouseholdMembers, getHOHForFamilyMember, getMemberPaymentMethods, getMembershipPlans, getMemberTransactions, linkFamilyMember, MemberOnHoldError, removeFully, unlinkFamilyMember, updateMember, updateMemberContactInfo, updateMemberPhoto, updateMemberStatus } from '@/services/MembersService';
+import { addMemberMembership, changeMemberMembership, createMember, deleteMemberPaymentMethod, getAllMembershipPlans, getFamilyMembers, getHeadOfHouseholdMembers, getHOHForFamilyMember, getMemberPaymentMethods, getMembershipPlans, getMemberTransactions, linkFamilyMember, MemberOnHoldError, removeFully, setPrimaryPaymentMethod as setPrimaryPaymentMethodService, unlinkFamilyMember, updateMember, updateMemberContactInfo, updateMemberPhoto, updateMemberStatus } from '@/services/MembersService';
 import { generatePdfFilename } from '@/services/WaiverPdfService';
 import { generateWaiverPdfBuffer } from '@/services/WaiverPdfService.server';
 import { AUDIT_ACTION, AUDIT_ENTITY_TYPE } from '@/types/Audit';
 import { ORG_ROLE } from '@/types/Auth';
-import { CancelMembershipValidation, DeleteMemberValidation, EditMemberValidation, GetHOHForMemberValidation, GetHOHPaymentMethodsValidation, HoldMembershipValidation, LinkFamilyMemberValidation, ListFamilyMembersValidation, MemberPaymentMethodsValidation, MemberTransactionsValidation, MemberValidation, ReactivateMembershipValidation, RemoveFullyMemberValidation, SearchHOHValidation, SendConfirmationEmailValidation, UnlinkFamilyMemberValidation, UpdateMemberContactInfoValidation, UpdateMemberPhotoValidation, UpdateMemberTypeValidation } from '@/validations/MemberValidation';
+import { CancelMembershipValidation, DeleteMemberValidation, EditMemberValidation, GetHOHForMemberValidation, GetHOHPaymentMethodsValidation, HoldMembershipValidation, LinkFamilyMemberValidation, ListFamilyMembersValidation, MemberPaymentMethodsValidation, MemberTransactionsValidation, MemberValidation, PaymentMethodMutationValidation, ReactivateMembershipValidation, RemoveFullyMemberValidation, SearchHOHValidation, SendConfirmationEmailValidation, UnlinkFamilyMemberValidation, UpdateMemberContactInfoValidation, UpdateMemberPhotoValidation, UpdateMemberTypeValidation } from '@/validations/MemberValidation';
 import { guardAuth, guardRole } from './AuthGuards';
 
 export const create = os
@@ -666,6 +666,40 @@ export const listPaymentMethods = os
       status: 'success',
     });
     return { paymentMethods };
+  });
+
+export const deletePaymentMethod = os
+  .input(PaymentMethodMutationValidation)
+  .handler(async ({ input }) => {
+    const context = await guardRole(ORG_ROLE.FRONT_DESK);
+    const result = await deleteMemberPaymentMethod(input.paymentMethodId, input.memberId, context.orgId);
+
+    await audit(context, AUDIT_ACTION.PAYMENT_METHOD_DELETE, AUDIT_ENTITY_TYPE.PAYMENT_METHOD, {
+      entityId: input.paymentMethodId,
+      status: result.deleted ? 'success' : 'failure',
+    });
+
+    if (!result.deleted) {
+      throw new ORPCError('Payment method not found', { status: 404 });
+    }
+    return result;
+  });
+
+export const setPrimaryPaymentMethod = os
+  .input(PaymentMethodMutationValidation)
+  .handler(async ({ input }) => {
+    const context = await guardRole(ORG_ROLE.FRONT_DESK);
+    const result = await setPrimaryPaymentMethodService(input.paymentMethodId, input.memberId, context.orgId);
+
+    await audit(context, AUDIT_ACTION.PAYMENT_METHOD_SET_PRIMARY, AUDIT_ENTITY_TYPE.PAYMENT_METHOD, {
+      entityId: input.paymentMethodId,
+      status: result.updated ? 'success' : 'failure',
+    });
+
+    if (!result.updated) {
+      throw new ORPCError('Payment method not found', { status: 404 });
+    }
+    return result;
   });
 
 export const listMemberTransactions = os
