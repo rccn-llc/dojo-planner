@@ -127,6 +127,14 @@ describe('useConvertMemberWizard', () => {
       expect(result.current.isLoading).toBe(false);
     });
 
+    it('should expose the computed steps (used to detect the last step before success)', async () => {
+      const { result } = await renderHook(() => useConvertMemberWizard(defaultInit));
+
+      // defaultInit is hoh-to-individual with membership + payment method on file.
+      expect(result.current.steps).toEqual(getStepsForConversion('hoh-to-individual', true, true));
+      expect(result.current.steps).toEqual(['confirm', 'success']);
+    });
+
     it('should include HOH data when provided', async () => {
       const init = {
         ...defaultInit,

@@ -1,5 +1,11 @@
 import * as z from 'zod';
 
+// Base64 data URLs inflate the raw byte size by ~33%. The client compresses
+// avatars to ≤200KB (see compressImageForStorage), so ≤400KB of base64 leaves
+// comfortable headroom while still keeping the request payload manageable.
+const PHOTO_DATA_URL_MAX = 400_000;
+const PHOTO_DATA_URL_REGEX = /^data:image\/(jpeg|png|gif);base64,/;
+
 export const MemberValidation = z.object({
   email: z.string().email(),
   firstName: z.string().min(1),
@@ -16,7 +22,13 @@ export const MemberValidation = z.object({
     zipCode: z.string(),
     country: z.string(),
   }).optional(),
-  photoUrl: z.string().optional(),
+  // Optional avatar as a base64 image data URL, capped so the create payload
+  // stays manageable (same limit as UpdateMemberPhotoValidation).
+  photoUrl: z
+    .string()
+    .max(PHOTO_DATA_URL_MAX, 'Photo data URL must be 400KB or less')
+    .regex(PHOTO_DATA_URL_REGEX, 'photoUrl must be a data URL for an image (jpeg, png, gif)')
+    .optional(),
   status: z.enum(['active', 'hold', 'trial', 'cancelled', 'past due']).optional(),
 });
 
@@ -54,11 +66,11 @@ export const UpdateMemberContactInfoValidation = z.object({
 export const UpdateMemberPhotoValidation = z.object({
   id: z.string().min(1),
   // null clears the photo. When set, must be a base64 data URL of a supported
-  // image type, capped at ~300KB so the request payload stays manageable.
+  // image type, capped so the request payload stays manageable.
   photoUrl: z
     .string()
-    .max(300_000, 'Photo data URL must be 300KB or less')
-    .regex(/^data:image\/(jpeg|png|gif);base64,/, 'photoUrl must be a data URL for an image (jpeg, png, gif)')
+    .max(PHOTO_DATA_URL_MAX, 'Photo data URL must be 400KB or less')
+    .regex(PHOTO_DATA_URL_REGEX, 'photoUrl must be a data URL for an image (jpeg, png, gif)')
     .nullable(),
 });
 

@@ -161,6 +161,7 @@ export const useConvertMemberWizard = (init: ConvertMemberWizardInit) => {
   return {
     step,
     setStep,
+    steps: getSteps(),
     data,
     updateData,
     nextStep,
