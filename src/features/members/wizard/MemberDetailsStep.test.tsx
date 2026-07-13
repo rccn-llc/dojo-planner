@@ -179,7 +179,9 @@ describe('MemberDetailsStep', () => {
     }
   });
 
-  it('should enable Next button when all required fields are filled', () => {
+  // #238: address is optional (labeled "Optional"), so Next must NOT be gated
+  // on it. Required fields = name, phone, DOB, valid email — no address.
+  it('should enable Next button with required fields filled and NO address', async () => {
     const filledData: AddMemberWizardData = {
       memberType: 'individual',
       firstName: 'John',
@@ -201,14 +203,9 @@ describe('MemberDetailsStep', () => {
       />,
     );
 
-    try {
-      const nextButton = page.getByRole('button', { name: /next/i }) as unknown as { getAttribute: (name: string) => string | null };
+    const nextButton = page.getByRole('button', { name: /next/i });
 
-      expect(nextButton.getAttribute('disabled')).toBeNull();
-    } catch {
-      // Button may not exist if render failed
-      expect(true).toBe(true);
-    }
+    await expect.element(nextButton).not.toBeDisabled();
   });
 
   it('should display error message when provided', () => {

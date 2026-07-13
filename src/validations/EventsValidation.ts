@@ -29,10 +29,15 @@ const BillingTierShape = z.object({
   sortOrder: z.number().int().min(0).optional().default(0),
 });
 
+const LOCATION_MAX = 200;
+const NOTE_MAX = 2000;
+
 const EventShape = z.object({
   name: z.string().min(1).max(NAME_MAX),
   description: z.string().max(DESCRIPTION_MAX).nullable().optional(),
   eventType: EventType,
+  location: z.string().max(LOCATION_MAX).nullable().optional(),
+  note: z.string().max(NOTE_MAX).nullable().optional(),
   programId: z.string().min(1).nullable().optional(),
   imageUrl: z.string().url().nullable().optional(),
   maxCapacity: z.number().int().min(1).nullable().optional(),

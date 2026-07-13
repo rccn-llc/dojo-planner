@@ -242,9 +242,23 @@ export const PaymentStep = ({
     && data.achRoutingNumber
     && data.achAccountNumber;
 
-  // Free-trial plans bypass the card/ACH validation gate — there's no charge,
-  // so no payment data to collect. The Next button is always enabled.
-  const isFormValid = isFreeTrial ? true : (isCardFormValid || isAchFormValid);
+  // Whether the user has started entering payment details. In capture-only mode
+  // a card/ACH is optional, so we only require a COMPLETE form once they've begun.
+  const hasStartedCardEntry = paymentMethod === 'card'
+    && !!(data.cardholderName || data.cardNumber || data.cardExpiry || data.cardCvc || (useIframe && (iframeValid || iframeCvvValid)));
+  const hasStartedAchEntry = paymentMethod === 'ach'
+    && !!(data.achAccountHolder || data.achRoutingNumber || data.achAccountNumber);
+  const hasStartedPaymentEntry = hasStartedCardEntry || hasStartedAchEntry;
+
+  // Free-trial plans bypass the card/ACH validation gate — there's no charge, so
+  // no payment data to collect. Capture-only (HOH who skipped membership) may
+  // also skip the payment method entirely (#217): Next is enabled when nothing
+  // has been entered, but if they start a card/ACH it must be complete.
+  const isFormValid = isFreeTrial
+    ? true
+    : captureOnly
+      ? (!hasStartedPaymentEntry || isCardFormValid || isAchFormValid)
+      : (isCardFormValid || isAchFormValid);
 
   const getDeclineReasonMessage = (reason?: PaymentDeclineReason): string => {
     switch (reason) {
@@ -271,6 +285,14 @@ export const PaymentStep = ({
 
   // Handle next: tokenize via iframe if needed, then proceed.
   const handleNextClick = useCallback(async () => {
+    // Capture-only with no payment details entered → skip the payment method
+    // entirely (nothing to tokenize or register). See AddMemberModal, which
+    // only calls registerPaymentMethod when a paymentMethod is present.
+    if (captureOnly && !hasStartedPaymentEntry) {
+      onNextAction();
+      return;
+    }
+
     if (!useIframe || paymentMethod !== 'card') {
       onNextAction();
       return;
@@ -293,7 +315,7 @@ export const PaymentStep = ({
     } finally {
       setTokenizing(false);
     }
-  }, [useIframe, paymentMethod, onNextAction, onUpdateAction, iframeTokenize]);
+  }, [useIframe, paymentMethod, onNextAction, onUpdateAction, iframeTokenize, captureOnly, hasStartedPaymentEntry]);
 
   // Try Again: clear the declined status so the user can re-submit the form
   // without re-entering payment fields. We deliberately do NOT auto-fire the
@@ -823,7 +845,7 @@ export const PaymentStep = ({
               : isFreeTrial
                 ? t('continue_button')
                 : captureOnly
-                  ? t('save_payment_method_button')
+                  ? (hasStartedPaymentEntry ? t('save_payment_method_button') : t('skip_payment_method_button'))
                   : paymentStatus === 'declined'
                     ? t('continue_without_payment_button')
                     : t('next_button')}

@@ -34,6 +34,8 @@ export type EventData = {
   slug: string;
   description: string | null;
   eventType: string;
+  location: string | null;
+  note: string | null;
   maxCapacity: number | null;
   isActive: boolean | null;
   tags: EventTag[];

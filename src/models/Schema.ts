@@ -515,6 +515,8 @@ export const eventSchema = pgTable(
     slug: text('slug').notNull(),
     description: text('description'),
     eventType: text('event_type').notNull(), // 'seminar', 'workshop', 'tournament', 'camp', 'other'
+    location: text('location'), // Venue / where the event is held (e.g. 'Downtown HQ')
+    note: text('note'), // Internal note about the event
     imageUrl: text('image_url'), // Event banner/poster
     maxCapacity: integer('max_capacity'), // null = unlimited
     registrationDeadline: timestamp('registration_deadline', { mode: 'date' }),
