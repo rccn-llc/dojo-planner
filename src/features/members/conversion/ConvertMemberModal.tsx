@@ -283,14 +283,28 @@ export const ConvertMemberModal = ({
     }
   };
 
-  const handleConfirmNext = () => {
-    if (conversionType === 'individual-to-hoh') {
-      // Simple conversion — no additional steps needed
+  // Advance to the next step, but run the actual conversion (handleConvert) when
+  // the next step is `success` — i.e. this is the last data-entry step. The
+  // payment step wires handleConvert directly; this covers every other case
+  // where the final step before success is confirm/subscription/waiver:
+  //  - Individual→HOH (steps: confirm → success)
+  //  - HOH→Individual with a membership + payment method already on file
+  //    (steps: confirm → success)
+  //  - HOH→Individual with a payment method but no membership
+  //    (steps: confirm → subscription → waiver → success, no payment step)
+  // Without this, the wizard advanced straight to the success screen and the
+  // conversion RPC never fired, so the member type never changed (#224, #210).
+  const handleStepNext = () => {
+    const currentIndex = wizard.steps.indexOf(wizard.step);
+    const nextStep = wizard.steps[currentIndex + 1];
+    if (nextStep === 'success') {
       handleConvert();
     } else {
       wizard.nextStep();
     }
   };
+
+  const handleConfirmNext = handleStepNext;
 
   const getDialogTitle = (): string => {
     switch (wizard.step) {
@@ -329,7 +343,7 @@ export const ConvertMemberModal = ({
             <MembershipStep
               data={wizard.data}
               onUpdate={updateDataWithRef}
-              onNext={wizard.nextStep}
+              onNext={handleStepNext}
               onBack={wizard.previousStep}
               onCancel={handleCancel}
               isLoading={wizard.isLoading}
@@ -340,7 +354,7 @@ export const ConvertMemberModal = ({
             <WaiverStep
               data={wizard.data}
               onUpdate={updateDataWithRef}
-              onNext={wizard.nextStep}
+              onNext={handleStepNext}
               onBack={wizard.previousStep}
               onCancel={handleCancel}
               isLoading={wizard.isLoading}

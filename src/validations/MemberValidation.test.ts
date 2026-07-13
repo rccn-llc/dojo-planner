@@ -109,6 +109,30 @@ describe('MemberValidation', () => {
 
       expect(result.success).toBe(true);
     });
+
+    it('accepts a valid image data URL for photoUrl', () => {
+      const result = MemberValidation.safeParse({
+        email: 'john@example.com',
+        firstName: 'John',
+        lastName: 'Doe',
+        dateOfBirth: '2000-01-01',
+        photoUrl: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD',
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects a photoUrl exceeding 400KB', () => {
+      const result = MemberValidation.safeParse({
+        email: 'john@example.com',
+        firstName: 'John',
+        lastName: 'Doe',
+        dateOfBirth: '2000-01-01',
+        photoUrl: `data:image/jpeg;base64,${'A'.repeat(400_000)}`,
+      });
+
+      expect(result.success).toBe(false);
+    });
   });
 
   describe('EditMemberValidation schema', () => {
@@ -772,8 +796,8 @@ describe('MemberValidation', () => {
       expect(result.success).toBe(false);
     });
 
-    it('rejects a photoUrl exceeding 300KB', () => {
-      const oversized = `data:image/jpeg;base64,${'A'.repeat(300_000)}`;
+    it('rejects a photoUrl exceeding 400KB', () => {
+      const oversized = `data:image/jpeg;base64,${'A'.repeat(400_000)}`;
       const result = UpdateMemberPhotoValidation.safeParse({
         id: 'member-123',
         photoUrl: oversized,
@@ -782,9 +806,9 @@ describe('MemberValidation', () => {
       expect(result.success).toBe(false);
     });
 
-    it('accepts a photoUrl exactly at the 300KB cap', () => {
+    it('accepts a photoUrl exactly at the 400KB cap', () => {
       const prefix = 'data:image/jpeg;base64,';
-      const padding = 'A'.repeat(300_000 - prefix.length);
+      const padding = 'A'.repeat(400_000 - prefix.length);
       const atCap = `${prefix}${padding}`;
       const result = UpdateMemberPhotoValidation.safeParse({
         id: 'member-123',

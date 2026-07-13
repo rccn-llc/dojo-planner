@@ -16,10 +16,14 @@ export async function compressImageForStorage(
 ): Promise<ImageCompressionResult> {
   const originalSize = file.size;
 
-  // Compression options optimized for avatar/profile pictures
-  // Target: 400x400px max, 80% JPEG quality = ~50-150KB
+  // Compression options optimized for avatar/profile pictures.
+  // Target: 400x400px max, 80% JPEG quality = ~50-150KB.
+  // maxSizeMB is kept well under the server-side photo cap: base64 encoding
+  // inflates the byte size by ~33%, so a 200KB file → ~267KB data URL, which
+  // stays under the 400KB validation limit (previously 500KB → ~666KB base64
+  // exceeded the old 300KB cap and the upload was rejected — #208/#209/#212).
   const options = {
-    maxSizeMB: 0.5, // 500KB max
+    maxSizeMB: 0.2, // 200KB max
     maxWidthOrHeight: 400, // Resize to max 400px
     useWebWorker: true,
     fileType: 'image/jpeg',
