@@ -27,6 +27,7 @@ import { useInstructorsCache } from '@/hooks/useInstructorsCache';
 import { client } from '@/libs/Orpc';
 
 const MAX_DESCRIPTION_LENGTH = 2000;
+const MAX_NOTE_LENGTH = 2000;
 
 type ApiEventType = 'seminar' | 'workshop' | 'tournament' | 'camp' | 'other';
 
@@ -50,6 +51,7 @@ type BillingRow = {
   id: string;
   name: string;
   price: string; // string in form, parsed on save
+  validUntil: string; // YYYY-MM-DD (early-bird deadline), '' = none
 };
 
 type EditEventModalProps = {
@@ -72,13 +74,15 @@ function emptySession(): SessionRow {
 }
 
 function emptyBilling(): BillingRow {
-  return { id: crypto.randomUUID(), name: 'Regular', price: '0' };
+  return { id: crypto.randomUUID(), name: 'Regular', price: '0', validUntil: '' };
 }
 
 type FormState = {
   name: string;
   description: string;
   eventType: ApiEventType;
+  location: string;
+  note: string;
   maxCapacity: string;
   sessions: SessionRow[];
   billing: BillingRow[];
@@ -94,6 +98,8 @@ function buildFormState(event: EventData, initialTab: EditEventModalTab): FormSt
     name: event.name,
     description: event.description ?? '',
     eventType: normalizeEventType(event.eventType),
+    location: event.location ?? '',
+    note: event.note ?? '',
     maxCapacity: event.maxCapacity !== null ? String(event.maxCapacity) : '',
     sessions: event.sessions.length > 0
       ? event.sessions.map(s => ({
@@ -109,6 +115,7 @@ function buildFormState(event: EventData, initialTab: EditEventModalTab): FormSt
           id: crypto.randomUUID(),
           name: b.name,
           price: String(b.price),
+          validUntil: b.validUntil ? dateToInputValue(new Date(b.validUntil)) : '',
         }))
       : [emptyBilling()],
     tab: initialTab,
@@ -163,6 +170,8 @@ export function EditEventModal({
         name: form.name.trim(),
         description: form.description.trim() || null,
         eventType: form.eventType,
+        location: form.location.trim() || null,
+        note: form.note.trim() || null,
         maxCapacity: form.maxCapacity ? Number.parseInt(form.maxCapacity, 10) : null,
         isPublic: true,
         isActive: event.isActive ?? true,
@@ -172,10 +181,13 @@ export function EditEventModal({
           endTime: s.endTime,
           primaryInstructorClerkId: s.primaryInstructorClerkId,
         })),
+        // Preserve the early-bird deadline (validUntil) instead of wiping it on
+        // every save (#250). An empty field clears the deadline.
         billing: form.billing.map((b, idx) => ({
           name: b.name.trim(),
           price: Number.parseFloat(b.price) || 0,
           memberOnly: false,
+          validUntil: b.validUntil ? new Date(`${b.validUntil}T00:00:00Z`) : null,
           sortOrder: idx,
         })),
         tagIds: event.tags.map(tg => tg.id),
@@ -248,6 +260,16 @@ export function EditEventModal({
             </div>
 
             <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="event-location">{t('location_label')}</label>
+              <Input
+                id="event-location"
+                value={form.location}
+                onChange={e => updateForm('location', e.target.value)}
+                placeholder={t('location_placeholder')}
+              />
+            </div>
+
+            <div className="space-y-1.5">
               <label className="text-sm font-medium" htmlFor="event-description">{t('description_label')}</label>
               <Textarea
                 id="event-description"
@@ -259,6 +281,17 @@ export function EditEventModal({
               <p className="text-xs text-muted-foreground">
                 {t('description_character_count', { count: form.description.length, max: MAX_DESCRIPTION_LENGTH })}
               </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="event-note">{t('note_label')}</label>
+              <Textarea
+                id="event-note"
+                value={form.note}
+                onChange={e => updateForm('note', e.target.value.slice(0, MAX_NOTE_LENGTH))}
+                rows={3}
+                placeholder={t('note_placeholder')}
+              />
             </div>
           </TabsContent>
 
@@ -275,7 +308,7 @@ export function EditEventModal({
                       placeholder={t('tier_name_placeholder')}
                     />
                   </div>
-                  <div className="w-32 space-y-1.5">
+                  <div className="w-28 space-y-1.5">
                     <label className="text-sm font-medium">{t('price_label')}</label>
                     <Input
                       type="number"
@@ -283,6 +316,14 @@ export function EditEventModal({
                       step="0.01"
                       value={b.price}
                       onChange={e => updateForm('billing', form.billing.map(row => (row.id === b.id ? { ...row, price: e.target.value } : row)))}
+                    />
+                  </div>
+                  <div className="w-40 space-y-1.5">
+                    <label className="text-sm font-medium">{t('early_bird_deadline_label')}</label>
+                    <Input
+                      type="date"
+                      value={b.validUntil}
+                      onChange={e => updateForm('billing', form.billing.map(row => (row.id === b.id ? { ...row, validUntil: e.target.value } : row)))}
                     />
                   </div>
                   <Button

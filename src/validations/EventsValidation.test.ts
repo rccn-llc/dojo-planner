@@ -48,6 +48,29 @@ describe('CreateEventValidation', () => {
     expect(CreateEventValidation.safeParse({ ...validEvent, imageUrl: 'not-a-url' }).success).toBe(false);
   });
 
+  it('accepts an optional location and note', () => {
+    const result = CreateEventValidation.safeParse({ ...validEvent, location: 'Downtown HQ', note: 'Bring your own gi' });
+
+    expect(result.success).toBe(true);
+
+    if (result.success) {
+      expect(result.data.location).toBe('Downtown HQ');
+      expect(result.data.note).toBe('Bring your own gi');
+    }
+  });
+
+  it('accepts an early-bird tier with a validUntil deadline', () => {
+    const result = CreateEventValidation.safeParse({
+      ...validEvent,
+      billing: [
+        { name: 'Regular', price: 25, sortOrder: 0 },
+        { name: 'Early Bird', price: 20, sortOrder: 1, validUntil: new Date('2026-06-01T00:00:00Z') },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   it('allows null imageUrl', () => {
     expect(CreateEventValidation.safeParse({ ...validEvent, imageUrl: null }).success).toBe(true);
   });

@@ -24,6 +24,7 @@ vi.mock('@/libs/DB', () => ({ db: dbMock }));
 vi.mock('@/models/Schema', () => ({
   attendanceSchema: {},
   eventBillingSchema: { eventId: 'eb_event_id' },
+  eventRegistrationSchema: { eventBillingId: 'er_billing_id' },
   eventSchema: { id: 'event_id', organizationId: 'event_org_id', isActive: 'event_is_active' },
   eventSessionSchema: { eventId: 'es_event_id' },
   eventTagSchema: { eventId: 'et_event_id', tagId: 'et_tag_id' },

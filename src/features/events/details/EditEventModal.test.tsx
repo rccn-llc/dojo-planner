@@ -90,6 +90,8 @@ const baseEvent: EventData = {
   slug: 'black-belt-seminar',
   description: 'A weekend seminar.',
   eventType: 'seminar',
+  location: null,
+  note: null,
   maxCapacity: 50,
   isActive: true,
   tags: [],

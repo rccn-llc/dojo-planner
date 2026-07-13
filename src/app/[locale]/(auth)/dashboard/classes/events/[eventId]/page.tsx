@@ -78,7 +78,7 @@ function transformEventData(
       date: formatSessionDate(new Date(s.sessionDate)),
       time: formatSessionTime(s.startTime, s.endTime),
     })),
-    location: '',
+    location: event.location ?? '',
     instructors,
     price: regularBilling?.price ?? (event.billing[0]?.price ?? null),
     maxCapacity: event.maxCapacity,

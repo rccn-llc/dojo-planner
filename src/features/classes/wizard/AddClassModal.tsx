@@ -112,17 +112,16 @@ export const AddClassModal = ({ isOpen, onCloseAction, onClassCreated, onEventCr
           };
         });
 
+        // The Regular tier must NOT carry a validUntil — that field is what the
+        // details page uses to tell early-bird from regular. Only the Early Bird
+        // tier gets the deadline. Previously both tiers got the deadline, so the
+        // display picked the Regular price as the "early bird" price (#255).
         const billing = wizard.data.eventBilling.hasFee && wizard.data.eventBilling.price !== null
           ? [{
               name: 'Regular',
               price: wizard.data.eventBilling.price,
               memberOnly: false,
               sortOrder: 0,
-              ...(wizard.data.eventBilling.hasEarlyBird
-                && wizard.data.eventBilling.earlyBirdPrice !== null
-                && wizard.data.eventBilling.earlyBirdDeadline
-                ? { validUntil: new Date(wizard.data.eventBilling.earlyBirdDeadline) }
-                : {}),
             }]
           : [];
         if (wizard.data.eventBilling.hasFee
@@ -145,6 +144,7 @@ export const AddClassModal = ({ isOpen, onCloseAction, onClassCreated, onEventCr
           name: wizard.data.eventName,
           description: wizard.data.eventDescription || null,
           eventType: apiEventType,
+          location: wizard.data.eventSchedule.location || null,
           maxCapacity: wizard.data.eventMaxCapacity ?? null,
           isPublic: true,
           isActive: true,

@@ -4,6 +4,7 @@ import { db } from '@/libs/DB';
 import {
   attendanceSchema,
   eventBillingSchema,
+  eventRegistrationSchema,
   eventSchema,
   eventSessionSchema,
   eventTagSchema,
@@ -43,6 +44,8 @@ export type EventData = {
   slug: string;
   description: string | null;
   eventType: string;
+  location: string | null;
+  note: string | null;
   maxCapacity: number | null;
   isActive: boolean | null;
   tags: EventTag[];
@@ -139,6 +142,8 @@ export async function getOrganizationEvents(organizationId: string): Promise<Eve
     slug: event.slug,
     description: event.description,
     eventType: event.eventType,
+    location: event.location,
+    note: event.note,
     maxCapacity: event.maxCapacity,
     isActive: event.isActive,
     tags: tagsByEvent.get(event.id) || [],
@@ -206,6 +211,8 @@ export type CreateEventServiceInput = {
   name: string;
   description?: string | null;
   eventType: string;
+  location?: string | null;
+  note?: string | null;
   programId?: string | null;
   imageUrl?: string | null;
   maxCapacity?: number | null;
@@ -235,6 +242,8 @@ export async function createEvent(input: CreateEventServiceInput, organizationId
       slug,
       description: input.description ?? null,
       eventType: input.eventType,
+      location: input.location ?? null,
+      note: input.note ?? null,
       imageUrl: input.imageUrl ?? null,
       maxCapacity: input.maxCapacity ?? null,
       registrationDeadline: input.registrationDeadline ?? null,
@@ -325,6 +334,8 @@ export async function updateEvent(
         slug,
         description: input.description ?? null,
         eventType: input.eventType,
+        location: input.location ?? null,
+        note: input.note ?? null,
         imageUrl: input.imageUrl ?? null,
         maxCapacity: input.maxCapacity ?? null,
         registrationDeadline: input.registrationDeadline ?? null,
@@ -380,8 +391,27 @@ export async function updateEvent(
     );
   }
 
-  // Billing tiers: full replace (no referencing rows).
-  await db.delete(eventBillingSchema).where(eq(eventBillingSchema.eventId, eventId));
+  // Billing tiers: replace, but only delete tiers NOT referenced by a
+  // registration. event_registration.event_billing_id FKs to these rows, so
+  // blindly deleting all of them raised a FK violation and 500'd whenever the
+  // event already had registrations — i.e. past events (#254). Referenced tiers
+  // are kept as historical records alongside the freshly-submitted tiers.
+  const oldBilling = await db
+    .select({ id: eventBillingSchema.id })
+    .from(eventBillingSchema)
+    .where(eq(eventBillingSchema.eventId, eventId));
+  if (oldBilling.length > 0) {
+    const oldBillingIds = oldBilling.map(b => b.id);
+    const refRegistrations = await db
+      .select({ id: eventRegistrationSchema.eventBillingId })
+      .from(eventRegistrationSchema)
+      .where(inArray(eventRegistrationSchema.eventBillingId, oldBillingIds));
+    const referenced = new Set(refRegistrations.map(r => r.id).filter((id): id is string => id !== null));
+    const deletable = oldBillingIds.filter(id => !referenced.has(id));
+    if (deletable.length > 0) {
+      await db.delete(eventBillingSchema).where(inArray(eventBillingSchema.id, deletable));
+    }
+  }
   if (input.billing.length > 0) {
     await db.insert(eventBillingSchema).values(
       input.billing.map((b, idx) => ({

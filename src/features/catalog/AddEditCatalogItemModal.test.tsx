@@ -43,9 +43,9 @@ describe('AddEditCatalogItemModal', () => {
   ];
 
   const mockEvents: EventData[] = [
-    { id: 'event-1', name: 'Summer Seminar', slug: 'summer-seminar', description: null, eventType: 'seminar', maxCapacity: 50, isActive: true, tags: [], sessions: [], billing: [] },
-    { id: 'event-2', name: 'Winter Camp', slug: 'winter-camp', description: null, eventType: 'camp', maxCapacity: 30, isActive: true, tags: [], sessions: [], billing: [] },
-    { id: 'event-3', name: 'Inactive Event', slug: 'inactive-event', description: null, eventType: 'workshop', maxCapacity: 20, isActive: false, tags: [], sessions: [], billing: [] },
+    { id: 'event-1', name: 'Summer Seminar', slug: 'summer-seminar', description: null, eventType: 'seminar', location: null, note: null, maxCapacity: 50, isActive: true, tags: [], sessions: [], billing: [] },
+    { id: 'event-2', name: 'Winter Camp', slug: 'winter-camp', description: null, eventType: 'camp', location: null, note: null, maxCapacity: 30, isActive: true, tags: [], sessions: [], billing: [] },
+    { id: 'event-3', name: 'Inactive Event', slug: 'inactive-event', description: null, eventType: 'workshop', location: null, note: null, maxCapacity: 20, isActive: false, tags: [], sessions: [], billing: [] },
   ];
 
   const mockItem: CatalogItem = {

@@ -55,22 +55,19 @@ export const MemberDetailsStep = ({ data, onUpdate, onNext, onBack, onCancel, er
     setTouched(prev => ({ ...prev, [`address.${field}`]: true }));
   };
 
-  const isAddressValid
-    = data.address?.street
-      && data.address?.city
-      && data.address?.state
-      && data.address?.zipCode
-      && data.address?.country;
-
   const isDateOfBirthInvalid = touched.dateOfBirth && !data.dateOfBirth;
 
+  // Address is optional (see the "Address Fields (Optional)" section below) and
+  // the create API accepts a member with no address — so it must NOT gate the
+  // Next button. Requiring a full address here left the button permanently
+  // disabled for members added without one (#238). Per-field address hints
+  // (isStreetInvalid, etc.) still surface if a field is touched then cleared.
   const isFormValid
     = data.firstName
       && data.lastName
       && data.phone
       && data.dateOfBirth
-      && isValidEmail(data.email)
-      && isAddressValid;
+      && isValidEmail(data.email);
 
   // Validation helpers for touched fields
   const isFirstNameInvalid = touched.firstName && !data.firstName;

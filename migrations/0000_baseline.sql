@@ -254,6 +254,8 @@ CREATE TABLE "event" (
 	"slug" text NOT NULL,
 	"description" text,
 	"event_type" text NOT NULL,
+	"location" text,
+	"note" text,
 	"image_url" text,
 	"max_capacity" integer,
 	"registration_deadline" timestamp,
