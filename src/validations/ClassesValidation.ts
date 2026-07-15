@@ -49,6 +49,10 @@ export const DeleteClassValidation = z.object({
   id: z.string().min(1),
 });
 
+export const GetClassAttendanceValidation = z.object({
+  classId: z.string().min(1),
+});
+
 // Accepts both the original schema vocabulary and the UI's vocabulary —
 // the column is a text field and existing seeded data uses the second set.
 const ExceptionType = z.enum([

@@ -19,6 +19,8 @@ export type ClassCardProps = {
   level: string;
   type: string;
   style: string;
+  /** Custom tags beyond the level/type/style categories, rendered as extra badges. */
+  tags?: string[];
   schedule: ScheduleItem[];
   location: string;
   instructors: Array<{
@@ -49,7 +51,7 @@ function getInitials(name: string) {
 }
 
 export const ClassCard = (props: ClassCardProps) => {
-  const { id, name, description, level, type, style, schedule, location, instructors, onEdit } = props;
+  const { id, name, description, level, type, style, tags, schedule, location, instructors, onEdit } = props;
   const t = useTranslations('ClassCard');
 
   return (
@@ -66,6 +68,9 @@ export const ClassCard = (props: ClassCardProps) => {
           <Badge variant={getLevelColor(level)}>{level}</Badge>
           <Badge variant="outline">{type}</Badge>
           <Badge variant="outline">{style}</Badge>
+          {tags?.map(tag => (
+            <Badge key={tag} variant="secondary">{tag}</Badge>
+          ))}
         </div>
 
         {/* Details */}

@@ -352,6 +352,8 @@ export function updateMemberStatus(memberId: string, organizationId: string, sta
 
 type UpdateMemberContactInfoInput = {
   id: string;
+  firstName: string;
+  lastName: string;
   email: string;
   phone?: string | null;
   dateOfBirth?: Date;
@@ -372,11 +374,13 @@ type UpdateMemberContactInfoInput = {
  * @returns The updated member record
  */
 export async function updateMemberContactInfo(input: UpdateMemberContactInfoInput, organizationId: string) {
-  const { id, email, phone, dateOfBirth, address } = input;
+  const { id, firstName, lastName, email, phone, dateOfBirth, address } = input;
 
   // Build the partial set so a missing dateOfBirth doesn't overwrite the
   // existing column with undefined.
   const memberUpdates: Record<string, unknown> = {
+    firstName,
+    lastName,
     email,
     phone: phone ?? null,
   };
@@ -724,6 +728,17 @@ export async function getMemberTransactions(
   organizationId: string,
   limit: number = 50,
 ): Promise<TransactionData[]> {
+  // Include this member's OWN transactions plus those of any family members
+  // linked under them as a head of household. When a HOH pays for a family
+  // member's membership, the transaction row is keyed to the family member, so
+  // without this the HOH's billing history would be empty (#223). Each row
+  // still shows the actual charged member's name via the join below.
+  const familyLinks = await db
+    .select({ relatedMemberId: familyMemberSchema.relatedMemberId })
+    .from(familyMemberSchema)
+    .where(eq(familyMemberSchema.memberId, memberId));
+  const memberIds = [memberId, ...familyLinks.map(f => f.relatedMemberId)];
+
   return db
     .select({
       id: transactionSchema.id,
@@ -742,7 +757,7 @@ export async function getMemberTransactions(
     .from(transactionSchema)
     .innerJoin(memberSchema, eq(transactionSchema.memberId, memberSchema.id))
     .where(and(
-      eq(transactionSchema.memberId, memberId),
+      inArray(transactionSchema.memberId, memberIds),
       eq(transactionSchema.organizationId, organizationId),
     ))
     .orderBy(desc(transactionSchema.createdAt))

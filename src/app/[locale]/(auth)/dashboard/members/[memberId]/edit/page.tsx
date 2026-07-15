@@ -88,6 +88,7 @@ type MembershipDetailsData = {
   program: string;
   membershipType: string;
   membershipFee: number;
+  signupFee: number;
   paymentFrequency: string;
   registrationDate: string;
   startDate: string;
@@ -197,6 +198,7 @@ function getMemberStatus(status?: string): 'active' | 'on-hold' | 'cancelled' {
 type MembershipPlanInfo = {
   name?: string;
   price?: number;
+  signupFee?: number;
   frequency?: string | null;
   contractLength?: string;
   isTrial?: boolean | null;
@@ -252,6 +254,7 @@ function buildMembershipDetails(
       ...baseDetails,
       membershipType: plan.name,
       membershipFee: plan.price || 0,
+      signupFee: plan.signupFee || 0,
       paymentFrequency: plan.frequency || 'N/A',
       nextPaymentDate: (isPaid && !isOneTime) ? formatMembershipDate(dates?.nextPaymentDate) : 'N/A',
       nextPaymentAmount: isOneTime ? 0 : (plan.price || 0),
@@ -264,6 +267,7 @@ function buildMembershipDetails(
       ...baseDetails,
       membershipType: getSubscriptionMembershipType(membershipType),
       membershipFee: 0,
+      signupFee: 0,
       paymentFrequency: 'N/A',
       nextPaymentDate: 'N/A',
       nextPaymentAmount: 0,
@@ -276,6 +280,7 @@ function buildMembershipDetails(
       ...baseDetails,
       membershipType: 'N/A',
       membershipFee: 0,
+      signupFee: 0,
       paymentFrequency: 'N/A',
       nextPaymentDate: 'N/A',
       nextPaymentAmount: 0,
@@ -287,6 +292,7 @@ function buildMembershipDetails(
     ...baseDetails,
     membershipType: membershipType === 'annual' ? 'Annual' : 'Month-to-Month',
     membershipFee: membershipType === 'annual' ? 1800 : 300,
+    signupFee: 0,
     paymentFrequency: membershipType === 'annual' ? 'Annual' : 'Monthly',
     nextPaymentDate: formatMembershipDate(dates?.nextPaymentDate),
     nextPaymentAmount: membershipType === 'annual' ? 1800 : 300,
@@ -1125,7 +1131,7 @@ export default function EditMemberPage() {
             <p className="text-sm text-muted-foreground">
               {'Linked to '}
               <Link
-                href={`/dashboard/members/${currentHOH.id}`}
+                href={`/${locale}/dashboard/members/${currentHOH.id}/edit`}
                 className="font-medium text-foreground underline-offset-4 hover:underline"
               >
                 {currentHOH.name}
@@ -1224,6 +1230,8 @@ export default function EditMemberPage() {
               isOpen={isEditContactModalOpen}
               onClose={() => setIsEditContactModalOpen(false)}
               memberId={memberId}
+              initialFirstName={state.currentData.firstName || ''}
+              initialLastName={state.currentData.lastName || ''}
               initialEmail={state.currentData.contactInfo.email || ''}
               initialPhone={state.currentData.contactInfo.phone || ''}
               initialDateOfBirth={currentMember?.dateOfBirth ? new Date(currentMember.dateOfBirth) : undefined}
@@ -1299,6 +1307,14 @@ export default function EditMemberPage() {
                             <p className="text-sm text-muted-foreground">Membership Fee</p>
                             <p className="text-right text-sm font-semibold text-foreground">
                               {formatCurrency(state.currentData.membershipDetails.membershipFee)}
+                            </p>
+                          </div>
+                        )}
+                        {state.currentData.membershipDetails.signupFee > 0 && (
+                          <div className="flex items-start justify-between">
+                            <p className="text-sm text-muted-foreground">Signup Fee</p>
+                            <p className="text-right text-sm font-semibold text-foreground">
+                              {formatCurrency(state.currentData.membershipDetails.signupFee)}
                             </p>
                           </div>
                         )}

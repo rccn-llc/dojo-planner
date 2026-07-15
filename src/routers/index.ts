@@ -17,7 +17,7 @@ import {
   variantRemove,
   variantUpdate,
 } from './Catalog';
-import { tags as classTags, create as createClass, list as listClasses, remove as removeClass, removeException as removeClassException, update as updateClass, upsertException as upsertClassException } from './Classes';
+import { tags as classTags, create as createClass, getAttendance as getClassAttendance, list as listClasses, remove as removeClass, removeException as removeClassException, update as updateClass, upsertException as upsertClassException } from './Classes';
 import { create as createCoupon, getTotalSavings as getCouponTotalSavings, listActive as listActiveCoupons, list as listCoupons, remove as removeCoupon, update as updateCoupon } from './Coupons';
 import { earningsChart, financialStats, memberAverageChart, membershipStats } from './Dashboard';
 import { create as createEvent, list as listEvents, remove as removeEvent, update as updateEvent } from './Events';
@@ -96,6 +96,7 @@ export const router = {
   classes: {
     list: listClasses,
     tags: classTags,
+    getAttendance: getClassAttendance,
     create: createClass,
     update: updateClass,
     remove: removeClass,

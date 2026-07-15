@@ -1427,6 +1427,17 @@
     "not_found": "Class not found",
     "back_to_classes": "Back to Classes",
     "delete_button": "Delete Class",
+    "AttendanceCard": {
+      "title": "Attendance Roster",
+      "empty": "No check-ins recorded yet.",
+      "checked_in": "In {time}",
+      "checked_out": "Out {time}"
+    },
+    "UpcomingSessionsCard": {
+      "title": "Upcoming Sessions",
+      "empty": "No upcoming sessions scheduled.",
+      "cancelled": "Cancelled"
+    },
     "StatsCard": {
       "active_enrollments": "Active Enrollments",
       "average_attendance": "Avg. Attendance",
@@ -1624,6 +1635,12 @@
   },
   "EditContactInfoModal": {
     "title": "Edit Contact Information",
+    "first_name_label": "First Name",
+    "first_name_placeholder": "John",
+    "first_name_error": "Please enter a first name",
+    "last_name_label": "Last Name",
+    "last_name_placeholder": "Doe",
+    "last_name_error": "Please enter a last name",
     "email_label": "Email",
     "email_placeholder": "you@example.com",
     "email_error": "Please enter a valid email address",

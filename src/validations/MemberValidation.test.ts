@@ -221,6 +221,8 @@ describe('MemberValidation', () => {
     it('should validate a correct contact info update', () => {
       const validData = {
         id: 'member-123',
+        firstName: 'John',
+        lastName: 'Doe',
         email: 'john.doe@example.com',
         phone: '(555) 123-4567',
       };
@@ -233,6 +235,8 @@ describe('MemberValidation', () => {
     it('should validate with optional address', () => {
       const validData = {
         id: 'member-123',
+        firstName: 'John',
+        lastName: 'Doe',
         email: 'john.doe@example.com',
         phone: '(555) 123-4567',
         address: {
@@ -252,6 +256,8 @@ describe('MemberValidation', () => {
     it('should fail when email is invalid', () => {
       const invalidData = {
         id: 'member-123',
+        firstName: 'John',
+        lastName: 'Doe',
         email: 'invalid-email',
         phone: '(555) 123-4567',
       };
@@ -275,6 +281,8 @@ describe('MemberValidation', () => {
     it('should allow null phone', () => {
       const validData = {
         id: 'member-123',
+        firstName: 'John',
+        lastName: 'Doe',
         email: 'john.doe@example.com',
         phone: null,
       };
@@ -287,6 +295,8 @@ describe('MemberValidation', () => {
     it('should validate address with optional apartment', () => {
       const validData = {
         id: 'member-123',
+        firstName: 'John',
+        lastName: 'Doe',
         email: 'john.doe@example.com',
         address: {
           street: '123 Main St',
@@ -306,6 +316,8 @@ describe('MemberValidation', () => {
     it('accepts a Date dateOfBirth', () => {
       const result = UpdateMemberContactInfoValidation.safeParse({
         id: 'member-123',
+        firstName: 'John',
+        lastName: 'Doe',
         email: 'john.doe@example.com',
         dateOfBirth: new Date('1990-01-15'),
       });
@@ -316,6 +328,8 @@ describe('MemberValidation', () => {
     it('coerces a string dateOfBirth into a Date', () => {
       const result = UpdateMemberContactInfoValidation.safeParse({
         id: 'member-123',
+        firstName: 'John',
+        lastName: 'Doe',
         email: 'john.doe@example.com',
         dateOfBirth: '1990-01-15',
       });
@@ -330,6 +344,8 @@ describe('MemberValidation', () => {
     it('accepts a missing dateOfBirth (optional)', () => {
       const result = UpdateMemberContactInfoValidation.safeParse({
         id: 'member-123',
+        firstName: 'John',
+        lastName: 'Doe',
         email: 'john.doe@example.com',
       });
 
@@ -339,6 +355,8 @@ describe('MemberValidation', () => {
     it('rejects an unparseable dateOfBirth string', () => {
       const result = UpdateMemberContactInfoValidation.safeParse({
         id: 'member-123',
+        firstName: 'John',
+        lastName: 'Doe',
         email: 'john.doe@example.com',
         dateOfBirth: 'not-a-date',
       });

@@ -139,6 +139,8 @@ describe('MembersService', () => {
       const { updateMemberContactInfo } = await import('./MembersService');
       const input = {
         id: 'member-123',
+        firstName: 'Test',
+        lastName: 'Member',
         email: 'updated@example.com',
         phone: '(555) 999-8888',
       };
@@ -153,6 +155,8 @@ describe('MembersService', () => {
       const { updateMemberContactInfo } = await import('./MembersService');
       const input = {
         id: 'member-123',
+        firstName: 'Test',
+        lastName: 'Member',
         email: 'updated@example.com',
         phone: null,
       };
@@ -166,6 +170,8 @@ describe('MembersService', () => {
       const { updateMemberContactInfo } = await import('./MembersService');
       const input = {
         id: 'member-123',
+        firstName: 'Test',
+        lastName: 'Member',
         email: 'updated@example.com',
         phone: '(555) 999-8888',
         address: {
@@ -186,6 +192,8 @@ describe('MembersService', () => {
       const { updateMemberContactInfo } = await import('./MembersService');
       const input = {
         id: 'member-123',
+        firstName: 'Test',
+        lastName: 'Member',
         email: 'updated@example.com',
         phone: '(555) 999-8888',
         address: {
@@ -215,6 +223,8 @@ describe('MembersService', () => {
       const dob = new Date('1990-01-15');
       await updateMemberContactInfo({
         id: 'member-123',
+        firstName: 'Test',
+        lastName: 'Member',
         email: 'updated@example.com',
         phone: '(555) 999-8888',
         dateOfBirth: dob,
@@ -239,6 +249,8 @@ describe('MembersService', () => {
       const { updateMemberContactInfo } = await import('./MembersService');
       await updateMemberContactInfo({
         id: 'member-123',
+        firstName: 'Test',
+        lastName: 'Member',
         email: 'updated@example.com',
         phone: '(555) 999-8888',
       }, 'org-123');
@@ -485,12 +497,17 @@ describe('MembersService', () => {
         },
       ];
 
+      // First select() resolves the member's family links (may be empty).
+      const mockFamilyFrom = vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) }));
+      // Second select() is the transaction query.
       const mockLimit = vi.fn(() => Promise.resolve(mockTransactions));
       const mockOrderBy = vi.fn(() => ({ limit: mockLimit }));
       const mockWhere = vi.fn(() => ({ orderBy: mockOrderBy }));
       const mockInnerJoin = vi.fn(() => ({ where: mockWhere }));
       const mockFrom = vi.fn(() => ({ innerJoin: mockInnerJoin }));
-      vi.mocked(db.select).mockReturnValue({ from: mockFrom } as never);
+      vi.mocked(db.select)
+        .mockReturnValueOnce({ from: mockFamilyFrom } as never)
+        .mockReturnValueOnce({ from: mockFrom } as never);
 
       const { getMemberTransactions } = await import('./MembersService');
       const result = await getMemberTransactions('member-123', 'org-123');
@@ -502,12 +519,15 @@ describe('MembersService', () => {
     it('should return empty array when no transactions exist', async () => {
       const { db } = await import('@/libs/DB');
 
+      const mockFamilyFrom = vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) }));
       const mockLimit = vi.fn(() => Promise.resolve([]));
       const mockOrderBy = vi.fn(() => ({ limit: mockLimit }));
       const mockWhere = vi.fn(() => ({ orderBy: mockOrderBy }));
       const mockInnerJoin = vi.fn(() => ({ where: mockWhere }));
       const mockFrom = vi.fn(() => ({ innerJoin: mockInnerJoin }));
-      vi.mocked(db.select).mockReturnValue({ from: mockFrom } as never);
+      vi.mocked(db.select)
+        .mockReturnValueOnce({ from: mockFamilyFrom } as never)
+        .mockReturnValueOnce({ from: mockFrom } as never);
 
       const { getMemberTransactions } = await import('./MembersService');
       const result = await getMemberTransactions('member-no-tx', 'org-123');
@@ -518,12 +538,15 @@ describe('MembersService', () => {
     it('should respect custom limit parameter', async () => {
       const { db } = await import('@/libs/DB');
 
+      const mockFamilyFrom = vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) }));
       const mockLimit = vi.fn(() => Promise.resolve([]));
       const mockOrderBy = vi.fn(() => ({ limit: mockLimit }));
       const mockWhere = vi.fn(() => ({ orderBy: mockOrderBy }));
       const mockInnerJoin = vi.fn(() => ({ where: mockWhere }));
       const mockFrom = vi.fn(() => ({ innerJoin: mockInnerJoin }));
-      vi.mocked(db.select).mockReturnValue({ from: mockFrom } as never);
+      vi.mocked(db.select)
+        .mockReturnValueOnce({ from: mockFamilyFrom } as never)
+        .mockReturnValueOnce({ from: mockFrom } as never);
 
       const { getMemberTransactions } = await import('./MembersService');
       await getMemberTransactions('member-123', 'org-123', 10);
