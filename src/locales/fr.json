@@ -1431,6 +1431,17 @@
     "not_found": "Cours introuvable",
     "back_to_classes": "Retour aux cours",
     "delete_button": "Supprimer le cours",
+    "AttendanceCard": {
+      "title": "Liste de présence",
+      "empty": "Aucune présence enregistrée pour le moment.",
+      "checked_in": "Arrivée {time}",
+      "checked_out": "Départ {time}"
+    },
+    "UpcomingSessionsCard": {
+      "title": "Séances à venir",
+      "empty": "Aucune séance à venir planifiée.",
+      "cancelled": "Annulée"
+    },
     "StatsCard": {
       "active_enrollments": "Inscriptions actives",
       "average_attendance": "Présence moyenne",
@@ -1628,6 +1639,12 @@
   },
   "EditContactInfoModal": {
     "title": "Modifier les informations de contact",
+    "first_name_label": "Prénom",
+    "first_name_placeholder": "Jean",
+    "first_name_error": "Veuillez entrer un prénom",
+    "last_name_label": "Nom",
+    "last_name_placeholder": "Dupont",
+    "last_name_error": "Veuillez entrer un nom",
     "email_label": "Email",
     "email_placeholder": "vous@exemple.com",
     "email_error": "Veuillez entrer une adresse email valide",

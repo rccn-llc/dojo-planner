@@ -28,6 +28,8 @@ describe('EditContactInfoModal', () => {
     isOpen: true,
     onClose: vi.fn(),
     memberId: 'member-123',
+    initialFirstName: 'Test',
+    initialLastName: 'Member',
     initialEmail: 'test@example.com',
     initialPhone: '(555) 123-4567',
     initialAddress: {

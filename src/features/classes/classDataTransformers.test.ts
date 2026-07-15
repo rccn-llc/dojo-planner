@@ -362,6 +362,37 @@ describe('location threading', () => {
   });
 });
 
+describe('custom tags in the grid (#247)', () => {
+  it('carries non-category tags into ClassCardProps.tags', () => {
+    const cls = makeClass({
+      id: 'c1',
+      name: 'Class',
+      schedule: [],
+      tags: [
+        { id: 't1', name: 'Beginner', slug: 'beginner', color: null }, // level → excluded
+        { id: 't2', name: 'Gi', slug: 'gi', color: null }, // style → excluded
+        { id: 't3', name: 'Fundamentals', slug: 'fundamentals', color: null }, // custom → included
+        { id: 't4', name: 'Morning', slug: 'morning', color: null }, // custom → included
+      ],
+    });
+
+    const result = transformClassToCardProps(cls);
+
+    expect(result.tags).toEqual(['Fundamentals', 'Morning']);
+    // The level/type/style badges are still derived, not duplicated as extra tags.
+    expect(result.level).toBe('Beginner');
+    expect(result.style).toBe('Gi');
+    expect(result.tags).not.toContain('Beginner');
+    expect(result.tags).not.toContain('Gi');
+  });
+
+  it('yields an empty tags array when there are no custom tags', () => {
+    const cls = makeClass({ id: 'c1', name: 'Class', schedule: [], tags: [] });
+
+    expect(transformClassToCardProps(cls).tags).toEqual([]);
+  });
+});
+
 // =============================================================================
 // INSTRUCTOR RESOLUTION
 // =============================================================================

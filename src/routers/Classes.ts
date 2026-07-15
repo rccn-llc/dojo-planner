@@ -4,6 +4,7 @@ import {
   ClassSlugAlreadyExistsError,
   createClass,
   deleteScheduleException,
+  getClassAttendance,
   getClassTags,
   getOrganizationClasses,
   softDeleteClass,
@@ -16,6 +17,7 @@ import {
   CreateClassValidation,
   DeleteClassValidation,
   DeleteScheduleExceptionValidation,
+  GetClassAttendanceValidation,
   UpdateClassValidation,
   UpsertScheduleExceptionValidation,
 } from '@/validations/ClassesValidation';
@@ -36,6 +38,14 @@ export const tags = os.handler(async () => {
 
   return { tags: classTags };
 });
+
+export const getAttendance = os
+  .input(GetClassAttendanceValidation)
+  .handler(async ({ input }) => {
+    const { orgId } = await guardRole(ORG_ROLE.FRONT_DESK);
+
+    return getClassAttendance(input.classId, orgId);
+  });
 
 export const create = os
   .input(CreateClassValidation)

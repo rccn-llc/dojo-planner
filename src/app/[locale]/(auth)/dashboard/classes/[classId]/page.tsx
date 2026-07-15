@@ -7,9 +7,10 @@ import { ArrowLeft, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { use, useMemo, useState } from 'react';
+import { use, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ClassAttendanceCard } from '@/features/classes/details/ClassAttendanceCard';
 import { ClassBasicsCard } from '@/features/classes/details/ClassBasicsCard';
 import { ClassScheduleCard } from '@/features/classes/details/ClassScheduleCard';
 import { ClassSettingsCard } from '@/features/classes/details/ClassSettingsCard';
@@ -19,6 +20,7 @@ import { EditClassBasicsModal } from '@/features/classes/details/EditClassBasics
 import { EditClassScheduleModal } from '@/features/classes/details/EditClassScheduleModal';
 import { EditClassSettingsModal } from '@/features/classes/details/EditClassSettingsModal';
 import { EditScheduleInstanceModal } from '@/features/classes/details/EditScheduleInstanceModal';
+import { UpcomingSessionsCard } from '@/features/classes/details/UpcomingSessionsCard';
 import { invalidateClassesCache, useClassesCache } from '@/hooks/useClassesCache';
 import { useHasRole } from '@/hooks/useHasRole';
 import { useProgramsCache } from '@/hooks/useProgramsCache';
@@ -232,6 +234,27 @@ export default function ClassDetailPage({ params }: { params: Promise<PageParams
     [classes, resolvedParams.classId],
   );
 
+  // Fetch the attendance roster + rollup stats for this class (#248). The stats
+  // feed ClassStatsCard; the records render in the roster card below.
+  const [attendance, setAttendance] = useState<Awaited<ReturnType<typeof client.classes.getAttendance>> | null>(null);
+  useEffect(() => {
+    let active = true;
+    client.classes.getAttendance({ classId: resolvedParams.classId })
+      .then((res) => {
+        if (active) {
+          setAttendance(res);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setAttendance(null);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [resolvedParams.classId]);
+
   // Merge edits from an Edit Basics / Settings / Schedule modal into local
   // state, then persist the whole class via client.classes.update. The update
   // endpoint takes the full class, so we rebuild the payload from the merged
@@ -433,11 +456,11 @@ export default function ClassDetailPage({ params }: { params: Promise<PageParams
         <p className="text-lg text-muted-foreground">{classData.program}</p>
       </div>
 
-      {/* Stats Card */}
+      {/* Stats Card — real numbers from the attendance query (#248) */}
       <ClassStatsCard
-        activeEnrollments={classData.activeEnrollments}
-        averageAttendance={classData.averageAttendance}
-        totalSessions={classData.totalSessions}
+        activeEnrollments={attendance?.stats.activeEnrollments ?? 0}
+        averageAttendance={attendance?.stats.averageAttendance ?? 0}
+        totalSessions={attendance?.stats.totalSessions ?? 0}
         level={classData.level}
       />
 
@@ -473,6 +496,15 @@ export default function ClassDetailPage({ params }: { params: Promise<PageParams
           calendarColor={classData.calendarColor}
           onEdit={canEdit ? () => setIsEditScheduleOpen(true) : undefined}
           onEditInstance={canEdit ? handleEditInstance : undefined}
+        />
+      </div>
+
+      {/* Attendance roster + upcoming sessions (#248) */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <ClassAttendanceCard records={attendance?.records ?? []} />
+        <UpcomingSessionsCard
+          schedule={rawClass?.schedule ?? []}
+          exceptions={rawClass?.scheduleExceptions ?? []}
         />
       </div>
 

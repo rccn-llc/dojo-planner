@@ -36,6 +36,8 @@ type EditContactInfoModalProps = {
   isOpen: boolean;
   onClose: () => void;
   memberId: string;
+  initialFirstName: string;
+  initialLastName: string;
   initialEmail: string;
   initialPhone: string;
   initialDateOfBirth?: Date;
@@ -52,6 +54,8 @@ export function EditContactInfoModal({
   isOpen,
   onClose,
   memberId,
+  initialFirstName,
+  initialLastName,
   initialEmail,
   initialPhone,
   initialDateOfBirth,
@@ -60,6 +64,8 @@ export function EditContactInfoModal({
   const t = useTranslations('EditContactInfoModal');
   const router = useRouter();
 
+  const [firstName, setFirstName] = useState(initialFirstName);
+  const [lastName, setLastName] = useState(initialLastName);
   const [email, setEmail] = useState(initialEmail);
   const [phone, setPhone] = useState(initialPhone);
   const [dateOfBirth, setDateOfBirth] = useState<Date | undefined>(initialDateOfBirth);
@@ -84,13 +90,15 @@ export function EditContactInfoModal({
     setAddress(prev => ({ ...prev, [field]: value }));
   };
 
+  const isFirstNameInvalid = touched.firstName && !firstName.trim();
+  const isLastNameInvalid = touched.lastName && !lastName.trim();
   const isEmailInvalid = touched.email && (email ? !isValidEmail(email) : true);
   const isPhoneInvalid = touched.phone && !phone;
 
   const isAddressComplete = address.street && address.city && address.state && address.zipCode && address.country;
   const isAddressPartiallyFilled = address.street || address.city || address.state || address.zipCode;
 
-  const isFormValid = email && isValidEmail(email) && phone && (!isAddressPartiallyFilled || isAddressComplete);
+  const isFormValid = firstName.trim() && lastName.trim() && email && isValidEmail(email) && phone && (!isAddressPartiallyFilled || isAddressComplete);
 
   const handleSubmit = async () => {
     try {
@@ -110,6 +118,8 @@ export function EditContactInfoModal({
 
       await client.member.updateContactInfo({
         id: memberId,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
         email,
         phone: phone || null,
         ...(dateOfBirth ? { dateOfBirth } : {}),
@@ -160,6 +170,35 @@ export function EditContactInfoModal({
           )}
 
           <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground">{t('first_name_label')}</label>
+                <Input
+                  placeholder={t('first_name_placeholder')}
+                  value={firstName}
+                  onChange={e => setFirstName(e.target.value)}
+                  onBlur={() => handleInputBlur('firstName')}
+                  error={isFirstNameInvalid}
+                />
+                {isFirstNameInvalid && (
+                  <p className="text-xs text-destructive">{t('first_name_error')}</p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground">{t('last_name_label')}</label>
+                <Input
+                  placeholder={t('last_name_placeholder')}
+                  value={lastName}
+                  onChange={e => setLastName(e.target.value)}
+                  onBlur={() => handleInputBlur('lastName')}
+                  error={isLastNameInvalid}
+                />
+                {isLastNameInvalid && (
+                  <p className="text-xs text-destructive">{t('last_name_error')}</p>
+                )}
+              </div>
+            </div>
+
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">{t('email_label')}</label>
               <Input

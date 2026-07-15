@@ -124,13 +124,26 @@ export function transformClassToCardProps(
     instructorLookup,
   );
 
+  const level = extractLevel(classData.tags);
+  const type = extractType(classData.tags);
+  const style = extractStyle(classData.tags);
+
+  // Any tag not already surfaced as the level/type/style badge is shown as an
+  // extra badge, so custom tags added on the class detail page appear in the
+  // grid instead of being silently dropped (#247).
+  const categoryTags = new Set([level, type, style]);
+  const extraTags = classData.tags
+    .map(t => t.name)
+    .filter(name => !categoryTags.has(name));
+
   return {
     id: classData.id,
     name: classData.name,
     description: classData.description || '',
-    level: extractLevel(classData.tags),
-    type: extractType(classData.tags),
-    style: extractStyle(classData.tags),
+    level,
+    type,
+    style,
+    tags: extraTags,
     schedule: transformSchedule(classData.schedule),
     location,
     instructors,

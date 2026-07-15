@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/libs/DB';
 import {
   attendanceSchema,
@@ -7,6 +7,7 @@ import {
   classScheduleInstanceSchema,
   classSchema,
   classTagSchema,
+  memberSchema,
   programSchema,
   tagSchema,
 } from '@/models/Schema';
@@ -202,6 +203,99 @@ export async function getOrganizationClasses(organizationId: string): Promise<Cl
 export async function getClassById(classId: string, organizationId: string): Promise<ClassData | null> {
   const classes = await getOrganizationClasses(organizationId);
   return classes.find(c => c.id === classId) || null;
+}
+
+export type ClassAttendanceRecord = {
+  id: string;
+  memberId: string;
+  memberFirstName: string;
+  memberLastName: string;
+  memberPhotoUrl: string | null;
+  attendanceDate: Date;
+  checkInTime: Date;
+  checkOutTime: Date | null;
+  dayOfWeek: number | null;
+  startTime: string | null;
+};
+
+export type ClassAttendanceData = {
+  records: ClassAttendanceRecord[];
+  stats: {
+    totalSessions: number; // distinct schedule instances that have any check-in
+    activeEnrollments: number; // distinct members who have attended
+    averageAttendance: number; // avg check-ins per attended session
+  };
+};
+
+/**
+ * Get the attendance roster + rollup stats for a class. Attendance rows join
+ * to the class's schedule instances (attendance.classScheduleInstanceId) and to
+ * the member for display. Org-scoped via the attendance org column.
+ */
+export async function getClassAttendance(classId: string, organizationId: string): Promise<ClassAttendanceData> {
+  // The class's schedule instances — attendance references these.
+  const instances = await db
+    .select({ id: classScheduleInstanceSchema.id })
+    .from(classScheduleInstanceSchema)
+    .where(eq(classScheduleInstanceSchema.classId, classId));
+  const instanceIds = instances.map(i => i.id);
+
+  if (instanceIds.length === 0) {
+    return { records: [], stats: { totalSessions: 0, activeEnrollments: 0, averageAttendance: 0 } };
+  }
+
+  const rows = await db
+    .select({
+      id: attendanceSchema.id,
+      memberId: attendanceSchema.memberId,
+      memberFirstName: memberSchema.firstName,
+      memberLastName: memberSchema.lastName,
+      memberPhotoUrl: memberSchema.photoUrl,
+      attendanceDate: attendanceSchema.attendanceDate,
+      checkInTime: attendanceSchema.checkInTime,
+      checkOutTime: attendanceSchema.checkOutTime,
+      classScheduleInstanceId: attendanceSchema.classScheduleInstanceId,
+      dayOfWeek: classScheduleInstanceSchema.dayOfWeek,
+      startTime: classScheduleInstanceSchema.startTime,
+    })
+    .from(attendanceSchema)
+    .innerJoin(memberSchema, eq(attendanceSchema.memberId, memberSchema.id))
+    .leftJoin(classScheduleInstanceSchema, eq(attendanceSchema.classScheduleInstanceId, classScheduleInstanceSchema.id))
+    .where(and(
+      eq(attendanceSchema.organizationId, organizationId),
+      inArray(attendanceSchema.classScheduleInstanceId, instanceIds),
+    ))
+    .orderBy(desc(attendanceSchema.attendanceDate));
+
+  const records: ClassAttendanceRecord[] = rows.map(r => ({
+    id: r.id,
+    memberId: r.memberId,
+    memberFirstName: r.memberFirstName,
+    memberLastName: r.memberLastName,
+    memberPhotoUrl: r.memberPhotoUrl,
+    attendanceDate: r.attendanceDate,
+    checkInTime: r.checkInTime,
+    checkOutTime: r.checkOutTime,
+    dayOfWeek: r.dayOfWeek,
+    startTime: r.startTime,
+  }));
+
+  const uniqueMembers = new Set(rows.map(r => r.memberId));
+  // A "session" here = a distinct (instance, calendar-day) the class actually met.
+  const sessionKeys = new Set(
+    rows.map(r => `${r.classScheduleInstanceId ?? 'none'}|${r.attendanceDate.toISOString().slice(0, 10)}`),
+  );
+  const totalSessions = sessionKeys.size;
+  const averageAttendance = totalSessions > 0 ? Math.round(rows.length / totalSessions) : 0;
+
+  return {
+    records,
+    stats: {
+      totalSessions,
+      activeEnrollments: uniqueMembers.size,
+      averageAttendance,
+    },
+  };
 }
 
 // =============================================================================

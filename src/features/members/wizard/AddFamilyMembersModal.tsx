@@ -49,6 +49,7 @@ export const AddFamilyMembersModal = ({
   // payment call. On payment decline + cancel, this is what we pass to
   // client.member.removeFully to roll back the half-finished signup (#132).
   const createdMemberIdRef = useRef<string | undefined>(undefined);
+  const createdMemberMembershipIdRef = useRef<string | undefined>(undefined);
 
   // Re-entrancy guard for handleFamilyMemberSubmit — see AddMemberModal for rationale.
   const submittingRef = useRef(false);
@@ -104,6 +105,7 @@ export const AddFamilyMembersModal = ({
     cardFirstSixRef.current = undefined;
     cardLastFourRef.current = undefined;
     createdMemberIdRef.current = undefined;
+    createdMemberMembershipIdRef.current = undefined;
     submittingRef.current = false;
     wizard.reset();
     onCloseAction();
@@ -117,6 +119,7 @@ export const AddFamilyMembersModal = ({
     cardFirstSixRef.current = undefined;
     cardLastFourRef.current = undefined;
     createdMemberIdRef.current = undefined;
+    createdMemberMembershipIdRef.current = undefined;
     submittingRef.current = false;
     wizard.reset();
     onCloseAction();
@@ -128,6 +131,7 @@ export const AddFamilyMembersModal = ({
     cardFirstSixRef.current = undefined;
     cardLastFourRef.current = undefined;
     createdMemberIdRef.current = undefined;
+    createdMemberMembershipIdRef.current = undefined;
     submittingRef.current = false;
     wizard.resetForNextMember();
     setPaymentStepKey(prev => prev + 1);
@@ -230,51 +234,62 @@ export const AddFamilyMembersModal = ({
         photoUrl = await fileToDataUrl(wizard.data.photoFile);
       }
 
-      // 1. Create the member
-      const result = await client.member.create({
-        email: wizard.data.email,
-        firstName: wizard.data.firstName,
-        lastName: wizard.data.lastName,
-        phone: wizard.data.phone,
-        dateOfBirth: wizard.data.dateOfBirth!,
-        memberType: 'family-member' as const,
-        ...(wizard.data.membershipPlanId && { membershipPlanId: wizard.data.membershipPlanId }),
-        ...(addressPayload && { address: addressPayload }),
-        ...(photoUrl && { photoUrl }),
-        ...(wizard.data.appliedCoupon && {
-          appliedCoupon: {
-            id: wizard.data.appliedCoupon.id,
-            code: wizard.data.appliedCoupon.code,
-            type: wizard.data.appliedCoupon.type,
-            amount: wizard.data.appliedCoupon.amount,
-            description: wizard.data.appliedCoupon.description,
-          },
-        }),
-      });
-      // Track the new member's id so handleCancel can roll back the whole
-      // signup chain if the user bails after a payment decline (#132).
-      createdMemberIdRef.current = result.id;
-
-      // 2. Create signed waiver if applicable
-      if (
-        result.id
-        && wizard.data.waiverTemplateId
-        && wizard.data.waiverSignatureDataUrl
-        && wizard.data.waiverRenderedContent
-        && !wizard.data.waiverSkipped
-      ) {
-        await client.waivers.createSignedWaiver(
-          buildSignedWaiverPayload(wizard.data, result.id),
-        );
-      }
-
-      // 3. Link family member to HOH
-      if (result.id) {
-        await client.member.linkFamilyMember({
-          memberId: result.id,
-          hohMemberId: hohMember.id,
-          relationship: 'family-member',
+      // Steps 1-3 (create member, sign waiver, link to HOH) run ONCE. On a
+      // payment-decline "Try Again", the member already exists — re-running
+      // create would spawn a duplicate active member on every retry (#220). If
+      // we already created one, reuse it and jump straight to payment.
+      let result: { id: string | undefined; memberMembershipId?: string };
+      if (createdMemberIdRef.current) {
+        result = { id: createdMemberIdRef.current, memberMembershipId: createdMemberMembershipIdRef.current };
+      } else {
+        // 1. Create the member
+        const created = await client.member.create({
+          email: wizard.data.email,
+          firstName: wizard.data.firstName,
+          lastName: wizard.data.lastName,
+          phone: wizard.data.phone,
+          dateOfBirth: wizard.data.dateOfBirth!,
+          memberType: 'family-member' as const,
+          ...(wizard.data.membershipPlanId && { membershipPlanId: wizard.data.membershipPlanId }),
+          ...(addressPayload && { address: addressPayload }),
+          ...(photoUrl && { photoUrl }),
+          ...(wizard.data.appliedCoupon && {
+            appliedCoupon: {
+              id: wizard.data.appliedCoupon.id,
+              code: wizard.data.appliedCoupon.code,
+              type: wizard.data.appliedCoupon.type,
+              amount: wizard.data.appliedCoupon.amount,
+              description: wizard.data.appliedCoupon.description,
+            },
+          }),
         });
+        result = created;
+        // Track the new member's id so a retry reuses it and handleCancel can
+        // roll back the whole signup chain if the user bails after a decline.
+        createdMemberIdRef.current = created.id;
+        createdMemberMembershipIdRef.current = created.memberMembershipId;
+
+        // 2. Create signed waiver if applicable
+        if (
+          created.id
+          && wizard.data.waiverTemplateId
+          && wizard.data.waiverSignatureDataUrl
+          && wizard.data.waiverRenderedContent
+          && !wizard.data.waiverSkipped
+        ) {
+          await client.waivers.createSignedWaiver(
+            buildSignedWaiverPayload(wizard.data, created.id),
+          );
+        }
+
+        // 3. Link family member to HOH
+        if (created.id) {
+          await client.member.linkFamilyMember({
+            memberId: created.id,
+            hohMemberId: hohMember.id,
+            relationship: 'family-member',
+          });
+        }
       }
 
       // 4. Process payment. Recurring (post-coupon) goes in `amount`; the

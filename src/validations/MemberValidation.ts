@@ -50,6 +50,8 @@ export const RemoveFullyMemberValidation = z.object({
 
 export const UpdateMemberContactInfoValidation = z.object({
   id: z.string(),
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
   email: z.string().email(),
   phone: z.string().nullable().optional(),
   dateOfBirth: z.coerce.date().optional(),
