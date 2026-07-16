@@ -1594,7 +1594,7 @@
     "responsible_owner_heading": "Responsible Academy Owner",
     "responsible_owner_none": "No Academy Owner is assigned. Assign one in Clerk to manage billing.",
     "responsible_owner_unknown_name": "Academy Owner",
-    "trial_notice": "You're on a free trial. Choose a plan and subscribe to continue access.",
+    "trial_notice": "You're on a free trial. Choosing a plan starts a paid subscription and requires a payment method — you can switch between monthly and annual afterward.",
     "monthly_button": "Monthly",
     "annual_button": "Annual",
     "billing_history_heading": "My Billing History",

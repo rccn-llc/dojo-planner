@@ -1598,7 +1598,7 @@
     "responsible_owner_heading": "Propriétaire d'académie responsable",
     "responsible_owner_none": "Aucun propriétaire d'académie n'est assigné. Assignez-en un dans Clerk pour gérer la facturation.",
     "responsible_owner_unknown_name": "Propriétaire d'académie",
-    "trial_notice": "Vous êtes en période d'essai gratuite. Choisissez un forfait et abonnez-vous pour continuer.",
+    "trial_notice": "Vous êtes en période d'essai gratuite. Choisir un forfait démarre un abonnement payant et nécessite un moyen de paiement — vous pourrez ensuite passer du mensuel à l'annuel.",
     "monthly_button": "Mensuel",
     "annual_button": "Annuel",
     "billing_history_heading": "Mon historique de facturation",
