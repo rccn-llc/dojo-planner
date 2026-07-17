@@ -636,4 +636,45 @@ describe('getGatewayProcessors', () => {
 
     expect(result).toEqual({ cardProcessorId: 'card_proc', achProcessorId: 'ach_proc' });
   });
+
+  it('falls back to the first processor when none is flagged default (#214/#264)', async () => {
+    const mod = await import('./IQPro');
+    mod.resetOAuthTokenCache();
+    mod.resetGatewayProcessorsCache();
+
+    mockOAuthOk();
+    mockFetch.mockResolvedValueOnce(new Response(
+      JSON.stringify({
+        data: {
+          processors: [
+            { processorId: 'p1', isDefaultCard: false, isDefaultAch: false },
+            { processorId: 'p2', isDefaultCard: false, isDefaultAch: false },
+          ],
+        },
+      }),
+      { status: 200 },
+    ));
+
+    const result = await mod.getGatewayProcessors(testConfig);
+
+    // Both fall back to the first available processor rather than null, which
+    // previously hard-failed every charge as a "declined" payment.
+    expect(result).toEqual({ cardProcessorId: 'p1', achProcessorId: 'p1' });
+  });
+
+  it('returns null when the gateway has no processors at all', async () => {
+    const mod = await import('./IQPro');
+    mod.resetOAuthTokenCache();
+    mod.resetGatewayProcessorsCache();
+
+    mockOAuthOk();
+    mockFetch.mockResolvedValueOnce(new Response(
+      JSON.stringify({ data: { processors: [] } }),
+      { status: 200 },
+    ));
+
+    const result = await mod.getGatewayProcessors(testConfig);
+
+    expect(result).toEqual({ cardProcessorId: null, achProcessorId: null });
+  });
 });

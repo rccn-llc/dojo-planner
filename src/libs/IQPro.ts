@@ -372,8 +372,14 @@ export async function getGatewayProcessors(config: IQProConfig): Promise<Gateway
     isDefaultAch: boolean;
   }>;
 
-  const defaultCard = processors.find(p => p.isDefaultCard);
-  const defaultAch = processors.find(p => p.isDefaultAch);
+  // Prefer the processor flagged as default, but fall back to the first
+  // available processor of that kind. Some gateways (notably the sandbox) have
+  // processors provisioned but none flagged isDefaultCard/isDefaultAch — the
+  // old behaviour returned null there, which hard-failed every charge with
+  // "No processor configured" and surfaced as a payment decline (#214/#215/#216
+  // card, #264 ACH, #219 vaulted). The fallback lets those gateways charge.
+  const defaultCard = processors.find(p => p.isDefaultCard) ?? processors[0];
+  const defaultAch = processors.find(p => p.isDefaultAch) ?? processors[0];
 
   const result: GatewayProcessors = {
     cardProcessorId: defaultCard?.processorId ?? null,
@@ -381,7 +387,9 @@ export async function getGatewayProcessors(config: IQProConfig): Promise<Gateway
   };
   processorsCache.set(config.gatewayId, result);
 
-  logger.info('[IQPro] Gateway processors loaded', result);
+  const usedCardFallback = !processors.some(p => p.isDefaultCard) && result.cardProcessorId !== null;
+  const usedAchFallback = !processors.some(p => p.isDefaultAch) && result.achProcessorId !== null;
+  logger.info('[IQPro] Gateway processors loaded', { ...result, usedCardFallback, usedAchFallback });
   return result;
 }
 
