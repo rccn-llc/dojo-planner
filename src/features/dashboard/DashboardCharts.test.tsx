@@ -165,7 +165,7 @@ describe('DashboardCharts', () => {
     expect(earningsSelect).toHaveTextContent('Yearly');
   });
 
-  it('renders View details buttons', () => {
+  it('does not render dead "View details" buttons (#230)', () => {
     render(
       <DashboardCharts
         memberAverageData={mockMemberAverageData}
@@ -173,9 +173,11 @@ describe('DashboardCharts', () => {
       />,
     );
 
+    // The charts have no detail view to link to, so the previously-dead
+    // "View details" buttons were removed rather than wired to a generic target.
     const viewDetailsButtons = page.getByRole('button', { name: /View details/i });
 
-    expect(viewDetailsButtons.elements().length).toBe(2);
+    expect(viewDetailsButtons.elements().length).toBe(0);
   });
 
   it('Member average and Earnings selects work independently', async () => {

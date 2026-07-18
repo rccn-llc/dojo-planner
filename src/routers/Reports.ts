@@ -13,7 +13,7 @@ export const chartData = os
   .input(ReportTypeValidation)
   .handler(async ({ input }) => {
     const { orgId } = await guardRole(ORG_ROLE.FRONT_DESK);
-    return getReportChartData(orgId, input.reportType);
+    return getReportChartData(orgId, input.reportType, input.range);
   });
 
 export const insights = os

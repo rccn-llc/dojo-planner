@@ -263,6 +263,103 @@ describe('ReportsService', () => {
   });
 
   // ===========================================================================
+  // getReportChartData — daily "last N days" range (#274)
+  // ===========================================================================
+
+  describe('getReportChartData daily range', () => {
+    it('does not add a daily series when no range is passed', async () => {
+      mockDbResult = [{ total: 1000 }];
+      const { getReportChartData } = await import('./ReportsService');
+
+      const result = await getReportChartData('test-org-123', 'payments-last-30-days');
+
+      expect(result.daily).toBeUndefined();
+    });
+
+    it.each([
+      ['last-7', 7],
+      ['last-30', 30],
+      ['last-90', 90],
+    ] as const)('adds a %s daily series with %i buckets, preserving monthly/yearly', async (range, buckets) => {
+      mockDbResult = [{ total: 1000 }];
+      const { getReportChartData } = await import('./ReportsService');
+
+      const result = await getReportChartData('test-org-123', 'payments-last-30-days', range);
+
+      expect(result.monthly).toHaveLength(12);
+      expect(result.yearly).toHaveLength(5);
+      expect(result.daily).toHaveLength(buckets);
+      expect(result.daily?.[0]).toHaveProperty('day');
+      expect(result.daily?.[0]).toHaveProperty('value');
+
+      // ends today (last bucket is the most recent day)
+      const lastLabel = result.daily?.[buckets - 1]?.day;
+      const today = new Date();
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+      expect(lastLabel).toBe(`${monthNames[today.getMonth()]} ${today.getDate()}`);
+    });
+
+    it('sums paid transactions for payments-last-30-days daily buckets', async () => {
+      mockDbResult = [{ total: 250 }];
+      const { getReportChartData } = await import('./ReportsService');
+
+      const result = await getReportChartData('test-org-123', 'payments-last-30-days', 'last-7');
+
+      expect(result.daily).toHaveLength(7);
+      expect(result.daily?.every(d => d.value === 250)).toBe(true);
+    });
+
+    it('takes the absolute value of summed amounts (refunds/adjustments)', async () => {
+      mockDbResult = [{ total: -500 }];
+      const { getReportChartData } = await import('./ReportsService');
+
+      const result = await getReportChartData('test-org-123', 'past-due', 'last-7');
+
+      expect(result.daily?.every(d => d.value === 500)).toBe(true);
+    });
+
+    it('counts point-in-time members for accounts-autopay-suspended daily buckets', async () => {
+      mockDbResult = [{ count: 3 }];
+      const { getReportChartData } = await import('./ReportsService');
+
+      const result = await getReportChartData('test-org-123', 'accounts-autopay-suspended', 'last-7');
+
+      expect(result.daily).toHaveLength(7);
+      expect(result.daily?.every(d => d.value === 3)).toBe(true);
+    });
+
+    it('computes per-student income for income-per-student daily buckets', async () => {
+      mockDbResult = [{ total: 1000, count: 4 }];
+      const { getReportChartData } = await import('./ReportsService');
+
+      const result = await getReportChartData('test-org-123', 'income-per-student', 'last-7');
+
+      expect(result.daily).toHaveLength(7);
+      // 1000 / 4 = 250 per student
+      expect(result.daily?.every(d => d.value === 250)).toBe(true);
+    });
+
+    it('returns zero-valued daily buckets for expiring-credit-cards', async () => {
+      const { getReportChartData } = await import('./ReportsService');
+
+      const result = await getReportChartData('test-org-123', 'expiring-credit-cards', 'last-30');
+
+      expect(result.daily).toHaveLength(30);
+      expect(result.daily?.every(d => d.value === 0)).toBe(true);
+    });
+
+    it('returns zero-valued daily buckets for unknown report types', async () => {
+      const { getReportChartData } = await import('./ReportsService');
+
+      const result = await getReportChartData('test-org-123', 'unknown-report-type', 'last-7');
+
+      expect(result.daily).toHaveLength(7);
+      expect(result.daily?.every(d => d.value === 0)).toBe(true);
+    });
+  });
+
+  // ===========================================================================
   // getReportInsights
   // ===========================================================================
 
