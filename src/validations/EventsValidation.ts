@@ -59,5 +59,25 @@ export const DeleteEventValidation = z.object({
   id: z.string().min(1),
 });
 
+// Event registration / enrollment (#257 / #279)
+export const RegisterForEventValidation = z.object({
+  eventId: z.string().min(1),
+  memberId: z.string().min(1),
+  eventBillingId: z.string().min(1).nullable().optional(),
+  amountPaid: z.number().min(0).nullable().optional(),
+  // Set when a saved-card charge was processed just before enrolling, so the
+  // transaction can be back-linked to the new registration.
+  transactionId: z.string().min(1).nullable().optional(),
+});
+
+export const EventRegistrationsValidation = z.object({
+  eventId: z.string().min(1),
+});
+
+export const CancelEventRegistrationValidation = z.object({
+  id: z.string().min(1),
+});
+
 export type CreateEventInput = z.infer<typeof CreateEventValidation>;
 export type UpdateEventInput = z.infer<typeof UpdateEventValidation>;
+export type RegisterForEventInput = z.infer<typeof RegisterForEventValidation>;

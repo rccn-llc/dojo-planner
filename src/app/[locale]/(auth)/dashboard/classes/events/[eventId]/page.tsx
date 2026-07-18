@@ -3,11 +3,11 @@
 import type { EventDetailData } from './eventData';
 import type { EventData } from '@/hooks/useEventsCache';
 import { useOrganization } from '@clerk/nextjs';
-import { ArrowLeft, Calendar, Edit, MapPin, Trash2, Users } from 'lucide-react';
+import { ArrowLeft, Calendar, Edit, MapPin, Trash2, UserPlus, Users, X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { use, useMemo, useState } from 'react';
+import { use, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EditEventModal } from '@/features/events/details/EditEventModal';
+import { EnrollMemberModal } from '@/features/events/details/EnrollMemberModal';
 import { invalidateEventsCache, useEventsCache } from '@/hooks/useEventsCache';
 import { useInstructorsCache } from '@/hooks/useInstructorsCache';
 import { client } from '@/libs/Orpc';
@@ -43,9 +44,22 @@ function formatSessionTime(startTime: string, endTime: string): string {
   return `${formatTime(startTime)} - ${formatTime(endTime)}`;
 }
 
+type Registrant = {
+  id: string;
+  memberId: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  photoUrl: string | null;
+  status: string;
+  amountPaid: number | null;
+  tierName: string | null;
+};
+
 function transformEventData(
   event: EventData,
   instructorLookup?: Map<string, { name: string; photoUrl: string | null }>,
+  registrationCount = 0,
 ): EventDetailData {
   const sortedSessions = [...event.sessions].sort(
     (a, b) => new Date(a.sessionDate).getTime() - new Date(b.sessionDate).getTime(),
@@ -82,7 +96,7 @@ function transformEventData(
     instructors,
     price: regularBilling?.price ?? (event.billing[0]?.price ?? null),
     maxCapacity: event.maxCapacity,
-    currentRegistrations: 0,
+    currentRegistrations: registrationCount,
     earlyBirdPrice: earlyBirdBilling?.price ?? null,
     earlyBirdDeadline: earlyBirdBilling?.validUntil
       ? formatSessionDate(new Date(earlyBirdBilling.validUntil))
@@ -112,16 +126,58 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
   // Modal states
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [editTab, setEditTab] = useState<'details' | 'pricing' | 'sessions' | null>(null);
+  const [isEnrollOpen, setIsEnrollOpen] = useState(false);
+
+  // Registrants
+  const [registrants, setRegistrants] = useState<Registrant[]>([]);
+  // Bumped to re-trigger the registrants fetch after an enroll / cancel.
+  const [registrantsRefreshKey, setRegistrantsRefreshKey] = useState(0);
+  const refreshRegistrants = useCallback(() => setRegistrantsRefreshKey(k => k + 1), []);
 
   // Find event from cache and transform
   const rawEvent = useMemo(
     () => events.find(e => e.id === resolvedParams.eventId) ?? null,
     [events, resolvedParams.eventId],
   );
+  const eventId = rawEvent?.id;
+
+  // Load registrants whenever the event resolves or a refresh is requested.
+  useEffect(() => {
+    if (!eventId) {
+      return;
+    }
+    let cancelled = false;
+    client.events.registrations({ eventId })
+      .then((result) => {
+        if (!cancelled) {
+          setRegistrants(result.registrants as Registrant[]);
+        }
+      })
+      .catch((err) => {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[Event Detail] Failed to load registrants:', err);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [eventId, registrantsRefreshKey]);
+
   const eventData = useMemo(
-    () => (rawEvent ? transformEventData(rawEvent, instructorLookup) : null),
-    [rawEvent, instructorLookup],
+    () => (rawEvent ? transformEventData(rawEvent, instructorLookup, registrants.length) : null),
+    [rawEvent, instructorLookup, registrants.length],
   );
+
+  const handleCancelRegistration = async (registrationId: string) => {
+    try {
+      await client.events.cancelRegistration({ id: registrationId });
+      refreshRegistrants();
+    } catch (err) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[Event Detail] Failed to cancel registration:', err);
+      }
+    }
+  };
 
   // Handler for deleting event — soft-delete on the server then navigate.
   const handleDeleteEvent = async () => {
@@ -181,16 +237,22 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
       </div>
 
       {/* Header */}
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-2">
-          <Calendar className="h-5 w-5 text-primary" />
-          <Badge variant="default" className="bg-primary text-primary-foreground">
-            {t('event_badge')}
-          </Badge>
-          <Badge variant="outline">{eventData.eventType}</Badge>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <Calendar className="h-5 w-5 text-primary" />
+            <Badge variant="default" className="bg-primary text-primary-foreground">
+              {t('event_badge')}
+            </Badge>
+            <Badge variant="outline">{eventData.eventType}</Badge>
+          </div>
+          <h1 className="text-3xl font-bold text-foreground">{eventData.name}</h1>
+          <p className="text-lg text-muted-foreground">{eventData.description}</p>
         </div>
-        <h1 className="text-3xl font-bold text-foreground">{eventData.name}</h1>
-        <p className="text-lg text-muted-foreground">{eventData.description}</p>
+        <Button onClick={() => setIsEnrollOpen(true)} className="shrink-0">
+          <UserPlus className="mr-2 h-4 w-4" />
+          {t('enroll_member_button')}
+        </Button>
       </div>
 
       {/* Stats Card */}
@@ -366,6 +428,65 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
         </div>
       </div>
 
+      {/* Registrants Card */}
+      <Card className="p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-foreground">
+            {t('registrants_card_title')}
+            {' '}
+            <span className="text-sm font-normal text-muted-foreground">
+              (
+              {registrants.length}
+              )
+            </span>
+          </h2>
+          <Button variant="outline" size="sm" onClick={() => setIsEnrollOpen(true)}>
+            <UserPlus className="mr-2 h-4 w-4" />
+            {t('enroll_member_button')}
+          </Button>
+        </div>
+        {registrants.length === 0
+          ? <p className="py-4 text-center text-sm text-muted-foreground">{t('no_registrants')}</p>
+          : (
+              <div className="space-y-2">
+                {registrants.map(reg => (
+                  <div
+                    key={reg.id}
+                    className="flex items-center gap-3 rounded-lg border border-border p-3"
+                  >
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage src={reg.photoUrl ?? undefined} alt={`${reg.firstName} ${reg.lastName}`} />
+                      <AvatarFallback>{getInitials(`${reg.firstName} ${reg.lastName}`)}</AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-foreground">
+                        {reg.firstName}
+                        {' '}
+                        {reg.lastName}
+                      </p>
+                      <p className="truncate text-sm text-muted-foreground">{reg.email}</p>
+                    </div>
+                    {reg.tierName && (
+                      <Badge variant="outline" className="shrink-0">{reg.tierName}</Badge>
+                    )}
+                    {reg.amountPaid !== null && reg.amountPaid > 0 && (
+                      <span className="shrink-0 text-sm font-medium text-foreground">{formatPrice(reg.amountPaid)}</span>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="shrink-0 text-muted-foreground hover:text-destructive"
+                      onClick={() => handleCancelRegistration(reg.id)}
+                      aria-label={t('cancel_registration_aria', { name: `${reg.firstName} ${reg.lastName}` })}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+      </Card>
+
       {/* Delete Button */}
       <div className="flex justify-end">
         <Button
@@ -384,6 +505,18 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
           initialTab={editTab ?? 'details'}
           event={rawEvent}
           onCloseAction={() => setEditTab(null)}
+        />
+      )}
+
+      {/* Enroll Member Modal */}
+      {rawEvent && (
+        <EnrollMemberModal
+          isOpen={isEnrollOpen}
+          eventId={rawEvent.id}
+          eventName={rawEvent.name}
+          billingTiers={rawEvent.billing}
+          onCloseAction={() => setIsEnrollOpen(false)}
+          onEnrolledAction={refreshRegistrants}
         />
       )}
 

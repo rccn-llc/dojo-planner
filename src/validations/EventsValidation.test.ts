@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CancelEventRegistrationValidation,
   CreateEventValidation,
   DeleteEventValidation,
+  EventRegistrationsValidation,
+  RegisterForEventValidation,
   UpdateEventValidation,
 } from './EventsValidation';
 
@@ -134,5 +137,58 @@ describe('DeleteEventValidation', () => {
 
   it('accepts non-empty id', () => {
     expect(DeleteEventValidation.safeParse({ id: 'e-1' }).success).toBe(true);
+  });
+});
+
+describe('RegisterForEventValidation', () => {
+  it('accepts a minimal register payload (eventId + memberId)', () => {
+    expect(RegisterForEventValidation.safeParse({ eventId: 'ev-1', memberId: 'mem-1' }).success).toBe(true);
+  });
+
+  it('accepts optional tier, amount, and transaction id', () => {
+    const r = RegisterForEventValidation.safeParse({
+      eventId: 'ev-1',
+      memberId: 'mem-1',
+      eventBillingId: 'tier-1',
+      amountPaid: 40,
+      transactionId: 'tx-1',
+    });
+
+    expect(r.success).toBe(true);
+  });
+
+  it('allows null tier / amount / transaction id', () => {
+    const r = RegisterForEventValidation.safeParse({
+      eventId: 'ev-1',
+      memberId: 'mem-1',
+      eventBillingId: null,
+      amountPaid: null,
+      transactionId: null,
+    });
+
+    expect(r.success).toBe(true);
+  });
+
+  it('rejects missing eventId or memberId', () => {
+    expect(RegisterForEventValidation.safeParse({ memberId: 'mem-1' }).success).toBe(false);
+    expect(RegisterForEventValidation.safeParse({ eventId: 'ev-1' }).success).toBe(false);
+  });
+
+  it('rejects a negative amount', () => {
+    expect(RegisterForEventValidation.safeParse({ eventId: 'ev-1', memberId: 'mem-1', amountPaid: -5 }).success).toBe(false);
+  });
+});
+
+describe('EventRegistrationsValidation', () => {
+  it('requires a non-empty eventId', () => {
+    expect(EventRegistrationsValidation.safeParse({ eventId: '' }).success).toBe(false);
+    expect(EventRegistrationsValidation.safeParse({ eventId: 'ev-1' }).success).toBe(true);
+  });
+});
+
+describe('CancelEventRegistrationValidation', () => {
+  it('requires a non-empty id', () => {
+    expect(CancelEventRegistrationValidation.safeParse({ id: '' }).success).toBe(false);
+    expect(CancelEventRegistrationValidation.safeParse({ id: 'reg-1' }).success).toBe(true);
   });
 });

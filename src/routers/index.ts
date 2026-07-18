@@ -20,7 +20,7 @@ import {
 import { tags as classTags, create as createClass, getAttendance as getClassAttendance, list as listClasses, remove as removeClass, removeException as removeClassException, update as updateClass, upsertException as upsertClassException } from './Classes';
 import { create as createCoupon, getTotalSavings as getCouponTotalSavings, listActive as listActiveCoupons, list as listCoupons, remove as removeCoupon, update as updateCoupon } from './Coupons';
 import { earningsChart, financialStats, memberAverageChart, membershipStats } from './Dashboard';
-import { create as createEvent, list as listEvents, remove as removeEvent, update as updateEvent } from './Events';
+import { cancelRegistration as cancelEventRegistration, create as createEvent, registrations as listEventRegistrations, list as listEvents, register as registerForEvent, remove as removeEvent, update as updateEvent } from './Events';
 import { list as listInstructors, updatePhoto as updateInstructorPhoto } from './Instructors';
 import { addMembership, cancelMembership, changeMembership, create as createMember, deletePaymentMethod, getHOHForMember, getHOHPaymentMethods, holdMembership, linkFamily, listAllMembershipPlans, listFamily, listMembershipPlans, listMemberTransactions, listPaymentMethods, reactivateMembership, removeFullyMember, remove as removeMember, restore as restoreMember, searchHOH, sendConfirmationEmail, setPrimaryPaymentMethod, unlinkFamily, updateLastAccessed, update as updateMember, updateContactInfo as updateMemberContactInfo, updatePhoto as updateMemberPhoto, updateMemberType } from './Member';
 import { list as listMembers } from './Members';
@@ -108,6 +108,9 @@ export const router = {
     create: createEvent,
     update: updateEvent,
     remove: removeEvent,
+    register: registerForEvent,
+    registrations: listEventRegistrations,
+    cancelRegistration: cancelEventRegistration,
   },
   instructors: {
     list: listInstructors,
