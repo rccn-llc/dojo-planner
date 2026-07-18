@@ -26,4 +26,6 @@ export const ReportTypeValidation = z.object({
     'failed-payments',
     'income-per-student',
   ]),
+  // Optional "last N days" daily window for chart data (#274). Ignored by insights.
+  range: z.enum(['last-7', 'last-30', 'last-90']).optional(),
 });

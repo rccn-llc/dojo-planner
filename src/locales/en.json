@@ -1015,6 +1015,9 @@
     "insights_title": "Insights",
     "time_period_monthly": "Monthly",
     "time_period_yearly": "Yearly",
+    "time_period_last_7": "Last 7 days",
+    "time_period_last_30": "Last 30 days",
+    "time_period_last_90": "Last 90 days",
     "compare_with_last_year": "Compare with last year"
   },
   "PerformancePage": {

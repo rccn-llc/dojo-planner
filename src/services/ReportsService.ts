@@ -25,12 +25,40 @@ type YearlyDataPoint = {
   value: number;
 };
 
+type DailyDataPoint = {
+  day: string; // 'MMM D' label, e.g. 'Jul 3'
+  value: number;
+};
+
+export type ReportRange = 'last-7' | 'last-30' | 'last-90';
+
+const RANGE_DAYS: Record<ReportRange, number> = {
+  'last-7': 7,
+  'last-30': 30,
+  'last-90': 90,
+};
+
 export type ReportChartData = {
   monthly: MonthlyDataPoint[];
   yearly: YearlyDataPoint[];
+  daily?: DailyDataPoint[];
 };
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// Build the last-N calendar days ending today, each as a { start-of-day,
+// end-of-day, label } bucket. Used by the daily report series (#274).
+function lastNDayBuckets(days: number): Array<{ start: Date; end: Date; label: string }> {
+  const buckets: Array<{ start: Date; end: Date; label: string }> = [];
+  const today = new Date();
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
+    const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0);
+    const end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59);
+    buckets.push({ start, end, label: `${MONTH_NAMES[d.getMonth()]} ${d.getDate()}` });
+  }
+  return buckets;
+}
 
 export async function getReportCurrentValues(organizationId: string): Promise<ReportCurrentValues> {
   const stats = await getFinancialStats(organizationId);
@@ -49,28 +77,111 @@ export async function getReportCurrentValues(organizationId: string): Promise<Re
 export async function getReportChartData(
   organizationId: string,
   reportType: string,
+  range?: ReportRange | null,
 ): Promise<ReportChartData> {
   const currentYear = new Date().getFullYear();
 
+  const base = await (async (): Promise<ReportChartData> => {
+    switch (reportType) {
+      case 'accounts-autopay-suspended':
+        return getAutopayChartData(organizationId, currentYear);
+      case 'expiring-credit-cards':
+        return getEmptyChartData(currentYear);
+      case 'amount-due':
+        return getAmountDueChartData(organizationId, currentYear);
+      case 'past-due':
+        return getStatusChartData(organizationId, currentYear, 'declined');
+      case 'payments-last-30-days':
+        return getStatusChartData(organizationId, currentYear, 'paid');
+      case 'payments-pending':
+        return getPendingChartData(organizationId, currentYear);
+      case 'failed-payments':
+        return getStatusChartData(organizationId, currentYear, 'declined');
+      case 'income-per-student':
+        return getIncomePerStudentChartData(organizationId, currentYear);
+      default:
+        return getEmptyChartData(currentYear);
+    }
+  })();
+
+  // A range only adds a daily series; monthly/yearly are unchanged (#274).
+  if (range) {
+    base.daily = await getDailyChartData(organizationId, reportType, RANGE_DAYS[range]);
+  }
+  return base;
+}
+
+// Daily series for the "last N days" report filter. Reuses each report's
+// underlying per-bucket query (range-sum or point-in-time count) over the
+// last-N-day buckets. Kept separate from the monthly/yearly helpers so those
+// remain untouched (zero regression risk).
+async function getDailyChartData(
+  organizationId: string,
+  reportType: string,
+  days: number,
+): Promise<DailyDataPoint[]> {
+  const buckets = lastNDayBuckets(days);
+
+  // Sum transaction.amount in [start,end] for a given status set.
+  const txSumInRange = (start: Date, end: Date, statuses: string[]) =>
+    db.select({ total: sum(transactionSchema.amount) })
+      .from(transactionSchema)
+      .where(and(
+        eq(transactionSchema.organizationId, organizationId),
+        inArray(transactionSchema.status, statuses),
+        gte(transactionSchema.createdAt, start),
+        sql`${transactionSchema.createdAt} <= ${end}`,
+      ));
+
+  // Count members in status 'past_due' as of a point in time.
+  const pastDueCountAt = (at: Date) =>
+    db.select({ count: count() })
+      .from(memberSchema)
+      .where(and(
+        eq(memberSchema.organizationId, organizationId),
+        eq(memberSchema.status, 'past_due'),
+        sql`${memberSchema.createdAt} <= ${at}`,
+      ));
+
+  const mapSum = (results: Array<{ total: string | number | null }[]>): DailyDataPoint[] =>
+    buckets.map((b, i) => ({ day: b.label, value: Math.abs(Number(results[i]?.[0]?.total ?? 0)) }));
+
   switch (reportType) {
-    case 'accounts-autopay-suspended':
-      return getAutopayChartData(organizationId, currentYear);
-    case 'expiring-credit-cards':
-      return getEmptyChartData(currentYear);
+    case 'accounts-autopay-suspended': {
+      const results = await Promise.all(buckets.map(b => pastDueCountAt(b.end)));
+      return buckets.map((b, i) => ({ day: b.label, value: results[i]?.[0]?.count ?? 0 }));
+    }
     case 'amount-due':
-      return getAmountDueChartData(organizationId, currentYear);
-    case 'past-due':
-      return getStatusChartData(organizationId, currentYear, 'declined');
     case 'payments-last-30-days':
-      return getStatusChartData(organizationId, currentYear, 'paid');
-    case 'payments-pending':
-      return getPendingChartData(organizationId, currentYear);
+      return mapSum(await Promise.all(buckets.map(b => txSumInRange(b.start, b.end, ['paid']))));
+    case 'past-due':
     case 'failed-payments':
-      return getStatusChartData(organizationId, currentYear, 'declined');
-    case 'income-per-student':
-      return getIncomePerStudentChartData(organizationId, currentYear);
+      return mapSum(await Promise.all(buckets.map(b => txSumInRange(b.start, b.end, ['declined']))));
+    case 'payments-pending':
+      return mapSum(await Promise.all(buckets.map(b => txSumInRange(b.start, b.end, ['pending', 'processing']))));
+    case 'income-per-student': {
+      // Per-day income divided by member count at end of day.
+      const memberCountAt = (at: Date) =>
+        db.select({ count: count() })
+          .from(memberSchema)
+          .where(and(
+            eq(memberSchema.organizationId, organizationId),
+            sql`${memberSchema.createdAt} <= ${at}`,
+            sql`(${memberSchema.status} != 'cancelled' OR ${memberSchema.updatedAt} > ${at})`,
+          ));
+      const [incomeResults, memberResults] = await Promise.all([
+        Promise.all(buckets.map(b => txSumInRange(b.start, b.end, ['paid']))),
+        Promise.all(buckets.map(b => memberCountAt(b.end))),
+      ]);
+      return buckets.map((b, i) => {
+        const income = Number(incomeResults[i]?.[0]?.total ?? 0);
+        const members = memberResults[i]?.[0]?.count ?? 1;
+        return { day: b.label, value: members > 0 ? Math.round((income / members) * 100) / 100 : 0 };
+      });
+    }
+    case 'expiring-credit-cards':
     default:
-      return getEmptyChartData(currentYear);
+      return buckets.map(b => ({ day: b.label, value: 0 }));
   }
 }
 

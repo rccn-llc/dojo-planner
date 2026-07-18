@@ -982,6 +982,9 @@
     "insights_title": "Aperçus",
     "time_period_monthly": "Mensuel",
     "time_period_yearly": "Annuel",
+    "time_period_last_7": "7 derniers jours",
+    "time_period_last_30": "30 derniers jours",
+    "time_period_last_90": "90 derniers jours",
     "compare_with_last_year": "Comparer avec l'année dernière"
   },
   "PerformancePage": {

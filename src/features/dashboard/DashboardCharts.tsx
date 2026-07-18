@@ -1,10 +1,8 @@
 'use client';
 
-import { ArrowRight } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { Bar, BarChart, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -138,12 +136,6 @@ export default function DashboardCharts({ memberAverageData, earningsData }: Das
             )}
           </BarChart>
         </ResponsiveContainer>
-        <div className="mt-4 flex items-center justify-end">
-          <Button variant="outline" size="sm">
-            View details
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
-        </div>
       </Card>
 
       {/* Earnings Chart */}
@@ -217,12 +209,6 @@ export default function DashboardCharts({ memberAverageData, earningsData }: Das
             )}
           </BarChart>
         </ResponsiveContainer>
-        <div className="mt-4 flex items-center justify-end">
-          <Button variant="outline" size="sm">
-            View details
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
-        </div>
       </Card>
     </div>
   );

@@ -13,7 +13,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { useReportCurrentValues, useReportDetail } from '@/hooks/useReportsCache';
 
-type TimePeriod = 'monthly' | 'yearly';
+type TimePeriod = 'monthly' | 'yearly' | 'last-7' | 'last-30' | 'last-90';
+
+const DAILY_PERIODS = ['last-7', 'last-30', 'last-90'] as const;
+
+function isDailyPeriod(p: TimePeriod): p is 'last-7' | 'last-30' | 'last-90' {
+  return (DAILY_PERIODS as readonly string[]).includes(p);
+}
 type ChartType = 'bar' | 'line' | 'area';
 
 // Chart type mapping for each report - using blue-themed colors for dark/light mode visibility
@@ -151,7 +157,7 @@ const previousYearColor = 'hsl(210, 20%, 60%)';
 // Render the appropriate chart type based on report configuration
 function renderChart(
   reportId: ReportType,
-  chartData: Array<{ month?: string; year?: string; value: number; previousYear?: number }>,
+  chartData: Array<{ month?: string; year?: string; day?: string; value: number; previousYear?: number }>,
   xKey: string,
   formatValue: (value: number) => string,
   showComparison: boolean = false,
@@ -302,7 +308,8 @@ function ReportDetail({ reportId, onBack }: { reportId: ReportType; onBack: () =
   const [timePeriod, setTimePeriod] = useState<TimePeriod>('monthly');
   const [showComparison, setShowComparison] = useState(false);
 
-  const { chartData: rawChartData, insights, loading } = useReportDetail(reportId);
+  const range = isDailyPeriod(timePeriod) ? timePeriod : undefined;
+  const { chartData: rawChartData, insights, loading } = useReportDetail(reportId, range);
 
   const { data: currentValues } = useReportCurrentValues();
 
@@ -328,10 +335,13 @@ function ReportDetail({ reportId, onBack }: { reportId: ReportType; onBack: () =
     if (!rawChartData) {
       return [];
     }
+    if (isDailyPeriod(timePeriod)) {
+      return rawChartData.daily ?? [];
+    }
     return timePeriod === 'monthly' ? rawChartData.monthly : rawChartData.yearly;
   }, [rawChartData, timePeriod]);
 
-  // Check if previous year data is available (only in monthly view)
+  // Previous-year comparison is only meaningful in the monthly view.
   const hasPreviousYearData = useMemo(() => {
     if (timePeriod !== 'monthly' || !rawChartData) {
       return false;
@@ -339,7 +349,7 @@ function ReportDetail({ reportId, onBack }: { reportId: ReportType; onBack: () =
     return rawChartData.monthly.some(d => d.previousYear !== undefined);
   }, [rawChartData, timePeriod]);
 
-  const xKey = timePeriod === 'monthly' ? 'month' : 'year';
+  const xKey = isDailyPeriod(timePeriod) ? 'day' : (timePeriod === 'monthly' ? 'month' : 'year');
 
   const formatValue = useCallback((value: number) => {
     // Format currency values appropriately
@@ -411,6 +421,9 @@ function ReportDetail({ reportId, onBack }: { reportId: ReportType; onBack: () =
                 <SelectContent>
                   <SelectItem value="monthly">{t('time_period_monthly')}</SelectItem>
                   <SelectItem value="yearly">{t('time_period_yearly')}</SelectItem>
+                  <SelectItem value="last-7">{t('time_period_last_7')}</SelectItem>
+                  <SelectItem value="last-30">{t('time_period_last_30')}</SelectItem>
+                  <SelectItem value="last-90">{t('time_period_last_90')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>

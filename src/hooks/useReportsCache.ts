@@ -1,4 +1,4 @@
-import type { ReportChartData, ReportCurrentValues } from '@/services/ReportsService';
+import type { ReportChartData, ReportCurrentValues, ReportRange } from '@/services/ReportsService';
 import { useCallback, useEffect, useReducer } from 'react';
 import { client } from '@/libs/Orpc';
 
@@ -96,7 +96,7 @@ function reportDetailReducer(state: ReportDetailState, action: ReportDetailActio
   }
 }
 
-export const useReportDetail = (reportType: string | null) => {
+export const useReportDetail = (reportType: string | null, range?: ReportRange) => {
   const [state, dispatch] = useReducer(reportDetailReducer, {
     chartData: null,
     insights: [],
@@ -115,7 +115,10 @@ export const useReportDetail = (reportType: string | null) => {
       dispatch({ type: 'LOADING_START' });
       try {
         const [chartData, insights] = await Promise.all([
-          client.reports.chartData({ reportType: reportType as Parameters<typeof client.reports.chartData>[0]['reportType'] }) as Promise<ReportChartData>,
+          client.reports.chartData({
+            reportType: reportType as Parameters<typeof client.reports.chartData>[0]['reportType'],
+            ...(range ? { range } : {}),
+          }) as Promise<ReportChartData>,
           client.reports.insights({ reportType: reportType as Parameters<typeof client.reports.insights>[0]['reportType'] }) as Promise<string[]>,
         ]);
 
@@ -135,7 +138,8 @@ export const useReportDetail = (reportType: string | null) => {
     return () => {
       cancelled = true;
     };
-  }, [reportType]);
+    // `range` is part of the cache key — switching it re-fetches.
+  }, [reportType, range]);
 
   return {
     chartData: state.chartData,

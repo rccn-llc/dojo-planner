@@ -112,8 +112,21 @@ describe('Reports Router', () => {
       const result = await callHandler(chartData, input);
 
       expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
-      expect(getReportChartData).toHaveBeenCalledWith('test-org-456', 'revenue');
+      expect(getReportChartData).toHaveBeenCalledWith('test-org-456', 'revenue', undefined);
       expect(result).toEqual(mockChartData);
+    });
+
+    it('forwards the range param to the service when provided (#274)', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { getReportChartData } = await import('@/services/ReportsService');
+
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(getReportChartData).mockResolvedValue({ monthly: [], yearly: [], daily: [] });
+
+      const { chartData } = await import('./Reports');
+      await callHandler(chartData, { reportType: 'past-due', range: 'last-30' });
+
+      expect(getReportChartData).toHaveBeenCalledWith('test-org-456', 'past-due', 'last-30');
     });
 
     it('should return chart data for attendance report type', async () => {
@@ -140,7 +153,7 @@ describe('Reports Router', () => {
       const result = await callHandler(chartData, input);
 
       expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
-      expect(getReportChartData).toHaveBeenCalledWith('test-org-456', 'attendance');
+      expect(getReportChartData).toHaveBeenCalledWith('test-org-456', 'attendance', undefined);
       expect(result).toEqual(mockChartData);
     });
 
