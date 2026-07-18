@@ -46,7 +46,7 @@ src/
 │   ├── Member.ts          # Member CRUD, family linking/unlinking, HOH search, member type conversion, confirmation email, membership lifecycle (cancelMembership, holdMembership, reactivateMembership)
 │   ├── Members.ts         # Members list ops
 │   ├── Classes.ts         # Classes list & tags (create/update persist allowWalkIns + schedule instructor clerk ids)
-│   ├── Events.ts          # Events list
+│   ├── Events.ts          # Events list + event registration/enrollment (register, registrations, cancelRegistration)
 │   ├── Instructors.ts     # Instructor list (org:instructor + org:academy_owner) + updatePhoto (in-app headshot upload)
 │   ├── Tags.ts            # Tags (class, membership, all)
 │   ├── Coupons.ts         # Coupons list & active, total savings aggregation
@@ -64,7 +64,7 @@ src/
 │   ├── ClassesService.ts  # Class & schedule queries
 │   ├── ClerkRolesService.ts # Clerk Backend API (exports `clerkApiRequest` helper)
 │   ├── CouponsService.ts  # Coupon queries + organization-wide total savings aggregation
-│   ├── EventsService.ts   # Event queries
+│   ├── EventsService.ts   # Event queries + event registration (registerMemberForEvent, getEventRegistrations, cancelEventRegistration)
 │   ├── InstructorsService.ts # Org instructors from Clerk (org:instructor + org:academy_owner), DB photo overrides (instructor_profile) preferred over Clerk avatar
 │   ├── MembersService.ts  # Member operations
 │   ├── OrganizationService.ts # Org & Stripe customer storage + per-org location settings (name, address, phone, email, tax rate)
@@ -336,6 +336,29 @@ The kiosk's `PATCH /api/members/[memberId]/membership` mirrors the same precheck
 - "Reactivate" is a one-click action (no modal) — it just calls the endpoint and refreshes the cache.
 
 **Kiosk parity:** `dojo-planner-kiosk/src/app/api/members/[memberId]/membership/route.ts` PATCH handles the same three actions on the kiosk side. The hold-fee one-time charge is mirrored; the recurring hold-fee path is currently planner-only (kiosk member-area flow does short-term holds where one-time fees are the common case — this can be backported later if needed).
+
+### Event Registration / Enrollment
+
+Members are enrolled into events from the **event detail page** (`classes/events/[eventId]/page.tsx`). The page shows an "Enroll Member" button (header + registrants card) and a **Registrants card** listing enrolled members (member, tier, amount paid, with a per-row Cancel action). The `event_registration` table already existed; this feature adds the write/read/cancel paths.
+
+**Flow (`EnrollMemberModal.tsx`):**
+1. Loads all org members via `client.members.list()` (searchable).
+2. On member select, fetches their saved payment methods (`client.member.listPaymentMethods`) to determine card vs ACH and whether a charge is possible.
+3. User picks an optional billing tier (from `event.billing`) and, when the member has a saved card **and** the tier price > 0, may tick "charge saved card".
+4. On submit: if charging, calls `client.payment.process` with `paymentMethodSource: 'saved'`, `billingType: 'one-time'`, `isTaxable: true` (events are taxable) — on approval the returned `transactionId` is passed to `client.events.register` so the transaction row is back-linked to the new registration. If not charging (or no saved card / free tier), it registers directly. A decline surfaces in the modal and does NOT create the registration.
+
+**Endpoints (Events router, all `FRONT_DESK`):**
+- `events.register` — `registerMemberForEvent` (audit `EVENT_REGISTRATION_CREATE`). Verifies event + member belong to the org (registration rows carry no `organizationId` — org-scoped via the parent event), dedupes on non-cancelled event+member, resolves the tier price, inserts the row, and back-links the optional `transactionId`. Maps `MemberAlreadyRegisteredError` → 409, `EventNotFoundError`/`MemberNotFoundError` → 404.
+- `events.registrations` — `getEventRegistrations` (joined member identity + tier name; excludes cancelled). Feeds the Registrants card + the real `currentRegistrations` count (previously hardcoded to 0).
+- `events.cancelRegistration` — `cancelEventRegistration` (audit `EVENT_REGISTRATION_CANCEL`; soft-cancel: `status='cancelled'`, `cancelledAt` set). Org-scoped via the parent event.
+
+**Key Files:**
+- `src/features/events/details/EnrollMemberModal.tsx` — enroll modal (member search, tier select, charge toggle)
+- `src/services/EventsService.ts` — `registerMemberForEvent`, `getEventRegistrations`, `cancelEventRegistration` (+ `MemberAlreadyRegisteredError`/`EventNotFoundError`/`MemberNotFoundError`)
+- `src/routers/Events.ts` — `register` / `registrations` / `cancelRegistration`
+- `src/validations/EventsValidation.ts` — `RegisterForEventValidation` / `EventRegistrationsValidation` / `CancelEventRegistrationValidation`
+
+**Notes / caveats:** Charging is best-effort and only for members with a saved card (mirrors family-member billing); there's no new-card TokenEx collection in this cut (the "record without charging" path covers no-card members). Locally IQPro is null → the charge is skipped, but the registration + amountPaid still record. Calendar-hover register (part of #257) is deferred — the detail-page enroll + registrants list is the core of #257/#279.
 
 ### Payment frequency conventions
 
@@ -1135,6 +1158,8 @@ AUDIT_ACTION.CLASS_SCHEDULE_EXCEPTION_CREATE;
 AUDIT_ACTION.EVENT_CREATE;
 AUDIT_ACTION.EVENT_SESSION_CREATE;
 AUDIT_ACTION.EVENT_SESSION_CANCEL;
+AUDIT_ACTION.EVENT_REGISTRATION_CREATE; // member enrolled into an event
+AUDIT_ACTION.EVENT_REGISTRATION_CANCEL; // registration soft-cancelled
 
 // Coupon operations
 AUDIT_ACTION.COUPON_CREATE;
