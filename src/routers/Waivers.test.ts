@@ -39,6 +39,7 @@ vi.mock('@/services/WaiversService', () => ({
   createSignedWaiver: vi.fn(),
   getWaiversForMembershipPlan: vi.fn(),
   setMembershipPlanWaivers: vi.fn(),
+  setWaiverMembershipPlans: vi.fn(),
   addWaiverToMembershipPlan: vi.fn(),
   removeWaiverFromMembershipPlan: vi.fn(),
   getOrganizationMergeFields: vi.fn(),
@@ -118,6 +119,8 @@ const mockSignedWaiver = {
   signedByName: 'John Doe',
   signedByEmail: 'john@example.com',
   signedByRelationship: 'self',
+  memberSignatureDataUrl: null,
+  memberSignedByName: null,
   memberFirstName: 'John',
   memberLastName: 'Doe',
   memberEmail: 'john@example.com',
@@ -1543,6 +1546,55 @@ describe('Waivers Router', () => {
         AUDIT_ACTION.MERGE_FIELD_DELETE,
         AUDIT_ENTITY_TYPE.WAIVER_MERGE_FIELD,
         { entityId: 'merge-field-1', status: 'failure', error: 'DB failure' },
+      );
+    });
+  });
+
+  describe('setWaiverMemberships (#267)', () => {
+    it('sets the membership plans for a waiver (ACADEMY_OWNER) and audits success', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { setWaiverMembershipPlans } = await import('@/services/WaiversService');
+      const { audit } = await import('@/services/AuditService');
+
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(setWaiverMembershipPlans).mockResolvedValue(undefined);
+
+      const { setWaiverMemberships } = await import('./Waivers');
+      const result = await callHandler(setWaiverMemberships, {
+        waiverTemplateId: 'template-1',
+        membershipPlanIds: ['plan-a', 'plan-b'],
+      });
+
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
+      expect(setWaiverMembershipPlans).toHaveBeenCalledWith('template-1', ['plan-a', 'plan-b']);
+      expect(audit).toHaveBeenCalledWith(
+        mockContext,
+        AUDIT_ACTION.MEMBERSHIP_WAIVER_SET,
+        AUDIT_ENTITY_TYPE.MEMBERSHIP_WAIVER,
+        { entityId: 'template-1', status: 'success' },
+      );
+      expect(result).toEqual({});
+    });
+
+    it('audits failure and wraps a thrown error as a 500', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { setWaiverMembershipPlans } = await import('@/services/WaiversService');
+      const { audit } = await import('@/services/AuditService');
+
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(setWaiverMembershipPlans).mockRejectedValue(new Error('DB failure'));
+
+      const { setWaiverMemberships } = await import('./Waivers');
+
+      await expect(
+        callHandler(setWaiverMemberships, { waiverTemplateId: 'template-1', membershipPlanIds: [] }),
+      ).rejects.toMatchObject({ status: 500 });
+
+      expect(audit).toHaveBeenCalledWith(
+        mockContext,
+        AUDIT_ACTION.MEMBERSHIP_WAIVER_SET,
+        AUDIT_ENTITY_TYPE.MEMBERSHIP_WAIVER,
+        { entityId: 'template-1', status: 'failure', error: 'DB failure' },
       );
     });
   });

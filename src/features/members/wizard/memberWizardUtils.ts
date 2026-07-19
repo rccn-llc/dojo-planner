@@ -92,6 +92,9 @@ export function buildSignedWaiverPayload(
     signedByName: data.waiverSignedByName || firstName,
     signedByRelationship: data.waiverSignedByRelationship || 'self',
     ...(data.waiverGuardianEmail && { signedByEmail: data.waiverGuardianEmail }),
+    // Minor member's own signature, captured alongside the guardian's (#268).
+    ...(data.waiverMemberSignatureDataUrl && { memberSignatureDataUrl: data.waiverMemberSignatureDataUrl }),
+    ...(data.waiverMemberSignedByName && { memberSignedByName: data.waiverMemberSignedByName }),
     memberFirstName: firstName,
     memberLastName: lastName,
     memberEmail: email,

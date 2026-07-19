@@ -1622,6 +1622,9 @@ async function seedOrganization(organizationId: string) {
       signedByName: isMinor ? `Guardian of ${member.firstName}` : `${member.firstName} ${member.lastName}`,
       signedByEmail: member.email,
       signedByRelationship: isMinor ? 'parent' : null,
+      // Minors sign alongside the guardian (#268).
+      memberSignatureDataUrl: isMinor ? placeholderSignature : null,
+      memberSignedByName: isMinor ? `${member.firstName} ${member.lastName}` : null,
       memberFirstName: member.firstName,
       memberLastName: member.lastName,
       memberEmail: member.email,

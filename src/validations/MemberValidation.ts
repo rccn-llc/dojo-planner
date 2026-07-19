@@ -142,6 +142,8 @@ export const SendConfirmationEmailValidation = z.object({
     signatureDataUrl: z.string().min(1),
     signedByName: z.string().min(1),
     signedByRelationship: z.string().optional(),
+    memberSignatureDataUrl: z.string().optional(),
+    memberSignedByName: z.string().optional(),
     signedAt: z.coerce.date(),
     membershipPlanName: z.string().optional(),
     membershipPlanPrice: z.number().optional(),

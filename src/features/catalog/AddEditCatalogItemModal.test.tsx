@@ -377,6 +377,45 @@ describe('AddEditCatalogItemModal', () => {
       });
     });
 
+    it('reorders variants and persists the new order on save (#271)', async () => {
+      render(
+        <AddEditCatalogItemModal
+          isOpen={true}
+          onCloseAction={mockHandlers.onCloseAction}
+          onSaveAction={mockHandlers.onSaveAction}
+          item={mockItem}
+          categories={mockCategories}
+          events={mockEvents}
+        />,
+      );
+
+      // mockItem loads variants [A1, A2]. Move the second (A2) up.
+      await userEvent.click(page.getByTestId('variant-1-move-up-button'));
+      await userEvent.click(page.getByRole('button', { name: 'save_button' }));
+
+      await waitFor(() => {
+        const savedForm = mockHandlers.onSaveAction.mock.calls.at(-1)?.[0] as { variants: Array<{ name: string }> };
+
+        expect(savedForm.variants.map(v => v.name)).toEqual(['A2', 'A1']);
+      });
+    });
+
+    it('disables move-up on the first variant and move-down on the last (#271)', async () => {
+      render(
+        <AddEditCatalogItemModal
+          isOpen={true}
+          onCloseAction={mockHandlers.onCloseAction}
+          onSaveAction={mockHandlers.onSaveAction}
+          item={mockItem}
+          categories={mockCategories}
+          events={mockEvents}
+        />,
+      );
+
+      await expect.element(page.getByTestId('variant-0-move-up-button')).toBeDisabled();
+      await expect.element(page.getByTestId('variant-1-move-down-button')).toBeDisabled();
+    });
+
     it('should display success message after successful add', async () => {
       render(
         <AddEditCatalogItemModal

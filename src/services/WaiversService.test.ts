@@ -2694,4 +2694,34 @@ describe('WaiversService', () => {
       await expect(deleteMergeField('nonexistent', 'test-org-123')).resolves.toBeUndefined();
     });
   });
+
+  describe('setWaiverMembershipPlans (#267)', () => {
+    it('deletes existing associations by waiver, then inserts one row per plan', async () => {
+      const { db } = await import('@/libs/DB');
+      const insertValues = vi.fn(() => Promise.resolve());
+      (db.insert as any).mockReturnValueOnce({ values: insertValues });
+
+      const { setWaiverMembershipPlans } = await import('./WaiversService');
+      await setWaiverMembershipPlans('waiver-1', ['plan-a', 'plan-b']);
+
+      // Deletes keyed on the waiver template (not the plan).
+      expect(db.delete).toHaveBeenCalled();
+      // Inserts one junction row per selected membership plan.
+      expect(insertValues).toHaveBeenCalledWith([
+        { membershipPlanId: 'plan-a', waiverTemplateId: 'waiver-1', isRequired: true, sortOrder: 0 },
+        { membershipPlanId: 'plan-b', waiverTemplateId: 'waiver-1', isRequired: true, sortOrder: 1 },
+      ]);
+    });
+
+    it('only deletes (no insert) when the plan list is empty', async () => {
+      const { db } = await import('@/libs/DB');
+      (db.insert as any).mockClear();
+
+      const { setWaiverMembershipPlans } = await import('./WaiversService');
+      await setWaiverMembershipPlans('waiver-1', []);
+
+      expect(db.delete).toHaveBeenCalled();
+      expect(db.insert).not.toHaveBeenCalled();
+    });
+  });
 });

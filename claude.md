@@ -56,7 +56,7 @@ src/
 │   ├── Reports.ts         # Report values, chart data, dynamic insights
 │   ├── Payment.ts         # Payment processing (one-time + autopay subscriptions) + payment method registration (no charge)
 │   ├── SaasSubscription.ts # Org SaaS billing (getCurrentPlan, subscribe, changePlan, cancel, getBillingHistory, getTokenizationConfig)
-│   └── Waivers.ts         # Waiver templates, signing, versioning, membership associations, merge fields
+│   └── Waivers.ts         # Waiver templates, signing, versioning, membership associations (both directions: `setMembershipWaivers` sets a plan's waivers, `setWaiverMemberships` sets a waiver's plans — #267), merge fields
 │
 ├── services/              # Business logic layer
 │   ├── BillingService.ts  # Stripe integration
@@ -309,7 +309,7 @@ The membership lifecycle on the member detail page is implemented as three route
 6. Mirrors `member.status='cancelled'` only when this was the member's last active membership (same semantics as the IQPro webhook handler).
 7. Audits `MEMBERSHIP_CANCEL` and (when charged) `CANCELLATION_FEE_CHARGE`.
 
-The cancellation fee is best-effort: if the charge fails, the cancellation still proceeds and the failure is surfaced as a partial-success warning in the UI rather than a rollback.
+The cancellation fee is best-effort: if the charge fails, the cancellation still proceeds and the failure is surfaced as a partial-success warning in the UI rather than a rollback. Regardless of whether the live IQPro charge runs (it's skipped for synthetic/seed subscriptions and can fail against the sandbox), an owed, non-waived fee is always written to the member's billing history as a `cancellation_fee` transaction — `'paid'` when captured live, `'pending'` when not — so the fee never silently disappears (#239).
 
 **Hold:** `member.holdMembership(memberId, memberMembershipId)`
 0. **Enforce `hold_limit_per_year`** if set on the plan. Counts prior successful `memberMembership.hold` audit events for the same `memberMembershipId` in the trailing 12 months. If the count is at the limit, throws `HoldLimitReachedError` → router maps to a 409 with a clear message. 0 or null = unlimited.
@@ -795,7 +795,7 @@ await deleteUserWithOrganization();
 - `catalog_item_category` - Item-category associations (M:N)
 - `catalog_item_image` - Product images
 - `waiver_template` - Waiver templates with placeholders, guardian settings, and immutable versioning (`parentId` for archive rows)
-- `signed_waiver` - Signed waiver records with signature data, rendered content, membership plan snapshot (name, price, frequency, contract length, signup fee, trial status), and coupon/discount snapshot (code, type, amount, discounted price)
+- `signed_waiver` - Signed waiver records with signature data, rendered content, membership plan snapshot (name, price, frequency, contract length, signup fee, trial status), and coupon/discount snapshot (code, type, amount, discounted price). For minors requiring a guardian, `signatureDataUrl`/`signedByName` hold the **guardian's** signature and `memberSignatureDataUrl`/`memberSignedByName` (nullable) hold the **minor member's own** signature — both captured at signing (#268)
 - `membership_waiver` - Junction table linking memberships to required waivers
 - `waiver_merge_field` - Configurable placeholder fields for waiver templates
 

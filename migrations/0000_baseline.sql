@@ -473,6 +473,8 @@ CREATE TABLE "signed_waiver" (
 	"signed_by_name" text NOT NULL,
 	"signed_by_email" text,
 	"signed_by_relationship" text,
+	"member_signature_data_url" text,
+	"member_signed_by_name" text,
 	"member_first_name" text NOT NULL,
 	"member_last_name" text NOT NULL,
 	"member_email" text NOT NULL,

@@ -332,11 +332,18 @@ export const signedWaiverSchema = pgTable(
     couponAmount: text('coupon_amount'), // Display string: '15%', '$50', '7 Days'
     couponDiscountedPrice: real('coupon_discounted_price'), // Final price after discount
 
-    // Signature data
+    // Signature data. `signatureDataUrl` is the primary signer — for a minor
+    // requiring a guardian this is the GUARDIAN's signature (the legal signer);
+    // the member's own signature is captured separately below (#268).
     signatureDataUrl: text('signature_data_url').notNull(), // Base64 signature image from canvas
     signedByName: text('signed_by_name').notNull(), // Name of the person who signed
     signedByEmail: text('signed_by_email'), // Email of signer (for minors, guardian email)
     signedByRelationship: text('signed_by_relationship'), // null = self, or 'parent', 'guardian', 'legal_guardian'
+    // Second signature captured when a minor's waiver requires a guardian: the
+    // MEMBER (minor) also signs alongside the guardian (#268). Nullable — only
+    // set when requiresGuardian applied at signing.
+    memberSignatureDataUrl: text('member_signature_data_url'), // Base64 signature image (the minor's own signature)
+    memberSignedByName: text('member_signed_by_name'), // The minor member's printed name on their signature
 
     // Member details at time of signing (snapshot for legal compliance)
     memberFirstName: text('member_first_name').notNull(),

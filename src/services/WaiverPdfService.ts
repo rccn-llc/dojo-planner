@@ -28,6 +28,10 @@ export type WaiverPdfInput = {
   signedByName: string;
   /** Relationship to member (null = self) */
   signedByRelationship?: string | null;
+  /** Minor member's own signature, captured alongside the guardian's (#268) */
+  memberSignatureDataUrl?: string | null;
+  /** Minor member's printed name on their signature (#268) */
+  memberSignedByName?: string | null;
   /** Date when the waiver was signed */
   signedAt: Date;
   /** IP address at signing (optional) */
@@ -268,10 +272,13 @@ export function generateWaiverPdf(input: WaiverPdfInput): Blob {
   addText('SIGNATURE', 12, true);
   yPosition += 3;
 
-  // Signed by info
+  // Signed by info. When a guardian signed, label this as the guardian's
+  // signature so the separate member signature below is unambiguous (#268).
+  const hasMemberSignature = !!input.memberSignatureDataUrl;
+  const signerLabel = hasMemberSignature ? 'Guardian signed by' : 'Signed by';
   const signerInfo = input.signedByRelationship
-    ? `Signed by: ${input.signedByName} (${input.signedByRelationship})`
-    : `Signed by: ${input.signedByName}`;
+    ? `${signerLabel}: ${input.signedByName} (${input.signedByRelationship})`
+    : `${signerLabel}: ${input.signedByName}`;
   addText(signerInfo, 10);
 
   // Date signed
@@ -318,6 +325,27 @@ export function generateWaiverPdf(input: WaiverPdfInput): Blob {
     console.error('Failed to add signature image to PDF:', error);
     addText('[Signature on file]', 10);
     yPosition += 10;
+  }
+
+  // Member (minor) signature — rendered when a guardian also signed (#268).
+  if (input.memberSignatureDataUrl) {
+    yPosition += 2;
+    addText(`Member signed by: ${input.memberSignedByName ?? `${input.memberFirstName} ${input.memberLastName}`}`, 10);
+    yPosition += 3;
+    try {
+      if (input.memberSignatureDataUrl.startsWith('data:image/')) {
+        const signatureWidth = 80;
+        const signatureHeight = 30;
+        doc.setDrawColor(200);
+        doc.rect(margin, yPosition, signatureWidth + 4, signatureHeight + 4);
+        doc.addImage(input.memberSignatureDataUrl, 'PNG', margin + 2, yPosition + 2, signatureWidth, signatureHeight);
+        yPosition += signatureHeight + 10;
+      }
+    } catch (error) {
+      console.error('Failed to add member signature image to PDF:', error);
+      addText('[Member signature on file]', 10);
+      yPosition += 10;
+    }
   }
 
   // ========================================

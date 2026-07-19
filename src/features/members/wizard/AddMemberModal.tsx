@@ -153,6 +153,8 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
           signatureDataUrl: wizard.data.waiverSignatureDataUrl,
           signedByName: wizard.data.waiverSignedByName || wizard.data.firstName,
           ...(wizard.data.waiverSignedByRelationship && { signedByRelationship: wizard.data.waiverSignedByRelationship }),
+          ...(wizard.data.waiverMemberSignatureDataUrl && { memberSignatureDataUrl: wizard.data.waiverMemberSignatureDataUrl }),
+          ...(wizard.data.waiverMemberSignedByName && { memberSignedByName: wizard.data.waiverMemberSignedByName }),
           signedAt: wizard.data.waiverSignedAt || new Date(),
           ...(wizard.data.membershipPlanName && { membershipPlanName: wizard.data.membershipPlanName }),
           ...(wizard.data.membershipPlanPrice !== undefined && { membershipPlanPrice: wizard.data.membershipPlanPrice }),

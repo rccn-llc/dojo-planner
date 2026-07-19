@@ -57,6 +57,8 @@ export type SignedWaiver = {
   signedByName: string;
   signedByEmail: string | null;
   signedByRelationship: string | null;
+  memberSignatureDataUrl: string | null;
+  memberSignedByName: string | null;
   memberFirstName: string;
   memberLastName: string;
   memberEmail: string;
@@ -123,6 +125,8 @@ type CreateSignedWaiverInput = {
   signedByName: string;
   signedByEmail?: string;
   signedByRelationship?: string;
+  memberSignatureDataUrl?: string;
+  memberSignedByName?: string;
   memberFirstName: string;
   memberLastName: string;
   memberEmail: string;
@@ -591,6 +595,8 @@ export async function getMemberSignedWaivers(memberId: string): Promise<SignedWa
     signedByName: w.signedByName,
     signedByEmail: w.signedByEmail,
     signedByRelationship: w.signedByRelationship,
+    memberSignatureDataUrl: w.memberSignatureDataUrl,
+    memberSignedByName: w.memberSignedByName,
     memberFirstName: w.memberFirstName,
     memberLastName: w.memberLastName,
     memberEmail: w.memberEmail,
@@ -640,6 +646,8 @@ export async function getSignedWaiverById(waiverId: string, organizationId: stri
     signedByName: w.signedByName,
     signedByEmail: w.signedByEmail,
     signedByRelationship: w.signedByRelationship,
+    memberSignatureDataUrl: w.memberSignatureDataUrl,
+    memberSignedByName: w.memberSignedByName,
     memberFirstName: w.memberFirstName,
     memberLastName: w.memberLastName,
     memberEmail: w.memberEmail,
@@ -697,6 +705,8 @@ export async function createSignedWaiver(
       signedByName: input.signedByName,
       signedByEmail: input.signedByEmail,
       signedByRelationship: input.signedByRelationship,
+      memberSignatureDataUrl: input.memberSignatureDataUrl,
+      memberSignedByName: input.memberSignedByName,
       memberFirstName: input.memberFirstName,
       memberLastName: input.memberLastName,
       memberEmail: input.memberEmail,
@@ -734,6 +744,8 @@ export async function createSignedWaiver(
     signedByName: w.signedByName,
     signedByEmail: w.signedByEmail,
     signedByRelationship: w.signedByRelationship,
+    memberSignatureDataUrl: w.memberSignatureDataUrl,
+    memberSignedByName: w.memberSignedByName,
     memberFirstName: w.memberFirstName,
     memberLastName: w.memberLastName,
     memberEmail: w.memberEmail,
@@ -820,6 +832,34 @@ export async function setMembershipPlanWaivers(
   if (waiverTemplateIds.length > 0) {
     await db.insert(membershipWaiverSchema).values(
       waiverTemplateIds.map((waiverTemplateId, index) => ({
+        membershipPlanId,
+        waiverTemplateId,
+        isRequired: true,
+        sortOrder: index,
+      })),
+    );
+  }
+}
+
+/**
+ * Set the membership plans associated with a given waiver template — the
+ * INVERSE of `setMembershipPlanWaivers`. Used by the waiver detail page's
+ * "Associated Memberships" card. Previously that card mistakenly called
+ * `setMembershipPlanWaivers` with the waiver id in the `membershipPlanId` slot,
+ * so nothing ever saved (#267). This keys the junction rows on the waiver
+ * template and replaces its full set of plan associations.
+ */
+export async function setWaiverMembershipPlans(
+  waiverTemplateId: string,
+  membershipPlanIds: string[],
+): Promise<void> {
+  // Remove existing associations for this waiver
+  await db.delete(membershipWaiverSchema).where(eq(membershipWaiverSchema.waiverTemplateId, waiverTemplateId));
+
+  // Add new associations, one row per selected membership plan
+  if (membershipPlanIds.length > 0) {
+    await db.insert(membershipWaiverSchema).values(
+      membershipPlanIds.map((membershipPlanId, index) => ({
         membershipPlanId,
         waiverTemplateId,
         isRequired: true,

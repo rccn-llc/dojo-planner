@@ -2,7 +2,7 @@
 
 import type { CatalogCategory, CatalogItem, CatalogItemFormData, CatalogItemType, VariantInput } from './types';
 import type { EventData } from '@/hooks/useEventsCache';
-import { Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -210,6 +210,23 @@ function CatalogItemFormContent({
       if (existing) {
         updatedVariants[index] = { ...existing, [field]: value };
       }
+      return { ...prev, variants: updatedVariants };
+    });
+  };
+
+  // Reorder a variant up/down (#271). Variant order is persisted from the array
+  // order on save — `updateCatalogItem`/`createCatalogItem` write each variant's
+  // `sortOrder` from its index — so reordering the array here is all that's
+  // needed. A keyboard-accessible move avoids adding a drag-and-drop dependency.
+  const handleMoveVariant = (index: number, direction: 'up' | 'down') => {
+    setFormData((prev) => {
+      const target = direction === 'up' ? index - 1 : index + 1;
+      if (target < 0 || target >= prev.variants.length) {
+        return prev;
+      }
+      const updatedVariants = [...prev.variants];
+      const [moved] = updatedVariants.splice(index, 1);
+      updatedVariants.splice(target, 0, moved!);
       return { ...prev, variants: updatedVariants };
     });
   };
@@ -457,6 +474,32 @@ function CatalogItemFormContent({
                               className="w-16"
                               data-testid={`variant-${index}-stock-input`}
                             />
+                          </div>
+                          <div className="flex flex-col">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleMoveVariant(index, 'up')}
+                              disabled={index === 0}
+                              className="size-5"
+                              aria-label={t('move_variant_up')}
+                              data-testid={`variant-${index}-move-up-button`}
+                            >
+                              <ChevronUp className="size-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleMoveVariant(index, 'down')}
+                              disabled={index === formData.variants.length - 1}
+                              className="size-5"
+                              aria-label={t('move_variant_down')}
+                              data-testid={`variant-${index}-move-down-button`}
+                            >
+                              <ChevronDown className="size-4" />
+                            </Button>
                           </div>
                           <Button
                             type="button"

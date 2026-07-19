@@ -56,6 +56,7 @@ import {
   removeWaiverFromMembership,
   resolveTemplatePlaceholders,
   setMembershipWaiverAssociations,
+  setWaiverMemberships,
   updateMergeFieldHandler,
   updateTemplate as updateWaiverTemplate,
 } from './Waivers';
@@ -228,6 +229,7 @@ export const router = {
     createSignedWaiver: createSignedWaiverRecord,
     getWaiversForMembership,
     setMembershipWaivers: setMembershipWaiverAssociations,
+    setWaiverMemberships,
     addWaiverToMembership,
     removeWaiverFromMembership,
     listTemplateVersions: listWaiverTemplateVersions,

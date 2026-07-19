@@ -12,10 +12,18 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Minimal mocks for upstream deps so the module loads cleanly. The lifecycle
-// helpers we're testing don't touch the DB or IQPro directly in the tests
-// below (we test normalizeFrequency only here), so empty stubs are fine.
-vi.mock('@/libs/DB', () => ({ db: {} }));
+// Capturing db mock — the cancellation-fee test below asserts on inserted rows.
+// `normalizeFrequency` tests don't touch the db, so the stub is inert for them.
+const dbInsertValues = vi.fn();
+const dbUpdateWhere = vi.fn();
+const dbMock = {
+  insert: vi.fn(() => ({ values: dbInsertValues })),
+  update: vi.fn(() => ({ set: vi.fn(() => ({ where: dbUpdateWhere })) })),
+  query: {
+    memberMembershipSchema: { findFirst: vi.fn().mockResolvedValue(undefined) },
+  },
+};
+vi.mock('@/libs/DB', () => ({ db: dbMock }));
 vi.mock('@/libs/IQPro', () => ({
   assertTransactionApproved: vi.fn(),
   buildServiceFeeAdjustment: vi.fn(),
@@ -30,10 +38,11 @@ vi.mock('@/libs/Logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 vi.mock('@/models/Schema', () => ({
+  auditEventSchema: {},
   couponSchema: {},
   couponUsageSchema: {},
-  memberMembershipSchema: {},
-  memberSchema: {},
+  memberMembershipSchema: { id: 'id', memberId: 'member_id', status: 'status' },
+  memberSchema: { id: 'id', status: 'status' },
   membershipPlanSchema: {},
   paymentMethodSchema: {},
   transactionSchema: {},
@@ -42,6 +51,7 @@ vi.mock('drizzle-orm', () => ({
   and: vi.fn(),
   desc: vi.fn(),
   eq: vi.fn(),
+  gte: vi.fn(),
   sql: vi.fn(),
 }));
 vi.mock('./EmailService', () => ({
@@ -116,5 +126,81 @@ describe('normalizeFrequency', () => {
     const { normalizeFrequency } = await import('./MemberPaymentService');
 
     expect(normalizeFrequency('whatever-cadence')).toBeNull();
+  });
+});
+
+describe('cancelMembershipLifecycle — records cancellation fee in billing history (#239)', () => {
+  const makeCtx = (cancellationFee: number) => ({
+    member: {
+      id: 'mem-1',
+      organizationId: 'org-1',
+      firstName: 'Jane',
+      lastName: 'Doe',
+      email: 'jane@example.com',
+      phone: null,
+      iqproCustomerId: null, // synthetic/no IQPro → live charge path is skipped
+    },
+    membership: {
+      id: 'mm-1',
+      memberId: 'mem-1',
+      membershipPlanId: 'plan-1',
+      status: 'active',
+      iqproSubscriptionId: null,
+      iqproHoldFeeSubscriptionId: null,
+    },
+    plan: {
+      id: 'plan-1',
+      name: 'Monthly Unlimited',
+      cancellationFee,
+      holdFeeAmount: 0,
+      holdFeeFrequency: null,
+      holdLimitPerYear: null,
+    },
+  });
+
+  it('inserts a pending cancellation_fee row when a fee is owed but no live charge ran', async () => {
+    const { cancelMembershipLifecycle } = await import('./MemberPaymentService');
+
+    const result = await cancelMembershipLifecycle({ config: null, ctx: makeCtx(50), waiveFee: false });
+
+    // The fee is recorded even though IQPro never charged it.
+    const feeInsert = dbInsertValues.mock.calls
+      .map(c => c[0])
+      .find((row: any) => row?.transactionType === 'cancellation_fee');
+
+    expect(feeInsert).toMatchObject({
+      organizationId: 'org-1',
+      memberId: 'mem-1',
+      memberMembershipId: 'mm-1',
+      transactionType: 'cancellation_fee',
+      amount: 50,
+      status: 'pending',
+    });
+    expect(result.cancellationFeeCharged).toBe(50);
+    expect(result.success).toBe(true);
+  });
+
+  it('does NOT record a fee row when the fee is waived', async () => {
+    const { cancelMembershipLifecycle } = await import('./MemberPaymentService');
+
+    await cancelMembershipLifecycle({ config: null, ctx: makeCtx(50), waiveFee: true });
+
+    const feeInsert = dbInsertValues.mock.calls
+      .map(c => c[0])
+      .find((row: any) => row?.transactionType === 'cancellation_fee');
+
+    expect(feeInsert).toBeUndefined();
+  });
+
+  it('does NOT record a fee row when the plan has no cancellation fee', async () => {
+    const { cancelMembershipLifecycle } = await import('./MemberPaymentService');
+
+    await cancelMembershipLifecycle({ config: null, ctx: makeCtx(0), waiveFee: false });
+
+    const feeInsert = dbInsertValues.mock.calls
+      .map(c => c[0])
+      .find((row: any) => row?.transactionType === 'cancellation_fee');
+
+    expect(feeInsert).toBeUndefined();
   });
 });
