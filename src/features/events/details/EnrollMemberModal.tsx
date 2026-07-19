@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { client } from '@/libs/Orpc';
+import { rankMembersByQuery } from '@/utils/MemberSearch';
 
 type EnrollMember = {
   id: string;
@@ -121,18 +122,11 @@ export function EnrollMemberModal({
     };
   }, [isOpen]);
 
-  const filteredMembers = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return members;
-    }
-    const q = searchQuery.toLowerCase();
-    return members.filter(
-      m =>
-        m.firstName.toLowerCase().includes(q)
-        || m.lastName.toLowerCase().includes(q)
-        || m.email.toLowerCase().includes(q),
-    );
-  }, [members, searchQuery]);
+  // Prefix-priority, alphabetically-ordered member search (#244).
+  const filteredMembers = useMemo(
+    () => rankMembersByQuery(members, searchQuery),
+    [members, searchQuery],
+  );
 
   const selectedTier = useMemo(
     () => (tierId === NO_TIER ? null : billingTiers.find(b => b.id === tierId) ?? null),

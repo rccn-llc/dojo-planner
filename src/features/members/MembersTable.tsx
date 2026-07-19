@@ -6,9 +6,17 @@ import { useCallback, useMemo, useState } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Pagination } from '@/components/ui/pagination/Pagination';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { MemberCard } from '@/templates/MemberCard';
 import { StatsCards } from '@/templates/StatsCards';
+import { compareMembersAlphabetically, memberSearchRank } from '@/utils/MemberSearch';
 import { MemberFilterBar } from './MemberFilterBar';
 
 type Member = {
@@ -41,6 +49,10 @@ type MembersTableProps = {
 
 type SortField = 'firstName' | 'membershipType' | 'amountDue' | 'nextPayment' | 'status' | 'lastAccessedAt';
 type SortDirection = 'asc' | 'desc';
+
+// Page-size options for the members list (#258).
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+const DEFAULT_PAGE_SIZE = 10;
 
 // Pure presentation helpers — hoisted to module scope so they are not
 // re-allocated on every render and not recreated per row.
@@ -145,12 +157,20 @@ export function MembersTable({
   const [sortField, setSortField] = useState<SortField>('firstName');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [currentPage, setCurrentPage] = useState(initialPage);
-  const ROWS_PER_PAGE = 10;
+  const [rowsPerPage, setRowsPerPage] = useState<number>(DEFAULT_PAGE_SIZE);
 
   const handlePageChange = useCallback((page: number) => {
     setCurrentPage(page);
     onPageChangeAction?.(page);
   }, [onPageChangeAction]);
+
+  const handleRowsPerPageChange = useCallback((value: string) => {
+    const size = Number.parseInt(value, 10);
+    if (!Number.isNaN(size)) {
+      setRowsPerPage(size);
+      handlePageChange(0);
+    }
+  }, [handlePageChange]);
 
   const handleFiltersChange = useCallback((newFilters: MemberFilters) => {
     setFilters(newFilters);
@@ -179,15 +199,12 @@ export function MembersTable({
     return Array.from(types).sort();
   }, [members]);
 
+  const searchQuery = filters.search.trim().toLowerCase();
+
   const filteredMembers = useMemo(() => {
-    const searchLower = filters.search.toLowerCase();
     return members.filter((member) => {
-      // Search filter
-      const matchesSearch = filters.search === ''
-        || (member.firstName?.toLowerCase().includes(searchLower))
-        || (member.lastName?.toLowerCase().includes(searchLower))
-        || member.email.toLowerCase().includes(searchLower)
-        || (member.phone?.toLowerCase().includes(searchLower));
+      // Search filter — prefix-priority relevance (#244); null rank = no match.
+      const matchesSearch = searchQuery === '' || memberSearchRank(member, searchQuery) !== null;
 
       // Status filter
       const matchesStatus = filters.status === 'all' || member.status === filters.status;
@@ -198,55 +215,67 @@ export function MembersTable({
 
       return matchesSearch && matchesStatus && matchesMembershipType;
     });
-  }, [members, filters]);
+  }, [members, filters.status, filters.membershipType, searchQuery]);
 
-  const sortedMembers = useMemo(() => [...filteredMembers].sort((a, b) => {
-    let aValue: string | number | Date | null | undefined;
-    let bValue: string | number | Date | null | undefined;
-
-    switch (sortField) {
-      case 'firstName':
-        aValue = `${a.firstName || ''} ${a.lastName || ''}`.toLowerCase();
-        bValue = `${b.firstName || ''} ${b.lastName || ''}`.toLowerCase();
-        break;
-      case 'membershipType':
-        aValue = a.memberType || '';
-        bValue = b.memberType || '';
-        break;
-      case 'amountDue':
-        aValue = a.amountDue ? Number.parseFloat(a.amountDue) : 0;
-        bValue = b.amountDue ? Number.parseFloat(b.amountDue) : 0;
-        break;
-      case 'nextPayment':
-        aValue = a.nextPayment ? new Date(a.nextPayment).getTime() : 0;
-        bValue = b.nextPayment ? new Date(b.nextPayment).getTime() : 0;
-        break;
-      case 'status':
-        aValue = a.status.toLowerCase();
-        bValue = b.status.toLowerCase();
-        break;
-      case 'lastAccessedAt':
-        aValue = a.lastAccessedAt ? new Date(a.lastAccessedAt).getTime() : 0;
-        bValue = b.lastAccessedAt ? new Date(b.lastAccessedAt).getTime() : 0;
-        break;
-      default:
-        aValue = '';
-        bValue = '';
+  const sortedMembers = useMemo(() => {
+    // When actively searching, relevance ranking wins over the column sort
+    // (#244) — prefix matches first, then alphabetical within each rank tier.
+    if (searchQuery !== '') {
+      return [...filteredMembers].sort((a, b) => {
+        const rankA = memberSearchRank(a, searchQuery) ?? Number.MAX_SAFE_INTEGER;
+        const rankB = memberSearchRank(b, searchQuery) ?? Number.MAX_SAFE_INTEGER;
+        return (rankA - rankB) || compareMembersAlphabetically(a, b);
+      });
     }
 
-    if (aValue < bValue) {
-      return sortDirection === 'asc' ? -1 : 1;
-    }
-    if (aValue > bValue) {
-      return sortDirection === 'asc' ? 1 : -1;
-    }
-    return 0;
-  }), [filteredMembers, sortField, sortDirection]);
+    return [...filteredMembers].sort((a, b) => {
+      let aValue: string | number | Date | null | undefined;
+      let bValue: string | number | Date | null | undefined;
 
-  const totalPages = Math.ceil(sortedMembers.length / ROWS_PER_PAGE);
+      switch (sortField) {
+        case 'firstName':
+          aValue = `${a.firstName || ''} ${a.lastName || ''}`.toLowerCase();
+          bValue = `${b.firstName || ''} ${b.lastName || ''}`.toLowerCase();
+          break;
+        case 'membershipType':
+          aValue = a.memberType || '';
+          bValue = b.memberType || '';
+          break;
+        case 'amountDue':
+          aValue = a.amountDue ? Number.parseFloat(a.amountDue) : 0;
+          bValue = b.amountDue ? Number.parseFloat(b.amountDue) : 0;
+          break;
+        case 'nextPayment':
+          aValue = a.nextPayment ? new Date(a.nextPayment).getTime() : 0;
+          bValue = b.nextPayment ? new Date(b.nextPayment).getTime() : 0;
+          break;
+        case 'status':
+          aValue = a.status.toLowerCase();
+          bValue = b.status.toLowerCase();
+          break;
+        case 'lastAccessedAt':
+          aValue = a.lastAccessedAt ? new Date(a.lastAccessedAt).getTime() : 0;
+          bValue = b.lastAccessedAt ? new Date(b.lastAccessedAt).getTime() : 0;
+          break;
+        default:
+          aValue = '';
+          bValue = '';
+      }
+
+      if (aValue < bValue) {
+        return sortDirection === 'asc' ? -1 : 1;
+      }
+      if (aValue > bValue) {
+        return sortDirection === 'asc' ? 1 : -1;
+      }
+      return 0;
+    });
+  }, [filteredMembers, sortField, sortDirection, searchQuery]);
+
+  const totalPages = Math.ceil(sortedMembers.length / rowsPerPage);
   const paginatedMembers = sortedMembers.slice(
-    currentPage * ROWS_PER_PAGE,
-    (currentPage + 1) * ROWS_PER_PAGE,
+    currentPage * rowsPerPage,
+    (currentPage + 1) * rowsPerPage,
   );
 
   const handleSort = useCallback((field: SortField) => {
@@ -493,15 +522,32 @@ export function MembersTable({
                 )}
         </div>
 
-        {/* Pagination */}
+        {/* Pagination + page-size selector (#258) */}
         {!loading && sortedMembers.length > 0 && (
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            totalItems={sortedMembers.length}
-            itemsPerPage={ROWS_PER_PAGE}
-            onPageChangeAction={handlePageChange}
-          />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Rows per page</span>
+              <Select value={String(rowsPerPage)} onValueChange={handleRowsPerPageChange}>
+                <SelectTrigger size="sm" className="w-20" aria-label="Rows per page">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAGE_SIZE_OPTIONS.map(size => (
+                    <SelectItem key={size} value={String(size)}>
+                      {size}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={sortedMembers.length}
+              itemsPerPage={rowsPerPage}
+              onPageChangeAction={handlePageChange}
+            />
+          </div>
         )}
       </div>
     </div>

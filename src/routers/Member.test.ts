@@ -77,7 +77,15 @@ describe('Member Router', () => {
       { id: 'hoh-3', firstName: 'Bob', lastName: 'Johnson', email: 'bob@test.com', phone: '555-0003', photoUrl: null, status: 'active' },
     ];
 
-    it('should return all HOH members when no query is provided', async () => {
+    // With #244 an empty query returns every HOH member ordered alphabetically
+    // by "lastName firstName": Doe, Johnson, Smith.
+    const alphabetical = [
+      { id: 'hoh-1', firstName: 'John', lastName: 'Doe', email: 'john@test.com', phone: '555-0001', photoUrl: null, status: 'active' },
+      { id: 'hoh-3', firstName: 'Bob', lastName: 'Johnson', email: 'bob@test.com', phone: '555-0003', photoUrl: null, status: 'active' },
+      { id: 'hoh-2', firstName: 'Jane', lastName: 'Smith', email: 'jane@test.com', phone: null, photoUrl: null, status: 'active' },
+    ];
+
+    it('should return all HOH members alphabetically when no query is provided (#244)', async () => {
       const { guardRole } = await import('./AuthGuards');
       const { getHeadOfHouseholdMembers } = await import('@/services/MembersService');
 
@@ -89,7 +97,7 @@ describe('Member Router', () => {
 
       expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
       expect(getHeadOfHouseholdMembers).toHaveBeenCalledWith('test-org-456');
-      expect(result).toEqual({ members: mockHOHMembers });
+      expect(result).toEqual({ members: alphabetical });
     });
 
     it('should filter HOH members by query (case-insensitive name match)', async () => {
@@ -122,7 +130,7 @@ describe('Member Router', () => {
       });
     });
 
-    it('should return all members when query is whitespace only', async () => {
+    it('should return all members alphabetically when query is whitespace only (#244)', async () => {
       const { guardRole } = await import('./AuthGuards');
       const { getHeadOfHouseholdMembers } = await import('@/services/MembersService');
 
@@ -132,7 +140,7 @@ describe('Member Router', () => {
       const { searchHOH } = await import('./Member');
       const result = await callHandler(searchHOH, { query: '   ' });
 
-      expect(result).toEqual({ members: mockHOHMembers });
+      expect(result).toEqual({ members: alphabetical });
     });
   });
 

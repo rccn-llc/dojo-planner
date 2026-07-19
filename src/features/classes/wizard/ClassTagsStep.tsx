@@ -96,7 +96,7 @@ export const ClassTagsStep = ({
         {/* Selected Tags */}
         <div className="space-y-2">
           <label className="text-sm font-medium text-foreground">{t('selected_tags_label')}</label>
-          <div className="min-h-[48px] rounded-lg border border-border bg-background p-3">
+          <div className="max-h-40 min-h-12 overflow-y-auto rounded-lg border border-border bg-background p-3">
             {selectedTagObjects.length === 0
               ? (
                   <p className="text-sm text-muted-foreground">{t('no_tags_selected')}</p>
@@ -128,7 +128,7 @@ export const ClassTagsStep = ({
         {/* Available Tags */}
         <div className="space-y-2">
           <label className="text-sm font-medium text-foreground">{t('available_tags_label')}</label>
-          <div className="rounded-lg border border-border bg-background p-4">
+          <div className="max-h-96 overflow-y-auto rounded-lg border border-border bg-background p-4">
             {availableTags.length === 0
               ? (
                   <p className="text-sm text-muted-foreground">{t('all_tags_selected')}</p>

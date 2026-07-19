@@ -99,7 +99,8 @@ src/
 │   ├── AppConfig.ts       # Pricing plans, Clerk locales
 │   ├── Auth.ts            # Page-level auth helpers
 │   ├── SaasPlans.ts       # SaaS plan configuration (Basic/Growth/Enterprise pricing, features)
-│   └── SuperAdmins.ts     # Super admin username list and helper
+│   ├── SuperAdmins.ts     # Super admin username list and helper
+│   └── MemberSearch.ts    # Shared member-search relevance ranking (prefix-priority + alphabetical) used by every member-search box
 ├── validations/           # Zod schemas
 ├── types/                 # TypeScript types
 │   └── Auth.ts            # Role definitions (ORG_ROLE)
@@ -294,7 +295,18 @@ The member detail/edit page (`members/[memberId]/edit/page.tsx`) displays:
 - "Add Family Member" button (HOH only) — opens `AddFamilyMembersModal` for adding multiple family members
 - "Convert" dropdown menu — opens `ConvertMemberModal` for type conversion with business rule enforcement
 - "Actions" dropdown menu (when an active or held membership exists) — opens lifecycle modals: Place on Hold, Reactivate, Cancel Membership
+- "Archive Member" / "Restore Member" button (ACADEMY_OWNER+ only, #221) — opens `ArchiveMemberModal`. Archive calls `member.remove` (soft-archive → `status='cancelled'`, preserves all history) and navigates back to the list; Restore calls `member.restore` (→ `status='active'`) when the member is currently archived. Both are academy-owner-gated via `useHasRole(ORG_ROLE.ACADEMY_OWNER)`, mirroring the endpoints' guards.
 - Attendance records and notes
+
+### Members list & search UX
+
+The members list (`MembersTable.tsx`) is client-side paginated over the full `client.members.list()` result:
+- **Page-size selector (#258):** a "Rows per page" dropdown (10 / 25 / 50 / 100, default 10) drives the slice; changing it resets to page 0.
+- **Search relevance (#244):** the search box ranks matches via the shared `@/utils/MemberSearch` helper — name-prefix matches rank above mid-name substrings, above email/phone matches; ties break alphabetically (`lastName, firstName`). When a search query is active, relevance ordering overrides the column sort; with no query the column sort applies. The same `rankMembersByQuery` helper backs the HOH picker (`HOHSelectionStep`), the event `EnrollMemberModal`, and the server-side `member.searchHOH` endpoint, so every member search behaves identically (an empty query returns everyone alphabetically).
+
+### Class-tags picker scroll (#234)
+
+The class wizard's tag picker (`ClassTagsStep.tsx`) caps both the selected-tags and available-tags boxes with `max-h-* overflow-y-auto` (matching the `MembershipStep.tsx` convention) so a large tag list scrolls instead of pushing the wizard footer off-screen.
 
 ### Cancel / Hold / Reactivate Membership
 
