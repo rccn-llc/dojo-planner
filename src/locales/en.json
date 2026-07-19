@@ -2070,6 +2070,19 @@
     }
   },
   "MemberDetailPage": {
+    "ArchiveMemberModal": {
+      "archive_title": "Archive Member",
+      "restore_title": "Restore Member",
+      "archive_description": "Archive {memberName}? They will be marked inactive and hidden from the active roster, but their history is preserved.",
+      "restore_description": "Restore {memberName} to active status?",
+      "archive_notice": "Archiving keeps all of the member's records — you can restore them at any time. This does not delete any data.",
+      "restore_notice": "The member will be set back to active and appear on the roster again.",
+      "back_button": "Cancel",
+      "archive_confirm_button": "Archive Member",
+      "restore_confirm_button": "Restore Member",
+      "confirming_button": "Working…",
+      "error_generic": "The action could not be completed. Please try again."
+    },
     "CancelMembershipModal": {
       "title": "Cancel Membership",
       "description": "Cancel {memberName}'s {planName} membership? This action cannot be undone.",

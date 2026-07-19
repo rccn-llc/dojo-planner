@@ -7,7 +7,7 @@ import type { Member } from '@/hooks/useMembersCache';
 import type { MemberPaymentMethodData } from '@/services/MembersService';
 import type { SignedWaiverWithTemplateName } from '@/services/WaiversService';
 import { useOrganization } from '@clerk/nextjs';
-import { ArrowRightLeft, Download, MoreVertical, Pencil, Plus, Trash2, Unlink } from 'lucide-react';
+import { Archive, ArchiveRestore, ArrowRightLeft, Download, MoreVertical, Pencil, Plus, Trash2, Unlink } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
@@ -26,6 +26,7 @@ import { EditMemberPhotoModal } from '@/features/members/details/EditMemberPhoto
 import { EditPaymentMethodModal } from '@/features/members/details/EditPaymentMethodModal';
 import { MemberDetailAttendance } from '@/features/members/details/MemberDetailAttendance';
 import { MemberDetailNotes } from '@/features/members/details/MemberDetailNotes';
+import { ArchiveMemberModal } from '@/features/members/lifecycle/ArchiveMemberModal';
 import { CancelMembershipModal } from '@/features/members/lifecycle/CancelMembershipModal';
 import { HoldMembershipModal } from '@/features/members/lifecycle/HoldMembershipModal';
 import { AddFamilyMembersModal } from '@/features/members/wizard/AddFamilyMembersModal';
@@ -509,6 +510,9 @@ export default function EditMemberPage() {
   const [isHoldMembershipOpen, setIsHoldMembershipOpen] = useState(false);
   const [isReactivateLoading, setIsReactivateLoading] = useState(false);
 
+  // State for member archive/restore (#221) — academy-owner action.
+  const [archiveModalMode, setArchiveModalMode] = useState<'archive' | 'restore' | null>(null);
+
   // HOH data for family members (who is this family member's HOH?)
   const [currentHOH, setCurrentHOH] = useState<{ id: string; name: string } | null>(null);
 
@@ -572,6 +576,16 @@ export default function EditMemberPage() {
       console.error('[member.reactivateMembership] failed', err);
     } finally {
       setIsReactivateLoading(false);
+    }
+  };
+
+  // Archive/restore succeeded: refresh the members cache. On archive we also
+  // navigate back to the list since the member is no longer "active" here.
+  const handleArchiveSuccess = async () => {
+    const archived = archiveModalMode === 'archive';
+    await invalidateMembersCache();
+    if (archived) {
+      router.push(`/${locale}/dashboard/members`);
     }
   };
 
@@ -750,6 +764,11 @@ export default function EditMemberPage() {
   const canRefund = useHasRole(ORG_ROLE.ADMIN);
   const [refundingId, setRefundingId] = useState<string | null>(null);
   const [refundError, setRefundError] = useState<string | null>(null);
+
+  // Archive/restore a member is an academy-owner action (#221) — mirrors the
+  // member.remove / member.restore ACADEMY_OWNER guard. Lower roles don't see it.
+  const canArchive = useHasRole(ORG_ROLE.ACADEMY_OWNER);
+  const isArchived = currentMember?.status === 'cancelled';
 
   const handleRefund = useCallback(async (transactionId: string) => {
     setRefundingId(transactionId);
@@ -1111,6 +1130,31 @@ export default function EditMemberPage() {
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
+            )}
+            {canArchive && (
+              isArchived
+                ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1 text-sm"
+                      onClick={() => setArchiveModalMode('restore')}
+                    >
+                      <ArchiveRestore className="h-3.5 w-3.5" />
+                      Restore Member
+                    </Button>
+                  )
+                : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1 text-sm text-destructive hover:text-destructive"
+                      onClick={() => setArchiveModalMode('archive')}
+                    >
+                      <Archive className="h-3.5 w-3.5" />
+                      Archive Member
+                    </Button>
+                  )
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -1784,6 +1828,17 @@ export default function EditMemberPage() {
             onSuccess={handleLifecycleSuccess}
           />
         </>
+      )}
+
+      {currentMember && archiveModalMode && (
+        <ArchiveMemberModal
+          isOpen={archiveModalMode !== null}
+          onClose={() => setArchiveModalMode(null)}
+          memberId={currentMember.id}
+          memberName={`${currentMember.firstName || ''} ${currentMember.lastName || ''}`.trim()}
+          mode={archiveModalMode}
+          onSuccess={handleArchiveSuccess}
+        />
       )}
     </div>
   );

@@ -12,6 +12,7 @@ import { generatePdfFilename } from '@/services/WaiverPdfService';
 import { generateWaiverPdfBuffer } from '@/services/WaiverPdfService.server';
 import { AUDIT_ACTION, AUDIT_ENTITY_TYPE } from '@/types/Audit';
 import { ORG_ROLE } from '@/types/Auth';
+import { rankMembersByQuery } from '@/utils/MemberSearch';
 import { CancelMembershipValidation, DeleteMemberValidation, EditMemberValidation, GetHOHForMemberValidation, GetHOHPaymentMethodsValidation, HoldMembershipValidation, LinkFamilyMemberValidation, ListFamilyMembersValidation, MemberPaymentMethodsValidation, MemberTransactionsValidation, MemberValidation, PaymentMethodMutationValidation, ReactivateMembershipValidation, RemoveFullyMemberValidation, SearchHOHValidation, SendConfirmationEmailValidation, UnlinkFamilyMemberValidation, UpdateMemberContactInfoValidation, UpdateMemberPhotoValidation, UpdateMemberTypeValidation } from '@/validations/MemberValidation';
 import { guardAuth, guardRole } from './AuthGuards';
 
@@ -723,16 +724,9 @@ export const searchHOH = os
     const { orgId } = await guardRole(ORG_ROLE.FRONT_DESK);
     const hohMembers = await getHeadOfHouseholdMembers(orgId);
 
-    if (input.query && input.query.trim()) {
-      const q = input.query.trim().toLowerCase();
-      return {
-        members: hohMembers.filter(m =>
-          `${m.firstName} ${m.lastName}`.toLowerCase().includes(q)
-          || m.email.toLowerCase().includes(q),
-        ),
-      };
-    }
-    return { members: hohMembers };
+    // Prefix-priority, alphabetically-ordered relevance ranking (#244). An empty
+    // query returns every HOH member alphabetically.
+    return { members: rankMembersByQuery(hohMembers, input.query ?? '') };
   });
 
 export const linkFamily = os

@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { client } from '@/libs/Orpc';
+import { rankMembersByQuery } from '@/utils/MemberSearch';
 
 type HOHMember = {
   id: string;
@@ -60,19 +61,11 @@ export const HOHSelectionStep = ({
       });
   }, []);
 
-  // Filter by search query
-  const filteredMembers = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return hohMembers;
-    }
-    const query = searchQuery.toLowerCase();
-    return hohMembers.filter(
-      m =>
-        m.firstName.toLowerCase().includes(query)
-        || m.lastName.toLowerCase().includes(query)
-        || m.email.toLowerCase().includes(query),
-    );
-  }, [hohMembers, searchQuery]);
+  // Filter + rank by search query (#244) — prefix-priority, alphabetical.
+  const filteredMembers = useMemo(
+    () => rankMembersByQuery(hohMembers, searchQuery),
+    [hohMembers, searchQuery],
+  );
 
   const getInitials = (firstName: string, lastName: string) => {
     return `${firstName[0] || ''}${lastName[0] || ''}`.toUpperCase();

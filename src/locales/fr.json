@@ -2075,6 +2075,19 @@
     }
   },
   "MemberDetailPage": {
+    "ArchiveMemberModal": {
+      "archive_title": "Archiver le membre",
+      "restore_title": "Restaurer le membre",
+      "archive_description": "Archiver {memberName} ? Le membre sera marqué comme inactif et retiré de la liste active, mais son historique est conservé.",
+      "restore_description": "Restaurer {memberName} au statut actif ?",
+      "archive_notice": "L'archivage conserve tous les dossiers du membre — vous pouvez le restaurer à tout moment. Aucune donnée n'est supprimée.",
+      "restore_notice": "Le membre redeviendra actif et réapparaîtra dans la liste.",
+      "back_button": "Annuler",
+      "archive_confirm_button": "Archiver le membre",
+      "restore_confirm_button": "Restaurer le membre",
+      "confirming_button": "En cours…",
+      "error_generic": "L'action n'a pas pu être effectuée. Veuillez réessayer."
+    },
     "CancelMembershipModal": {
       "title": "Annuler l'adhésion",
       "description": "Annuler l'adhésion {planName} de {memberName} ? Cette action ne peut pas être annulée.",

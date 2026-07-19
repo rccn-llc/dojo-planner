@@ -125,6 +125,29 @@ describe('ClassTagsStep', () => {
     expect(availableTagsLabel).toBeTruthy();
   });
 
+  it('constrains the available-tags list height so it scrolls instead of overflowing (#234)', () => {
+    render(
+      <ClassTagsStep
+        data={mockData}
+        onUpdate={mockHandlers.onUpdate}
+        onNext={mockHandlers.onNext}
+        onBack={mockHandlers.onBack}
+        onCancel={mockHandlers.onCancel}
+        isLoading={false}
+        classTags={mockClassTags}
+      />,
+    );
+
+    // The available-tags box (immediately following its label) must be capped
+    // in height with vertical scroll so a large tag list can't push the wizard
+    // footer off-screen.
+    const label = page.getByText('Available Tags').element();
+    const box = label.parentElement?.querySelector('div');
+
+    expect(box?.className).toContain('max-h-96');
+    expect(box?.className).toContain('overflow-y-auto');
+  });
+
   it('should call onCancel when Cancel button is clicked', async () => {
     render(
       <ClassTagsStep

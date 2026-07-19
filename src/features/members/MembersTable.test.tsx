@@ -1270,4 +1270,74 @@ describe('MembersTable', () => {
       expect(page.getByText('Total members')).toBeInTheDocument();
     });
   });
+
+  describe('Page size selector (#258)', () => {
+    const manyMembers = Array.from({ length: 30 }, (_, i) =>
+      createMockMember({ id: String(i), firstName: `Member${String(i).padStart(2, '0')}`, lastName: 'Test', email: `m${i}@x.com` }));
+
+    it('renders a rows-per-page selector', () => {
+      render(<MembersTable members={manyMembers} onRowClickAction={vi.fn()} />);
+
+      expect(page.getByLabelText('Rows per page')).toBeInTheDocument();
+    });
+
+    it('shows only 10 rows by default (30 members → first page)', () => {
+      render(<MembersTable members={manyMembers} onRowClickAction={vi.fn()} />);
+
+      const table = page.getByRole('table');
+
+      // Row 00 is on page 1; row 10 is on page 2 (not shown yet).
+      expect(table.getByText('Member00 Test')).toBeInTheDocument();
+      expect(table.getByText('Member10 Test').elements().length).toBe(0);
+    });
+
+    it('shows more rows after choosing a larger page size', async () => {
+      render(<MembersTable members={manyMembers} onRowClickAction={vi.fn()} />);
+
+      await page.getByLabelText('Rows per page').click();
+      await page.getByRole('option', { name: '25' }).click();
+
+      const table = page.getByRole('table');
+
+      // Member10 (index 10) now fits within the 25-row page.
+      expect(table.getByText('Member10 Test')).toBeInTheDocument();
+    });
+  });
+
+  describe('Search relevance (#244)', () => {
+    it('ranks name-prefix matches above email-only matches', async () => {
+      const members = [
+        createMockMember({ id: '1', firstName: 'Zoe', lastName: 'Zilch', email: 'jane@x.com' }), // "jane" only in email
+        createMockMember({ id: '2', firstName: 'Jane', lastName: 'Doe', email: 'jd@x.com' }), // "jane" prefixes first name
+      ];
+
+      render(<MembersTable members={members} onRowClickAction={vi.fn()} />);
+
+      const searchInput = page.getByPlaceholder('search_placeholder');
+      await userEvent.fill(searchInput.element() as HTMLInputElement, 'jane');
+
+      const rows = page.getByRole('table').getByRole('row').elements();
+      // rows[0] is the header; first data row should be the name-prefix match.
+      const firstDataRow = rows[1]!;
+
+      expect(firstDataRow.textContent).toContain('Jane Doe');
+    });
+
+    it('filters out members that do not match at all', async () => {
+      const members = [
+        createMockMember({ id: '1', firstName: 'Jane', lastName: 'Doe', email: 'jane@x.com' }),
+        createMockMember({ id: '2', firstName: 'Bob', lastName: 'Smith', email: 'bob@x.com' }),
+      ];
+
+      render(<MembersTable members={members} onRowClickAction={vi.fn()} />);
+
+      const searchInput = page.getByPlaceholder('search_placeholder');
+      await userEvent.fill(searchInput.element() as HTMLInputElement, 'jane');
+
+      const table = page.getByRole('table');
+
+      expect(table.getByText('Jane Doe')).toBeInTheDocument();
+      expect(table.getByText('Bob Smith').elements().length).toBe(0);
+    });
+  });
 });
