@@ -1,20 +1,44 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Mock DashboardService
+// Mock DashboardService. The N+1 refactor moved the shared "members as of"
+// helpers here; the chart builders import them, so we mock them too. Their
+// default implementations delegate to the same `mockDbResult`/`mockGroupedRows`
+// data the DB mock uses, so existing tests keep working with minimal changes.
+let mockDbResult: unknown[] = [];
+// Rows returned by grouped date_trunc queries (`{ bucket, total }`). Defaults to
+// `mockDbResult` when not explicitly set.
+let mockGroupedRows: unknown[] | null = null;
+// Rows returned by the "members as of" fetch (`{ createdAt, status, updatedAt }`).
+let mockMemberAsOfRows: Array<{ createdAt: Date; status: string; updatedAt: Date }> = [];
+
 vi.mock('./DashboardService', () => ({
   getFinancialStats: vi.fn(),
+  fetchMemberAsOfRows: vi.fn(async () => mockMemberAsOfRows),
+  countMembersAsOf: vi.fn((rows: Array<{ createdAt: Date; status: string; updatedAt: Date }>, at: Date) => {
+    const atMs = at.getTime();
+    let n = 0;
+    for (const row of rows) {
+      if (row.createdAt.getTime() <= atMs && (row.status !== 'cancelled' || row.updatedAt.getTime() > atMs)) {
+        n++;
+      }
+    }
+    return n;
+  }),
 }));
 
-// Mock database with dynamic result builder
-let mockDbResult: unknown[] = [];
-
-// Create a chain that can be both awaited AND have methods called on it
+// A promise that also exposes `.groupBy()` (resolving grouped rows) and
+// `.orderBy()`, so both a bare `await db…where(...)` and a
+// `db…where(...).groupBy(...)` (awaited) resolve correctly.
 const createAwaitableChainWithMethods = () => {
   const promise = Promise.resolve(mockDbResult);
   return Object.assign(promise, {
-    groupBy: vi.fn().mockReturnValue({
-      orderBy: vi.fn().mockResolvedValue(mockDbResult),
+    groupBy: vi.fn(() => {
+      const inner = Promise.resolve(mockGroupedRows ?? mockDbResult);
+      return Object.assign(inner, {
+        orderBy: vi.fn().mockResolvedValue(mockGroupedRows ?? mockDbResult),
+      });
     }),
+    orderBy: vi.fn().mockResolvedValue(mockGroupedRows ?? mockDbResult),
   });
 };
 
@@ -27,9 +51,7 @@ const createSelectChain = () => ({
         where: vi.fn().mockResolvedValue(mockDbResult),
       }),
     }),
-    groupBy: vi.fn().mockReturnValue({
-      orderBy: vi.fn().mockResolvedValue(mockDbResult),
-    }),
+    groupBy: vi.fn(() => Promise.resolve(mockGroupedRows ?? mockDbResult)),
   }),
 });
 
@@ -38,6 +60,18 @@ vi.mock('@/libs/DB', () => ({
     select: vi.fn(() => createSelectChain()),
   },
 }));
+
+// Build `{ bucket, total }` grouped rows for the last N day-buckets (matching
+// the day-start keys the service maps against), each with the same total.
+function dailyGroupedRows(days: number, total: number): Array<{ bucket: Date; total: number }> {
+  const today = new Date();
+  const rows: Array<{ bucket: Date; total: number }> = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
+    rows.push({ bucket: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0), total });
+  }
+  return rows;
+}
 
 vi.mock('@/models/Schema', () => ({
   memberSchema: {
@@ -73,6 +107,8 @@ describe('ReportsService', () => {
     vi.clearAllMocks();
     vi.resetModules();
     mockDbResult = [];
+    mockGroupedRows = null;
+    mockMemberAsOfRows = [];
   });
 
   // ===========================================================================
@@ -163,7 +199,8 @@ describe('ReportsService', () => {
     });
 
     it('should return chart data for accounts-autopay-suspended report type', async () => {
-      mockDbResult = [{ count: 5 }];
+      // As-of point-in-time count: rows carry createdAt (fetch-once + JS bucketing).
+      mockDbResult = [{ createdAt: new Date(new Date().getFullYear() - 5, 0, 1) }];
       const { getReportChartData } = await import('./ReportsService');
 
       const result = await getReportChartData('test-org-123', 'accounts-autopay-suspended');
@@ -301,7 +338,7 @@ describe('ReportsService', () => {
     });
 
     it('sums paid transactions for payments-last-30-days daily buckets', async () => {
-      mockDbResult = [{ total: 250 }];
+      mockGroupedRows = dailyGroupedRows(7, 250);
       const { getReportChartData } = await import('./ReportsService');
 
       const result = await getReportChartData('test-org-123', 'payments-last-30-days', 'last-7');
@@ -311,7 +348,7 @@ describe('ReportsService', () => {
     });
 
     it('takes the absolute value of summed amounts (refunds/adjustments)', async () => {
-      mockDbResult = [{ total: -500 }];
+      mockGroupedRows = dailyGroupedRows(7, -500);
       const { getReportChartData } = await import('./ReportsService');
 
       const result = await getReportChartData('test-org-123', 'past-due', 'last-7');
@@ -320,7 +357,10 @@ describe('ReportsService', () => {
     });
 
     it('counts point-in-time members for accounts-autopay-suspended daily buckets', async () => {
-      mockDbResult = [{ count: 3 }];
+      // 3 past_due members all created before the earliest bucket → every bucket
+      // counts all 3 (fetch-once + JS bucketing).
+      const longAgo = new Date(new Date().getFullYear() - 5, 0, 1);
+      mockDbResult = [{ createdAt: longAgo }, { createdAt: longAgo }, { createdAt: longAgo }];
       const { getReportChartData } = await import('./ReportsService');
 
       const result = await getReportChartData('test-org-123', 'accounts-autopay-suspended', 'last-7');
@@ -330,7 +370,10 @@ describe('ReportsService', () => {
     });
 
     it('computes per-student income for income-per-student daily buckets', async () => {
-      mockDbResult = [{ total: 1000, count: 4 }];
+      // 1000 income per day; 4 active members existing before all buckets.
+      mockGroupedRows = dailyGroupedRows(7, 1000);
+      const longAgo = new Date(new Date().getFullYear() - 5, 0, 1);
+      mockMemberAsOfRows = Array.from({ length: 4 }, () => ({ createdAt: longAgo, status: 'active', updatedAt: longAgo }));
       const { getReportChartData } = await import('./ReportsService');
 
       const result = await getReportChartData('test-org-123', 'income-per-student', 'last-7');
@@ -356,6 +399,66 @@ describe('ReportsService', () => {
 
       expect(result.daily).toHaveLength(7);
       expect(result.daily?.every(d => d.value === 0)).toBe(true);
+    });
+  });
+
+  // ===========================================================================
+  // countPastDueAsOf — exported pure counter (N+1 consolidation)
+  // ===========================================================================
+
+  describe('countPastDueAsOf (pure)', () => {
+    it('counts past_due members created at or before the point', async () => {
+      const { countPastDueAsOf } = await import('./ReportsService');
+      const at = new Date('2026-06-15T00:00:00Z');
+      const createdAts = [
+        new Date('2026-01-01T00:00:00Z'), // before → counted
+        new Date('2026-06-15T00:00:00Z'), // exactly at → counted (<=)
+        new Date('2026-07-01T00:00:00Z'), // after → excluded
+      ];
+
+      expect(countPastDueAsOf(createdAts, at)).toBe(2);
+    });
+
+    it('is cumulative — a later point counts at least as many rows', async () => {
+      const { countPastDueAsOf } = await import('./ReportsService');
+      const createdAts = [
+        new Date('2026-01-01T00:00:00Z'),
+        new Date('2026-03-01T00:00:00Z'),
+        new Date('2026-05-01T00:00:00Z'),
+      ];
+
+      expect(countPastDueAsOf(createdAts, new Date('2026-02-01T00:00:00Z'))).toBe(1);
+      expect(countPastDueAsOf(createdAts, new Date('2026-04-01T00:00:00Z'))).toBe(2);
+      expect(countPastDueAsOf(createdAts, new Date('2026-06-01T00:00:00Z'))).toBe(3);
+    });
+
+    it('returns 0 for an empty roster', async () => {
+      const { countPastDueAsOf } = await import('./ReportsService');
+
+      expect(countPastDueAsOf([], new Date('2026-06-15T00:00:00Z'))).toBe(0);
+    });
+  });
+
+  // ===========================================================================
+  // date_trunc grouped mapping — a missing bucket maps to 0
+  // ===========================================================================
+
+  describe('grouped monthly mapping', () => {
+    it('maps a month with no grouped row to 0 (missing bucket → 0)', async () => {
+      const currentYear = new Date().getFullYear();
+      // Only February of the current year has a grouped sum; every other month
+      // (incl. January) is a missing bucket and must map to 0. All three series
+      // (current months, prev-year months, yearly) share this mocked result.
+      mockGroupedRows = [{ bucket: new Date(currentYear, 1, 1), total: 900 }];
+      const { getReportChartData } = await import('./ReportsService');
+
+      const result = await getReportChartData('test-org-123', 'payments-last-30-days');
+
+      expect(result.monthly[0]?.month).toBe('Jan');
+      expect(result.monthly[0]?.value).toBe(0); // missing bucket → 0
+      expect(result.monthly[1]?.month).toBe('Feb');
+      expect(result.monthly[1]?.value).toBe(900);
+      expect(result.monthly[2]?.value).toBe(0); // missing bucket → 0
     });
   });
 

@@ -86,8 +86,12 @@ export const useProgramsCache = (organizationId?: string | undefined) => {
     try {
       dispatch({ type: 'LOADING_START' });
 
-      if (isCacheValid(cacheStore)) {
-        dispatch({ type: 'SET_PROGRAMS', payload: cacheStore!.data });
+      // Snapshot the module-global cache into a local so a concurrent
+      // invalidate() between the validity check and the read can't null it out
+      // (removes the load-bearing non-null assertion).
+      const cachedPrograms = cacheStore;
+      if (cachedPrograms && isCacheValid(cachedPrograms)) {
+        dispatch({ type: 'SET_PROGRAMS', payload: cachedPrograms.data });
         return;
       }
 

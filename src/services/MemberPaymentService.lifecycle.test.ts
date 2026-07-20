@@ -22,6 +22,10 @@ const dbMock = {
   query: {
     memberMembershipSchema: { findFirst: vi.fn().mockResolvedValue(undefined) },
   },
+  // The cancel path groups its local DB writes (fee row + membership/member
+  // status flips) into db.transaction; run the callback with a `tx` that reuses
+  // the same recorders so the assertions on dbInsertValues still see the writes.
+  transaction: vi.fn((cb: any) => cb(dbMock)),
 };
 vi.mock('@/libs/DB', () => ({ db: dbMock }));
 vi.mock('@/libs/IQPro', () => ({

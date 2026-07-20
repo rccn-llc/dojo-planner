@@ -191,3 +191,29 @@ export const ReactivateMembershipValidation = z.object({
   memberId: z.string().min(1),
   memberMembershipId: z.string().min(1),
 });
+
+/**
+ * Add a membership plan to an existing member. The plan and member are both
+ * org-scoped server-side (see MembersService.addMemberMembership).
+ */
+export const AddMembershipValidation = z.object({
+  memberId: z.string().min(1),
+  membershipPlanId: z.string().min(1),
+});
+
+/**
+ * Change a member's membership plan. The plan and member are both org-scoped
+ * server-side (see MembersService.changeMemberMembership).
+ */
+export const ChangeMembershipValidation = z.object({
+  memberId: z.string().min(1),
+  newMembershipPlanId: z.string().min(1),
+});
+
+/**
+ * Fetch a single member (with photo) by id for the detail page — lets the
+ * members-list query omit the large base64 photoUrl.
+ */
+export const GetMemberByIdValidation = z.object({
+  memberId: z.string().min(1),
+});

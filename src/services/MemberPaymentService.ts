@@ -22,7 +22,8 @@ import type { AppliedCoupon, BillingType, PaymentMethod } from '@/hooks/useAddMe
 import type { IQProConfig } from '@/libs/IQPro';
 import { randomUUID } from 'node:crypto';
 
-import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
+import { z } from 'zod';
 import { db } from '@/libs/DB';
 import {
   assertTransactionApproved,
@@ -811,13 +812,14 @@ async function handleAutopay(args: AutopayParams): Promise<ProcessMemberPaymentR
       processedAt,
     });
   }
-  await db.insert(transactionSchema).values(txRows);
-
   if (!initialCharge.success) {
-    // Subscription was created in IQPro but the initial charge failed. Surface
-    // the failure rather than silently proceeding — the membership will remain
-    // unactivated and the operator can decide whether to retry or cancel the
-    // IQPro subscription.
+    // Subscription was created in IQPro but the initial charge failed. Record
+    // the attempt row(s), then surface the failure rather than silently
+    // proceeding — the membership stays unactivated (its iqproSubscriptionId is
+    // NOT persisted) and the operator can retry or cancel the IQPro
+    // subscription. This is the documented compensating path for an orphan
+    // IQPro subscription (#WS3).
+    await db.insert(transactionSchema).values(txRows);
     logger.error('[MemberPayment] Subscription created but initial charge failed', {
       subscriptionId: subResult.subscriptionId,
       memberId: params.memberId,
@@ -833,21 +835,29 @@ async function handleAutopay(args: AutopayParams): Promise<ProcessMemberPaymentR
     };
   }
 
-  // Persist subscription ID + dates on membership only after both succeed.
-  if (params.memberMembershipId) {
-    const firstPaymentDate = new Date();
-    const nextPayment = computeNextPaymentDate(firstPaymentDate, frequency);
+  // Success path: the transaction row(s) and the membership activation
+  // (iqproSubscriptionId + billing dates) are one logical unit — persist them
+  // atomically so we never end up with recorded transactions but a membership
+  // that never learned its IQPro subscription id (which the app couldn't later
+  // cancel) (#WS3).
+  await db.transaction(async (tx) => {
+    await tx.insert(transactionSchema).values(txRows);
 
-    await db
-      .update(memberMembershipSchema)
-      .set({
-        iqproSubscriptionId: subResult.subscriptionId,
-        billingType: 'autopay',
-        firstPaymentDate,
-        nextPaymentDate: nextPayment,
-      })
-      .where(eq(memberMembershipSchema.id, params.memberMembershipId));
-  }
+    if (params.memberMembershipId) {
+      const firstPaymentDate = new Date();
+      const nextPayment = computeNextPaymentDate(firstPaymentDate, frequency);
+
+      await tx
+        .update(memberMembershipSchema)
+        .set({
+          iqproSubscriptionId: subResult.subscriptionId,
+          billingType: 'autopay',
+          firstPaymentDate,
+          nextPaymentDate: nextPayment,
+        })
+        .where(eq(memberMembershipSchema.id, params.memberMembershipId));
+    }
+  });
 
   // Record coupon redemption AFTER the charge has approved. Failures here are
   // logged but never thrown — payment already succeeded.
@@ -970,14 +980,20 @@ async function handleOneTimePayment(args: OneTimeParams): Promise<ProcessMemberP
       processedAt,
     });
   }
-  await db.insert(transactionSchema).values(txRows);
-
-  // Update membership billing info
+  // On success the transaction row(s) and the membership billing update are one
+  // logical unit — persist atomically so we never record a paid transaction
+  // without activating the membership (#WS3). On failure only the attempt
+  // row(s) are recorded.
   if (params.memberMembershipId && payResult.success) {
-    await db
-      .update(memberMembershipSchema)
-      .set({ billingType: 'one-time', firstPaymentDate: new Date() })
-      .where(eq(memberMembershipSchema.id, params.memberMembershipId));
+    await db.transaction(async (tx) => {
+      await tx.insert(transactionSchema).values(txRows);
+      await tx
+        .update(memberMembershipSchema)
+        .set({ billingType: 'one-time', firstPaymentDate: new Date() })
+        .where(eq(memberMembershipSchema.id, params.memberMembershipId!));
+    });
+  } else {
+    await db.insert(transactionSchema).values(txRows);
   }
 
   // Record coupon redemption only on approved transactions. Declined or
@@ -1129,67 +1145,100 @@ export async function refundTransaction(
   transactionId: string,
   organizationId: string,
 ): Promise<RefundTransactionResult> {
-  const original = await db
-    .select()
-    .from(transactionSchema)
-    .where(and(eq(transactionSchema.id, transactionId), eq(transactionSchema.organizationId, organizationId)))
-    .limit(1);
-  const originalTx = original[0];
-  if (!originalTx) {
-    throw new TransactionNotFoundError(transactionId);
-  }
-  if (originalTx.status === 'refunded') {
-    throw new TransactionAlreadyRefundedError(transactionId);
-  }
-
   const refundId = randomUUID();
-  await db.insert(transactionSchema).values({
-    id: refundId,
-    organizationId,
-    memberId: originalTx.memberId,
-    memberMembershipId: originalTx.memberMembershipId,
-    transactionType: 'refund',
-    amount: -Math.abs(originalTx.amount),
-    currency: originalTx.currency,
-    status: 'paid',
-    paymentMethod: originalTx.paymentMethod,
-    description: `Refund for transaction ${originalTx.id}`,
-    processedAt: new Date(),
+
+  // The refund-row insert and the original-status flip must be atomic:
+  // otherwise a crash between them would leave an orphan refund row while the
+  // original still looks refundable, and the caller could refund it a second
+  // time (#WS3 double-refund). We flip FIRST, guarded on the row still being
+  // non-refunded, so two racing refunds can't both create a refund row.
+  const originalTx = await db.transaction(async (tx) => {
+    const original = await tx
+      .select()
+      .from(transactionSchema)
+      .where(and(eq(transactionSchema.id, transactionId), eq(transactionSchema.organizationId, organizationId)))
+      .limit(1);
+    const row = original[0];
+    if (!row) {
+      throw new TransactionNotFoundError(transactionId);
+    }
+    if (row.status === 'refunded') {
+      throw new TransactionAlreadyRefundedError(transactionId);
+    }
+
+    const flipped = await tx
+      .update(transactionSchema)
+      .set({ status: 'refunded' })
+      .where(and(
+        eq(transactionSchema.id, transactionId),
+        sql`${transactionSchema.status} != 'refunded'`,
+      ))
+      .returning({ id: transactionSchema.id });
+
+    if (flipped.length === 0) {
+      // A concurrent refund already flipped it between our read and update.
+      throw new TransactionAlreadyRefundedError(transactionId);
+    }
+
+    await tx.insert(transactionSchema).values({
+      id: refundId,
+      organizationId,
+      memberId: row.memberId,
+      memberMembershipId: row.memberMembershipId,
+      transactionType: 'refund',
+      amount: -Math.abs(row.amount),
+      currency: row.currency,
+      status: 'paid',
+      paymentMethod: row.paymentMethod,
+      description: `Refund for transaction ${row.id}`,
+      processedAt: new Date(),
+    });
+
+    return row;
   });
 
-  await db
-    .update(transactionSchema)
-    .set({ status: 'refunded' })
-    .where(eq(transactionSchema.id, transactionId));
-
-  // Reverse coupon redemption(s) tied to the original transaction.
-  const usages = await db
-    .select({ id: couponUsageSchema.id, couponId: couponUsageSchema.couponId })
-    .from(couponUsageSchema)
-    .where(eq(couponUsageSchema.transactionId, transactionId));
-
+  // Coupon reversal is intentionally best-effort and runs AFTER the refund
+  // commits: a stuck coupon counter must not roll back (or block) a completed
+  // refund. Batched — one delete for all usage rows, plus one grouped decrement
+  // per distinct coupon — replacing the previous 2-writes-per-usage loop (#WS2).
   let decrementedCoupons = 0;
-  for (const usage of usages) {
-    try {
-      await db.delete(couponUsageSchema).where(eq(couponUsageSchema.id, usage.id));
-      await db
-        .update(couponSchema)
-        .set({ usageCount: sql`GREATEST(COALESCE(${couponSchema.usageCount}, 0) - 1, 0)` })
-        .where(eq(couponSchema.id, usage.couponId));
-      decrementedCoupons += 1;
-    } catch (error) {
-      logger.error('[MemberPayment] Failed to reverse coupon redemption (non-fatal)', {
-        error,
-        couponUsageId: usage.id,
-        couponId: usage.couponId,
-        transactionId,
-      });
+  try {
+    const usages = await db
+      .select({ id: couponUsageSchema.id, couponId: couponUsageSchema.couponId })
+      .from(couponUsageSchema)
+      .where(eq(couponUsageSchema.transactionId, transactionId));
+
+    if (usages.length > 0) {
+      await db.delete(couponUsageSchema).where(inArray(couponUsageSchema.id, usages.map(u => u.id)));
+
+      // Group by coupon so a transaction that redeemed the same coupon more than
+      // once decrements by the correct count in a single UPDATE.
+      const decrementByCoupon = new Map<string, number>();
+      for (const usage of usages) {
+        decrementByCoupon.set(usage.couponId, (decrementByCoupon.get(usage.couponId) ?? 0) + 1);
+      }
+
+      await Promise.all(
+        [...decrementByCoupon.entries()].map(([couponId, count]) =>
+          db
+            .update(couponSchema)
+            .set({ usageCount: sql`GREATEST(COALESCE(${couponSchema.usageCount}, 0) - ${count}, 0)` })
+            .where(eq(couponSchema.id, couponId)),
+        ),
+      );
+
+      decrementedCoupons = usages.length;
     }
+  } catch (error) {
+    logger.error('[MemberPayment] Failed to reverse coupon redemptions (non-fatal)', {
+      error,
+      transactionId,
+    });
   }
 
   logger.info('[MemberPayment] Refund processed', {
     refundTransactionId: refundId,
-    originalTransactionId: transactionId,
+    originalTransactionId: originalTx.id,
     decrementedCoupons,
   });
 
@@ -1315,6 +1364,26 @@ export type LifecycleResult = {
 };
 
 /**
+ * Shape of the IQPro subscription-lookup response we depend on for resolving a
+ * vaulted payment method. All fields are optional/lenient — IQPro may omit any
+ * of them — but parsing once (instead of a chain of `as Record<string,unknown>`
+ * casts) means a real shape change surfaces as a parse result we can reason
+ * about rather than a silent `undefined` charged on a fallback BIN (#WS4).
+ */
+const IQProSubscriptionResponseSchema = z.object({
+  customer: z.object({ customerId: z.string().optional() }).partial().optional(),
+  paymentMethod: z.object({
+    customerPaymentMethod: z.object({
+      paymentMethodId: z.string().optional(),
+      card: z.object({
+        maskedNumber: z.string().optional(),
+        maskedCard: z.string().optional(),
+      }).partial().optional(),
+    }).partial().optional(),
+  }).partial().optional(),
+}).partial();
+
+/**
  * Charge a one-time fee against an existing IQPro subscription's vaulted
  * payment method. Mirrors the kiosk's cancellation-fee Sale payload byte-for-
  * byte. Used for cancellation fees and one-time hold fees.
@@ -1357,11 +1426,10 @@ export async function chargeOneTimeFee(args: {
       config,
       `/api/gateway/${gatewayId}/subscription/${iqproSubscriptionId}`,
     );
-    const sub = (subRes.data ?? subRes) as Record<string, unknown>;
-    const subPM = sub.paymentMethod as Record<string, unknown> | undefined;
-    const custPM = subPM?.customerPaymentMethod as Record<string, unknown> | undefined;
-    const customerId = ((sub.customer as Record<string, unknown> | undefined)?.customerId ?? iqproCustomerId) as string;
-    const pmId = (custPM?.paymentMethodId ?? '') as string;
+    const sub = IQProSubscriptionResponseSchema.parse(subRes.data ?? subRes);
+    const custPM = sub.paymentMethod?.customerPaymentMethod;
+    const customerId = sub.customer?.customerId ?? iqproCustomerId;
+    const pmId = custPM?.paymentMethodId ?? '';
 
     if (!pmId) {
       return {
@@ -1379,8 +1447,8 @@ export async function chargeOneTimeFee(args: {
     if (!processorId) {
       return { success: false, error: `No ${paymentMethodName} processor configured` };
     }
-    const cardInfo = custPM?.card as Record<string, unknown> | undefined;
-    const maskedNumber = (cardInfo?.maskedNumber ?? cardInfo?.maskedCard ?? '') as string;
+    const cardInfo = custPM?.card;
+    const maskedNumber = cardInfo?.maskedNumber ?? cardInfo?.maskedCard ?? '';
     const bin = maskedNumber && maskedNumber.length >= 6 ? maskedNumber.slice(0, 6) : '400000';
 
     // Cancellation / hold fees are NOT taxable (per Basys guidance on non-store charges).
@@ -1601,29 +1669,10 @@ export async function cancelMembershipLifecycle(args: {
     }
   }
 
-  // Record the cancellation fee in the member's billing history even when the
-  // live IQPro charge didn't run or failed (#239). Without this, a fee owed on
-  // a member whose subscription is synthetic (Preview/seed) or whose charge
-  // errored would silently vanish from the billing history. `chargeOneTimeFee`
-  // already inserts a 'paid' row on a successful charge; here we insert a
-  // 'pending' row for the not-captured case so the fee is still visible and
-  // reconcilable. Only fires when a fee was actually owed (not waived, > 0) and
-  // no live charge transaction was produced.
-  if (feeAmount > 0 && !cancellationTransactionId) {
-    await db.insert(transactionSchema).values({
-      id: randomUUID(),
-      organizationId: ctx.member.organizationId,
-      memberId: ctx.member.id,
-      memberMembershipId: ctx.membership.id,
-      transactionType: 'cancellation_fee',
-      amount: feeAmount,
-      status: 'pending',
-      description: `Cancellation fee — ${ctx.plan.name}`,
-      createdAt: now,
-      updatedAt: now,
-    });
-    cancellationFeeCharged = feeAmount;
-  }
+  // Whether we still owe a 'pending' cancellation-fee row (fee owed, not waived,
+  // and no live charge transaction was produced). Written below in the same DB
+  // transaction as the status updates.
+  const needsPendingFeeRow = feeAmount > 0 && !cancellationTransactionId;
 
   // 2) Cancel the IQPro membership subscription
   let subscriptionCancelled = false;
@@ -1637,28 +1686,58 @@ export async function cancelMembershipLifecycle(args: {
     await cancelIQProSubscription(config, ctx.membership.iqproHoldFeeSubscriptionId);
   }
 
-  // 4) Update local DB rows
-  await db.update(memberMembershipSchema)
-    .set({
-      status: 'cancelled',
-      endDate: now,
-      iqproHoldFeeSubscriptionId: null,
-    })
-    .where(eq(memberMembershipSchema.id, ctx.membership.id));
+  // 4) Update local DB rows atomically. The pending-fee record, the membership
+  // status flip, and the mirrored member-status flip are one unit — a mid-way
+  // failure must not leave e.g. a cancelled membership without its fee record,
+  // or a fee row with no status mirror (#WS3). Runs after the IQPro side
+  // effects resolve (those can't participate in a DB transaction).
+  await db.transaction(async (tx) => {
+    // Record the cancellation fee in the member's billing history even when the
+    // live IQPro charge didn't run or failed (#239). Without this, a fee owed on
+    // a member whose subscription is synthetic (Preview/seed) or whose charge
+    // errored would silently vanish. `chargeOneTimeFee` already inserts a 'paid'
+    // row on success; here we insert a 'pending' row for the not-captured case.
+    if (needsPendingFeeRow) {
+      await tx.insert(transactionSchema).values({
+        id: randomUUID(),
+        organizationId: ctx.member.organizationId,
+        memberId: ctx.member.id,
+        memberMembershipId: ctx.membership.id,
+        transactionType: 'cancellation_fee',
+        amount: feeAmount,
+        status: 'pending',
+        description: `Cancellation fee — ${ctx.plan.name}`,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
 
-  // Mirror member.status only if no other active memberships remain — matches
-  // the IQPro webhook handler at src/app/[locale]/webhook/iqpro/route.ts.
-  const otherActive = await db.query.memberMembershipSchema.findFirst({
-    where: and(
-      eq(memberMembershipSchema.memberId, ctx.member.id),
-      eq(memberMembershipSchema.status, 'active'),
-    ),
-    columns: { id: true },
+    await tx.update(memberMembershipSchema)
+      .set({
+        status: 'cancelled',
+        endDate: now,
+        iqproHoldFeeSubscriptionId: null,
+      })
+      .where(eq(memberMembershipSchema.id, ctx.membership.id));
+
+    // Mirror member.status only if no other active memberships remain — matches
+    // the IQPro webhook handler at src/app/[locale]/webhook/iqpro/route.ts.
+    const otherActive = await tx.query.memberMembershipSchema.findFirst({
+      where: and(
+        eq(memberMembershipSchema.memberId, ctx.member.id),
+        eq(memberMembershipSchema.status, 'active'),
+      ),
+      columns: { id: true },
+    });
+    if (!otherActive) {
+      await tx.update(memberSchema)
+        .set({ status: 'cancelled', statusChangedAt: now })
+        .where(eq(memberSchema.id, ctx.member.id));
+    }
   });
-  if (!otherActive) {
-    await db.update(memberSchema)
-      .set({ status: 'cancelled', statusChangedAt: now })
-      .where(eq(memberSchema.id, ctx.member.id));
+
+  if (needsPendingFeeRow) {
+    cancellationFeeCharged = feeAmount;
   }
 
   return {
@@ -1849,17 +1928,20 @@ export async function holdMembershipLifecycle(args: {
     }
   }
 
-  // Update local DB rows
-  await db.update(memberMembershipSchema)
-    .set({
-      status: 'hold',
-      ...(holdFeeSubscriptionId ? { iqproHoldFeeSubscriptionId: holdFeeSubscriptionId } : {}),
-    })
-    .where(eq(memberMembershipSchema.id, ctx.membership.id));
+  // Update local DB rows atomically (mirrors the cancel path): the membership
+  // status flip and the mirrored member status flip are one unit.
+  await db.transaction(async (tx) => {
+    await tx.update(memberMembershipSchema)
+      .set({
+        status: 'hold',
+        ...(holdFeeSubscriptionId ? { iqproHoldFeeSubscriptionId: holdFeeSubscriptionId } : {}),
+      })
+      .where(eq(memberMembershipSchema.id, ctx.membership.id));
 
-  await db.update(memberSchema)
-    .set({ status: 'hold', statusChangedAt: now })
-    .where(eq(memberSchema.id, ctx.member.id));
+    await tx.update(memberSchema)
+      .set({ status: 'hold', statusChangedAt: now })
+      .where(eq(memberSchema.id, ctx.member.id));
+  });
 
   return {
     success: true,
@@ -1900,16 +1982,19 @@ export async function reactivateMembershipLifecycle(args: {
     }
   }
 
-  await db.update(memberMembershipSchema)
-    .set({
-      status: 'active',
-      iqproHoldFeeSubscriptionId: null,
-    })
-    .where(eq(memberMembershipSchema.id, ctx.membership.id));
+  // Update local DB rows atomically (mirrors the cancel path).
+  await db.transaction(async (tx) => {
+    await tx.update(memberMembershipSchema)
+      .set({
+        status: 'active',
+        iqproHoldFeeSubscriptionId: null,
+      })
+      .where(eq(memberMembershipSchema.id, ctx.membership.id));
 
-  await db.update(memberSchema)
-    .set({ status: 'active', statusChangedAt: now })
-    .where(eq(memberSchema.id, ctx.member.id));
+    await tx.update(memberSchema)
+      .set({ status: 'active', statusChangedAt: now })
+      .where(eq(memberSchema.id, ctx.member.id));
+  });
 
   return { success: true, error };
 }

@@ -89,12 +89,16 @@ export const useCouponsCache = (organizationId?: string | undefined) => {
     try {
       dispatch({ type: 'LOADING_START' });
 
-      if (isCacheValid(cacheStore)) {
+      // Snapshot the module-global cache into a local so a concurrent
+      // invalidate() between the validity check and the read can't null it out
+      // (removes the load-bearing non-null assertion).
+      const cached = cacheStore;
+      if (cached && isCacheValid(cached)) {
         console.info('[Coupons Cache] Using cached data for organization:', {
           organizationId,
-          cacheAge: Date.now() - (cacheStore?.timestamp || 0),
+          cacheAge: Date.now() - cached.timestamp,
         });
-        dispatch({ type: 'SET_COUPONS', payload: cacheStore!.data });
+        dispatch({ type: 'SET_COUPONS', payload: cached.data });
         return;
       }
 

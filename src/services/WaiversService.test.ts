@@ -39,6 +39,23 @@ vi.mock('@/models/Schema', () => ({
   waiverMergeFieldSchema: { id: 'id', organizationId: 'organizationId' },
 }));
 
+const TEST_ORG = 'test-org-123';
+
+/**
+ * Build a chainable db.select mock supporting the org-guard shape
+ * `.from(...).where(...).limit(1)` (resolving to `rows`). The awaited
+ * `.where(...)` also resolves to `rows` for callers that don't chain `.limit`.
+ */
+function selectChain(rows: any[]): any {
+  const whereResult: any = Promise.resolve(rows);
+  whereResult.limit = vi.fn().mockResolvedValue(rows);
+  return {
+    from: vi.fn().mockReturnValue({
+      where: vi.fn().mockReturnValue(whereResult),
+    }),
+  };
+}
+
 const mockTemplate = {
   id: 'template-1',
   organizationId: 'test-org-123',
@@ -150,27 +167,25 @@ describe('WaiversService', () => {
     it('should return templates with stats (signedCount, membershipCount)', async () => {
       const { db } = await import('@/libs/DB');
 
-      const mockSignedWaiver = { waiverTemplateId: 'template-1' };
-      const mockMembershipWaiver = { waiverTemplateId: 'template-1' };
-
+      // Counts now come from grouped aggregates: `.where().groupBy()` resolving
+      // to `[{ waiverTemplateId, n }]` rows (was: loading every full row).
       let callCount = 0;
       vi.mocked(db.select).mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockImplementation(() => {
             callCount++;
-            // First call: templates (filtered by parentId IS NULL)
+            // First call: templates (filtered by parentId IS NULL) — awaited directly.
             if (callCount === 1) {
               return Promise.resolve([mockTemplate]);
             }
-            // Second call: signed waivers
-            if (callCount === 2) {
-              return Promise.resolve([mockSignedWaiver, mockSignedWaiver]);
-            }
-            // Third call: membership waivers
-            if (callCount === 3) {
-              return Promise.resolve([mockMembershipWaiver]);
-            }
-            return Promise.resolve([]);
+            // Calls 2 & 3: grouped signed / membership counts — .groupBy() then await.
+            return {
+              groupBy: vi.fn().mockResolvedValue(
+                callCount === 2
+                  ? [{ waiverTemplateId: 'template-1', n: 2 }]
+                  : [{ waiverTemplateId: 'template-1', n: 1 }],
+              ),
+            };
           }),
         }),
       } as any);
@@ -201,7 +216,8 @@ describe('WaiversService', () => {
               // Only root templates returned from DB (parentId IS NULL filter applied)
               return Promise.resolve([rootTemplate]);
             }
-            return Promise.resolve([]);
+            // Grouped count queries (.groupBy()) — no rows.
+            return { groupBy: vi.fn().mockResolvedValue([]) };
           }),
         }),
       } as any);
@@ -235,7 +251,7 @@ describe('WaiversService', () => {
             if (callCount === 1) {
               return Promise.resolve([templateWithNulls]);
             }
-            return Promise.resolve([]);
+            return { groupBy: vi.fn().mockResolvedValue([]) };
           }),
         }),
       } as any);
@@ -262,8 +278,8 @@ describe('WaiversService', () => {
             if (callCount === 1) {
               return Promise.resolve([mockTemplate]);
             }
-            // Signed waivers and membership waivers both empty
-            return Promise.resolve([]);
+            // Signed & membership grouped counts both empty.
+            return { groupBy: vi.fn().mockResolvedValue([]) };
           }),
         }),
       } as any);
@@ -844,7 +860,7 @@ describe('WaiversService', () => {
             if (callCount === 1) {
               return Promise.resolve([activeTemplate, inactiveTemplate]);
             }
-            return Promise.resolve([]);
+            return { groupBy: vi.fn().mockResolvedValue([]) };
           }),
         }),
       } as any);
@@ -870,7 +886,7 @@ describe('WaiversService', () => {
             if (callCount === 1) {
               return Promise.resolve([inactiveTemplate]);
             }
-            return Promise.resolve([]);
+            return { groupBy: vi.fn().mockResolvedValue([]) };
           }),
         }),
       } as any);
@@ -902,21 +918,29 @@ describe('WaiversService', () => {
   // ===========================================================================
 
   describe('getWaiverTemplateById', () => {
-    it('should return a template when it exists', async () => {
-      const { db } = await import('@/libs/DB');
-
-      let callCount = 0;
-      vi.mocked(db.select).mockReturnValue({
+    // getWaiverTemplateById now does a direct single-row fetch
+    // (`.where().limit(1)`) + two scalar `count()` queries (`.where()` → [{n}]),
+    // rather than aggregating every template in the org.
+    const byIdSelect = (templateRows: unknown[]): any => {
+      let call = 0;
+      return {
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockImplementation(() => {
-            callCount++;
-            if (callCount === 1) {
-              return Promise.resolve([mockTemplate]);
+            call++;
+            if (call === 1) {
+              // template lookup: .where().limit(1)
+              return { limit: vi.fn().mockResolvedValue(templateRows) };
             }
-            return Promise.resolve([]);
+            // scalar count queries: .where() awaited → [{ n }]
+            return Promise.resolve([{ n: 0 }]);
           }),
         }),
-      } as any);
+      };
+    };
+
+    it('should return a template when it exists', async () => {
+      const { db } = await import('@/libs/DB');
+      vi.mocked(db.select).mockReturnValue(byIdSelect([mockTemplate]));
 
       const { getWaiverTemplateById } = await import('./WaiversService');
       const result = await getWaiverTemplateById('template-1', 'test-org-123');
@@ -928,19 +952,7 @@ describe('WaiversService', () => {
 
     it('should return null when template does not exist', async () => {
       const { db } = await import('@/libs/DB');
-
-      let callCount = 0;
-      vi.mocked(db.select).mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockImplementation(() => {
-            callCount++;
-            if (callCount === 1) {
-              return Promise.resolve([mockTemplate]);
-            }
-            return Promise.resolve([]);
-          }),
-        }),
-      } as any);
+      vi.mocked(db.select).mockReturnValue(byIdSelect([]));
 
       const { getWaiverTemplateById } = await import('./WaiversService');
       const result = await getWaiverTemplateById('nonexistent', 'test-org-123');
@@ -950,12 +962,7 @@ describe('WaiversService', () => {
 
     it('should return null when organization has no templates', async () => {
       const { db } = await import('@/libs/DB');
-
-      vi.mocked(db.select).mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([]),
-        }),
-      } as any);
+      vi.mocked(db.select).mockReturnValue(byIdSelect([]));
 
       const { getWaiverTemplateById } = await import('./WaiversService');
       const result = await getWaiverTemplateById('template-1', 'test-org-123');
@@ -982,7 +989,7 @@ describe('WaiversService', () => {
             if (callCount === 1) {
               return Promise.resolve([defaultTemplate]);
             }
-            return Promise.resolve([]);
+            return { groupBy: vi.fn().mockResolvedValue([]) };
           }),
         }),
       } as any);
@@ -1008,7 +1015,7 @@ describe('WaiversService', () => {
             if (callCount === 1) {
               return Promise.resolve([inactiveDefault]);
             }
-            return Promise.resolve([]);
+            return { groupBy: vi.fn().mockResolvedValue([]) };
           }),
         }),
       } as any);
@@ -1032,7 +1039,7 @@ describe('WaiversService', () => {
             if (callCount === 1) {
               return Promise.resolve([nonDefaultTemplate]);
             }
-            return Promise.resolve([]);
+            return { groupBy: vi.fn().mockResolvedValue([]) };
           }),
         }),
       } as any);
@@ -1415,7 +1422,7 @@ describe('WaiversService', () => {
       } as any));
 
       const { getMemberSignedWaivers } = await import('./WaiversService');
-      const result = await getMemberSignedWaivers('member-1');
+      const result = await getMemberSignedWaivers('member-1', TEST_ORG);
 
       expect(result).toHaveLength(1);
       expect(result[0]?.id).toBe('signed-1');
@@ -1440,7 +1447,7 @@ describe('WaiversService', () => {
       } as any);
 
       const { getMemberSignedWaivers } = await import('./WaiversService');
-      const result = await getMemberSignedWaivers('member-no-waivers');
+      const result = await getMemberSignedWaivers('member-no-waivers', TEST_ORG);
 
       expect(result).toEqual([]);
       // Only one DB call; no second call for template names
@@ -1477,7 +1484,7 @@ describe('WaiversService', () => {
       } as any));
 
       const { getMemberSignedWaivers } = await import('./WaiversService');
-      const result = await getMemberSignedWaivers('member-1');
+      const result = await getMemberSignedWaivers('member-1', TEST_ORG);
 
       expect(result).toHaveLength(2);
       expect(result[0]?.id).toBe('signed-1');
@@ -1517,7 +1524,7 @@ describe('WaiversService', () => {
       } as any));
 
       const { getMemberSignedWaivers } = await import('./WaiversService');
-      const result = await getMemberSignedWaivers('member-1');
+      const result = await getMemberSignedWaivers('member-1', TEST_ORG);
 
       expect(result[0]?.signedByEmail).toBeNull();
       expect(result[0]?.signedByRelationship).toBeNull();
@@ -1550,7 +1557,7 @@ describe('WaiversService', () => {
       } as any));
 
       const { getMemberSignedWaivers } = await import('./WaiversService');
-      const result = await getMemberSignedWaivers('member-1');
+      const result = await getMemberSignedWaivers('member-1', TEST_ORG);
 
       expect(result).toHaveLength(1);
       expect(result[0]?.waiverName).toBe('Unknown Waiver');
@@ -1584,7 +1591,7 @@ describe('WaiversService', () => {
       } as any));
 
       const { getMemberSignedWaivers } = await import('./WaiversService');
-      const result = await getMemberSignedWaivers('member-1');
+      const result = await getMemberSignedWaivers('member-1', TEST_ORG);
 
       expect(result).toHaveLength(2);
       expect(result[0]?.waiverName).toBe('Standard Adult Waiver');
@@ -1944,6 +1951,8 @@ describe('WaiversService', () => {
     it('should return empty array when no associations exist', async () => {
       const { db } = await import('@/libs/DB');
 
+      // guard: assertPlanInOrg passes; then associations select returns []
+      vi.mocked(db.select).mockReturnValueOnce(selectChain([{ id: 'plan-1' }]));
       vi.mocked(db.select).mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockResolvedValue([]),
@@ -1951,9 +1960,19 @@ describe('WaiversService', () => {
       } as any);
 
       const { getWaiversForMembershipPlan } = await import('./WaiversService');
-      const result = await getWaiversForMembershipPlan('plan-1');
+      const result = await getWaiversForMembershipPlan('plan-1', TEST_ORG);
 
       expect(result).toEqual([]);
+    });
+
+    it('should reject cross-tenant plan with WaiverNotFoundError', async () => {
+      const { db } = await import('@/libs/DB');
+
+      vi.mocked(db.select).mockReturnValueOnce(selectChain([]));
+
+      const { getWaiversForMembershipPlan, WaiverNotFoundError } = await import('./WaiversService');
+
+      await expect(getWaiversForMembershipPlan('plan-x', TEST_ORG)).rejects.toThrow(WaiverNotFoundError);
     });
 
     it('should return waiver templates sorted by association sortOrder', async () => {
@@ -1966,6 +1985,8 @@ describe('WaiversService', () => {
 
       const waiver1 = { ...mockTemplate, id: 'template-1', name: 'Waiver A' };
       const waiver2 = { ...mockTemplate, id: 'template-2', name: 'Waiver B' };
+
+      vi.mocked(db.select).mockReturnValueOnce(selectChain([{ id: 'plan-1' }]));
 
       let callCount = 0;
       vi.mocked(db.select).mockReturnValue({
@@ -1985,7 +2006,7 @@ describe('WaiversService', () => {
       } as any);
 
       const { getWaiversForMembershipPlan } = await import('./WaiversService');
-      const result = await getWaiversForMembershipPlan('plan-1');
+      const result = await getWaiversForMembershipPlan('plan-1', TEST_ORG);
 
       expect(result).toHaveLength(2);
       // Should be sorted by sortOrder: template-1 (0) first, template-2 (1) second
@@ -2001,6 +2022,8 @@ describe('WaiversService', () => {
       const associations = [
         { waiverTemplateId: 'template-1', membershipPlanId: 'plan-1', sortOrder: null },
       ];
+
+      vi.mocked(db.select).mockReturnValueOnce(selectChain([{ id: 'plan-1' }]));
 
       let callCount = 0;
       vi.mocked(db.select).mockReturnValue({
@@ -2019,7 +2042,7 @@ describe('WaiversService', () => {
       } as any);
 
       const { getWaiversForMembershipPlan } = await import('./WaiversService');
-      const result = await getWaiversForMembershipPlan('plan-1');
+      const result = await getWaiversForMembershipPlan('plan-1', TEST_ORG);
 
       expect(result).toHaveLength(1);
       expect(result[0]?.sortOrder).toBe(0);
@@ -2040,6 +2063,8 @@ describe('WaiversService', () => {
         guardianAgeThreshold: null,
       };
 
+      vi.mocked(db.select).mockReturnValueOnce(selectChain([{ id: 'plan-1' }]));
+
       let callCount = 0;
       vi.mocked(db.select).mockReturnValue({
         from: vi.fn().mockReturnValue({
@@ -2057,7 +2082,7 @@ describe('WaiversService', () => {
       } as any);
 
       const { getWaiversForMembershipPlan } = await import('./WaiversService');
-      const result = await getWaiversForMembershipPlan('plan-1');
+      const result = await getWaiversForMembershipPlan('plan-1', TEST_ORG);
 
       expect(result).toHaveLength(1);
       expect(result[0]?.isActive).toBe(true);
@@ -2080,6 +2105,8 @@ describe('WaiversService', () => {
         { membershipPlanId: 'plan-2', waiverTemplateId: 'template-1' },
       ];
 
+      // guard: assertTemplateInOrg passes; then associations select
+      vi.mocked(db.select).mockReturnValueOnce(selectChain([{ id: 'template-1' }]));
       vi.mocked(db.select).mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockResolvedValue(associations),
@@ -2087,7 +2114,7 @@ describe('WaiversService', () => {
       } as any);
 
       const { getMembershipsForWaiverTemplate } = await import('./WaiversService');
-      const result = await getMembershipsForWaiverTemplate('template-1');
+      const result = await getMembershipsForWaiverTemplate('template-1', TEST_ORG);
 
       expect(result).toEqual(['plan-1', 'plan-2']);
     });
@@ -2095,6 +2122,7 @@ describe('WaiversService', () => {
     it('should return empty array when no associations exist', async () => {
       const { db } = await import('@/libs/DB');
 
+      vi.mocked(db.select).mockReturnValueOnce(selectChain([{ id: 'template-no-assoc' }]));
       vi.mocked(db.select).mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockResolvedValue([]),
@@ -2102,9 +2130,19 @@ describe('WaiversService', () => {
       } as any);
 
       const { getMembershipsForWaiverTemplate } = await import('./WaiversService');
-      const result = await getMembershipsForWaiverTemplate('template-no-assoc');
+      const result = await getMembershipsForWaiverTemplate('template-no-assoc', TEST_ORG);
 
       expect(result).toEqual([]);
+    });
+
+    it('should reject cross-tenant template with WaiverNotFoundError', async () => {
+      const { db } = await import('@/libs/DB');
+
+      vi.mocked(db.select).mockReturnValueOnce(selectChain([]));
+
+      const { getMembershipsForWaiverTemplate, WaiverNotFoundError } = await import('./WaiversService');
+
+      await expect(getMembershipsForWaiverTemplate('template-x', TEST_ORG)).rejects.toThrow(WaiverNotFoundError);
     });
   });
 
@@ -2116,6 +2154,9 @@ describe('WaiversService', () => {
     it('should remove existing associations and add new ones', async () => {
       const { db } = await import('@/libs/DB');
 
+      // All guard selects (plan + each template) resolve to a non-empty row.
+      vi.mocked(db.select).mockReturnValue(selectChain([{ id: 'ok' }]));
+
       vi.mocked(db.delete).mockReturnValue({
         where: vi.fn().mockResolvedValue(undefined),
       } as any);
@@ -2125,21 +2166,39 @@ describe('WaiversService', () => {
       } as any);
 
       const { setMembershipPlanWaivers } = await import('./WaiversService');
-      await setMembershipPlanWaivers('plan-1', ['template-1', 'template-2']);
+      await setMembershipPlanWaivers('plan-1', ['template-1', 'template-2'], TEST_ORG);
 
       expect(db.delete).toHaveBeenCalledTimes(1);
       expect(db.insert).toHaveBeenCalledTimes(1);
     });
 
+    it('should reject when a referenced template is cross-tenant', async () => {
+      const { db } = await import('@/libs/DB');
+
+      // Plan guard passes, template guard fails (empty)
+      vi.mocked(db.select)
+        .mockReturnValueOnce(selectChain([{ id: 'plan-1' }]))
+        .mockReturnValueOnce(selectChain([]));
+
+      const { setMembershipPlanWaivers, WaiverNotFoundError } = await import('./WaiversService');
+
+      await expect(
+        setMembershipPlanWaivers('plan-1', ['template-x'], TEST_ORG),
+      ).rejects.toThrow(WaiverNotFoundError);
+    });
+
     it('should only delete when waiverTemplateIds is empty', async () => {
       const { db } = await import('@/libs/DB');
+
+      // Only the plan guard runs (no templates to check).
+      vi.mocked(db.select).mockReturnValue(selectChain([{ id: 'plan-1' }]));
 
       vi.mocked(db.delete).mockReturnValue({
         where: vi.fn().mockResolvedValue(undefined),
       } as any);
 
       const { setMembershipPlanWaivers } = await import('./WaiversService');
-      await setMembershipPlanWaivers('plan-1', []);
+      await setMembershipPlanWaivers('plan-1', [], TEST_ORG);
 
       expect(db.delete).toHaveBeenCalledTimes(1);
       expect(db.insert).not.toHaveBeenCalled();
@@ -2147,6 +2206,8 @@ describe('WaiversService', () => {
 
     it('should assign sortOrder based on array index', async () => {
       const { db } = await import('@/libs/DB');
+
+      vi.mocked(db.select).mockReturnValue(selectChain([{ id: 'ok' }]));
 
       vi.mocked(db.delete).mockReturnValue({
         where: vi.fn().mockResolvedValue(undefined),
@@ -2158,7 +2219,7 @@ describe('WaiversService', () => {
       } as any);
 
       const { setMembershipPlanWaivers } = await import('./WaiversService');
-      await setMembershipPlanWaivers('plan-1', ['template-a', 'template-b', 'template-c']);
+      await setMembershipPlanWaivers('plan-1', ['template-a', 'template-b', 'template-c'], TEST_ORG);
 
       expect(mockValues).toHaveBeenCalledWith([
         { membershipPlanId: 'plan-1', waiverTemplateId: 'template-a', isRequired: true, sortOrder: 0 },
@@ -2181,6 +2242,10 @@ describe('WaiversService', () => {
         { membershipPlanId: 'plan-1', waiverTemplateId: 'template-2', sortOrder: 1 },
       ];
 
+      // Two guard selects (plan + template) then the max-sortorder select.
+      vi.mocked(db.select)
+        .mockReturnValueOnce(selectChain([{ id: 'plan-1' }]))
+        .mockReturnValueOnce(selectChain([{ id: 'template-3' }]));
       vi.mocked(db.select).mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockResolvedValue(existingAssociations),
@@ -2193,7 +2258,7 @@ describe('WaiversService', () => {
       } as any);
 
       const { addWaiverToMembershipPlan } = await import('./WaiversService');
-      await addWaiverToMembershipPlan('plan-1', 'template-3');
+      await addWaiverToMembershipPlan('plan-1', 'template-3', TEST_ORG);
 
       expect(mockValues).toHaveBeenCalledWith({
         membershipPlanId: 'plan-1',
@@ -2203,9 +2268,24 @@ describe('WaiversService', () => {
       });
     });
 
+    it('should reject cross-tenant plan with WaiverNotFoundError', async () => {
+      const { db } = await import('@/libs/DB');
+
+      vi.mocked(db.select).mockReturnValueOnce(selectChain([]));
+
+      const { addWaiverToMembershipPlan, WaiverNotFoundError } = await import('./WaiversService');
+
+      await expect(
+        addWaiverToMembershipPlan('plan-x', 'template-1', TEST_ORG),
+      ).rejects.toThrow(WaiverNotFoundError);
+    });
+
     it('should default isRequired to true', async () => {
       const { db } = await import('@/libs/DB');
 
+      vi.mocked(db.select)
+        .mockReturnValueOnce(selectChain([{ id: 'plan-1' }]))
+        .mockReturnValueOnce(selectChain([{ id: 'template-1' }]));
       vi.mocked(db.select).mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockResolvedValue([]),
@@ -2218,7 +2298,7 @@ describe('WaiversService', () => {
       } as any);
 
       const { addWaiverToMembershipPlan } = await import('./WaiversService');
-      await addWaiverToMembershipPlan('plan-1', 'template-1');
+      await addWaiverToMembershipPlan('plan-1', 'template-1', TEST_ORG);
 
       expect(mockValues).toHaveBeenCalledWith(
         expect.objectContaining({ isRequired: true }),
@@ -2228,6 +2308,9 @@ describe('WaiversService', () => {
     it('should accept custom isRequired parameter', async () => {
       const { db } = await import('@/libs/DB');
 
+      vi.mocked(db.select)
+        .mockReturnValueOnce(selectChain([{ id: 'plan-1' }]))
+        .mockReturnValueOnce(selectChain([{ id: 'template-1' }]));
       vi.mocked(db.select).mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockResolvedValue([]),
@@ -2240,7 +2323,7 @@ describe('WaiversService', () => {
       } as any);
 
       const { addWaiverToMembershipPlan } = await import('./WaiversService');
-      await addWaiverToMembershipPlan('plan-1', 'template-1', false);
+      await addWaiverToMembershipPlan('plan-1', 'template-1', TEST_ORG, false);
 
       expect(mockValues).toHaveBeenCalledWith(
         expect.objectContaining({ isRequired: false }),
@@ -2250,6 +2333,9 @@ describe('WaiversService', () => {
     it('should start sortOrder at 0 when no existing associations', async () => {
       const { db } = await import('@/libs/DB');
 
+      vi.mocked(db.select)
+        .mockReturnValueOnce(selectChain([{ id: 'plan-1' }]))
+        .mockReturnValueOnce(selectChain([{ id: 'template-1' }]));
       vi.mocked(db.select).mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockResolvedValue([]),
@@ -2262,7 +2348,7 @@ describe('WaiversService', () => {
       } as any);
 
       const { addWaiverToMembershipPlan } = await import('./WaiversService');
-      await addWaiverToMembershipPlan('plan-1', 'template-1');
+      await addWaiverToMembershipPlan('plan-1', 'template-1', TEST_ORG);
 
       expect(mockValues).toHaveBeenCalledWith(
         expect.objectContaining({ sortOrder: 0 }),
@@ -2276,6 +2362,9 @@ describe('WaiversService', () => {
         { membershipPlanId: 'plan-1', waiverTemplateId: 'template-1', sortOrder: null },
       ];
 
+      vi.mocked(db.select)
+        .mockReturnValueOnce(selectChain([{ id: 'plan-1' }]))
+        .mockReturnValueOnce(selectChain([{ id: 'template-2' }]));
       vi.mocked(db.select).mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockResolvedValue(existingAssociations),
@@ -2288,7 +2377,7 @@ describe('WaiversService', () => {
       } as any);
 
       const { addWaiverToMembershipPlan } = await import('./WaiversService');
-      await addWaiverToMembershipPlan('plan-1', 'template-2');
+      await addWaiverToMembershipPlan('plan-1', 'template-2', TEST_ORG);
 
       // null sortOrder treated as 0, so max is 0, new one is 1
       expect(mockValues).toHaveBeenCalledWith(
@@ -2305,16 +2394,30 @@ describe('WaiversService', () => {
     it('should delete the association between membership plan and waiver', async () => {
       const { db } = await import('@/libs/DB');
 
+      vi.mocked(db.select).mockReturnValueOnce(selectChain([{ id: 'plan-1' }]));
+
       const mockWhere = vi.fn().mockResolvedValue(undefined);
       vi.mocked(db.delete).mockReturnValue({
         where: mockWhere,
       } as any);
 
       const { removeWaiverFromMembershipPlan } = await import('./WaiversService');
-      await removeWaiverFromMembershipPlan('plan-1', 'template-1');
+      await removeWaiverFromMembershipPlan('plan-1', 'template-1', TEST_ORG);
 
       expect(db.delete).toHaveBeenCalledTimes(1);
       expect(mockWhere).toHaveBeenCalledTimes(1);
+    });
+
+    it('should reject cross-tenant plan with WaiverNotFoundError', async () => {
+      const { db } = await import('@/libs/DB');
+
+      vi.mocked(db.select).mockReturnValueOnce(selectChain([]));
+
+      const { removeWaiverFromMembershipPlan, WaiverNotFoundError } = await import('./WaiversService');
+
+      await expect(
+        removeWaiverFromMembershipPlan('plan-x', 'template-1', TEST_ORG),
+      ).rejects.toThrow(WaiverNotFoundError);
     });
   });
 
@@ -2698,11 +2801,13 @@ describe('WaiversService', () => {
   describe('setWaiverMembershipPlans (#267)', () => {
     it('deletes existing associations by waiver, then inserts one row per plan', async () => {
       const { db } = await import('@/libs/DB');
+      // All guard selects (template + each plan) resolve to a non-empty row.
+      vi.mocked(db.select).mockReturnValue(selectChain([{ id: 'ok' }]));
       const insertValues = vi.fn(() => Promise.resolve());
       (db.insert as any).mockReturnValueOnce({ values: insertValues });
 
       const { setWaiverMembershipPlans } = await import('./WaiversService');
-      await setWaiverMembershipPlans('waiver-1', ['plan-a', 'plan-b']);
+      await setWaiverMembershipPlans('waiver-1', ['plan-a', 'plan-b'], TEST_ORG);
 
       // Deletes keyed on the waiver template (not the plan).
       expect(db.delete).toHaveBeenCalled();
@@ -2716,12 +2821,25 @@ describe('WaiversService', () => {
     it('only deletes (no insert) when the plan list is empty', async () => {
       const { db } = await import('@/libs/DB');
       (db.insert as any).mockClear();
+      // Only the template guard runs (no plans to check).
+      vi.mocked(db.select).mockReturnValue(selectChain([{ id: 'waiver-1' }]));
 
       const { setWaiverMembershipPlans } = await import('./WaiversService');
-      await setWaiverMembershipPlans('waiver-1', []);
+      await setWaiverMembershipPlans('waiver-1', [], TEST_ORG);
 
       expect(db.delete).toHaveBeenCalled();
       expect(db.insert).not.toHaveBeenCalled();
+    });
+
+    it('rejects a cross-tenant waiver template with WaiverNotFoundError', async () => {
+      const { db } = await import('@/libs/DB');
+      vi.mocked(db.select).mockReturnValueOnce(selectChain([]));
+
+      const { setWaiverMembershipPlans, WaiverNotFoundError } = await import('./WaiversService');
+
+      await expect(
+        setWaiverMembershipPlans('waiver-x', ['plan-a'], TEST_ORG),
+      ).rejects.toThrow(WaiverNotFoundError);
     });
   });
 });

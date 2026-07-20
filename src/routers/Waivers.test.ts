@@ -25,6 +25,14 @@ vi.mock('@/services/AuditService', () => ({
 }));
 
 vi.mock('@/services/WaiversService', () => ({
+  // Real error class so the router's `instanceof WaiverNotFoundError` check
+  // (in toOrpcError) resolves to a 404 rather than throwing on an undefined.
+  WaiverNotFoundError: class WaiverNotFoundError extends Error {
+    constructor(message = 'Waiver resource not found') {
+      super(message);
+      this.name = 'WaiverNotFoundError';
+    }
+  },
   getOrganizationWaiverTemplates: vi.fn(),
   getActiveWaiverTemplates: vi.fn(),
   getWaiverTemplateById: vi.fn(),
@@ -706,7 +714,7 @@ describe('Waivers Router', () => {
       const result = await callHandler(listMemberSignedWaivers, { memberId: 'member-1' });
 
       expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
-      expect(getMemberSignedWaivers).toHaveBeenCalledWith('member-1');
+      expect(getMemberSignedWaivers).toHaveBeenCalledWith('member-1', 'test-org-456');
       expect(result).toEqual({ waivers: [mockSignedWaiverWithName] });
       expect((result as { waivers: Array<{ waiverName: string }> }).waivers[0]!.waiverName).toBe('Standard Adult Waiver');
     });
@@ -934,7 +942,7 @@ describe('Waivers Router', () => {
       const result = await callHandler(getWaiversForMembership, { membershipPlanId: 'plan-1' });
 
       expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
-      expect(getWaiversForMembershipPlan).toHaveBeenCalledWith('plan-1');
+      expect(getWaiversForMembershipPlan).toHaveBeenCalledWith('plan-1', 'test-org-456');
       expect(result).toEqual({ waivers: [mockTemplate] });
     });
 
@@ -989,7 +997,7 @@ describe('Waivers Router', () => {
       const result = await callHandler(setMembershipWaiverAssociations, setInput);
 
       expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
-      expect(setMembershipPlanWaivers).toHaveBeenCalledWith('plan-1', ['template-1', 'template-2']);
+      expect(setMembershipPlanWaivers).toHaveBeenCalledWith('plan-1', ['template-1', 'template-2'], 'test-org-456');
       expect(audit).toHaveBeenCalledWith(
         mockContext,
         AUDIT_ACTION.MEMBERSHIP_WAIVER_SET,
@@ -1067,7 +1075,7 @@ describe('Waivers Router', () => {
       const result = await callHandler(addWaiverToMembership, addInput);
 
       expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
-      expect(addWaiverToMembershipPlan).toHaveBeenCalledWith('plan-1', 'template-1', true);
+      expect(addWaiverToMembershipPlan).toHaveBeenCalledWith('plan-1', 'template-1', 'test-org-456', true);
       expect(audit).toHaveBeenCalledWith(
         mockContext,
         AUDIT_ACTION.MEMBERSHIP_WAIVER_ADD,
@@ -1144,7 +1152,7 @@ describe('Waivers Router', () => {
       const result = await callHandler(removeWaiverFromMembership, removeInput);
 
       expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
-      expect(removeWaiverFromMembershipPlan).toHaveBeenCalledWith('plan-1', 'template-1');
+      expect(removeWaiverFromMembershipPlan).toHaveBeenCalledWith('plan-1', 'template-1', 'test-org-456');
       expect(audit).toHaveBeenCalledWith(
         mockContext,
         AUDIT_ACTION.MEMBERSHIP_WAIVER_REMOVE,
@@ -1566,7 +1574,7 @@ describe('Waivers Router', () => {
       });
 
       expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
-      expect(setWaiverMembershipPlans).toHaveBeenCalledWith('template-1', ['plan-a', 'plan-b']);
+      expect(setWaiverMembershipPlans).toHaveBeenCalledWith('template-1', ['plan-a', 'plan-b'], 'test-org-456');
       expect(audit).toHaveBeenCalledWith(
         mockContext,
         AUDIT_ACTION.MEMBERSHIP_WAIVER_SET,
@@ -1596,6 +1604,20 @@ describe('Waivers Router', () => {
         AUDIT_ENTITY_TYPE.MEMBERSHIP_WAIVER,
         { entityId: 'template-1', status: 'failure', error: 'DB failure' },
       );
+    });
+
+    it('maps a cross-tenant WaiverNotFoundError to a 404 ORPCError', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { setWaiverMembershipPlans, WaiverNotFoundError } = await import('@/services/WaiversService');
+
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(setWaiverMembershipPlans).mockRejectedValue(new WaiverNotFoundError('Waiver template not found'));
+
+      const { setWaiverMemberships } = await import('./Waivers');
+
+      await expect(
+        callHandler(setWaiverMemberships, { waiverTemplateId: 'template-x', membershipPlanIds: [] }),
+      ).rejects.toMatchObject({ status: 404 });
     });
   });
 });

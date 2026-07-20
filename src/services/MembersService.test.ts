@@ -87,6 +87,20 @@ vi.mock('@/models/Schema', () => ({
 
 vi.mock('@/services/TransactionsService', () => ({}));
 
+const TEST_ORG = 'org-123';
+
+/**
+ * A chainable db.select mock matching the org-guard shape
+ * `.from(...).where(...).limit(1)` (resolving to `rows`). Also supports an
+ * `.innerJoin(...)` before `.where(...)` for guards that join.
+ */
+function guardSelect(rows: unknown[]): any {
+  const limit = vi.fn(() => Promise.resolve(rows));
+  const where = vi.fn(() => ({ limit }));
+  const inner: any = { where, innerJoin: vi.fn(() => inner), limit };
+  return { from: vi.fn(() => inner) };
+}
+
 describe('MembersService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -104,7 +118,7 @@ describe('MembersService', () => {
 
       const { addMemberMembership, MemberOnHoldError } = await import('./MembersService');
 
-      await expect(addMemberMembership('member-123', 'plan-1')).rejects.toBeInstanceOf(MemberOnHoldError);
+      await expect(addMemberMembership('member-123', 'plan-1', TEST_ORG)).rejects.toBeInstanceOf(MemberOnHoldError);
       // The insert must not run for a held member.
       expect(db.insert).not.toHaveBeenCalled();
     });
@@ -122,7 +136,7 @@ describe('MembersService', () => {
       vi.mocked(db.insert).mockReturnValue({ values } as never);
 
       const { addMemberMembership } = await import('./MembersService');
-      const result = await addMemberMembership('member-123', 'plan-1');
+      const result = await addMemberMembership('member-123', 'plan-1', TEST_ORG);
 
       expect(db.insert).toHaveBeenCalled();
       expect(values).toHaveBeenCalledWith(expect.objectContaining({
@@ -131,6 +145,111 @@ describe('MembersService', () => {
         status: 'active',
       }));
       expect(result).toEqual([{ id: 'mm-1' }]);
+    });
+
+    it('rejects a cross-tenant member with MemberNotFoundError', async () => {
+      const { db } = await import('@/libs/DB');
+      // The member guard select returns empty → not in caller's org.
+      vi.mocked(db.select).mockReturnValue(guardSelect([]));
+
+      const { addMemberMembership, MemberNotFoundError } = await import('./MembersService');
+
+      await expect(addMemberMembership('member-x', 'plan-1', TEST_ORG)).rejects.toBeInstanceOf(MemberNotFoundError);
+      expect(db.insert).not.toHaveBeenCalled();
+    });
+
+    it('rejects a cross-tenant plan with MemberNotFoundError', async () => {
+      const { db } = await import('@/libs/DB');
+      // Member guard passes, plan guard fails.
+      vi.mocked(db.select)
+        .mockReturnValueOnce(guardSelect([{ id: 'member-123' }]))
+        .mockReturnValueOnce(guardSelect([]));
+
+      const { addMemberMembership, MemberNotFoundError } = await import('./MembersService');
+
+      await expect(addMemberMembership('member-123', 'plan-x', TEST_ORG)).rejects.toBeInstanceOf(MemberNotFoundError);
+      expect(db.insert).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('changeMemberMembership', () => {
+    it('marks active memberships converted and inserts the new plan', async () => {
+      const { db } = await import('@/libs/DB');
+      // Both guard selects pass.
+      vi.mocked(db.select).mockReturnValue(guardSelect([{ id: 'ok' }]));
+
+      const setWhere = vi.fn(() => Promise.resolve());
+      const set = vi.fn(() => ({ where: setWhere }));
+      vi.mocked(db.update).mockReturnValueOnce({ set } as never);
+
+      const returning = vi.fn(() => Promise.resolve([{ id: 'mm-new' }]));
+      const values = vi.fn(() => ({ returning }));
+      vi.mocked(db.insert).mockReturnValueOnce({ values } as never);
+
+      const { changeMemberMembership } = await import('./MembersService');
+      const result = await changeMemberMembership('member-123', 'plan-2', TEST_ORG);
+
+      expect(db.update).toHaveBeenCalled();
+      expect(db.insert).toHaveBeenCalled();
+      expect(result).toEqual([{ id: 'mm-new' }]);
+    });
+
+    it('rejects a cross-tenant member with MemberNotFoundError', async () => {
+      const { db } = await import('@/libs/DB');
+      vi.mocked(db.select).mockReturnValue(guardSelect([]));
+
+      const { changeMemberMembership, MemberNotFoundError } = await import('./MembersService');
+
+      await expect(changeMemberMembership('member-x', 'plan-2', TEST_ORG)).rejects.toBeInstanceOf(MemberNotFoundError);
+      expect(db.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getMemberById', () => {
+    // A select chain whose `.where()` is directly awaitable (address/membership
+    // queries) AND supports `.where().limit()` (the member lookup).
+    const awaitableSelect = (rows: unknown[]): any => {
+      const promise: any = Promise.resolve(rows);
+      promise.limit = vi.fn(() => Promise.resolve(rows));
+      return { from: vi.fn(() => ({ where: vi.fn(() => promise) })) };
+    };
+
+    it('returns the member (with photoUrl) when in the org', async () => {
+      const { db } = await import('@/libs/DB');
+      const memberRow = {
+        id: 'member-1',
+        firstName: 'Jane',
+        lastName: 'Doe',
+        email: 'jane@test.com',
+        phone: null,
+        dateOfBirth: null,
+        photoUrl: 'data:image/jpeg;base64,/9j/AA',
+        memberType: 'individual',
+        lastAccessedAt: null,
+        status: 'active',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      vi.mocked(db.select)
+        .mockReturnValueOnce(awaitableSelect([memberRow])) // member lookup (.limit)
+        .mockReturnValueOnce(awaitableSelect([])) // addresses
+        .mockReturnValueOnce(awaitableSelect([])); // memberships
+
+      const { getMemberById } = await import('./MembersService');
+      const result = await getMemberById('member-1', TEST_ORG);
+
+      expect(result?.id).toBe('member-1');
+      expect(result?.photoUrl).toBe('data:image/jpeg;base64,/9j/AA');
+    });
+
+    it('returns null for a cross-tenant / missing member', async () => {
+      const { db } = await import('@/libs/DB');
+      vi.mocked(db.select).mockReturnValueOnce(awaitableSelect([]));
+
+      const { getMemberById } = await import('./MembersService');
+      const result = await getMemberById('member-x', TEST_ORG);
+
+      expect(result).toBeNull();
     });
   });
 
@@ -593,12 +712,15 @@ describe('MembersService', () => {
       const { db } = await import('@/libs/DB');
       const mockResult = [{ id: 'family-link-1' }];
 
+      // Both member guards pass.
+      vi.mocked(db.select).mockReturnValue(guardSelect([{ id: 'ok' }]));
+
       const mockReturning = vi.fn(() => Promise.resolve(mockResult));
       const mockValues = vi.fn(() => ({ returning: mockReturning }));
       vi.mocked(db.insert).mockReturnValue({ values: mockValues } as never);
 
       const { linkFamilyMember } = await import('./MembersService');
-      const result = await linkFamilyMember('hoh-123', 'member-456', 'family-member');
+      const result = await linkFamilyMember('hoh-123', 'member-456', 'family-member', TEST_ORG);
 
       expect(result).toEqual(mockResult);
       expect(db.insert).toHaveBeenCalled();
@@ -607,6 +729,21 @@ describe('MembersService', () => {
         relatedMemberId: 'member-456',
         relationship: 'family-member',
       });
+    });
+
+    it('rejects when the family member is cross-tenant', async () => {
+      const { db } = await import('@/libs/DB');
+      // HOH guard passes, family-member guard fails.
+      vi.mocked(db.select)
+        .mockReturnValueOnce(guardSelect([{ id: 'hoh-123' }]))
+        .mockReturnValueOnce(guardSelect([]));
+
+      const { linkFamilyMember, MemberNotFoundError } = await import('./MembersService');
+
+      await expect(
+        linkFamilyMember('hoh-123', 'member-x', 'family-member', TEST_ORG),
+      ).rejects.toBeInstanceOf(MemberNotFoundError);
+      expect(db.insert).not.toHaveBeenCalled();
     });
   });
 
@@ -638,12 +775,23 @@ describe('MembersService', () => {
           planFrequency: 'monthly',
         },
       ];
-      vi.mocked(db.select).mockReturnValue(mockChain(mockFamilyMembers) as never);
+      vi.mocked(db.select)
+        .mockReturnValueOnce(guardSelect([{ id: 'hoh-123' }]))
+        .mockReturnValue(mockChain(mockFamilyMembers) as never);
 
       const { getFamilyMembers } = await import('./MembersService');
-      const result = await getFamilyMembers('hoh-123');
+      const result = await getFamilyMembers('hoh-123', TEST_ORG);
 
       expect(result).toEqual(mockFamilyMembers);
+    });
+
+    it('rejects a cross-tenant HOH with MemberNotFoundError', async () => {
+      const { db } = await import('@/libs/DB');
+      vi.mocked(db.select).mockReturnValue(guardSelect([]));
+
+      const { getFamilyMembers, MemberNotFoundError } = await import('./MembersService');
+
+      await expect(getFamilyMembers('hoh-x', TEST_ORG)).rejects.toBeInstanceOf(MemberNotFoundError);
     });
 
     it('should return null plan fields when a family member has no active membership', async () => {
@@ -662,10 +810,12 @@ describe('MembersService', () => {
           planFrequency: null,
         },
       ];
-      vi.mocked(db.select).mockReturnValue(mockChain(mockFamilyMembers) as never);
+      vi.mocked(db.select)
+        .mockReturnValueOnce(guardSelect([{ id: 'hoh-123' }]))
+        .mockReturnValue(mockChain(mockFamilyMembers) as never);
 
       const { getFamilyMembers } = await import('./MembersService');
-      const result = await getFamilyMembers('hoh-123');
+      const result = await getFamilyMembers('hoh-123', TEST_ORG);
 
       expect(result[0]?.planName).toBeNull();
       expect(result[0]?.planPrice).toBeNull();
@@ -674,10 +824,12 @@ describe('MembersService', () => {
 
     it('should return empty array when HOH has no family members', async () => {
       const { db } = await import('@/libs/DB');
-      vi.mocked(db.select).mockReturnValue(mockChain([]) as never);
+      vi.mocked(db.select)
+        .mockReturnValueOnce(guardSelect([{ id: 'hoh-no-family' }]))
+        .mockReturnValue(mockChain([]) as never);
 
       const { getFamilyMembers } = await import('./MembersService');
-      const result = await getFamilyMembers('hoh-no-family');
+      const result = await getFamilyMembers('hoh-no-family', TEST_ORG);
 
       expect(result).toEqual([]);
     });
@@ -688,12 +840,15 @@ describe('MembersService', () => {
       const { db } = await import('@/libs/DB');
       const mockResult = [{ memberId: 'hoh-123', relatedMemberId: 'fm-456' }];
 
+      // Both member guards pass.
+      vi.mocked(db.select).mockReturnValue(guardSelect([{ id: 'ok' }]));
+
       const mockReturning = vi.fn(() => Promise.resolve(mockResult));
       const mockWhere = vi.fn(() => ({ returning: mockReturning }));
       (vi.mocked(db) as any).delete.mockReturnValue({ where: mockWhere } as never);
 
       const { unlinkFamilyMember } = await import('./MembersService');
-      const result = await unlinkFamilyMember('hoh-123', 'fm-456');
+      const result = await unlinkFamilyMember('hoh-123', 'fm-456', TEST_ORG);
 
       expect(result).toEqual(mockResult);
       expect(db.delete).toHaveBeenCalled();
@@ -702,14 +857,26 @@ describe('MembersService', () => {
     it('should return empty array when no matching relationship exists', async () => {
       const { db } = await import('@/libs/DB');
 
+      vi.mocked(db.select).mockReturnValue(guardSelect([{ id: 'ok' }]));
+
       const mockReturning = vi.fn(() => Promise.resolve([]));
       const mockWhere = vi.fn(() => ({ returning: mockReturning }));
       (vi.mocked(db) as any).delete.mockReturnValue({ where: mockWhere } as never);
 
       const { unlinkFamilyMember } = await import('./MembersService');
-      const result = await unlinkFamilyMember('hoh-999', 'fm-999');
+      const result = await unlinkFamilyMember('hoh-999', 'fm-999', TEST_ORG);
 
       expect(result).toEqual([]);
+    });
+
+    it('rejects a cross-tenant HOH with MemberNotFoundError', async () => {
+      const { db } = await import('@/libs/DB');
+      vi.mocked(db.select).mockReturnValue(guardSelect([]));
+
+      const { unlinkFamilyMember, MemberNotFoundError } = await import('./MembersService');
+
+      await expect(unlinkFamilyMember('hoh-x', 'fm-456', TEST_ORG)).rejects.toBeInstanceOf(MemberNotFoundError);
+      expect(db.delete).not.toHaveBeenCalled();
     });
   });
 
@@ -730,13 +897,24 @@ describe('MembersService', () => {
       const mockWhere = vi.fn(() => ({ limit: mockLimit }));
       const mockInnerJoin = vi.fn(() => ({ where: mockWhere }));
       const mockFrom = vi.fn(() => ({ innerJoin: mockInnerJoin }));
-      vi.mocked(db.select).mockReturnValue({ from: mockFrom } as never);
+      vi.mocked(db.select)
+        .mockReturnValueOnce(guardSelect([{ id: 'fm-123' }]))
+        .mockReturnValue({ from: mockFrom } as never);
 
       const { getHOHForFamilyMember } = await import('./MembersService');
-      const result = await getHOHForFamilyMember('fm-123');
+      const result = await getHOHForFamilyMember('fm-123', TEST_ORG);
 
       expect(result).toEqual(mockHOH);
       expect(db.select).toHaveBeenCalled();
+    });
+
+    it('rejects a cross-tenant family member with MemberNotFoundError', async () => {
+      const { db } = await import('@/libs/DB');
+      vi.mocked(db.select).mockReturnValue(guardSelect([]));
+
+      const { getHOHForFamilyMember, MemberNotFoundError } = await import('./MembersService');
+
+      await expect(getHOHForFamilyMember('fm-x', TEST_ORG)).rejects.toBeInstanceOf(MemberNotFoundError);
     });
 
     it('should return null when no HOH found for a member', async () => {
@@ -746,10 +924,12 @@ describe('MembersService', () => {
       const mockWhere = vi.fn(() => ({ limit: mockLimit }));
       const mockInnerJoin = vi.fn(() => ({ where: mockWhere }));
       const mockFrom = vi.fn(() => ({ innerJoin: mockInnerJoin }));
-      vi.mocked(db.select).mockReturnValue({ from: mockFrom } as never);
+      vi.mocked(db.select)
+        .mockReturnValueOnce(guardSelect([{ id: 'member-not-family' }]))
+        .mockReturnValue({ from: mockFrom } as never);
 
       const { getHOHForFamilyMember } = await import('./MembersService');
-      const result = await getHOHForFamilyMember('member-not-family');
+      const result = await getHOHForFamilyMember('member-not-family', TEST_ORG);
 
       expect(result).toBeNull();
     });

@@ -1,4 +1,5 @@
-import { redirect } from 'next/navigation';
+import { redirect, unstable_rethrow } from 'next/navigation';
+import { logger } from '@/libs/Logger';
 import { createBillingPortal } from '@/services/BillingService';
 import { getStripeCustomerId } from '@/services/OrganizationService';
 import { ORG_ROLE } from '@/types/Auth';
@@ -27,7 +28,19 @@ export async function GET(
     redirect('/dashboard/billing');
   }
 
-  const session = await createBillingPortal(customerId, locale);
+  let portalUrl: string;
+  try {
+    const session = await createBillingPortal(customerId, locale);
+    portalUrl = session.url;
+  } catch (error) {
+    // redirect() throws a control-flow signal — never swallow it.
+    unstable_rethrow(error);
+    logger.error('Failed to create Stripe billing portal session', {
+      orgId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    redirect('/dashboard/billing?error=portal');
+  }
 
-  redirect(session.url);
+  redirect(portalUrl);
 }

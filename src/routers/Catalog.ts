@@ -3,6 +3,7 @@ import { logger } from '@/libs/Logger';
 import { audit } from '@/services/AuditService';
 import {
   adjustVariantStock,
+  CatalogNotFoundError,
   createCatalogImage,
   createCatalogItem,
   createCatalogVariant,
@@ -37,6 +38,21 @@ import {
   UpdateVariantValidation,
 } from '@/validations/CatalogValidation';
 import { guardRole } from './AuthGuards';
+
+/**
+ * Normalize a service error into an ORPCError. A CatalogNotFoundError (raised
+ * when a variant/image/item is missing OR belongs to another org) maps to 404
+ * so cross-tenant probes are indistinguishable from genuine misses.
+ */
+function toOrpcError(error: unknown, fallbackMessage: string): ORPCError<string, unknown> {
+  if (error instanceof ORPCError) {
+    return error;
+  }
+  if (error instanceof CatalogNotFoundError) {
+    return new ORPCError('Not Found', { status: 404, message: error.message });
+  }
+  return new ORPCError(fallbackMessage, { status: 500 });
+}
 
 // =============================================================================
 // CATALOG ITEM HANDLERS
@@ -214,7 +230,7 @@ export const variantCreate = os
     const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
-      const variant = await createCatalogVariant(input);
+      const variant = await createCatalogVariant(input, context.orgId);
 
       logger.info(`[Catalog.variantCreate] Variant created: ${variant.id} for item: ${input.catalogItemId}`);
 
@@ -233,7 +249,7 @@ export const variantCreate = os
         error: errorMessage,
       });
 
-      throw error instanceof ORPCError ? error : new ORPCError('Failed to create variant.', { status: 500 });
+      throw toOrpcError(error, 'Failed to create variant.');
     }
   });
 
@@ -246,7 +262,7 @@ export const variantUpdate = os
     const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
-      const variant = await updateCatalogVariant(input);
+      const variant = await updateCatalogVariant(input, context.orgId);
 
       logger.info(`[Catalog.variantUpdate] Variant updated: ${input.id}`);
 
@@ -266,7 +282,7 @@ export const variantUpdate = os
         error: errorMessage,
       });
 
-      throw error instanceof ORPCError ? error : new ORPCError('Failed to update variant.', { status: 500 });
+      throw toOrpcError(error, 'Failed to update variant.');
     }
   });
 
@@ -279,7 +295,7 @@ export const variantRemove = os
     const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
-      await deleteCatalogVariant(input.id);
+      await deleteCatalogVariant(input.id, context.orgId);
 
       logger.info(`[Catalog.variantRemove] Variant deleted: ${input.id}`);
 
@@ -299,7 +315,7 @@ export const variantRemove = os
         error: errorMessage,
       });
 
-      throw error instanceof ORPCError ? error : new ORPCError('Failed to delete variant.', { status: 500 });
+      throw toOrpcError(error, 'Failed to delete variant.');
     }
   });
 
@@ -312,7 +328,7 @@ export const stockAdjust = os
     const context = await guardRole(ORG_ROLE.FRONT_DESK);
 
     try {
-      const variant = await adjustVariantStock(input.variantId, input.adjustment);
+      const variant = await adjustVariantStock(input.variantId, input.adjustment, context.orgId);
 
       logger.info(`[Catalog.stockAdjust] Stock adjusted for variant: ${input.variantId}, adjustment: ${input.adjustment}, reason: ${input.reason}`);
 
@@ -332,7 +348,7 @@ export const stockAdjust = os
         error: errorMessage,
       });
 
-      throw error instanceof ORPCError ? error : new ORPCError('Failed to adjust stock.', { status: 500 });
+      throw toOrpcError(error, 'Failed to adjust stock.');
     }
   });
 
@@ -467,7 +483,7 @@ export const imageCreate = os
     const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
-      const image = await createCatalogImage(input);
+      const image = await createCatalogImage(input, context.orgId);
 
       logger.info(`[Catalog.imageCreate] Image added: ${image.id} for item: ${input.catalogItemId}`);
 
@@ -486,7 +502,7 @@ export const imageCreate = os
         error: errorMessage,
       });
 
-      throw error instanceof ORPCError ? error : new ORPCError('Failed to add image.', { status: 500 });
+      throw toOrpcError(error, 'Failed to add image.');
     }
   });
 
@@ -499,7 +515,7 @@ export const imageRemove = os
     const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
-      await deleteCatalogImage(input.id);
+      await deleteCatalogImage(input.id, context.orgId);
 
       logger.info(`[Catalog.imageRemove] Image deleted: ${input.id}`);
 
@@ -519,6 +535,6 @@ export const imageRemove = os
         error: errorMessage,
       });
 
-      throw error instanceof ORPCError ? error : new ORPCError('Failed to delete image.', { status: 500 });
+      throw toOrpcError(error, 'Failed to delete image.');
     }
   });

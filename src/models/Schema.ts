@@ -366,6 +366,8 @@ export const signedWaiverSchema = pgTable(
     index('signed_waiver_member_idx').on(table.memberId),
     index('signed_waiver_template_idx').on(table.waiverTemplateId),
     index('signed_waiver_membership_idx').on(table.memberMembershipId),
+    // Serves countSignedWaiversThisMonth (WHERE organization_id = ? AND signed_at >= ?).
+    index('signed_waiver_org_signed_idx').on(table.organizationId, table.signedAt),
   ],
 );
 
@@ -419,7 +421,10 @@ export const addressSchema = pgTable('address', {
   zipCode: text('zip_code').notNull(),
   country: text('country').notNull().default('US'),
   isDefault: boolean('is_default').default(false),
-});
+}, table => [
+  // Addresses are fetched by member_id (inArray) on every members-list load.
+  index('address_member_idx').on(table.memberId),
+]);
 
 export const noteSchema = pgTable('note', {
   id: text('id').primaryKey(),
@@ -433,7 +438,10 @@ export const noteSchema = pgTable('note', {
     .defaultNow()
     .$onUpdate(() => new Date())
     .notNull(),
-});
+}, table => [
+  // Notes are joined/filtered by member_id (+ status active/archived).
+  index('note_member_idx').on(table.memberId),
+]);
 
 export const paymentMethodSchema = pgTable('payment_method', {
   id: text('id').primaryKey(),
@@ -445,7 +453,10 @@ export const paymentMethodSchema = pgTable('payment_method', {
   last4: text('last4'),
   accountType: text('account_type'), // ACH bank account type: 'Checking' | 'Savings'. Null for cards.
   isDefault: boolean('is_default').default(false),
-});
+}, table => [
+  // Payment methods are looked up by member_id on member detail / billing.
+  index('payment_method_member_idx').on(table.memberId),
+]);
 
 export const familyMemberSchema = pgTable('family_member', {
   memberId: text('member_id').references(() => memberSchema.id).notNull(),
@@ -453,6 +464,9 @@ export const familyMemberSchema = pgTable('family_member', {
   relationship: text('relationship').notNull(),
 }, table => [
   primaryKey({ columns: [table.memberId, table.relatedMemberId] }),
+  // The composite PK covers lookups by memberId (prefix); family lookups that
+  // key on related_member_id alone need their own index.
+  index('family_member_related_idx').on(table.relatedMemberId),
 ]);
 
 // =============================================================================
@@ -967,6 +981,9 @@ export const transactionSchema = pgTable(
     index('transaction_member_idx').on(table.memberId),
     index('transaction_status_idx').on(table.status),
     index('transaction_date_idx').on(table.createdAt),
+    // Serves the hot org-scoped, date-ordered transaction list (WHERE
+    // organization_id = ? ORDER BY created_at DESC) from one index.
+    index('transaction_org_created_idx').on(table.organizationId, table.createdAt),
     uniqueIndex('transaction_stripe_idx').on(table.stripePaymentIntentId),
   ],
 );

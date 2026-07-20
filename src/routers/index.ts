@@ -22,7 +22,7 @@ import { create as createCoupon, getTotalSavings as getCouponTotalSavings, listA
 import { earningsChart, financialStats, memberAverageChart, membershipStats } from './Dashboard';
 import { cancelRegistration as cancelEventRegistration, create as createEvent, registrations as listEventRegistrations, list as listEvents, register as registerForEvent, remove as removeEvent, update as updateEvent } from './Events';
 import { list as listInstructors, updatePhoto as updateInstructorPhoto } from './Instructors';
-import { addMembership, cancelMembership, changeMembership, create as createMember, deletePaymentMethod, getHOHForMember, getHOHPaymentMethods, holdMembership, linkFamily, listAllMembershipPlans, listFamily, listMembershipPlans, listMemberTransactions, listPaymentMethods, reactivateMembership, removeFullyMember, remove as removeMember, restore as restoreMember, searchHOH, sendConfirmationEmail, setPrimaryPaymentMethod, unlinkFamily, updateLastAccessed, update as updateMember, updateContactInfo as updateMemberContactInfo, updatePhoto as updateMemberPhoto, updateMemberType } from './Member';
+import { addMembership, cancelMembership, changeMembership, create as createMember, deletePaymentMethod, getHOHForMember, getHOHPaymentMethods, getById as getMemberById, holdMembership, linkFamily, listAllMembershipPlans, listFamily, listMembershipPlans, listMemberTransactions, listPaymentMethods, reactivateMembership, removeFullyMember, remove as removeMember, restore as restoreMember, searchHOH, sendConfirmationEmail, setPrimaryPaymentMethod, unlinkFamily, updateLastAccessed, update as updateMember, updateContactInfo as updateMemberContactInfo, updatePhoto as updateMemberPhoto, updateMemberType } from './Member';
 import { list as listMembers } from './Members';
 import { create as createMembershipPlan, remove as removeMembershipPlan, update as updateMembershipPlan } from './MembershipPlans';
 import { create as createNoteHandler, list as listNotes, remove as removeNoteHandler, update as updateNoteHandler } from './Notes';
@@ -91,6 +91,7 @@ export const router = {
     getHOHPaymentMethods,
     unlinkFamilyMember: unlinkFamily,
     getHOHForMember,
+    getById: getMemberById,
     sendConfirmationEmail,
     updateMemberType,
   },

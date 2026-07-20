@@ -475,6 +475,9 @@ export default function EditMemberPage() {
   const [isChangeMembershipModalOpen, setIsChangeMembershipModalOpen] = useState(false);
   const [membershipModalMode, setMembershipModalMode] = useState<'add' | 'change'>('add');
 
+  // Member photo (large base64), loaded separately from the members list.
+  const [memberPhoto, setMemberPhoto] = useState<string | undefined>(undefined);
+
   // State for signed waivers
   const [signedWaivers, setSignedWaivers] = useState<SignedWaiverWithTemplateName[]>([]);
   const [isLoadingWaivers, setIsLoadingWaivers] = useState(true);
@@ -651,6 +654,26 @@ export default function EditMemberPage() {
   useEffect(() => {
     loadMemberData();
   }, [loadMemberData]);
+
+  // Fetch the member's photo (large base64) separately — the members-LIST query
+  // omits it for payload/heap reasons. Held in its own state and merged into the
+  // rendered member data below, so it's independent of when the cache load runs.
+  // Extracted so the edit-photo modal can re-run it after a save.
+  const reloadMemberPhoto = useCallback(async () => {
+    if (!memberId) {
+      return;
+    }
+    try {
+      const result = await client.member.getById({ memberId });
+      setMemberPhoto(result.member.photoUrl ?? undefined);
+    } catch (err) {
+      console.warn('[Edit Member] Failed to fetch member photo:', err);
+    }
+  }, [memberId]);
+
+  useEffect(() => {
+    void reloadMemberPhoto();
+  }, [reloadMemberPhoto]);
 
   // Fetch signed waivers for this member
   useEffect(() => {
@@ -1029,7 +1052,7 @@ export default function EditMemberPage() {
       <div className="flex items-center gap-4">
         <div className="relative h-16 w-16 shrink-0">
           <Avatar className="h-16 w-16">
-            {state.currentData.photoUrl && <AvatarImage src={state.currentData.photoUrl} alt={state.currentData.memberName} />}
+            {memberPhoto && <AvatarImage src={memberPhoto} alt={state.currentData.memberName} />}
             <AvatarFallback>{getInitials(state.currentData.memberName)}</AvatarFallback>
           </Avatar>
           <button
@@ -1301,11 +1324,12 @@ export default function EditMemberPage() {
               isOpen={isEditPhotoModalOpen}
               memberId={memberId}
               memberName={state.currentData.memberName}
-              currentPhotoUrl={state.currentData.photoUrl ?? null}
+              currentPhotoUrl={memberPhoto ?? null}
               onCloseAction={() => setIsEditPhotoModalOpen(false)}
               onSavedAction={() => {
-                // The modal already calls invalidateMembersCache(); useMembersCache
-                // re-runs and the avatar refreshes without a full page reload.
+                // The photo now lives outside the members-list cache (which omits
+                // it), so re-fetch it directly to refresh the avatar after a save.
+                void reloadMemberPhoto();
               }}
             />
 

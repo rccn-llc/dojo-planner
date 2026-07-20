@@ -205,10 +205,15 @@ describe('DashboardService', () => {
   });
 
   describe('getMemberAverageChartData', () => {
-    it('should return monthly and yearly chart data', async () => {
-      // For this test, we'll mock 12 months + 12 months prev year + 5 years = 29 queries
-      const mockCount = 50;
-      mockQueryBuilder.where.mockResolvedValue([{ count: mockCount }]);
+    it('should return monthly and yearly chart data from a single fetch', async () => {
+      // N+1 consolidation: ONE query fetches all member rows; every bucket count
+      // is computed in JS. A member created before the earliest bucket and never
+      // cancelled is counted in every bucket.
+      const currentYear = new Date().getFullYear();
+      const longAgo = new Date(currentYear - 10, 0, 1);
+      mockQueryBuilder.where.mockResolvedValue([
+        { createdAt: longAgo, status: 'active', updatedAt: longAgo },
+      ]);
 
       const { db } = await import('@/libs/DB');
       (db as any).select = vi.fn(() => mockQueryBuilder);
@@ -227,23 +232,21 @@ describe('DashboardService', () => {
       expect(result.monthly[0]).toHaveProperty('value');
       expect(result.monthly[0]).toHaveProperty('previousYearValue');
       expect(result.monthly[0]?.month).toBe('Jan');
-      expect(result.monthly[0]?.value).toBe(mockCount);
-      expect(result.monthly[0]?.previousYearValue).toBe(mockCount);
+      expect(result.monthly[0]?.value).toBe(1);
+      expect(result.monthly[0]?.previousYearValue).toBe(1);
 
       // Verify yearly data structure
-      const currentYear = new Date().getFullYear();
-
       expect(result.yearly[0]).toHaveProperty('year');
       expect(result.yearly[0]).toHaveProperty('value');
       expect(result.yearly[0]?.year).toBe(String(currentYear - 4));
       expect(result.yearly[4]?.year).toBe(String(currentYear));
 
-      // Each month has 2 queries current + prev year, plus 5 years
-      expect(db.select).toHaveBeenCalledTimes(12 * 2 + 5);
+      // N+1 → 1: a single member fetch replaces the 29-query fan-out.
+      expect(db.select).toHaveBeenCalledTimes(1);
     });
 
     it('should handle zero member data', async () => {
-      mockQueryBuilder.where.mockResolvedValue([{ count: 0 }]);
+      mockQueryBuilder.where.mockResolvedValue([]);
 
       const { db } = await import('@/libs/DB');
       (db as any).select = vi.fn(() => mockQueryBuilder);
@@ -260,7 +263,7 @@ describe('DashboardService', () => {
     });
 
     it('should return correct month names in order', async () => {
-      mockQueryBuilder.where.mockResolvedValue([{ count: 10 }]);
+      mockQueryBuilder.where.mockResolvedValue([]);
 
       const { db } = await import('@/libs/DB');
       (db as any).select = vi.fn(() => mockQueryBuilder);
@@ -274,8 +277,15 @@ describe('DashboardService', () => {
       expect(actualMonths).toEqual(expectedMonths);
     });
 
-    it('should handle null count results', async () => {
-      mockQueryBuilder.where.mockResolvedValue([{ count: null }]);
+    it('should exclude members created after the bucket and cancelled-before members', async () => {
+      const currentYear = new Date().getFullYear();
+      // Cancelled well before any bucket → never counted.
+      const cancelledEarly = {
+        createdAt: new Date(currentYear - 10, 0, 1),
+        status: 'cancelled',
+        updatedAt: new Date(currentYear - 9, 0, 1),
+      };
+      mockQueryBuilder.where.mockResolvedValue([cancelledEarly]);
 
       const { db } = await import('@/libs/DB');
       (db as any).select = vi.fn(() => mockQueryBuilder);
@@ -283,14 +293,12 @@ describe('DashboardService', () => {
       const { getMemberAverageChartData } = await import('./DashboardService');
       const result = await getMemberAverageChartData('org_test123');
 
-      // Null counts should default to 0
       expect(result.monthly.every(m => m.value === 0)).toBe(true);
-      expect(result.monthly.every(m => m.previousYearValue === 0)).toBe(true);
       expect(result.yearly.every(y => y.value === 0)).toBe(true);
     });
 
     it('should calculate correct year range', async () => {
-      mockQueryBuilder.where.mockResolvedValue([{ count: 25 }]);
+      mockQueryBuilder.where.mockResolvedValue([]);
 
       const { db } = await import('@/libs/DB');
       (db as any).select = vi.fn(() => mockQueryBuilder);
@@ -313,9 +321,23 @@ describe('DashboardService', () => {
   });
 
   describe('getEarningsChartData', () => {
-    it('should return monthly and yearly earnings data', async () => {
-      const mockTotal = 5000;
-      mockQueryBuilder.where.mockResolvedValue([{ total: mockTotal }]);
+    // The grouped date_trunc query is awaited off `.groupBy(...)`. Helper to
+    // point every grouped query at a fixed set of `{ bucket, total }` rows.
+    const mockGroupedRows = (rows: Array<{ bucket: Date; total: number | string | null }>) => {
+      mockQueryBuilder.where.mockReturnValue(mockQueryBuilder);
+      mockQueryBuilder.groupBy.mockResolvedValue(rows);
+    };
+
+    it('should return monthly and yearly earnings data via grouped queries', async () => {
+      const currentYear = new Date().getFullYear();
+      // A grouped result covering Jan of the current year (current-month series),
+      // Jan of the previous year (prev-year series), and the current year's
+      // yearly bucket. Because all three grouped queries share one mock, we
+      // include all three bucket keys.
+      mockGroupedRows([
+        { bucket: new Date(currentYear, 0, 1), total: 5000 },
+        { bucket: new Date(currentYear - 1, 0, 1), total: 5000 },
+      ]);
 
       const { db } = await import('@/libs/DB');
       (db as any).select = vi.fn(() => mockQueryBuilder);
@@ -329,28 +351,23 @@ describe('DashboardService', () => {
       expect(result.monthly).toHaveLength(12);
       expect(result.yearly).toHaveLength(5);
 
-      // Verify monthly data structure
-      expect(result.monthly[0]).toHaveProperty('month');
-      expect(result.monthly[0]).toHaveProperty('value');
-      expect(result.monthly[0]).toHaveProperty('previousYearValue');
+      // Jan maps to the Jan bucket; the rest of the year is a missing bucket → 0.
       expect(result.monthly[0]?.month).toBe('Jan');
-      expect(result.monthly[0]?.value).toBe(mockTotal);
-      expect(result.monthly[0]?.previousYearValue).toBe(mockTotal);
+      expect(result.monthly[0]?.value).toBe(5000);
+      expect(result.monthly[0]?.previousYearValue).toBe(5000);
+      expect(result.monthly[1]?.value).toBe(0);
+      expect(result.monthly[1]?.previousYearValue).toBe(0);
 
       // Verify yearly data structure
-      const currentYear = new Date().getFullYear();
-
-      expect(result.yearly[0]).toHaveProperty('year');
-      expect(result.yearly[0]).toHaveProperty('value');
       expect(result.yearly[0]?.year).toBe(String(currentYear - 4));
       expect(result.yearly[4]?.year).toBe(String(currentYear));
 
-      // Each month has 2 queries (current + prev year), plus 5 years
-      expect(db.select).toHaveBeenCalledTimes(12 * 2 + 5); // 29 total
+      // N+1 → 3: one grouped query per series (current months, prev-year, yearly).
+      expect(db.select).toHaveBeenCalledTimes(3);
     });
 
     it('should handle zero earnings data', async () => {
-      mockQueryBuilder.where.mockResolvedValue([{ total: null }]);
+      mockGroupedRows([]);
 
       const { db } = await import('@/libs/DB');
       (db as any).select = vi.fn(() => mockQueryBuilder);
@@ -367,8 +384,9 @@ describe('DashboardService', () => {
     });
 
     it('should convert total amounts to numbers', async () => {
+      const currentYear = new Date().getFullYear();
       // Mock returns string-like totals (as SQL aggregates might)
-      mockQueryBuilder.where.mockResolvedValue([{ total: '1234.56' }]);
+      mockGroupedRows([{ bucket: new Date(currentYear, 0, 1), total: '1234.56' }]);
 
       const { db } = await import('@/libs/DB');
       (db as any).select = vi.fn(() => mockQueryBuilder);
@@ -381,8 +399,25 @@ describe('DashboardService', () => {
       expect(result.monthly[0]?.value).toBe(1234.56);
     });
 
+    it('maps a missing bucket to 0', async () => {
+      const currentYear = new Date().getFullYear();
+      // Only February has a grouped row → January (a missing bucket) must be 0.
+      mockGroupedRows([{ bucket: new Date(currentYear, 1, 1), total: 900 }]);
+
+      const { db } = await import('@/libs/DB');
+      (db as any).select = vi.fn(() => mockQueryBuilder);
+
+      const { getEarningsChartData } = await import('./DashboardService');
+      const result = await getEarningsChartData('org_test123');
+
+      expect(result.monthly[0]?.month).toBe('Jan');
+      expect(result.monthly[0]?.value).toBe(0);
+      expect(result.monthly[1]?.month).toBe('Feb');
+      expect(result.monthly[1]?.value).toBe(900);
+    });
+
     it('should return correct month names in order', async () => {
-      mockQueryBuilder.where.mockResolvedValue([{ total: 1000 }]);
+      mockGroupedRows([]);
 
       const { db } = await import('@/libs/DB');
       (db as any).select = vi.fn(() => mockQueryBuilder);
@@ -397,7 +432,7 @@ describe('DashboardService', () => {
     });
 
     it('should calculate correct year range', async () => {
-      mockQueryBuilder.where.mockResolvedValue([{ total: 10000 }]);
+      mockGroupedRows([]);
 
       const { db } = await import('@/libs/DB');
       (db as any).select = vi.fn(() => mockQueryBuilder);
@@ -417,20 +452,40 @@ describe('DashboardService', () => {
 
       expect(actualYears).toEqual(expectedYears);
     });
+  });
 
-    it('should handle varying earnings per month', async () => {
-      // With Promise.all, all queries use the same mock, so verify structure
-      mockQueryBuilder.where.mockResolvedValue([{ total: 2500 }]);
+  describe('countMembersAsOf (pure)', () => {
+    it('counts members created at or before the point and not yet cancelled', async () => {
+      const { countMembersAsOf } = await import('./DashboardService');
+      const at = new Date('2026-06-15T00:00:00Z');
+      const rows = [
+        // active, created before → counted
+        { createdAt: new Date('2026-01-01T00:00:00Z'), status: 'active', updatedAt: new Date('2026-01-01T00:00:00Z') },
+        // created after the point → excluded
+        { createdAt: new Date('2026-07-01T00:00:00Z'), status: 'active', updatedAt: new Date('2026-07-01T00:00:00Z') },
+        // cancelled BEFORE the point (updatedAt <= at) → excluded
+        { createdAt: new Date('2026-01-01T00:00:00Z'), status: 'cancelled', updatedAt: new Date('2026-05-01T00:00:00Z') },
+        // cancelled AFTER the point (updatedAt > at) → still counted (was active as of `at`)
+        { createdAt: new Date('2026-01-01T00:00:00Z'), status: 'cancelled', updatedAt: new Date('2026-08-01T00:00:00Z') },
+      ];
 
-      const { db } = await import('@/libs/DB');
-      (db as any).select = vi.fn(() => mockQueryBuilder);
+      expect(countMembersAsOf(rows, at)).toBe(2);
+    });
 
-      const { getEarningsChartData } = await import('./DashboardService');
-      const result = await getEarningsChartData('org_test123');
+    it('treats createdAt exactly equal to the point as included (<=)', async () => {
+      const { countMembersAsOf } = await import('./DashboardService');
+      const at = new Date('2026-06-15T00:00:00Z');
+      const rows = [
+        { createdAt: new Date('2026-06-15T00:00:00Z'), status: 'active', updatedAt: new Date('2026-06-15T00:00:00Z') },
+      ];
 
-      // All months should have the same mocked value
-      expect(result.monthly.every(m => m.value === 2500)).toBe(true);
-      expect(result.monthly.every(m => m.previousYearValue === 2500)).toBe(true);
+      expect(countMembersAsOf(rows, at)).toBe(1);
+    });
+
+    it('returns 0 for an empty roster', async () => {
+      const { countMembersAsOf } = await import('./DashboardService');
+
+      expect(countMembersAsOf([], new Date('2026-06-15T00:00:00Z'))).toBe(0);
     });
   });
 });

@@ -10,6 +10,8 @@ const dbMocks = {
   select: vi.fn(),
   update: vi.fn(),
   insert: vi.fn(),
+  delete: vi.fn(),
+  transaction: vi.fn(),
 };
 
 vi.mock('@/libs/DB', () => ({ db: dbMocks }));
@@ -17,6 +19,7 @@ vi.mock('@/libs/DB', () => ({ db: dbMocks }));
 vi.mock('drizzle-orm', () => ({
   eq: vi.fn((_col, val) => ({ _type: 'eq', value: val })),
   and: vi.fn((...conds) => ({ _type: 'and', conds })),
+  inArray: vi.fn((_col, vals) => ({ _type: 'inArray', vals })),
   desc: vi.fn(col => ({ _type: 'desc', col })),
   sql: Object.assign(
     vi.fn((..._args) => ({ _type: 'sql' })),
@@ -171,6 +174,29 @@ function resetDbMock(opts: {
       return Promise.resolve();
     }),
   });
+
+  dbMocks.delete.mockReturnValue({
+    where: vi.fn().mockResolvedValue(undefined),
+  });
+
+  // db.transaction(cb) runs the callback with a `tx` that reuses the same
+  // insert/update/select/delete recorders, so writes performed inside a
+  // transaction land in the same dbState.insertCalls / setCalls the assertions
+  // read. `tx.query.*.findFirst` (cancel path) resolves to no other active
+  // membership by default.
+  dbMocks.transaction.mockImplementation(async (cb: any) =>
+    cb({
+      insert: dbMocks.insert,
+      update: dbMocks.update,
+      select: dbMocks.select,
+      delete: dbMocks.delete,
+      query: {
+        memberMembershipSchema: {
+          findFirst: vi.fn().mockResolvedValue(undefined),
+        },
+      },
+    }),
+  );
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────────
@@ -1135,5 +1161,30 @@ describe('chargeOneTimeFee (resilience — #237)', () => {
     });
 
     expect(result).toEqual({ success: true, amountCharged: 0 });
+  });
+
+  it('parses a subscription with no saved payment method into a clean error (schema, #WS4)', async () => {
+    const { iqproGet } = await import('@/libs/IQPro');
+    // A well-formed but payment-method-less subscription: the response parses
+    // cleanly and yields no pmId, so we abort with a friendly error instead of
+    // charging on a fallback BIN or throwing on an untyped read.
+    vi.mocked(iqproGet).mockResolvedValue({ data: { customer: { customerId: 'cus_9' } } } as any);
+
+    const { chargeOneTimeFee } = await import('./MemberPaymentService');
+    const result = await chargeOneTimeFee({
+      config: testConfig,
+      iqproSubscriptionId: 'sub_real_1',
+      iqproCustomerId: 'cus_9',
+      orgId: 'org-1',
+      memberId: 'member-1',
+      memberMembershipId: 'mm-1',
+      amount: 25,
+      transactionType: 'cancellation_fee',
+      description: 'Cancellation fee',
+      caption: 'Cancellation fee',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('No saved payment method');
   });
 });

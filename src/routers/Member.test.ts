@@ -20,11 +20,26 @@ vi.mock('@/services/AuditService', () => ({
   audit: vi.fn(),
 }));
 vi.mock('@/services/MembersService', () => ({
+  // Real error classes so the router's `instanceof` checks resolve correctly:
+  // MemberNotFoundError → 404 (cross-tenant/missing), MemberOnHoldError → 409.
+  MemberNotFoundError: class MemberNotFoundError extends Error {
+    constructor(message = 'Member not found') {
+      super(message);
+      this.name = 'MemberNotFoundError';
+    }
+  },
+  MemberOnHoldError: class MemberOnHoldError extends Error {
+    constructor(message = 'Member is on hold') {
+      super(message);
+      this.name = 'MemberOnHoldError';
+    }
+  },
   getHeadOfHouseholdMembers: vi.fn(),
   linkFamilyMember: vi.fn(),
   unlinkFamilyMember: vi.fn(),
   getHOHForFamilyMember: vi.fn(),
   getFamilyMembers: vi.fn(),
+  getMemberById: vi.fn(),
   getMemberPaymentMethods: vi.fn(),
   createMember: vi.fn(),
   updateMember: vi.fn(),
@@ -163,7 +178,7 @@ describe('Member Router', () => {
       const result = await callHandler(linkFamily, linkInput);
 
       expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
-      expect(linkFamilyMember).toHaveBeenCalledWith('hoh-member-123', 'family-member-456', 'child');
+      expect(linkFamilyMember).toHaveBeenCalledWith('hoh-member-123', 'family-member-456', 'child', 'test-org-456');
       expect(audit).toHaveBeenCalledWith(
         mockFrontDeskContext,
         AUDIT_ACTION.FAMILY_MEMBER_LINK,
@@ -260,8 +275,22 @@ describe('Member Router', () => {
       const result = await callHandler(listFamily, { memberId: 'hoh-member-123' });
 
       expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
-      expect(getFamilyMembers).toHaveBeenCalledWith('hoh-member-123');
+      expect(getFamilyMembers).toHaveBeenCalledWith('hoh-member-123', 'test-org-456');
       expect(result).toEqual({ familyMembers: mockFamilyMembers });
+    });
+
+    it('maps a cross-tenant MemberNotFoundError to a 404 ORPCError', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { getFamilyMembers, MemberNotFoundError } = await import('@/services/MembersService');
+
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
+      vi.mocked(getFamilyMembers).mockRejectedValue(new MemberNotFoundError('Member not found'));
+
+      const { listFamily } = await import('./Member');
+
+      await expect(
+        callHandler(listFamily, { memberId: 'cross-tenant-member' }),
+      ).rejects.toMatchObject({ status: 404 });
     });
   });
 
@@ -513,7 +542,7 @@ describe('Member Router', () => {
       const result = await callHandler(unlinkFamily, unlinkInput);
 
       expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
-      expect(unlinkFamilyMember).toHaveBeenCalledWith('hoh-member-123', 'family-member-456');
+      expect(unlinkFamilyMember).toHaveBeenCalledWith('hoh-member-123', 'family-member-456', 'test-org-456');
       expect(audit).toHaveBeenCalledWith(
         mockAcademyOwnerContext,
         AUDIT_ACTION.FAMILY_MEMBER_UNLINK,
@@ -615,7 +644,7 @@ describe('Member Router', () => {
       const result = await callHandler(getHOHForMember, { memberId: 'fm-123' });
 
       expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
-      expect(getHOHForFamilyMember).toHaveBeenCalledWith('fm-123');
+      expect(getHOHForFamilyMember).toHaveBeenCalledWith('fm-123', 'test-org-456');
       expect(result).toEqual({ hoh: mockHOH });
     });
 
@@ -630,6 +659,51 @@ describe('Member Router', () => {
       const result = await callHandler(getHOHForMember, { memberId: 'individual-123' });
 
       expect(result).toEqual({ hoh: null });
+    });
+  });
+
+  describe('getById', () => {
+    it('returns the member (with photo) for the detail page, org-scoped', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { getMemberById } = await import('@/services/MembersService');
+
+      const mockMember = {
+        id: 'member-1',
+        firstName: 'Jane',
+        lastName: 'Doe',
+        email: 'jane@test.com',
+        phone: null,
+        dateOfBirth: null,
+        photoUrl: 'data:image/jpeg;base64,/9j/AA',
+        memberType: 'individual',
+        lastAccessedAt: null,
+        status: 'active',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
+      vi.mocked(getMemberById).mockResolvedValue(mockMember);
+
+      const { getById } = await import('./Member');
+      const result = await callHandler(getById, { memberId: 'member-1' });
+
+      expect(getMemberById).toHaveBeenCalledWith('member-1', 'test-org-456');
+      expect(result).toEqual({ member: mockMember });
+    });
+
+    it('maps a missing / cross-tenant member to a 404', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { getMemberById } = await import('@/services/MembersService');
+
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
+      vi.mocked(getMemberById).mockResolvedValue(null);
+
+      const { getById } = await import('./Member');
+
+      await expect(
+        callHandler(getById, { memberId: 'cross-tenant-member' }),
+      ).rejects.toMatchObject({ status: 404 });
     });
   });
 

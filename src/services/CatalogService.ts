@@ -163,6 +163,18 @@ type CreateImageInput = {
   isPrimary?: boolean;
 };
 
+/**
+ * Thrown when a catalog variant/image/item cannot be resolved within the
+ * caller's organization. Routers map this to a 404 so a cross-tenant probe is
+ * indistinguishable from a genuinely missing row.
+ */
+export class CatalogNotFoundError extends Error {
+  constructor(message = 'Catalog resource not found') {
+    super(message);
+    this.name = 'CatalogNotFoundError';
+  }
+}
+
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
@@ -172,6 +184,60 @@ function generateSlug(name: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
+}
+
+/**
+ * Verify a catalog item belongs to the given organization. Throws
+ * CatalogNotFoundError (→ 404) on miss so a caller in org A cannot mutate
+ * org B's item by supplying its id.
+ */
+async function assertItemInOrg(catalogItemId: string, organizationId: string): Promise<void> {
+  const rows = await db
+    .select({ id: catalogItemSchema.id })
+    .from(catalogItemSchema)
+    .where(and(eq(catalogItemSchema.id, catalogItemId), eq(catalogItemSchema.organizationId, organizationId)))
+    .limit(1);
+
+  if (rows.length === 0) {
+    throw new CatalogNotFoundError('Catalog item not found');
+  }
+}
+
+/**
+ * Resolve a variant's parent catalog item id, but only if the variant's item
+ * belongs to the given organization. Returns the parent item id, or throws
+ * CatalogNotFoundError (→ 404) when the variant is missing or cross-tenant.
+ */
+async function resolveVariantItemInOrg(variantId: string, organizationId: string): Promise<string> {
+  const rows = await db
+    .select({ catalogItemId: catalogItemVariantSchema.catalogItemId })
+    .from(catalogItemVariantSchema)
+    .innerJoin(catalogItemSchema, eq(catalogItemVariantSchema.catalogItemId, catalogItemSchema.id))
+    .where(and(eq(catalogItemVariantSchema.id, variantId), eq(catalogItemSchema.organizationId, organizationId)))
+    .limit(1);
+
+  const parentId = rows[0]?.catalogItemId;
+  if (!parentId) {
+    throw new CatalogNotFoundError('Variant not found');
+  }
+  return parentId;
+}
+
+/**
+ * Verify an image belongs to a catalog item within the given organization.
+ * Throws CatalogNotFoundError (→ 404) when the image is missing or cross-tenant.
+ */
+async function assertImageInOrg(imageId: string, organizationId: string): Promise<void> {
+  const rows = await db
+    .select({ id: catalogItemImageSchema.id })
+    .from(catalogItemImageSchema)
+    .innerJoin(catalogItemSchema, eq(catalogItemImageSchema.catalogItemId, catalogItemSchema.id))
+    .where(and(eq(catalogItemImageSchema.id, imageId), eq(catalogItemSchema.organizationId, organizationId)))
+    .limit(1);
+
+  if (rows.length === 0) {
+    throw new CatalogNotFoundError('Image not found');
+  }
 }
 
 // =============================================================================
@@ -470,8 +536,11 @@ export async function deleteCatalogItem(itemId: string, organizationId: string):
 /**
  * Create a variant for a catalog item
  */
-export async function createCatalogVariant(input: CreateVariantInput): Promise<CatalogVariant> {
+export async function createCatalogVariant(input: CreateVariantInput, organizationId: string): Promise<CatalogVariant> {
   const variantId = input.id || randomUUID();
+
+  // Org-scope: the target item must belong to the caller's organization.
+  await assertItemInOrg(input.catalogItemId, organizationId);
 
   // Check variant count for the item
   const existingVariants = await db
@@ -515,8 +584,11 @@ export async function createCatalogVariant(input: CreateVariantInput): Promise<C
 /**
  * Update a variant
  */
-export async function updateCatalogVariant(input: UpdateVariantInput): Promise<CatalogVariant> {
+export async function updateCatalogVariant(input: UpdateVariantInput, organizationId: string): Promise<CatalogVariant> {
   const { id, ...updateData } = input;
+
+  // Org-scope: reject a cross-tenant variant id before mutating.
+  await resolveVariantItemInOrg(id, organizationId);
 
   const result = await db
     .update(catalogItemVariantSchema)
@@ -544,14 +616,20 @@ export async function updateCatalogVariant(input: UpdateVariantInput): Promise<C
 /**
  * Delete a variant
  */
-export async function deleteCatalogVariant(variantId: string): Promise<void> {
+export async function deleteCatalogVariant(variantId: string, organizationId: string): Promise<void> {
+  // Org-scope: reject a cross-tenant variant id before deleting.
+  await resolveVariantItemInOrg(variantId, organizationId);
+
   await db.delete(catalogItemVariantSchema).where(eq(catalogItemVariantSchema.id, variantId));
 }
 
 /**
  * Adjust variant stock quantity
  */
-export async function adjustVariantStock(variantId: string, adjustment: number): Promise<CatalogVariant> {
+export async function adjustVariantStock(variantId: string, adjustment: number, organizationId: string): Promise<CatalogVariant> {
+  // Org-scope: reject a cross-tenant variant id before mutating stock.
+  await resolveVariantItemInOrg(variantId, organizationId);
+
   // Get current stock
   const variants = await db
     .select()
@@ -714,8 +792,11 @@ export async function deleteCategory(categoryId: string, organizationId: string)
 /**
  * Add an image to a catalog item
  */
-export async function createCatalogImage(input: CreateImageInput): Promise<CatalogItemImage> {
+export async function createCatalogImage(input: CreateImageInput, organizationId: string): Promise<CatalogItemImage> {
   const imageId = input.id || randomUUID();
+
+  // Org-scope: the target item must belong to the caller's organization.
+  await assertItemInOrg(input.catalogItemId, organizationId);
 
   // If this is marked as primary, unset other primary images for this item
   if (input.isPrimary) {
@@ -757,6 +838,9 @@ export async function createCatalogImage(input: CreateImageInput): Promise<Catal
 /**
  * Delete an image
  */
-export async function deleteCatalogImage(imageId: string): Promise<void> {
+export async function deleteCatalogImage(imageId: string, organizationId: string): Promise<void> {
+  // Org-scope: reject a cross-tenant image id before deleting.
+  await assertImageInOrg(imageId, organizationId);
+
   await db.delete(catalogItemImageSchema).where(eq(catalogItemImageSchema.id, imageId));
 }

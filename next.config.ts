@@ -89,6 +89,10 @@ const baseConfig: NextConfig = {
   },
   experimental: {
     turbopackFileSystemCacheForDev: true,
+    // Tree-shake large barrel packages so only the icons/components actually
+    // used land in each route chunk (lucide-react especially is imported
+    // app-wide). recharts is additionally code-split via next/dynamic.
+    optimizePackageImports: ['lucide-react', 'recharts', 'date-fns'],
   },
   async headers() {
     return [

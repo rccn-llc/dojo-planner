@@ -1,5 +1,3 @@
-import imageCompression from 'browser-image-compression';
-
 type ImageCompressionResult = {
   compressedFile: File;
   originalSize: number;
@@ -15,6 +13,11 @@ export async function compressImageForStorage(
   file: File,
 ): Promise<ImageCompressionResult> {
   const originalSize = file.size;
+
+  // Lazily load the (fairly heavy) compression lib only when a user actually
+  // uploads an image — keeps it out of the initial bundle of every component
+  // that has a photo-upload control (member wizard, photo modals, etc.).
+  const { default: imageCompression } = await import('browser-image-compression');
 
   // Compression options optimized for avatar/profile pictures.
   // Target: 400x400px max, 80% JPEG quality = ~50-150KB.

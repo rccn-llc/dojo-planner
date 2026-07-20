@@ -1,12 +1,18 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useMemo } from 'react';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useDashboardCache } from '@/hooks/useDashboardCache';
-import DashboardCharts from './DashboardCharts';
+
+// recharts (~100KB+) is heavy and only needed once the charts render. Load it
+// as a lazy chunk so it's not in the dashboard route's initial JS.
+const DashboardCharts = dynamic(() => import('./DashboardCharts'), {
+  loading: () => <Skeleton className="h-80 w-full" />,
+});
 
 type DashboardDataItem = {
   type: string;

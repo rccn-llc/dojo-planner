@@ -9,12 +9,33 @@
 import { auth } from '@clerk/nextjs/server';
 import { eq } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
+import { cache } from 'react';
 import { db } from '@/libs/DB';
 import { organizationSchema } from '@/models/Schema';
 import { getAcademyOwner } from '@/services/ClerkRolesService';
 import { hasActiveSubscription } from '@/services/SaasSubscriptionService';
 import { ORG_ROLE } from '@/types/Auth';
 import { isExemptOrg, isSuperAdmin } from '@/utils/SuperAdmins';
+
+/**
+ * Request-deduped org-existence check. Both the dashboard layout and
+ * `requireActiveSubscription` run in the same RSC render and both need to know
+ * whether the org has a DB row; `cache()` collapses the repeated reads to one
+ * per request.
+ */
+const orgExists = cache(async (orgId: string): Promise<boolean> => {
+  const org = await db.query.organizationSchema.findFirst({
+    where: eq(organizationSchema.id, orgId),
+    columns: { id: true },
+  });
+  return !!org;
+});
+
+/**
+ * Request-deduped subscription-active check. Wraps the service call so the gate
+ * and the layout's client-UX fallback share a single DB read per request.
+ */
+const isSubscriptionActiveCached = cache(hasActiveSubscription);
 
 /**
  * Ensures the user belongs to an organization.
@@ -53,32 +74,28 @@ const SUBSCRIPTION_EXEMPT_SEGMENTS = ['/subscription', '/subscription-expired'];
  *
  * @param pathname The current request pathname (from the `x-pathname` header).
  */
-export const requireActiveSubscription = async (pathname: string) => {
+export const requireActiveSubscription = async (pathname: string): Promise<{ subscriptionActive: boolean }> => {
   // Never block the pages used to view/fix the subscription itself.
   if (SUBSCRIPTION_EXEMPT_SEGMENTS.some(seg => pathname.includes(seg))) {
-    return;
+    return { subscriptionActive: true };
   }
 
   const { orgId, orgRole, sessionClaims } = await auth();
   if (!orgId) {
-    return; // org enforcement is handled elsewhere (requireOrganization / proxy)
+    return { subscriptionActive: true }; // org enforcement is handled elsewhere (requireOrganization / proxy)
   }
 
   const username = (sessionClaims as Record<string, unknown>)?.username as string | undefined;
   if (isSuperAdmin(username) || isExemptOrg(orgId)) {
-    return;
+    return { subscriptionActive: true };
   }
 
   // Fresh Clerk org without a DB row yet — don't enforce.
-  const org = await db.query.organizationSchema.findFirst({
-    where: eq(organizationSchema.id, orgId),
-    columns: { id: true },
-  });
-  if (!org) {
-    return;
+  if (!(await orgExists(orgId))) {
+    return { subscriptionActive: true };
   }
 
-  const active = await hasActiveSubscription(orgId);
+  const active = await isSubscriptionActiveCached(orgId);
   // The org needs a person responsible for the subscription. That's normally the
   // academy owner, but an org admin also qualifies — an admin managing the org
   // shouldn't be locked out just because the academy_owner role isn't assigned.
@@ -89,4 +106,8 @@ export const requireActiveSubscription = async (pathname: string) => {
     const localePrefix = pathname.match(/^(\/[^/]+)\/dashboard/)?.[1] ?? '';
     redirect(`${localePrefix}/dashboard/subscription-expired`);
   }
+
+  // The gate passed — the subscription is active (this value feeds the layout's
+  // client-UX fallback, avoiding a duplicate org read + hasActiveSubscription).
+  return { subscriptionActive: active };
 };

@@ -1,4 +1,4 @@
-import { and, count, eq, gte, inArray, ne, sql, sum } from 'drizzle-orm';
+import { and, count, eq, gte, inArray, lte, ne, sql, sum } from 'drizzle-orm';
 import { db } from '@/libs/DB';
 import { memberMembershipSchema, memberSchema, membershipPlanSchema, transactionSchema } from '@/models/Schema';
 
@@ -42,6 +42,59 @@ export type ChartData = {
 };
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// =============================================================================
+// SHARED "MEMBERS AS OF" HELPER (N+1 consolidation)
+//
+// Both `getMemberAverageChartData` (here) and `getIncomePerStudentChartData`
+// (ReportsService) count, as of a point in time, members that existed and were
+// not yet cancelled at that instant. This is a cumulative snapshot — GROUP BY
+// does not apply — so instead of one query per bucket we fetch the minimal
+// columns ONCE per org and compute every bucket in JS.
+//
+// Predicate (byte-identical to the original per-bucket SQL
+//   `WHERE created_at <= at AND (status != 'cancelled' OR updated_at > at)`):
+//   createdAt <= at AND (status !== 'cancelled' OR updatedAt > at)
+// =============================================================================
+
+export type MemberAsOfRow = {
+  createdAt: Date;
+  status: string;
+  updatedAt: Date;
+};
+
+// Fetch the minimal columns for every member in an org (one query).
+export async function fetchMemberAsOfRows(organizationId: string): Promise<MemberAsOfRow[]> {
+  const rows = await db
+    .select({
+      createdAt: memberSchema.createdAt,
+      status: memberSchema.status,
+      updatedAt: memberSchema.updatedAt,
+    })
+    .from(memberSchema)
+    .where(eq(memberSchema.organizationId, organizationId));
+  return rows.map(r => ({
+    createdAt: r.createdAt as Date,
+    status: r.status as string,
+    updatedAt: r.updatedAt as Date,
+  }));
+}
+
+/**
+ * Pure counter for the "members as of a point in time" series: counts members
+ * whose createdAt <= `at` and that were not yet cancelled at `at`. Exported for
+ * direct unit testing. Mirrors the original `memberCountAt(at)` query.
+ */
+export function countMembersAsOf(rows: MemberAsOfRow[], at: Date): number {
+  const atMs = at.getTime();
+  let n = 0;
+  for (const row of rows) {
+    if (row.createdAt.getTime() <= atMs && (row.status !== 'cancelled' || row.updatedAt.getTime() > atMs)) {
+      n++;
+    }
+  }
+  return n;
+}
 
 export async function getMembershipStats(organizationId: string): Promise<MembershipStats> {
   const thirtyDaysAgo = new Date();
@@ -249,31 +302,19 @@ export async function getMemberAverageChartData(organizationId: string): Promise
     endOfYear: new Date(currentYear - 4 + i, 11, 31, 23, 59, 59),
   }));
 
-  const memberCountAt = (datePoint: Date) =>
-    db.select({ count: count() })
-      .from(memberSchema)
-      .where(and(
-        eq(memberSchema.organizationId, organizationId),
-        sql`${memberSchema.createdAt} <= ${datePoint}`,
-        sql`(${memberSchema.status} != 'cancelled' OR ${memberSchema.updatedAt} > ${datePoint})`,
-      ));
+  // ONE query: fetch all members' minimal columns, then count as-of each bucket
+  // in JS (replaces the per-bucket `memberCountAt` fan-out — 29 → 1).
+  const rows = await fetchMemberAsOfRows(organizationId);
 
-  // Run all queries in parallel
-  const [monthlyCurrentResults, monthlyPrevResults, yearlyResults] = await Promise.all([
-    Promise.all(monthlyDates.map(d => memberCountAt(d.endOfMonth))),
-    Promise.all(monthlyDates.map(d => memberCountAt(d.endOfMonthPrev))),
-    Promise.all(yearlyDates.map(d => memberCountAt(d.endOfYear))),
-  ]);
-
-  const monthly: MonthlyChartPoint[] = monthlyDates.map((d, i) => ({
+  const monthly: MonthlyChartPoint[] = monthlyDates.map(d => ({
     month: MONTH_NAMES[d.month]!,
-    value: monthlyCurrentResults[i]![0]?.count ?? 0,
-    previousYearValue: monthlyPrevResults[i]![0]?.count ?? 0,
+    value: countMembersAsOf(rows, d.endOfMonth),
+    previousYearValue: countMembersAsOf(rows, d.endOfMonthPrev),
   }));
 
-  const yearly: YearlyChartPoint[] = yearlyDates.map((d, i) => ({
+  const yearly: YearlyChartPoint[] = yearlyDates.map(d => ({
     year: String(d.year),
-    value: yearlyResults[i]![0]?.count ?? 0,
+    value: countMembersAsOf(rows, d.endOfYear),
   }));
 
   return { monthly, yearly };
@@ -296,32 +337,77 @@ export async function getEarningsChartData(organizationId: string): Promise<Char
     endOfYear: new Date(currentYear - 4 + i, 11, 31, 23, 59, 59),
   }));
 
-  const earningsInRange = (start: Date, end: Date) =>
-    db.select({ total: sum(transactionSchema.amount) })
-      .from(transactionSchema)
-      .where(and(
-        eq(transactionSchema.organizationId, organizationId),
-        eq(transactionSchema.status, 'paid'),
-        gte(transactionSchema.createdAt, start),
-        sql`${transactionSchema.createdAt} <= ${end}`,
-      ));
+  // Each series → ONE grouped date_trunc sum query (was one query per bucket).
+  const currentYearStart = monthlyDates[0]!.startOfMonth;
+  const currentYearEnd = monthlyDates[11]!.endOfMonth;
+  const prevYearStart = monthlyDates[0]!.startOfMonthPrev;
+  const prevYearEnd = monthlyDates[11]!.endOfMonthPrev;
+  const yearlyStart = yearlyDates[0]!.startOfYear;
+  const yearlyEnd = yearlyDates[4]!.endOfYear;
 
-  const [monthlyCurrentResults, monthlyPrevResults, yearlyResults] = await Promise.all([
-    Promise.all(monthlyDates.map(d => earningsInRange(d.startOfMonth, d.endOfMonth))),
-    Promise.all(monthlyDates.map(d => earningsInRange(d.startOfMonthPrev, d.endOfMonthPrev))),
-    Promise.all(yearlyDates.map(d => earningsInRange(d.startOfYear, d.endOfYear))),
+  const [currentMap, prevMap, yearlyMap] = await Promise.all([
+    groupedPaidSumByBucket(organizationId, 'month', currentYearStart, currentYearEnd),
+    groupedPaidSumByBucket(organizationId, 'month', prevYearStart, prevYearEnd),
+    groupedPaidSumByBucket(organizationId, 'year', yearlyStart, yearlyEnd),
   ]);
 
-  const monthly: MonthlyChartPoint[] = monthlyDates.map((d, i) => ({
+  const monthly: MonthlyChartPoint[] = monthlyDates.map(d => ({
     month: MONTH_NAMES[d.month]!,
-    value: Number(monthlyCurrentResults[i]![0]?.total ?? 0),
-    previousYearValue: Number(monthlyPrevResults[i]![0]?.total ?? 0),
+    value: Number(currentMap.get(bucketKey(d.startOfMonth)) ?? 0),
+    previousYearValue: Number(prevMap.get(bucketKey(d.startOfMonthPrev)) ?? 0),
   }));
 
-  const yearly: YearlyChartPoint[] = yearlyDates.map((d, i) => ({
+  const yearly: YearlyChartPoint[] = yearlyDates.map(d => ({
     year: String(d.year),
-    value: Number(yearlyResults[i]![0]?.total ?? 0),
+    value: Number(yearlyMap.get(bucketKey(d.startOfYear)) ?? 0),
   }));
 
   return { monthly, yearly };
+}
+
+// -----------------------------------------------------------------------------
+// Grouped paid-transaction sum by calendar bucket (N+1 consolidation).
+//
+// Mirrors the range-sum shape used by ReportsService: ONE `date_trunc` GROUP BY
+// query per series, mapped back into calendar buckets in JS (missing → 0). The
+// `withinBucketWindow` predicate reproduces the originals' per-bucket upper
+// bound so sub-second gap rows are dropped exactly as before (byte-identical).
+// -----------------------------------------------------------------------------
+
+type EarningsTruncPeriod = 'month' | 'year';
+
+function bucketKey(value: unknown): string {
+  if (value instanceof Date) {
+    return value.getTime().toString();
+  }
+  return new Date(value as string).getTime().toString();
+}
+
+async function groupedPaidSumByBucket(
+  organizationId: string,
+  period: EarningsTruncPeriod,
+  start: Date,
+  end: Date,
+): Promise<Map<string, number>> {
+  const oneUnit = sql.raw(`interval '1 ${period}'`);
+  const rows = await db
+    .select({
+      bucket: sql<Date>`date_trunc(${period}, ${transactionSchema.createdAt})`,
+      total: sql<string | number | null>`COALESCE(SUM(${transactionSchema.amount}), 0)`,
+    })
+    .from(transactionSchema)
+    .where(and(
+      eq(transactionSchema.organizationId, organizationId),
+      eq(transactionSchema.status, 'paid'),
+      gte(transactionSchema.createdAt, start),
+      lte(transactionSchema.createdAt, end),
+      sql`${transactionSchema.createdAt} <= date_trunc(${period}, ${transactionSchema.createdAt}) + ${oneUnit} - interval '1 second'`,
+    ))
+    .groupBy(sql`date_trunc(${period}, ${transactionSchema.createdAt})`);
+
+  const map = new Map<string, number>();
+  for (const row of rows) {
+    map.set(bucketKey(row.bucket), Number(row.total ?? 0));
+  }
+  return map;
 }

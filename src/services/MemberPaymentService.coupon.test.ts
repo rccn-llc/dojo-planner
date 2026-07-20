@@ -11,6 +11,7 @@ const dbMocks = {
   update: vi.fn(),
   insert: vi.fn(),
   delete: vi.fn(),
+  transaction: vi.fn(),
 };
 
 vi.mock('@/libs/DB', () => ({ db: dbMocks }));
@@ -18,6 +19,7 @@ vi.mock('@/libs/DB', () => ({ db: dbMocks }));
 vi.mock('drizzle-orm', () => ({
   eq: vi.fn((_col, val) => ({ _type: 'eq', value: val })),
   and: vi.fn((...conds) => ({ _type: 'and', conds })),
+  inArray: vi.fn((_col, vals) => ({ _type: 'inArray', vals })),
   desc: vi.fn(col => ({ _type: 'desc', col })),
   sql: Object.assign(
     vi.fn((..._args) => ({ _type: 'sql' })),
@@ -194,7 +196,22 @@ describe('refundTransaction', () => {
     paymentMethod: 'card',
   };
 
+  // db.transaction(cb) runs the callback with a `tx` that reuses the same
+  // recorders, mirroring how the refund flow reads/writes inside the transaction
+  // (original lookup + guarded status flip + refund-row insert).
+  function wireTransaction() {
+    dbMocks.transaction.mockImplementation(async (cb: any) =>
+      cb({
+        select: dbMocks.select,
+        update: dbMocks.update,
+        insert: dbMocks.insert,
+        delete: dbMocks.delete,
+      }),
+    );
+  }
+
   it('throws TransactionNotFoundError when the transaction is not in the org', async () => {
+    wireTransaction();
     dbMocks.select.mockReturnValueOnce({
       from: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
     });
@@ -205,6 +222,7 @@ describe('refundTransaction', () => {
   });
 
   it('throws TransactionAlreadyRefundedError when the transaction is already refunded', async () => {
+    wireTransaction();
     dbMocks.select.mockReturnValueOnce({
       from: () => ({ where: () => ({ limit: () => Promise.resolve([{ ...originalTx, status: 'refunded' }]) }) }),
     });
@@ -215,7 +233,8 @@ describe('refundTransaction', () => {
   });
 
   it('inserts a refund row, marks original refunded, and reverses linked coupon usage', async () => {
-    // 1) Original transaction lookup
+    wireTransaction();
+    // 1) Original transaction lookup (inside the transaction)
     dbMocks.select.mockReturnValueOnce({
       from: () => ({ where: () => ({ limit: () => Promise.resolve([originalTx]) }) }),
     });
@@ -232,7 +251,16 @@ describe('refundTransaction', () => {
     dbMocks.update.mockReturnValue({
       set: vi.fn((vals: Record<string, unknown>) => {
         updateSetCalls.push(vals);
-        return { where: () => Promise.resolve() };
+        // The guarded status flip calls `.returning()`; return one row so the
+        // flip is treated as successful. The coupon-decrement update calls
+        // `.where()` and awaits it directly.
+        return {
+          where: vi.fn(() => {
+            const p: any = Promise.resolve();
+            p.returning = () => Promise.resolve([{ id: 'tx-original' }]);
+            return p;
+          }),
+        };
       }),
     });
 
@@ -273,12 +301,78 @@ describe('refundTransaction', () => {
     expect(deleteWhereCalls.length).toBeGreaterThan(0);
   });
 
-  it('handles transactions with no linked coupon usage (decrementedCoupons=0)', async () => {
+  it('rejects a concurrent double-refund: the guarded status flip updates 0 rows', async () => {
+    wireTransaction();
+    // Original read still shows a refundable row (the race partner flipped it
+    // AFTER our read)...
     dbMocks.select.mockReturnValueOnce({
       from: () => ({ where: () => ({ limit: () => Promise.resolve([originalTx]) }) }),
     });
     dbMocks.insert.mockReturnValue({ values: vi.fn(() => Promise.resolve()) });
-    dbMocks.update.mockReturnValue({ set: vi.fn(() => ({ where: () => Promise.resolve() })) });
+    // ...but the guarded flip (WHERE status != 'refunded') returns 0 rows,
+    // proving another refund already committed → we must abort, not insert.
+    const insertSpy = vi.fn(() => Promise.resolve());
+    dbMocks.insert.mockReturnValue({ values: insertSpy });
+    dbMocks.update.mockReturnValue({
+      set: vi.fn(() => ({ where: vi.fn(() => ({ returning: () => Promise.resolve([]) })) })),
+    });
+
+    const { refundTransaction, TransactionAlreadyRefundedError } = await import('./MemberPaymentService');
+
+    await expect(refundTransaction('tx-original', 'org-1')).rejects.toBeInstanceOf(TransactionAlreadyRefundedError);
+    // No refund row was inserted — the flip failing aborts the transaction.
+    expect(insertSpy).not.toHaveBeenCalled();
+  });
+
+  it('groups the decrement per coupon: two usages of the same coupon → one -2 update', async () => {
+    wireTransaction();
+    dbMocks.select.mockReturnValueOnce({
+      from: () => ({ where: () => ({ limit: () => Promise.resolve([originalTx]) }) }),
+    });
+    dbMocks.insert.mockReturnValue({ values: vi.fn(() => Promise.resolve()) });
+
+    const updateSetCalls: Array<Record<string, unknown>> = [];
+    dbMocks.update.mockReturnValue({
+      set: vi.fn((vals: Record<string, unknown>) => {
+        updateSetCalls.push(vals);
+        return {
+          where: vi.fn(() => {
+            const p: any = Promise.resolve();
+            p.returning = () => Promise.resolve([{ id: 'tx-original' }]);
+            return p;
+          }),
+        };
+      }),
+    });
+    dbMocks.delete.mockReturnValue({ where: vi.fn(() => Promise.resolve()) });
+    // Same coupon redeemed twice on the one transaction.
+    dbMocks.select.mockReturnValueOnce({
+      from: () => ({ where: () => Promise.resolve([
+        { id: 'usage-1', couponId: 'cpn-1' },
+        { id: 'usage-2', couponId: 'cpn-1' },
+      ]) }),
+    });
+
+    const { refundTransaction } = await import('./MemberPaymentService');
+    const result = await refundTransaction('tx-original', 'org-1');
+
+    expect(result.decrementedCoupons).toBe(2);
+
+    // Exactly ONE usageCount decrement update (grouped), not two.
+    const usageCountUpdates = updateSetCalls.filter(c => 'usageCount' in c);
+
+    expect(usageCountUpdates).toHaveLength(1);
+  });
+
+  it('handles transactions with no linked coupon usage (decrementedCoupons=0)', async () => {
+    wireTransaction();
+    dbMocks.select.mockReturnValueOnce({
+      from: () => ({ where: () => ({ limit: () => Promise.resolve([originalTx]) }) }),
+    });
+    dbMocks.insert.mockReturnValue({ values: vi.fn(() => Promise.resolve()) });
+    dbMocks.update.mockReturnValue({
+      set: vi.fn(() => ({ where: vi.fn(() => ({ returning: () => Promise.resolve([{ id: 'tx-original' }]) })) })),
+    });
     dbMocks.select.mockReturnValueOnce({
       from: () => ({ where: () => Promise.resolve([]) }),
     });

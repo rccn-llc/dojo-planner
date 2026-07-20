@@ -1,20 +1,34 @@
 import type { Buffer } from 'node:buffer';
 import { randomUUID } from 'node:crypto';
 import { ORPCError, os } from '@orpc/server';
-import { z } from 'zod';
 import { logger } from '@/libs/Logger';
 import { audit } from '@/services/AuditService';
 import { sendMemberConfirmationEmail } from '@/services/EmailService';
 import { resolveIQProConfig } from '@/services/IQProConfigService';
 import { cancelMembershipLifecycle, getLifecycleContext, HoldLimitReachedError, holdMembershipLifecycle, reactivateMembershipLifecycle } from '@/services/MemberPaymentService';
-import { addMemberMembership, changeMemberMembership, createMember, deleteMemberPaymentMethod, getAllMembershipPlans, getFamilyMembers, getHeadOfHouseholdMembers, getHOHForFamilyMember, getMemberPaymentMethods, getMembershipPlans, getMemberTransactions, linkFamilyMember, MemberOnHoldError, removeFully, setPrimaryPaymentMethod as setPrimaryPaymentMethodService, unlinkFamilyMember, updateMember, updateMemberContactInfo, updateMemberPhoto, updateMemberStatus } from '@/services/MembersService';
+import { addMemberMembership, changeMemberMembership, createMember, deleteMemberPaymentMethod, getAllMembershipPlans, getFamilyMembers, getHeadOfHouseholdMembers, getHOHForFamilyMember, getMemberById, getMemberPaymentMethods, getMembershipPlans, getMemberTransactions, linkFamilyMember, MemberNotFoundError, MemberOnHoldError, removeFully, setPrimaryPaymentMethod as setPrimaryPaymentMethodService, unlinkFamilyMember, updateMember, updateMemberContactInfo, updateMemberPhoto, updateMemberStatus } from '@/services/MembersService';
 import { generatePdfFilename } from '@/services/WaiverPdfService';
 import { generateWaiverPdfBuffer } from '@/services/WaiverPdfService.server';
 import { AUDIT_ACTION, AUDIT_ENTITY_TYPE } from '@/types/Audit';
 import { ORG_ROLE } from '@/types/Auth';
 import { rankMembersByQuery } from '@/utils/MemberSearch';
-import { CancelMembershipValidation, DeleteMemberValidation, EditMemberValidation, GetHOHForMemberValidation, GetHOHPaymentMethodsValidation, HoldMembershipValidation, LinkFamilyMemberValidation, ListFamilyMembersValidation, MemberPaymentMethodsValidation, MemberTransactionsValidation, MemberValidation, PaymentMethodMutationValidation, ReactivateMembershipValidation, RemoveFullyMemberValidation, SearchHOHValidation, SendConfirmationEmailValidation, UnlinkFamilyMemberValidation, UpdateMemberContactInfoValidation, UpdateMemberPhotoValidation, UpdateMemberTypeValidation } from '@/validations/MemberValidation';
+import { AddMembershipValidation, CancelMembershipValidation, ChangeMembershipValidation, DeleteMemberValidation, EditMemberValidation, GetHOHForMemberValidation, GetHOHPaymentMethodsValidation, GetMemberByIdValidation, HoldMembershipValidation, LinkFamilyMemberValidation, ListFamilyMembersValidation, MemberPaymentMethodsValidation, MemberTransactionsValidation, MemberValidation, PaymentMethodMutationValidation, ReactivateMembershipValidation, RemoveFullyMemberValidation, SearchHOHValidation, SendConfirmationEmailValidation, UnlinkFamilyMemberValidation, UpdateMemberContactInfoValidation, UpdateMemberPhotoValidation, UpdateMemberTypeValidation } from '@/validations/MemberValidation';
 import { guardAuth, guardRole } from './AuthGuards';
+
+/**
+ * Normalize a service error into an ORPCError. A MemberNotFoundError (raised
+ * when a member/plan is missing OR belongs to another org) maps to 404 so
+ * cross-tenant probes are indistinguishable from genuine misses.
+ */
+function toOrpcError(error: unknown, fallbackMessage: string): ORPCError<string, unknown> {
+  if (error instanceof ORPCError) {
+    return error;
+  }
+  if (error instanceof MemberNotFoundError) {
+    return new ORPCError('Not Found', { status: 404, message: error.message });
+  }
+  return new ORPCError(fallbackMessage, { status: 500 });
+}
 
 export const create = os
   .input(MemberValidation)
@@ -70,7 +84,7 @@ export const create = os
           const plans = await getMembershipPlans(context.orgId);
           const planExists = plans.some(p => p.id === input.membershipPlanId);
           if (planExists) {
-            const memberships = await addMemberMembership(member[0].id, input.membershipPlanId);
+            const memberships = await addMemberMembership(member[0].id, input.membershipPlanId, context.orgId);
             memberMembershipId = memberships[0]?.id;
             logger.info(`Membership added for new member: ${member[0].id}, planId: ${input.membershipPlanId}, memberMembershipId: ${memberMembershipId}`);
 
@@ -539,24 +553,13 @@ export const updatePhoto = os
     }
   });
 
-// Membership-related validation schemas
-const AddMembershipValidation = z.object({
-  memberId: z.string().min(1),
-  membershipPlanId: z.string().min(1),
-});
-
-const ChangeMembershipValidation = z.object({
-  memberId: z.string().min(1),
-  newMembershipPlanId: z.string().min(1),
-});
-
 export const addMembership = os
   .input(AddMembershipValidation)
   .handler(async ({ input }) => {
     const context = await guardRole(ORG_ROLE.FRONT_DESK);
 
     try {
-      const result = await addMemberMembership(input.memberId, input.membershipPlanId);
+      const result = await addMemberMembership(input.memberId, input.membershipPlanId, context.orgId);
 
       if (result.length === 0) {
         throw new ORPCError('Failed to add membership', { status: 500 });
@@ -588,7 +591,7 @@ export const addMembership = os
         throw new ORPCError('Conflict', { status: 409, message: error.message });
       }
 
-      throw error instanceof ORPCError ? error : new ORPCError('Failed to add membership. Please try again.', { status: 500 });
+      throw toOrpcError(error, 'Failed to add membership. Please try again.');
     }
   });
 
@@ -598,7 +601,7 @@ export const changeMembership = os
     const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
-      const result = await changeMemberMembership(input.memberId, input.newMembershipPlanId);
+      const result = await changeMemberMembership(input.memberId, input.newMembershipPlanId, context.orgId);
 
       if (result.length === 0) {
         throw new ORPCError('Failed to change membership', { status: 500 });
@@ -624,7 +627,7 @@ export const changeMembership = os
         error: errorMessage,
       });
 
-      throw error instanceof ORPCError ? error : new ORPCError('Failed to change membership. Please try again.', { status: 500 });
+      throw toOrpcError(error, 'Failed to change membership. Please try again.');
     }
   });
 
@@ -735,7 +738,7 @@ export const linkFamily = os
     const context = await guardRole(ORG_ROLE.FRONT_DESK);
 
     try {
-      await linkFamilyMember(input.hohMemberId, input.memberId, input.relationship);
+      await linkFamilyMember(input.hohMemberId, input.memberId, input.relationship, context.orgId);
 
       await audit(context, AUDIT_ACTION.FAMILY_MEMBER_LINK, AUDIT_ENTITY_TYPE.FAMILY_MEMBER, {
         entityId: input.memberId,
@@ -754,18 +757,20 @@ export const linkFamily = os
         error: errorMessage,
       });
 
-      throw error instanceof ORPCError
-        ? error
-        : new ORPCError('Failed to link family member. Please try again.', { status: 500 });
+      throw toOrpcError(error, 'Failed to link family member. Please try again.');
     }
   });
 
 export const listFamily = os
   .input(ListFamilyMembersValidation)
   .handler(async ({ input }) => {
-    await guardRole(ORG_ROLE.FRONT_DESK);
-    const familyMembers = await getFamilyMembers(input.memberId);
-    return { familyMembers };
+    const { orgId } = await guardRole(ORG_ROLE.FRONT_DESK);
+    try {
+      const familyMembers = await getFamilyMembers(input.memberId, orgId);
+      return { familyMembers };
+    } catch (error) {
+      throw toOrpcError(error, 'Failed to fetch family members.');
+    }
   });
 
 export const getHOHPaymentMethods = os
@@ -782,7 +787,7 @@ export const unlinkFamily = os
     const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
-      await unlinkFamilyMember(input.hohMemberId, input.memberId);
+      await unlinkFamilyMember(input.hohMemberId, input.memberId, context.orgId);
 
       await audit(context, AUDIT_ACTION.FAMILY_MEMBER_UNLINK, AUDIT_ENTITY_TYPE.FAMILY_MEMBER, {
         entityId: input.memberId,
@@ -801,18 +806,34 @@ export const unlinkFamily = os
         error: errorMessage,
       });
 
-      throw error instanceof ORPCError
-        ? error
-        : new ORPCError('Failed to unlink family member. Please try again.', { status: 500 });
+      throw toOrpcError(error, 'Failed to unlink family member. Please try again.');
     }
   });
 
 export const getHOHForMember = os
   .input(GetHOHForMemberValidation)
   .handler(async ({ input }) => {
-    await guardRole(ORG_ROLE.FRONT_DESK);
-    const hoh = await getHOHForFamilyMember(input.memberId);
-    return { hoh };
+    const { orgId } = await guardRole(ORG_ROLE.FRONT_DESK);
+    try {
+      const hoh = await getHOHForFamilyMember(input.memberId, orgId);
+      return { hoh };
+    } catch (error) {
+      throw toOrpcError(error, 'Failed to fetch head of household.');
+    }
+  });
+
+// Single-member fetch (with photo) for the detail page. The members-LIST
+// endpoint omits the large base64 photoUrl for payload/heap reasons, so the
+// detail page loads the full member (incl. photo) here.
+export const getById = os
+  .input(GetMemberByIdValidation)
+  .handler(async ({ input }) => {
+    const { orgId } = await guardRole(ORG_ROLE.FRONT_DESK);
+    const member = await getMemberById(input.memberId, orgId);
+    if (!member) {
+      throw new ORPCError('Member not found', { status: 404 });
+    }
+    return { member };
   });
 
 export const sendConfirmationEmail = os

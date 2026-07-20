@@ -43,7 +43,7 @@ src/
 ├── routers/               # ORPC API handlers
 │   ├── AuthGuards.ts      # Auth middleware with role hierarchy
 │   ├── Catalog.ts         # Catalog items, variants, categories, images
-│   ├── Member.ts          # Member CRUD, family linking/unlinking, HOH search, member type conversion, confirmation email, membership lifecycle (cancelMembership, holdMembership, reactivateMembership)
+│   ├── Member.ts          # Member CRUD, family linking/unlinking, HOH search, member type conversion, confirmation email, membership lifecycle (cancelMembership, holdMembership, reactivateMembership), `getById` (single member incl. base64 photo — the members LIST omits photoUrl for payload/heap reasons, so the detail page loads the photo via this endpoint)
 │   ├── Members.ts         # Members list ops
 │   ├── Classes.ts         # Classes list & tags (create/update persist allowWalkIns + schedule instructor clerk ids)
 │   ├── Events.ts          # Events list + event registration/enrollment (register, registrations, cancelRegistration)
@@ -70,8 +70,8 @@ src/
 │   ├── OrganizationService.ts # Org & Stripe customer storage + per-org location settings (name, address, phone, email, tax rate)
 │   ├── TagsService.ts     # Tag queries with usage counts
 │   ├── TransactionsService.ts # Transaction listing with member joins
-│   ├── DashboardService.ts # Membership stats, financial stats, member average & earnings chart data
-│   ├── ReportsService.ts  # Report current values, chart data, dynamically computed insights
+│   ├── DashboardService.ts # Membership stats, financial stats, member average & earnings chart data (chart series use ONE grouped `date_trunc` query for range sums + a fetch-once/JS `countMembersAsOf` for as-of counts — not one query per bucket; exports `fetchMemberAsOfRows`/`countMembersAsOf` reused by ReportsService)
+│   ├── ReportsService.ts  # Report current values, chart data, dynamically computed insights (chart builders collapsed from 29–180 per-chart queries to 1–3: `groupedSumByBucket` for range sums, exported pure `countPastDueAsOf`/`countMembersAsOf` for point-in-time counts)
 │   ├── WaiversService.ts  # Waiver template CRUD, versioning, signed waivers, merge fields, placeholder resolution
 │   ├── WaiverPdfService.ts # On-demand PDF generation for signed waivers (client Blob + server Buffer)
 │   ├── EmailService.ts    # Resend email integration with PDF attachment support
@@ -321,7 +321,9 @@ The membership lifecycle on the member detail page is implemented as three route
 6. Mirrors `member.status='cancelled'` only when this was the member's last active membership (same semantics as the IQPro webhook handler).
 7. Audits `MEMBERSHIP_CANCEL` and (when charged) `CANCELLATION_FEE_CHARGE`.
 
-The cancellation fee is best-effort: if the charge fails, the cancellation still proceeds and the failure is surfaced as a partial-success warning in the UI rather than a rollback. Regardless of whether the live IQPro charge runs (it's skipped for synthetic/seed subscriptions and can fail against the sandbox), an owed, non-waived fee is always written to the member's billing history as a `cancellation_fee` transaction — `'paid'` when captured live, `'pending'` when not — so the fee never silently disappears (#239).
+The cancellation fee is best-effort: if the charge fails, the cancellation still proceeds and the failure is surfaced as a partial-success warning in the UI rather than a rollback. Regardless of whether the live IQPro charge runs (it's skipped for synthetic/seed subscriptions and can fail against the sandbox), an owed, non-waived fee is always written to the member's billing history as a `cancellation_fee` transaction — `'paid'` when captured live, `'pending'` when not — so the fee never silently disappears (#239). The **local** DB writes in step 5–6 (pending-fee row + membership status flip + mirrored member-status flip) run inside a single `db.transaction` after the IQPro side effects resolve, so a mid-way failure can't leave a cancelled membership without its fee record.
+
+**Atomicity of multi-write flows:** several money/member flows wrap their related DB writes in `db.transaction` so a partial failure can't leave inconsistent state: `refundTransaction` (the original-status flip is done FIRST, guarded on `status != 'refunded'` so two racing refunds can't both create a refund row — the double-refund guard; coupon reversal runs best-effort AFTER the commit, batched via `inArray` delete + one grouped decrement per coupon), `createMember` (member row + address), and the post-approval writes in `processMemberPayment` (transaction rows + membership activation, so a paid transaction is never recorded without the membership learning its `iqproSubscriptionId`). On an autopay initial-charge failure the attempt rows are still recorded and the membership is left unactivated (documented compensating path for an orphan IQPro subscription).
 
 **Hold:** `member.holdMembership(memberId, memberMembershipId)`
 0. **Enforce `hold_limit_per_year`** if set on the plan. Counts prior successful `memberMembership.hold` audit events for the same `memberMembershipId` in the trailing 12 months. If the count is at the limit, throws `HoldLimitReachedError` → router maps to a 409 with a clear message. 0 or null = unlimited.
@@ -1103,6 +1105,15 @@ npm run commit        # Interactive commit helper
 - **Locales:** English (en), French (fr)
 - **Lint:** Never use eslint-ignore comments; fix the underlying issue instead
 
+### Performance conventions
+
+- **Migrations:** the schema is applied via the single hand-authored `migrations/0000_baseline.sql` (there is no `0000_snapshot.json`, so `npm run db:generate` would regenerate the whole schema — do NOT run it). To add/alter a table or index, edit BOTH `src/models/Schema.ts` (the Drizzle source of truth) AND `0000_baseline.sql` (append the DDL), keeping them in sync by hand, then run the DDL against Neon directly (`CREATE INDEX CONCURRENTLY IF NOT EXISTS …`) since the baseline is already applied there. Local dev picks up baseline changes only on a fresh `rm -rf local.db` + reseed.
+- **Index every hot filter/join column:** every table that is filtered or joined on `member_id`, `organization_id`, a status column, or ordered by `created_at` should have a matching (often composite) index. The member-scoped tables (`address`, `note`, `payment_method`) and `transaction (organization_id, created_at)` / `signed_waiver (organization_id, signed_at)` composites were added for exactly this.
+- **Don't load rows to count them:** use `count()` + `GROUP BY` (e.g. `getOrganizationWaiverTemplates` counts signed waivers with a grouped aggregate) rather than `db.select()`-ing full rows and counting in JS — signed waivers / catalog images carry base64 blobs.
+- **Keep base64 out of list queries:** `member.photoUrl` and catalog image `url`/`thumbnailUrl` are base64 data URLs. The members-LIST query returns `photoUrl: null` and the detail page loads the photo via `member.getById`; large lists are paginated client-side (members, transactions, catalog) so only a page of image-bearing rows is in the DOM.
+- **Parallelize independent awaits** with `Promise.all` (reports insights, `getCurrentPlan`'s DB + Clerk calls). **Dedupe per-request work** with React `cache()` (the dashboard subscription gate's org lookup + `hasActiveSubscription`).
+- **Code-split heavy client deps:** `recharts` (Dashboard + Reports charts) and `browser-image-compression` are loaded via `next/dynamic` / lazy `await import()` so they're not in initial route bundles. `next.config.ts` sets `experimental.optimizePackageImports` for `lucide-react`/`recharts`/`date-fns`. `reactCompiler: true` auto-memoizes, so manual `useMemo`/`useCallback`/`React.memo` are usually unnecessary.
+
 ## CI/CD
 
 - **CI:** GitHub Actions (`.github/workflows/CI.yml`)
@@ -1375,15 +1386,28 @@ const context = await guardRole(ORG_ROLE.ADMIN);
 // context = { userId, orgId, role: 'org:admin' }
 ```
 
+### Multi-Tenant Org-Scoping (data isolation)
+
+**`guardRole()` only proves the caller has a role in THEIR OWN org — it does NOT verify that a row referenced by a request ID belongs to that org.** A service function that filters only on a child ID (`where(eq(id, ...))`) lets a caller in org A mutate/read org B's data by supplying B's IDs. Every service function that takes an entity ID from client input MUST verify that entity belongs to `context.orgId` before touching it.
+
+**Pattern:** pass `organizationId` into the service function and verify ownership via a `SELECT ... WHERE id = ? AND organizationId = ?` (or a JOIN up to the org-owning parent), throwing a typed `*NotFoundError` on miss. Routers map that error to **404** (via a `toOrpcError` helper) so a cross-tenant probe is indistinguishable from a genuine miss. Reference implementations:
+- `CatalogService.ts` — `assertItemInOrg` / `resolveVariantItemInOrg` / `assertImageInOrg` guard `createCatalogVariant`/`updateCatalogVariant`/`deleteCatalogVariant`/`adjustVariantStock`/`createCatalogImage`/`deleteCatalogImage`; `CatalogNotFoundError` → 404.
+- `WaiversService.ts` — `assertPlanInOrg` / `assertTemplateInOrg` guard the membership↔waiver association setters/getters and `getMemberSignedWaivers` (org filter on `signedWaiverSchema.organizationId`, PII protection); `WaiverNotFoundError` → 404.
+- `MembersService.ts` — `assertMemberInOrg` / `assertPlanInOrg` guard `addMemberMembership`/`changeMemberMembership` and the family link/unlink/read functions (`linkFamilyMember`/`unlinkFamilyMember`/`getFamilyMembers`/`getHOHForFamilyMember`); `MemberNotFoundError` → 404.
+- `ClassesService.deleteScheduleException` — JOIN up to `classSchema.organizationId`.
+
+Note the pre-existing `Member.create` handler already verifies a plan is in-org before `addMemberMembership`; the standalone `addMembership`/`changeMembership` endpoints now do too.
+
 ### Security Checklist for New Features
 
 When adding new features, ensure:
 
 1. **Authentication:** Use `guardAuth()` or `guardRole()` for all protected endpoints
-2. **Audit Logging:** Add `audit()` calls for all mutations (create, update, delete)
-3. **Rate Limiting:** Consider if the endpoint needs rate limiting
-4. **Input Validation:** Use Zod schemas in `src/validations/`
-5. **Error Handling:** Never expose internal errors to clients
+2. **Org-scoping:** Verify every client-supplied entity ID belongs to `context.orgId` before reading/mutating it (see Multi-Tenant Org-Scoping above). `guardRole` alone is NOT sufficient.
+3. **Audit Logging:** Add `audit()` calls for all mutations (create, update, delete)
+4. **Rate Limiting:** Consider if the endpoint needs rate limiting
+5. **Input Validation:** Use Zod schemas in `src/validations/`
+6. **Error Handling:** Never expose internal errors to clients
 
 ## Post-Implementation Checklist
 
