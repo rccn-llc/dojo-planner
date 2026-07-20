@@ -652,18 +652,27 @@ CREATE INDEX "signed_waiver_org_idx" ON "signed_waiver" USING btree ("organizati
 CREATE INDEX "signed_waiver_member_idx" ON "signed_waiver" USING btree ("member_id");--> statement-breakpoint
 CREATE INDEX "signed_waiver_template_idx" ON "signed_waiver" USING btree ("waiver_template_id");--> statement-breakpoint
 CREATE INDEX "signed_waiver_membership_idx" ON "signed_waiver" USING btree ("member_membership_id");--> statement-breakpoint
+CREATE INDEX "signed_waiver_org_signed_idx" ON "signed_waiver" USING btree ("organization_id","signed_at");--> statement-breakpoint
 CREATE INDEX "tag_org_entity_idx" ON "tag" USING btree ("organization_id","entity_type");--> statement-breakpoint
 CREATE UNIQUE INDEX "tag_org_entity_slug_idx" ON "tag" USING btree ("organization_id","entity_type","slug");--> statement-breakpoint
 CREATE INDEX "transaction_org_idx" ON "transaction" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "transaction_member_idx" ON "transaction" USING btree ("member_id");--> statement-breakpoint
 CREATE INDEX "transaction_status_idx" ON "transaction" USING btree ("status");--> statement-breakpoint
 CREATE INDEX "transaction_date_idx" ON "transaction" USING btree ("created_at");--> statement-breakpoint
+CREATE INDEX "transaction_org_created_idx" ON "transaction" USING btree ("organization_id","created_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "transaction_stripe_idx" ON "transaction" USING btree ("stripe_payment_intent_id");--> statement-breakpoint
 CREATE INDEX "waiver_merge_field_org_idx" ON "waiver_merge_field" USING btree ("organization_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "waiver_merge_field_org_key_idx" ON "waiver_merge_field" USING btree ("organization_id","key");--> statement-breakpoint
 CREATE INDEX "waiver_template_org_idx" ON "waiver_template" USING btree ("organization_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "waiver_template_org_slug_version_idx" ON "waiver_template" USING btree ("organization_id","slug","version");--> statement-breakpoint
 CREATE INDEX "waiver_template_parent_idx" ON "waiver_template" USING btree ("parent_id");--> statement-breakpoint
+-- Member-scoped FK indexes for tables that were previously unindexed on
+-- member_id (fetched on every member-list / member-detail load), plus the
+-- family_member reverse lookup keyed on related_member_id.
+CREATE INDEX "address_member_idx" ON "address" USING btree ("member_id");--> statement-breakpoint
+CREATE INDEX "note_member_idx" ON "note" USING btree ("member_id");--> statement-breakpoint
+CREATE INDEX "payment_method_member_idx" ON "payment_method" USING btree ("member_id");--> statement-breakpoint
+CREATE INDEX "family_member_related_idx" ON "family_member" USING btree ("related_member_id");--> statement-breakpoint
 -- Backfill `membership_plan.program_id` for existing rows where the FK is
 -- null but the legacy `program` text column matches a `program.name` within
 -- the same organization (case-insensitive).

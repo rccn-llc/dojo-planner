@@ -29,8 +29,10 @@ const retrieveSubscriptionAndUpdate = async (subscriptionId: string) => {
     });
 
     logger.info('Subscription has been updated');
-  } catch (error: any) {
-    logger.error(error, 'An error occurred while updating subscription');
+  } catch (error) {
+    logger.error('An error occurred while updating subscription', {
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 };
 

@@ -4,6 +4,7 @@ import {
   EditMemberValidation,
   GetHOHForMemberValidation,
   GetHOHPaymentMethodsValidation,
+  GetMemberByIdValidation,
   LinkFamilyMemberValidation,
   ListFamilyMembersValidation,
   MemberPaymentMethodsValidation,
@@ -689,6 +690,20 @@ describe('MemberValidation', () => {
 
     it('should fail when memberId is missing', () => {
       const result = GetHOHForMemberValidation.safeParse({});
+
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('GetMemberByIdValidation schema', () => {
+    it('should validate with a valid memberId', () => {
+      const result = GetMemberByIdValidation.safeParse({ memberId: 'member-123' });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should fail when memberId is empty', () => {
+      const result = GetMemberByIdValidation.safeParse({ memberId: '' });
 
       expect(result.success).toBe(false);
     });

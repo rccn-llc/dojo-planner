@@ -117,14 +117,12 @@ describe('Dashboard Page', () => {
     expect(expireCards).toBeInTheDocument();
   });
 
-  it('displays chart headings', () => {
+  it('displays chart headings', async () => {
     render(<DashboardPage />);
 
-    const memberAverageChart = page.getByRole('heading', { name: /Member average/i });
-    const earningsChart = page.getByRole('heading', { name: /Earnings/i });
-
-    expect(memberAverageChart).toBeInTheDocument();
-    expect(earningsChart).toBeInTheDocument();
+    // DashboardCharts is loaded via next/dynamic, so poll until it resolves.
+    await expect.element(page.getByRole('heading', { name: /Member average/i })).toBeInTheDocument();
+    await expect.element(page.getByRole('heading', { name: /Earnings/i })).toBeInTheDocument();
   });
 });
 
@@ -361,14 +359,12 @@ describe('Dashboard Page - Layout Structure', () => {
     expect(financialsHeading).toBeInTheDocument();
   });
 
-  it('renders charts section', () => {
+  it('renders charts section', async () => {
     render(<DashboardPage />);
 
-    const memberAverageChart = page.getByRole('heading', { name: /Member average/i });
-    const earningsChart = page.getByRole('heading', { name: /Earnings/i });
-
-    expect(memberAverageChart).toBeInTheDocument();
-    expect(earningsChart).toBeInTheDocument();
+    // DashboardCharts is loaded via next/dynamic, so poll until it resolves.
+    await expect.element(page.getByRole('heading', { name: /Member average/i })).toBeInTheDocument();
+    await expect.element(page.getByRole('heading', { name: /Earnings/i })).toBeInTheDocument();
   });
 });
 

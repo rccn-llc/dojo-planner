@@ -81,7 +81,7 @@ describe('requireActiveSubscription', () => {
   it('passes through when active subscription and owner exist', async () => {
     setAuth('org-1');
 
-    await expect(requireActiveSubscription('/en/dashboard/members')).resolves.toBeUndefined();
+    await expect(requireActiveSubscription('/en/dashboard/members')).resolves.toEqual({ subscriptionActive: true });
     expect(mockRedirect).not.toHaveBeenCalled();
   });
 
@@ -102,7 +102,7 @@ describe('requireActiveSubscription', () => {
   it('does not enforce when there is no orgId', async () => {
     setAuth(null);
 
-    await expect(requireActiveSubscription('/en/dashboard/members')).resolves.toBeUndefined();
+    await expect(requireActiveSubscription('/en/dashboard/members')).resolves.toEqual({ subscriptionActive: true });
     expect(mockRedirect).not.toHaveBeenCalled();
   });
 
@@ -158,7 +158,7 @@ describe('requireActiveSubscription', () => {
     mockHasActiveSubscription.mockResolvedValue(true);
     mockGetAcademyOwner.mockResolvedValue(null);
 
-    await expect(requireActiveSubscription('/en/dashboard/members')).resolves.toBeUndefined();
+    await expect(requireActiveSubscription('/en/dashboard/members')).resolves.toEqual({ subscriptionActive: true });
     expect(mockRedirect).not.toHaveBeenCalled();
   });
 

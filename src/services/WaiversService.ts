@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq, gte, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, count, eq, gte, inArray, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/libs/DB';
 import {
   membershipPlanSchema,
@@ -198,25 +198,26 @@ export async function getOrganizationWaiverTemplates(organizationId: string): Pr
 
   const templateIds = templates.map(t => t.id);
 
-  // Get signed counts and membership counts in parallel
-  const [signedWaivers, membershipWaivers] = await Promise.all([
-    db.select().from(signedWaiverSchema).where(inArray(signedWaiverSchema.waiverTemplateId, templateIds)),
-    db.select().from(membershipWaiverSchema).where(inArray(membershipWaiverSchema.waiverTemplateId, templateIds)),
+  // Count signed waivers + membership associations per template via grouped
+  // aggregates. Previously this loaded EVERY signed_waiver row (base64
+  // signatures + full rendered content) just to count them in JS — potentially
+  // megabytes transferred to compute integers. Now the DB returns one row per
+  // template with its count.
+  const [signedCounts, membershipCounts] = await Promise.all([
+    db
+      .select({ waiverTemplateId: signedWaiverSchema.waiverTemplateId, n: count() })
+      .from(signedWaiverSchema)
+      .where(inArray(signedWaiverSchema.waiverTemplateId, templateIds))
+      .groupBy(signedWaiverSchema.waiverTemplateId),
+    db
+      .select({ waiverTemplateId: membershipWaiverSchema.waiverTemplateId, n: count() })
+      .from(membershipWaiverSchema)
+      .where(inArray(membershipWaiverSchema.waiverTemplateId, templateIds))
+      .groupBy(membershipWaiverSchema.waiverTemplateId),
   ]);
 
-  // Count signed waivers per template
-  const signedCountMap = new Map<string, number>();
-  signedWaivers.forEach((sw) => {
-    const count = signedCountMap.get(sw.waiverTemplateId) || 0;
-    signedCountMap.set(sw.waiverTemplateId, count + 1);
-  });
-
-  // Count membership associations per template
-  const membershipCountMap = new Map<string, number>();
-  membershipWaivers.forEach((mw) => {
-    const count = membershipCountMap.get(mw.waiverTemplateId) || 0;
-    membershipCountMap.set(mw.waiverTemplateId, count + 1);
-  });
+  const signedCountMap = new Map<string, number>(signedCounts.map(r => [r.waiverTemplateId, r.n]));
+  const membershipCountMap = new Map<string, number>(membershipCounts.map(r => [r.waiverTemplateId, r.n]));
 
   return templates.map(template => ({
     id: template.id,
@@ -243,8 +244,49 @@ export async function getOrganizationWaiverTemplates(organizationId: string): Pr
  * Get a single waiver template by ID
  */
 export async function getWaiverTemplateById(templateId: string, organizationId: string): Promise<WaiverTemplateWithStats | null> {
-  const templates = await getOrganizationWaiverTemplates(organizationId);
-  return templates.find(t => t.id === templateId) || null;
+  // Direct single-row fetch + two scalar counts, rather than materializing and
+  // aggregating every template in the org just to `.find()` one.
+  // Match getOrganizationWaiverTemplates' filter (active, non-archived parents)
+  // so behavior is identical to the previous "aggregate all then .find()".
+  const [template] = await db
+    .select()
+    .from(waiverTemplateSchema)
+    .where(and(
+      eq(waiverTemplateSchema.id, templateId),
+      eq(waiverTemplateSchema.organizationId, organizationId),
+      isNull(waiverTemplateSchema.parentId),
+      eq(waiverTemplateSchema.isActive, true),
+    ))
+    .limit(1);
+
+  if (!template) {
+    return null;
+  }
+
+  const [[signed], [membership]] = await Promise.all([
+    db.select({ n: count() }).from(signedWaiverSchema).where(eq(signedWaiverSchema.waiverTemplateId, templateId)),
+    db.select({ n: count() }).from(membershipWaiverSchema).where(eq(membershipWaiverSchema.waiverTemplateId, templateId)),
+  ]);
+
+  return {
+    id: template.id,
+    organizationId: template.organizationId,
+    name: template.name,
+    slug: template.slug,
+    version: template.version,
+    content: template.content,
+    description: template.description,
+    isActive: template.isActive ?? true,
+    isDefault: template.isDefault ?? false,
+    requiresGuardian: template.requiresGuardian ?? true,
+    guardianAgeThreshold: template.guardianAgeThreshold ?? 16,
+    sortOrder: template.sortOrder ?? 0,
+    parentId: template.parentId,
+    createdAt: template.createdAt,
+    updatedAt: template.updatedAt,
+    signedCount: signed?.n ?? 0,
+    membershipCount: membership?.n ?? 0,
+  };
 }
 
 /**
@@ -555,11 +597,13 @@ export async function getWaiverTemplateVersion(
 /**
  * Get all signed waivers for a member, enriched with template name
  */
-export async function getMemberSignedWaivers(memberId: string): Promise<SignedWaiverWithTemplateName[]> {
+export async function getMemberSignedWaivers(memberId: string, organizationId: string): Promise<SignedWaiverWithTemplateName[]> {
+  // Org-scope: signed waivers carry PII (name, DOB, email, signature, IP); only
+  // return rows that belong to the caller's organization.
   const waivers = await db
     .select()
     .from(signedWaiverSchema)
-    .where(eq(signedWaiverSchema.memberId, memberId));
+    .where(and(eq(signedWaiverSchema.memberId, memberId), eq(signedWaiverSchema.organizationId, organizationId)));
 
   if (waivers.length === 0) {
     return [];
@@ -764,9 +808,57 @@ export async function createSignedWaiver(
 // =============================================================================
 
 /**
+ * Thrown when a membership plan / waiver template / member referenced by an
+ * association or read cannot be resolved within the caller's organization.
+ * Routers map this to a 404 so a cross-tenant probe is indistinguishable from a
+ * genuinely missing row.
+ */
+export class WaiverNotFoundError extends Error {
+  constructor(message = 'Waiver resource not found') {
+    super(message);
+    this.name = 'WaiverNotFoundError';
+  }
+}
+
+/**
+ * Verify a membership plan belongs to the given organization. Throws
+ * WaiverNotFoundError (→ 404) on miss.
+ */
+async function assertPlanInOrg(membershipPlanId: string, organizationId: string): Promise<void> {
+  const rows = await db
+    .select({ id: membershipPlanSchema.id })
+    .from(membershipPlanSchema)
+    .where(and(eq(membershipPlanSchema.id, membershipPlanId), eq(membershipPlanSchema.organizationId, organizationId)))
+    .limit(1);
+
+  if (rows.length === 0) {
+    throw new WaiverNotFoundError('Membership plan not found');
+  }
+}
+
+/**
+ * Verify a waiver template belongs to the given organization. Throws
+ * WaiverNotFoundError (→ 404) on miss.
+ */
+async function assertTemplateInOrg(waiverTemplateId: string, organizationId: string): Promise<void> {
+  const rows = await db
+    .select({ id: waiverTemplateSchema.id })
+    .from(waiverTemplateSchema)
+    .where(and(eq(waiverTemplateSchema.id, waiverTemplateId), eq(waiverTemplateSchema.organizationId, organizationId)))
+    .limit(1);
+
+  if (rows.length === 0) {
+    throw new WaiverNotFoundError('Waiver template not found');
+  }
+}
+
+/**
  * Get waiver templates associated with a membership plan
  */
-export async function getWaiversForMembershipPlan(membershipPlanId: string): Promise<WaiverTemplate[]> {
+export async function getWaiversForMembershipPlan(membershipPlanId: string, organizationId: string): Promise<WaiverTemplate[]> {
+  // Org-scope: reject a cross-tenant plan id before reading its associations.
+  await assertPlanInOrg(membershipPlanId, organizationId);
+
   const associations = await db
     .select()
     .from(membershipWaiverSchema)
@@ -809,7 +901,10 @@ export async function getWaiversForMembershipPlan(membershipPlanId: string): Pro
 /**
  * Get memberships associated with a waiver template
  */
-export async function getMembershipsForWaiverTemplate(waiverTemplateId: string): Promise<string[]> {
+export async function getMembershipsForWaiverTemplate(waiverTemplateId: string, organizationId: string): Promise<string[]> {
+  // Org-scope: reject a cross-tenant template id before reading its associations.
+  await assertTemplateInOrg(waiverTemplateId, organizationId);
+
   const associations = await db
     .select()
     .from(membershipWaiverSchema)
@@ -824,7 +919,12 @@ export async function getMembershipsForWaiverTemplate(waiverTemplateId: string):
 export async function setMembershipPlanWaivers(
   membershipPlanId: string,
   waiverTemplateIds: string[],
+  organizationId: string,
 ): Promise<void> {
+  // Org-scope: the plan and every referenced template must belong to the org.
+  await assertPlanInOrg(membershipPlanId, organizationId);
+  await Promise.all(waiverTemplateIds.map(id => assertTemplateInOrg(id, organizationId)));
+
   // Remove existing associations
   await db.delete(membershipWaiverSchema).where(eq(membershipWaiverSchema.membershipPlanId, membershipPlanId));
 
@@ -852,7 +952,12 @@ export async function setMembershipPlanWaivers(
 export async function setWaiverMembershipPlans(
   waiverTemplateId: string,
   membershipPlanIds: string[],
+  organizationId: string,
 ): Promise<void> {
+  // Org-scope: the template and every referenced plan must belong to the org.
+  await assertTemplateInOrg(waiverTemplateId, organizationId);
+  await Promise.all(membershipPlanIds.map(id => assertPlanInOrg(id, organizationId)));
+
   // Remove existing associations for this waiver
   await db.delete(membershipWaiverSchema).where(eq(membershipWaiverSchema.waiverTemplateId, waiverTemplateId));
 
@@ -875,8 +980,13 @@ export async function setWaiverMembershipPlans(
 export async function addWaiverToMembershipPlan(
   membershipPlanId: string,
   waiverTemplateId: string,
+  organizationId: string,
   isRequired: boolean = true,
 ): Promise<void> {
+  // Org-scope: both the plan and the template must belong to the org.
+  await assertPlanInOrg(membershipPlanId, organizationId);
+  await assertTemplateInOrg(waiverTemplateId, organizationId);
+
   // Get current max sort order
   const existing = await db
     .select()
@@ -899,7 +1009,11 @@ export async function addWaiverToMembershipPlan(
 export async function removeWaiverFromMembershipPlan(
   membershipPlanId: string,
   waiverTemplateId: string,
+  organizationId: string,
 ): Promise<void> {
+  // Org-scope: the plan must belong to the org before altering its associations.
+  await assertPlanInOrg(membershipPlanId, organizationId);
+
   await db
     .delete(membershipWaiverSchema)
     .where(

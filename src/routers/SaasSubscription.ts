@@ -37,19 +37,22 @@ export const getCurrentPlan = os.handler(async () => {
   const { sessionClaims } = await auth();
   const username = (sessionClaims as Record<string, unknown>)?.username as string | undefined;
 
-  const subscription = await getCurrentSubscription(context.orgId, username);
+  // The subscription (DB) and the responsible-owner lookup (Clerk HTTP) are
+  // independent — run them together instead of adding the full Clerk round-trip
+  // to latency serially. The owner lookup stays best-effort: a missing owner or
+  // Clerk error just leaves the display fields null.
+  const [subscription, owner] = await Promise.all([
+    getCurrentSubscription(context.orgId, username),
+    getAcademyOwner(context.orgId).catch((error) => {
+      logger.warn('[SaaSSubscription] Failed to resolve academy owner', { orgId: context.orgId, error });
+      return null;
+    }),
+  ]);
 
-  // Resolve the responsible academy owner's display info for the UI. Best-effort:
-  // a missing owner (or Clerk error) just leaves the display fields null.
   let responsibleOwner: { name: string | null; email: string | null } | null = null;
-  try {
-    const owner = await getAcademyOwner(context.orgId);
-    if (owner) {
-      const name = [owner.firstName, owner.lastName].filter(Boolean).join(' ').trim();
-      responsibleOwner = { name: name || null, email: owner.email || null };
-    }
-  } catch (error) {
-    logger.warn('[SaaSSubscription] Failed to resolve academy owner', { orgId: context.orgId, error });
+  if (owner) {
+    const name = [owner.firstName, owner.lastName].filter(Boolean).join(' ').trim();
+    responsibleOwner = { name: name || null, email: owner.email || null };
   }
 
   return { ...subscription, responsibleOwner };

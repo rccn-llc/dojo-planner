@@ -34,6 +34,27 @@ vi.mock('@/models/Schema', () => ({
   catalogItemVariantSchema: { id: 'id', catalogItemId: 'catalogItemId' },
 }));
 
+const TEST_ORG = 'test-org-123';
+
+/**
+ * Build a chainable db.select mock whose terminal `.where(...)` resolves to
+ * `rows`, and which also supports the guard shape `.where(...).limit(1)` and
+ * `.innerJoin(...).where(...).limit(1)`. Both the awaited `where` and the
+ * `limit` resolve to the same `rows`.
+ */
+function selectChain(rows: any[]): any {
+  const whereResult: any = Promise.resolve(rows);
+  whereResult.limit = vi.fn().mockResolvedValue(rows);
+  const inner: any = {
+    where: vi.fn().mockReturnValue(whereResult),
+    limit: vi.fn().mockResolvedValue(rows),
+  };
+  inner.innerJoin = vi.fn().mockReturnValue(inner);
+  return {
+    from: vi.fn().mockReturnValue(inner),
+  };
+}
+
 describe('CatalogService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -564,11 +585,11 @@ describe('CatalogService', () => {
         updatedAt: new Date(),
       };
 
-      vi.mocked(db.select).mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([]),
-        }),
-      } as any);
+      vi.mocked(db.select)
+        // guard: assertItemInOrg → non-empty item row
+        .mockReturnValueOnce(selectChain([{ id: 'item-1' }]))
+        // original variant-count select → no existing variants
+        .mockReturnValueOnce(selectChain([]));
 
       vi.mocked(db.insert).mockReturnValue({
         values: vi.fn().mockReturnValue({
@@ -582,7 +603,7 @@ describe('CatalogService', () => {
         name: 'Medium',
         price: 29.99,
         stockQuantity: 10,
-      });
+      }, TEST_ORG);
 
       expect(result.name).toBe('Medium');
       expect(result.price).toBe(29.99);
@@ -604,27 +625,25 @@ describe('CatalogService', () => {
         updatedAt: new Date(),
       }));
 
-      vi.mocked(db.select).mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue(existingVariants),
-        }),
-      } as any);
+      vi.mocked(db.select)
+        // guard passes
+        .mockReturnValueOnce(selectChain([{ id: 'item-1' }]))
+        // count select returns 8 existing variants
+        .mockReturnValueOnce(selectChain(existingVariants));
 
       const { createCatalogVariant } = await import('./CatalogService');
 
       await expect(
-        createCatalogVariant({ catalogItemId: 'item-1', name: 'New', price: 30 }),
+        createCatalogVariant({ catalogItemId: 'item-1', name: 'New', price: 30 }, TEST_ORG),
       ).rejects.toThrow('Maximum 8 variants allowed per item');
     });
 
     it('should throw error when creation fails', async () => {
       const { db } = await import('@/libs/DB');
 
-      vi.mocked(db.select).mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([]),
-        }),
-      } as any);
+      vi.mocked(db.select)
+        .mockReturnValueOnce(selectChain([{ id: 'item-1' }]))
+        .mockReturnValueOnce(selectChain([]));
 
       vi.mocked(db.insert).mockReturnValue({
         values: vi.fn().mockReturnValue({
@@ -635,8 +654,21 @@ describe('CatalogService', () => {
       const { createCatalogVariant } = await import('./CatalogService');
 
       await expect(
-        createCatalogVariant({ catalogItemId: 'item-1', name: 'Medium', price: 29.99 }),
+        createCatalogVariant({ catalogItemId: 'item-1', name: 'Medium', price: 29.99 }, TEST_ORG),
       ).rejects.toThrow('Failed to create variant');
+    });
+
+    it('should reject cross-tenant item with CatalogNotFoundError', async () => {
+      const { db } = await import('@/libs/DB');
+
+      // guard select returns empty → not in caller's org
+      vi.mocked(db.select).mockReturnValueOnce(selectChain([]));
+
+      const { createCatalogVariant, CatalogNotFoundError } = await import('./CatalogService');
+
+      await expect(
+        createCatalogVariant({ catalogItemId: 'item-x', name: 'Medium', price: 29.99 }, TEST_ORG),
+      ).rejects.toThrow(CatalogNotFoundError);
     });
   });
 
@@ -654,6 +686,8 @@ describe('CatalogService', () => {
         updatedAt: new Date(),
       };
 
+      vi.mocked(db.select).mockReturnValueOnce(selectChain([{ catalogItemId: 'item-1' }]));
+
       vi.mocked(db.update).mockReturnValue({
         set: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({
@@ -663,7 +697,7 @@ describe('CatalogService', () => {
       } as any);
 
       const { updateCatalogVariant } = await import('./CatalogService');
-      const result = await updateCatalogVariant({ id: 'variant-1', name: 'Large', price: 34.99, stockQuantity: 15 });
+      const result = await updateCatalogVariant({ id: 'variant-1', name: 'Large', price: 34.99, stockQuantity: 15 }, TEST_ORG);
 
       expect(result.name).toBe('Large');
       expect(result.price).toBe(34.99);
@@ -672,6 +706,9 @@ describe('CatalogService', () => {
 
     it('should throw error when variant not found', async () => {
       const { db } = await import('@/libs/DB');
+
+      // guard passes (variant belongs to org), but the update returns nothing
+      vi.mocked(db.select).mockReturnValueOnce(selectChain([{ catalogItemId: 'item-1' }]));
 
       vi.mocked(db.update).mockReturnValue({
         set: vi.fn().mockReturnValue({
@@ -684,8 +721,21 @@ describe('CatalogService', () => {
       const { updateCatalogVariant } = await import('./CatalogService');
 
       await expect(
-        updateCatalogVariant({ id: 'nonexistent' }),
+        updateCatalogVariant({ id: 'nonexistent' }, TEST_ORG),
       ).rejects.toThrow('Variant not found');
+    });
+
+    it('should reject cross-tenant variant with CatalogNotFoundError', async () => {
+      const { db } = await import('@/libs/DB');
+
+      // guard select returns empty → variant not in caller's org
+      vi.mocked(db.select).mockReturnValueOnce(selectChain([]));
+
+      const { updateCatalogVariant, CatalogNotFoundError } = await import('./CatalogService');
+
+      await expect(
+        updateCatalogVariant({ id: 'variant-x', name: 'X' }, TEST_ORG),
+      ).rejects.toThrow(CatalogNotFoundError);
     });
   });
 
@@ -693,14 +743,26 @@ describe('CatalogService', () => {
     it('should delete a variant', async () => {
       const { db } = await import('@/libs/DB');
 
+      vi.mocked(db.select).mockReturnValueOnce(selectChain([{ catalogItemId: 'item-1' }]));
+
       vi.mocked(db.delete).mockReturnValue({
         where: vi.fn().mockResolvedValue(undefined),
       } as any);
 
       const { deleteCatalogVariant } = await import('./CatalogService');
-      await deleteCatalogVariant('variant-1');
+      await deleteCatalogVariant('variant-1', TEST_ORG);
 
       expect(db.delete).toHaveBeenCalled();
+    });
+
+    it('should reject cross-tenant variant with CatalogNotFoundError', async () => {
+      const { db } = await import('@/libs/DB');
+
+      vi.mocked(db.select).mockReturnValueOnce(selectChain([]));
+
+      const { deleteCatalogVariant, CatalogNotFoundError } = await import('./CatalogService');
+
+      await expect(deleteCatalogVariant('variant-x', TEST_ORG)).rejects.toThrow(CatalogNotFoundError);
     });
   });
 
@@ -720,11 +782,9 @@ describe('CatalogService', () => {
 
       const mockUpdatedVariant = { ...mockVariant, stockQuantity: 15 };
 
-      vi.mocked(db.select).mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([mockVariant]),
-        }),
-      } as any);
+      vi.mocked(db.select)
+        .mockReturnValueOnce(selectChain([{ catalogItemId: 'item-1' }]))
+        .mockReturnValueOnce(selectChain([mockVariant]));
 
       vi.mocked(db.update).mockReturnValue({
         set: vi.fn().mockReturnValue({
@@ -735,7 +795,7 @@ describe('CatalogService', () => {
       } as any);
 
       const { adjustVariantStock } = await import('./CatalogService');
-      const result = await adjustVariantStock('variant-1', 5);
+      const result = await adjustVariantStock('variant-1', 5, TEST_ORG);
 
       expect(result.stockQuantity).toBe(15);
     });
@@ -755,11 +815,9 @@ describe('CatalogService', () => {
 
       const mockUpdatedVariant = { ...mockVariant, stockQuantity: 5 };
 
-      vi.mocked(db.select).mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([mockVariant]),
-        }),
-      } as any);
+      vi.mocked(db.select)
+        .mockReturnValueOnce(selectChain([{ catalogItemId: 'item-1' }]))
+        .mockReturnValueOnce(selectChain([mockVariant]));
 
       vi.mocked(db.update).mockReturnValue({
         set: vi.fn().mockReturnValue({
@@ -770,7 +828,7 @@ describe('CatalogService', () => {
       } as any);
 
       const { adjustVariantStock } = await import('./CatalogService');
-      const result = await adjustVariantStock('variant-1', -5);
+      const result = await adjustVariantStock('variant-1', -5, TEST_ORG);
 
       expect(result.stockQuantity).toBe(5);
     });
@@ -790,11 +848,9 @@ describe('CatalogService', () => {
 
       const mockUpdatedVariant = { ...mockVariant, stockQuantity: 0 };
 
-      vi.mocked(db.select).mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([mockVariant]),
-        }),
-      } as any);
+      vi.mocked(db.select)
+        .mockReturnValueOnce(selectChain([{ catalogItemId: 'item-1' }]))
+        .mockReturnValueOnce(selectChain([mockVariant]));
 
       vi.mocked(db.update).mockReturnValue({
         set: vi.fn().mockReturnValue({
@@ -805,7 +861,7 @@ describe('CatalogService', () => {
       } as any);
 
       const { adjustVariantStock } = await import('./CatalogService');
-      const result = await adjustVariantStock('variant-1', -10);
+      const result = await adjustVariantStock('variant-1', -10, TEST_ORG);
 
       expect(result.stockQuantity).toBe(0);
     });
@@ -813,15 +869,24 @@ describe('CatalogService', () => {
     it('should throw error when variant not found', async () => {
       const { db } = await import('@/libs/DB');
 
-      vi.mocked(db.select).mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([]),
-        }),
-      } as any);
+      // guard passes, but the stock-lookup select returns nothing
+      vi.mocked(db.select)
+        .mockReturnValueOnce(selectChain([{ catalogItemId: 'item-1' }]))
+        .mockReturnValueOnce(selectChain([]));
 
       const { adjustVariantStock } = await import('./CatalogService');
 
-      await expect(adjustVariantStock('nonexistent', 5)).rejects.toThrow('Variant not found');
+      await expect(adjustVariantStock('nonexistent', 5, TEST_ORG)).rejects.toThrow('Variant not found');
+    });
+
+    it('should reject cross-tenant variant with CatalogNotFoundError', async () => {
+      const { db } = await import('@/libs/DB');
+
+      vi.mocked(db.select).mockReturnValueOnce(selectChain([]));
+
+      const { adjustVariantStock, CatalogNotFoundError } = await import('./CatalogService');
+
+      await expect(adjustVariantStock('variant-x', 5, TEST_ORG)).rejects.toThrow(CatalogNotFoundError);
     });
 
     it('should throw error when update fails', async () => {
@@ -837,11 +902,9 @@ describe('CatalogService', () => {
         updatedAt: new Date(),
       };
 
-      vi.mocked(db.select).mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([mockVariant]),
-        }),
-      } as any);
+      vi.mocked(db.select)
+        .mockReturnValueOnce(selectChain([{ catalogItemId: 'item-1' }]))
+        .mockReturnValueOnce(selectChain([mockVariant]));
 
       vi.mocked(db.update).mockReturnValue({
         set: vi.fn().mockReturnValue({
@@ -853,7 +916,7 @@ describe('CatalogService', () => {
 
       const { adjustVariantStock } = await import('./CatalogService');
 
-      await expect(adjustVariantStock('variant-1', 5)).rejects.toThrow('Failed to update stock');
+      await expect(adjustVariantStock('variant-1', 5, TEST_ORG)).rejects.toThrow('Failed to update stock');
     });
   });
 
@@ -1077,6 +1140,8 @@ describe('CatalogService', () => {
         createdAt: new Date(),
       };
 
+      vi.mocked(db.select).mockReturnValueOnce(selectChain([{ id: 'item-1' }]));
+
       vi.mocked(db.insert).mockReturnValue({
         values: vi.fn().mockReturnValue({
           returning: vi.fn().mockResolvedValue([mockImage]),
@@ -1088,7 +1153,7 @@ describe('CatalogService', () => {
         catalogItemId: 'item-1',
         url: 'https://example.com/image.jpg',
         altText: 'Product image',
-      });
+      }, TEST_ORG);
 
       expect(result.url).toBe('https://example.com/image.jpg');
       expect(result.isPrimary).toBe(false);
@@ -1107,6 +1172,8 @@ describe('CatalogService', () => {
         createdAt: new Date(),
       };
 
+      vi.mocked(db.select).mockReturnValueOnce(selectChain([{ id: 'item-1' }]));
+
       vi.mocked(db.update).mockReturnValue({
         set: vi.fn().mockReturnValue({
           where: vi.fn().mockResolvedValue(undefined),
@@ -1124,7 +1191,7 @@ describe('CatalogService', () => {
         catalogItemId: 'item-1',
         url: 'https://example.com/image.jpg',
         isPrimary: true,
-      });
+      }, TEST_ORG);
 
       expect(result.isPrimary).toBe(true);
       expect(db.update).toHaveBeenCalled();
@@ -1132,6 +1199,8 @@ describe('CatalogService', () => {
 
     it('should throw error when creation fails', async () => {
       const { db } = await import('@/libs/DB');
+
+      vi.mocked(db.select).mockReturnValueOnce(selectChain([{ id: 'item-1' }]));
 
       vi.mocked(db.insert).mockReturnValue({
         values: vi.fn().mockReturnValue({
@@ -1142,8 +1211,20 @@ describe('CatalogService', () => {
       const { createCatalogImage } = await import('./CatalogService');
 
       await expect(
-        createCatalogImage({ catalogItemId: 'item-1', url: 'https://example.com/image.jpg' }),
+        createCatalogImage({ catalogItemId: 'item-1', url: 'https://example.com/image.jpg' }, TEST_ORG),
       ).rejects.toThrow('Failed to create image');
+    });
+
+    it('should reject cross-tenant item with CatalogNotFoundError', async () => {
+      const { db } = await import('@/libs/DB');
+
+      vi.mocked(db.select).mockReturnValueOnce(selectChain([]));
+
+      const { createCatalogImage, CatalogNotFoundError } = await import('./CatalogService');
+
+      await expect(
+        createCatalogImage({ catalogItemId: 'item-x', url: 'https://example.com/image.jpg' }, TEST_ORG),
+      ).rejects.toThrow(CatalogNotFoundError);
     });
   });
 
@@ -1151,14 +1232,26 @@ describe('CatalogService', () => {
     it('should delete an image', async () => {
       const { db } = await import('@/libs/DB');
 
+      vi.mocked(db.select).mockReturnValueOnce(selectChain([{ id: 'img-1' }]));
+
       vi.mocked(db.delete).mockReturnValue({
         where: vi.fn().mockResolvedValue(undefined),
       } as any);
 
       const { deleteCatalogImage } = await import('./CatalogService');
-      await deleteCatalogImage('img-1');
+      await deleteCatalogImage('img-1', TEST_ORG);
 
       expect(db.delete).toHaveBeenCalled();
+    });
+
+    it('should reject cross-tenant image with CatalogNotFoundError', async () => {
+      const { db } = await import('@/libs/DB');
+
+      vi.mocked(db.select).mockReturnValueOnce(selectChain([]));
+
+      const { deleteCatalogImage, CatalogNotFoundError } = await import('./CatalogService');
+
+      await expect(deleteCatalogImage('img-x', TEST_ORG)).rejects.toThrow(CatalogNotFoundError);
     });
   });
 });

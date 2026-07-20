@@ -1,7 +1,7 @@
-import { and, count, eq, gte, inArray, sql, sum } from 'drizzle-orm';
+import { and, count, eq, gte, inArray, lte, sql, sum } from 'drizzle-orm';
 import { db } from '@/libs/DB';
 import { memberMembershipSchema, memberSchema, membershipPlanSchema, transactionSchema } from '@/models/Schema';
-import { getFinancialStats } from './DashboardService';
+import { countMembersAsOf, fetchMemberAsOfRows, getFinancialStats } from './DashboardService';
 
 export type ReportCurrentValues = {
   autopaysSuspended: number;
@@ -46,18 +46,117 @@ export type ReportChartData = {
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-// Build the last-N calendar days ending today, each as a { start-of-day,
-// end-of-day, label } bucket. Used by the daily report series (#274).
-function lastNDayBuckets(days: number): Array<{ start: Date; end: Date; label: string }> {
-  const buckets: Array<{ start: Date; end: Date; label: string }> = [];
-  const today = new Date();
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
-    const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0);
-    const end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59);
-    buckets.push({ start, end, label: `${MONTH_NAMES[d.getMonth()]} ${d.getDate()}` });
+// =============================================================================
+// N+1 CONSOLIDATION HELPERS
+//
+// The chart builders previously fired one DB query per calendar bucket (12
+// months + 12 prev-year months + 5 years, and up to 90 daily buckets) inside
+// Promise.all — 29–180 queries per chart. They now issue ONE query per series.
+//
+// Two aggregate shapes:
+//  - Range sum   → a single `date_trunc(period, created_at)` GROUP BY query;
+//                  the rows are mapped back into calendar buckets in JS
+//                  (a missing bucket → 0).
+//  - As-of count → the minimal columns are fetched ONCE per org and every
+//                  bucket count is computed in JS via pure functions.
+//
+// A period bucket in the ORIGINAL code was `[start, start + 1 period - 1s]`,
+// e.g. a month is `[YYYY-MM-01 00:00:00, last-day 23:59:59]`. That leaves a
+// sub-second gap (`…59.001–…59.999`) at every period boundary — rows there
+// were dropped by the originals. `date_trunc` alone would fold those gap rows
+// into their calendar period, changing counts for millisecond-precision
+// timestamps. To stay byte-identical we replicate the original per-bucket
+// upper bound in SQL: a row is kept only when
+//   `created_at <= date_trunc(period, created_at) + 1 period - interval '1 second'`.
+// That reproduces the original row-set exactly; `date_trunc` then groups the
+// survivors into the same calendar buckets the originals used.
+// =============================================================================
+
+type TruncPeriod = 'month' | 'year' | 'day';
+
+// The SQL bucket key for a row (start of its calendar period).
+function bucketExpr(period: TruncPeriod) {
+  return sql<Date>`date_trunc(${period}, ${transactionSchema.createdAt})`;
+}
+
+// Reproduces the originals' per-bucket upper bound so gap rows (the fractional
+// tail of each period's final second) are dropped exactly as before.
+function withinBucketWindow(period: TruncPeriod) {
+  const oneUnit = sql.raw(`interval '1 ${period}'`);
+  return sql`${transactionSchema.createdAt} <= date_trunc(${period}, ${transactionSchema.createdAt}) + ${oneUnit} - interval '1 second'`;
+}
+
+// A stable map key for a bucket-start Date, regardless of whether the driver
+// returns a Date or an ISO string.
+function bucketKey(value: unknown): string {
+  if (value instanceof Date) {
+    return value.getTime().toString();
   }
-  return buckets;
+  return new Date(value as string).getTime().toString();
+}
+
+// Run ONE grouped date_trunc sum query for a status set over [start, end] and
+// return a Map keyed by bucket-start ms → summed amount.
+async function groupedSumByBucket(
+  organizationId: string,
+  statuses: string[],
+  period: TruncPeriod,
+  start: Date,
+  end: Date,
+): Promise<Map<string, number>> {
+  const rows = await db
+    .select({
+      bucket: bucketExpr(period),
+      total: sql<string | number | null>`COALESCE(SUM(${transactionSchema.amount}), 0)`,
+    })
+    .from(transactionSchema)
+    .where(and(
+      eq(transactionSchema.organizationId, organizationId),
+      inArray(transactionSchema.status, statuses),
+      gte(transactionSchema.createdAt, start),
+      lte(transactionSchema.createdAt, end),
+      withinBucketWindow(period),
+    ))
+    .groupBy(bucketExpr(period));
+
+  const map = new Map<string, number>();
+  for (const row of rows) {
+    map.set(bucketKey(row.bucket), Number(row.total ?? 0));
+  }
+  return map;
+}
+
+// -----------------------------------------------------------------------------
+// Shape B — as-of point-in-time member counts (fetch once, bucket in JS)
+// -----------------------------------------------------------------------------
+
+// Fetch the createdAt of every past_due member for an org (one query). The
+// per-bucket count is `# rows whose createdAt <= point`.
+async function fetchPastDueMemberCreatedAts(organizationId: string): Promise<Date[]> {
+  const rows = await db
+    .select({ createdAt: memberSchema.createdAt })
+    .from(memberSchema)
+    .where(and(
+      eq(memberSchema.organizationId, organizationId),
+      eq(memberSchema.status, 'past_due'),
+    ));
+  return rows.map(r => r.createdAt as Date);
+}
+
+/**
+ * Pure counter for the "accounts autopay suspended" series: counts the number
+ * of past_due members whose createdAt is at or before `at`. Exported for direct
+ * unit testing. Mirrors the original `pastDueCountAt(at)` query
+ * (`WHERE status='past_due' AND created_at <= at`).
+ */
+export function countPastDueAsOf(createdAts: Date[], at: Date): number {
+  let n = 0;
+  for (const createdAt of createdAts) {
+    if (createdAt.getTime() <= at.getTime()) {
+      n++;
+    }
+  }
+  return n;
 }
 
 export async function getReportCurrentValues(organizationId: string): Promise<ReportCurrentValues> {
@@ -111,71 +210,45 @@ export async function getReportChartData(
   return base;
 }
 
-// Daily series for the "last N days" report filter. Reuses each report's
-// underlying per-bucket query (range-sum or point-in-time count) over the
-// last-N-day buckets. Kept separate from the monthly/yearly helpers so those
-// remain untouched (zero regression risk).
+// Daily series for the "last N days" report filter. Uses the same two aggregate
+// shapes as the monthly/yearly builders over the last-N-day buckets, but issues
+// ONE query per series instead of one per day (#274 + N+1 consolidation).
 async function getDailyChartData(
   organizationId: string,
   reportType: string,
   days: number,
 ): Promise<DailyDataPoint[]> {
   const buckets = lastNDayBuckets(days);
+  if (buckets.length === 0) {
+    return [];
+  }
+  const rangeStart = buckets[0]!.start;
+  const rangeEnd = buckets[buckets.length - 1]!.end;
 
-  // Sum transaction.amount in [start,end] for a given status set.
-  const txSumInRange = (start: Date, end: Date, statuses: string[]) =>
-    db.select({ total: sum(transactionSchema.amount) })
-      .from(transactionSchema)
-      .where(and(
-        eq(transactionSchema.organizationId, organizationId),
-        inArray(transactionSchema.status, statuses),
-        gte(transactionSchema.createdAt, start),
-        sql`${transactionSchema.createdAt} <= ${end}`,
-      ));
-
-  // Count members in status 'past_due' as of a point in time.
-  const pastDueCountAt = (at: Date) =>
-    db.select({ count: count() })
-      .from(memberSchema)
-      .where(and(
-        eq(memberSchema.organizationId, organizationId),
-        eq(memberSchema.status, 'past_due'),
-        sql`${memberSchema.createdAt} <= ${at}`,
-      ));
-
-  const mapSum = (results: Array<{ total: string | number | null }[]>): DailyDataPoint[] =>
-    buckets.map((b, i) => ({ day: b.label, value: Math.abs(Number(results[i]?.[0]?.total ?? 0)) }));
+  const mapSum = (map: Map<string, number>): DailyDataPoint[] =>
+    buckets.map(b => ({ day: b.label, value: Math.abs(map.get(bucketKey(b.start)) ?? 0) }));
 
   switch (reportType) {
     case 'accounts-autopay-suspended': {
-      const results = await Promise.all(buckets.map(b => pastDueCountAt(b.end)));
-      return buckets.map((b, i) => ({ day: b.label, value: results[i]?.[0]?.count ?? 0 }));
+      const createdAts = await fetchPastDueMemberCreatedAts(organizationId);
+      return buckets.map(b => ({ day: b.label, value: countPastDueAsOf(createdAts, b.end) }));
     }
     case 'amount-due':
     case 'payments-last-30-days':
-      return mapSum(await Promise.all(buckets.map(b => txSumInRange(b.start, b.end, ['paid']))));
+      return mapSum(await groupedSumByBucket(organizationId, ['paid'], 'day', rangeStart, rangeEnd));
     case 'past-due':
     case 'failed-payments':
-      return mapSum(await Promise.all(buckets.map(b => txSumInRange(b.start, b.end, ['declined']))));
+      return mapSum(await groupedSumByBucket(organizationId, ['declined'], 'day', rangeStart, rangeEnd));
     case 'payments-pending':
-      return mapSum(await Promise.all(buckets.map(b => txSumInRange(b.start, b.end, ['pending', 'processing']))));
+      return mapSum(await groupedSumByBucket(organizationId, ['pending', 'processing'], 'day', rangeStart, rangeEnd));
     case 'income-per-student': {
-      // Per-day income divided by member count at end of day.
-      const memberCountAt = (at: Date) =>
-        db.select({ count: count() })
-          .from(memberSchema)
-          .where(and(
-            eq(memberSchema.organizationId, organizationId),
-            sql`${memberSchema.createdAt} <= ${at}`,
-            sql`(${memberSchema.status} != 'cancelled' OR ${memberSchema.updatedAt} > ${at})`,
-          ));
-      const [incomeResults, memberResults] = await Promise.all([
-        Promise.all(buckets.map(b => txSumInRange(b.start, b.end, ['paid']))),
-        Promise.all(buckets.map(b => memberCountAt(b.end))),
+      const [incomeMap, memberRows] = await Promise.all([
+        groupedSumByBucket(organizationId, ['paid'], 'day', rangeStart, rangeEnd),
+        fetchMemberAsOfRows(organizationId),
       ]);
-      return buckets.map((b, i) => {
-        const income = Number(incomeResults[i]?.[0]?.total ?? 0);
-        const members = memberResults[i]?.[0]?.count ?? 1;
+      return buckets.map((b) => {
+        const income = incomeMap.get(bucketKey(b.start)) ?? 0;
+        const members = countMembersAsOf(memberRows, b.end) ?? 1;
         return { day: b.label, value: members > 0 ? Math.round((income / members) * 100) / 100 : 0 };
       });
     }
@@ -185,25 +258,40 @@ async function getDailyChartData(
   }
 }
 
+// Build the last-N calendar days ending today, each as a { start-of-day,
+// end-of-day, label } bucket. Used by the daily report series (#274).
+function lastNDayBuckets(days: number): Array<{ start: Date; end: Date; label: string }> {
+  const buckets: Array<{ start: Date; end: Date; label: string }> = [];
+  const today = new Date();
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
+    const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0);
+    const end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59);
+    buckets.push({ start, end, label: `${MONTH_NAMES[d.getMonth()]} ${d.getDate()}` });
+  }
+  return buckets;
+}
+
 export async function getReportInsights(
   organizationId: string,
   reportType: string,
 ): Promise<string[]> {
-  const stats = await getFinancialStats(organizationId);
-
-  const [studentsResult] = await db
-    .select({ count: count() })
-    .from(memberSchema)
-    .where(and(
-      eq(memberSchema.organizationId, organizationId),
-      inArray(memberSchema.status, ['active', 'trial']),
-    ));
+  // These three reads are independent — run them together instead of serially.
+  const [stats, [studentsResult], [totalMembersResult]] = await Promise.all([
+    getFinancialStats(organizationId),
+    db
+      .select({ count: count() })
+      .from(memberSchema)
+      .where(and(
+        eq(memberSchema.organizationId, organizationId),
+        inArray(memberSchema.status, ['active', 'trial']),
+      )),
+    db
+      .select({ count: count() })
+      .from(memberSchema)
+      .where(eq(memberSchema.organizationId, organizationId)),
+  ]);
   const totalStudents = studentsResult?.count ?? 0;
-
-  const [totalMembersResult] = await db
-    .select({ count: count() })
-    .from(memberSchema)
-    .where(eq(memberSchema.organizationId, organizationId));
   const totalMembers = totalMembersResult?.count ?? 0;
 
   const thirtyDaysAgo = new Date();
@@ -256,32 +344,32 @@ export async function getReportInsights(
       ];
     }
     case 'payments-last-30-days': {
-      // Count paid transactions in last 30 days
-      const [paidCountResult] = await db
-        .select({ count: count() })
-        .from(transactionSchema)
-        .where(and(
-          eq(transactionSchema.organizationId, organizationId),
-          eq(transactionSchema.status, 'paid'),
-          gte(transactionSchema.createdAt, thirtyDaysAgo),
-        ));
+      // Paid-count and by-method breakdown are independent — run together.
+      const [[paidCountResult], methodCounts] = await Promise.all([
+        db
+          .select({ count: count() })
+          .from(transactionSchema)
+          .where(and(
+            eq(transactionSchema.organizationId, organizationId),
+            eq(transactionSchema.status, 'paid'),
+            gte(transactionSchema.createdAt, thirtyDaysAgo),
+          )),
+        db
+          .select({
+            method: transactionSchema.paymentMethod,
+            count: count(),
+          })
+          .from(transactionSchema)
+          .where(and(
+            eq(transactionSchema.organizationId, organizationId),
+            eq(transactionSchema.status, 'paid'),
+            gte(transactionSchema.createdAt, thirtyDaysAgo),
+          ))
+          .groupBy(transactionSchema.paymentMethod)
+          .orderBy(sql`count(*) DESC`),
+      ]);
       const paidCount = paidCountResult?.count ?? 0;
       const avgTx = paidCount > 0 ? stats.paymentsLast30Days / paidCount : 0;
-
-      // Count by payment method
-      const methodCounts = await db
-        .select({
-          method: transactionSchema.paymentMethod,
-          count: count(),
-        })
-        .from(transactionSchema)
-        .where(and(
-          eq(transactionSchema.organizationId, organizationId),
-          eq(transactionSchema.status, 'paid'),
-          gte(transactionSchema.createdAt, thirtyDaysAgo),
-        ))
-        .groupBy(transactionSchema.paymentMethod)
-        .orderBy(sql`count(*) DESC`);
 
       const topMethod = methodCounts[0]?.method ?? 'card';
       const topMethodPct = paidCount > 0 ? ((Number(methodCounts[0]?.count ?? 0) / paidCount) * 100).toFixed(0) : '0';
@@ -368,30 +456,19 @@ async function getAutopayChartData(organizationId: string, currentYear: number):
     endOfYear: new Date(currentYear - 4 + i, 11, 31, 23, 59, 59),
   }));
 
-  const pastDueCountAt = (datePoint: Date) =>
-    db.select({ count: count() })
-      .from(memberSchema)
-      .where(and(
-        eq(memberSchema.organizationId, organizationId),
-        eq(memberSchema.status, 'past_due'),
-        sql`${memberSchema.createdAt} <= ${datePoint}`,
-      ));
+  // ONE query: fetch every past_due member's createdAt, then count as-of each
+  // bucket end in JS (replaces the per-bucket `pastDueCountAt` fan-out).
+  const createdAts = await fetchPastDueMemberCreatedAts(organizationId);
 
-  const [monthlyCurrentResults, monthlyPrevResults, yearlyResults] = await Promise.all([
-    Promise.all(monthlyDates.map(d => pastDueCountAt(d.endOfMonth))),
-    Promise.all(monthlyDates.map(d => pastDueCountAt(d.endOfMonthPrev))),
-    Promise.all(yearlyDates.map(d => pastDueCountAt(d.endOfYear))),
-  ]);
-
-  const monthly: MonthlyDataPoint[] = monthlyDates.map((d, i) => ({
+  const monthly: MonthlyDataPoint[] = monthlyDates.map(d => ({
     month: MONTH_NAMES[d.month]!,
-    value: monthlyCurrentResults[i]![0]?.count ?? 0,
-    previousYear: monthlyPrevResults[i]![0]?.count ?? 0,
+    value: countPastDueAsOf(createdAts, d.endOfMonth),
+    previousYear: countPastDueAsOf(createdAts, d.endOfMonthPrev),
   }));
 
-  const yearly: YearlyDataPoint[] = yearlyDates.map((d, i) => ({
+  const yearly: YearlyDataPoint[] = yearlyDates.map(d => ({
     year: String(d.year),
-    value: yearlyResults[i]![0]?.count ?? 0,
+    value: countPastDueAsOf(createdAts, d.endOfYear),
   }));
 
   return { monthly, yearly };
@@ -447,47 +524,40 @@ async function getStatusChartData(
     endOfYear: new Date(currentYear - 4 + i, 11, 31, 23, 59, 59),
   }));
 
-  const txSumInRange = (start: Date, end: Date) =>
-    db.select({ total: sum(transactionSchema.amount) })
-      .from(transactionSchema)
-      .where(and(
-        eq(transactionSchema.organizationId, organizationId),
-        eq(transactionSchema.status, status),
-        gte(transactionSchema.createdAt, start),
-        sql`${transactionSchema.createdAt} <= ${end}`,
-      ));
+  // Each series → ONE grouped date_trunc query (was one query per bucket).
+  // For the current-year months, the whole calendar year is queried in one
+  // shot; the `currentMonthOverride` month is simply overwritten afterwards
+  // (querying it too is harmless — the mapped value is replaced).
+  const currentYearStart = monthlyDates[0]!.startOfMonth;
+  const currentYearEnd = monthlyDates[11]!.endOfMonth;
+  const prevYearStart = monthlyDates[0]!.startOfMonthPrev;
+  const prevYearEnd = monthlyDates[11]!.endOfMonthPrev;
+  const yearlyStart = yearlyDates[0]!.startOfYear;
+  const yearlyEnd = yearlyDates[4]!.endOfYear;
 
-  // Only query months that don't have an override
-  const monthsToQuery = monthlyDates.filter(d =>
-    !(currentMonthOverride !== undefined && d.month === currentMonth),
-  );
-
-  const [currentResults, prevResults, yearlyResults] = await Promise.all([
-    Promise.all(monthsToQuery.map(d => txSumInRange(d.startOfMonth, d.endOfMonth))),
-    Promise.all(monthlyDates.map(d => txSumInRange(d.startOfMonthPrev, d.endOfMonthPrev))),
-    Promise.all(yearlyDates.map(d => txSumInRange(d.startOfYear, d.endOfYear))),
+  const [currentMap, prevMap, yearlyMap] = await Promise.all([
+    groupedSumByBucket(organizationId, [status], 'month', currentYearStart, currentYearEnd),
+    groupedSumByBucket(organizationId, [status], 'month', prevYearStart, prevYearEnd),
+    groupedSumByBucket(organizationId, [status], 'year', yearlyStart, yearlyEnd),
   ]);
 
-  // Map queried results back, using override for the overridden month
-  let queryIdx = 0;
-  const monthly: MonthlyDataPoint[] = monthlyDates.map((d, i) => {
+  const monthly: MonthlyDataPoint[] = monthlyDates.map((d) => {
     let currentValue: number;
     if (currentMonthOverride !== undefined && d.month === currentMonth) {
       currentValue = currentMonthOverride;
     } else {
-      currentValue = Number(currentResults[queryIdx]![0]?.total ?? 0);
-      queryIdx++;
+      currentValue = currentMap.get(bucketKey(d.startOfMonth)) ?? 0;
     }
     return {
       month: MONTH_NAMES[d.month]!,
       value: Math.abs(currentValue),
-      previousYear: Math.abs(Number(prevResults[i]![0]?.total ?? 0)),
+      previousYear: Math.abs(prevMap.get(bucketKey(d.startOfMonthPrev)) ?? 0),
     };
   });
 
-  const yearly: YearlyDataPoint[] = yearlyDates.map((d, i) => ({
+  const yearly: YearlyDataPoint[] = yearlyDates.map(d => ({
     year: String(d.year),
-    value: Math.abs(Number(yearlyResults[i]![0]?.total ?? 0)),
+    value: Math.abs(yearlyMap.get(bucketKey(d.startOfYear)) ?? 0),
   }));
 
   return { monthly, yearly };
@@ -508,31 +578,28 @@ async function getPendingChartData(organizationId: string, currentYear: number):
     endOfYear: new Date(currentYear - 4 + i, 11, 31, 23, 59, 59),
   }));
 
-  const pendingSumInRange = (start: Date, end: Date) =>
-    db.select({ total: sum(transactionSchema.amount) })
-      .from(transactionSchema)
-      .where(and(
-        eq(transactionSchema.organizationId, organizationId),
-        inArray(transactionSchema.status, ['pending', 'processing']),
-        gte(transactionSchema.createdAt, start),
-        sql`${transactionSchema.createdAt} <= ${end}`,
-      ));
+  const currentYearStart = monthlyDates[0]!.startOfMonth;
+  const currentYearEnd = monthlyDates[11]!.endOfMonth;
+  const prevYearStart = monthlyDates[0]!.startOfMonthPrev;
+  const prevYearEnd = monthlyDates[11]!.endOfMonthPrev;
+  const yearlyStart = yearlyDates[0]!.startOfYear;
+  const yearlyEnd = yearlyDates[4]!.endOfYear;
 
-  const [monthlyCurrentResults, monthlyPrevResults, yearlyResults] = await Promise.all([
-    Promise.all(monthlyDates.map(d => pendingSumInRange(d.startOfMonth, d.endOfMonth))),
-    Promise.all(monthlyDates.map(d => pendingSumInRange(d.startOfMonthPrev, d.endOfMonthPrev))),
-    Promise.all(yearlyDates.map(d => pendingSumInRange(d.startOfYear, d.endOfYear))),
+  const [currentMap, prevMap, yearlyMap] = await Promise.all([
+    groupedSumByBucket(organizationId, ['pending', 'processing'], 'month', currentYearStart, currentYearEnd),
+    groupedSumByBucket(organizationId, ['pending', 'processing'], 'month', prevYearStart, prevYearEnd),
+    groupedSumByBucket(organizationId, ['pending', 'processing'], 'year', yearlyStart, yearlyEnd),
   ]);
 
-  const monthly: MonthlyDataPoint[] = monthlyDates.map((d, i) => ({
+  const monthly: MonthlyDataPoint[] = monthlyDates.map(d => ({
     month: MONTH_NAMES[d.month]!,
-    value: Number(monthlyCurrentResults[i]![0]?.total ?? 0),
-    previousYear: Number(monthlyPrevResults[i]![0]?.total ?? 0),
+    value: Number(currentMap.get(bucketKey(d.startOfMonth)) ?? 0),
+    previousYear: Number(prevMap.get(bucketKey(d.startOfMonthPrev)) ?? 0),
   }));
 
-  const yearly: YearlyDataPoint[] = yearlyDates.map((d, i) => ({
+  const yearly: YearlyDataPoint[] = yearlyDates.map(d => ({
     year: String(d.year),
-    value: Number(yearlyResults[i]![0]?.total ?? 0),
+    value: Number(yearlyMap.get(bucketKey(d.startOfYear)) ?? 0),
   }));
 
   return { monthly, yearly };
@@ -553,46 +620,26 @@ async function getIncomePerStudentChartData(organizationId: string, currentYear:
     endOfYear: new Date(currentYear - 4 + i, 11, 31, 23, 59, 59),
   }));
 
-  const incomeInRange = (start: Date, end: Date) =>
-    db.select({ total: sum(transactionSchema.amount) })
-      .from(transactionSchema)
-      .where(and(
-        eq(transactionSchema.organizationId, organizationId),
-        eq(transactionSchema.status, 'paid'),
-        gte(transactionSchema.createdAt, start),
-        sql`${transactionSchema.createdAt} <= ${end}`,
-      ));
+  const currentYearStart = monthlyDates[0]!.startOfMonth;
+  const currentYearEnd = monthlyDates[11]!.endOfMonth;
+  const prevYearStart = monthlyDates[0]!.startOfMonthPrev;
+  const prevYearEnd = monthlyDates[11]!.endOfMonthPrev;
+  const yearlyStart = yearlyDates[0]!.startOfYear;
+  const yearlyEnd = yearlyDates[4]!.endOfYear;
 
-  const memberCountAt = (datePoint: Date) =>
-    db.select({ count: count() })
-      .from(memberSchema)
-      .where(and(
-        eq(memberSchema.organizationId, organizationId),
-        sql`${memberSchema.createdAt} <= ${datePoint}`,
-        sql`(${memberSchema.status} != 'cancelled' OR ${memberSchema.updatedAt} > ${datePoint})`,
-      ));
-
-  const [
-    monthlyIncomeResults,
-    monthlyMemberResults,
-    monthlyPrevIncomeResults,
-    monthlyPrevMemberResults,
-    yearlyIncomeResults,
-    yearlyMemberResults,
-  ] = await Promise.all([
-    Promise.all(monthlyDates.map(d => incomeInRange(d.startOfMonth, d.endOfMonth))),
-    Promise.all(monthlyDates.map(d => memberCountAt(d.endOfMonth))),
-    Promise.all(monthlyDates.map(d => incomeInRange(d.startOfMonthPrev, d.endOfMonthPrev))),
-    Promise.all(monthlyDates.map(d => memberCountAt(d.endOfMonthPrev))),
-    Promise.all(yearlyDates.map(d => incomeInRange(d.startOfYear, d.endOfYear))),
-    Promise.all(yearlyDates.map(d => memberCountAt(d.endOfYear))),
+  // Income series → grouped date_trunc sums. Member counts → fetch-once + JS.
+  const [incomeMonthMap, incomePrevMonthMap, incomeYearMap, memberRows] = await Promise.all([
+    groupedSumByBucket(organizationId, ['paid'], 'month', currentYearStart, currentYearEnd),
+    groupedSumByBucket(organizationId, ['paid'], 'month', prevYearStart, prevYearEnd),
+    groupedSumByBucket(organizationId, ['paid'], 'year', yearlyStart, yearlyEnd),
+    fetchMemberAsOfRows(organizationId),
   ]);
 
-  const monthly: MonthlyDataPoint[] = monthlyDates.map((d, i) => {
-    const income = Number(monthlyIncomeResults[i]![0]?.total ?? 0);
-    const members = monthlyMemberResults[i]![0]?.count ?? 1;
-    const prevIncome = Number(monthlyPrevIncomeResults[i]![0]?.total ?? 0);
-    const prevMembers = monthlyPrevMemberResults[i]![0]?.count ?? 1;
+  const monthly: MonthlyDataPoint[] = monthlyDates.map((d) => {
+    const income = Number(incomeMonthMap.get(bucketKey(d.startOfMonth)) ?? 0);
+    const members = countMembersAsOf(memberRows, d.endOfMonth) ?? 1;
+    const prevIncome = Number(incomePrevMonthMap.get(bucketKey(d.startOfMonthPrev)) ?? 0);
+    const prevMembers = countMembersAsOf(memberRows, d.endOfMonthPrev) ?? 1;
     return {
       month: MONTH_NAMES[d.month]!,
       value: Math.round((members > 0 ? income / members : 0) * 100) / 100,
@@ -600,9 +647,9 @@ async function getIncomePerStudentChartData(organizationId: string, currentYear:
     };
   });
 
-  const yearly: YearlyDataPoint[] = yearlyDates.map((d, i) => {
-    const income = Number(yearlyIncomeResults[i]![0]?.total ?? 0);
-    const members = yearlyMemberResults[i]![0]?.count ?? 1;
+  const yearly: YearlyDataPoint[] = yearlyDates.map((d) => {
+    const income = Number(incomeYearMap.get(bucketKey(d.startOfYear)) ?? 0);
+    const members = countMembersAsOf(memberRows, d.endOfYear) ?? 1;
     return {
       year: String(d.year),
       value: members > 0 ? Math.round((income / members) * 100) / 100 : 0,

@@ -1,7 +1,9 @@
+import type { ReportType } from './reportHelpers';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render } from 'vitest-browser-react';
 import { page, userEvent } from 'vitest/browser';
+import ReportDetail from './ReportDetail';
 import { ReportsPage } from './ReportsPage';
 
 // Mock useReportsCache hooks
@@ -105,6 +107,24 @@ vi.mock('next/navigation', () => ({
   }),
   usePathname: () => '/en/dashboard/reports',
 }));
+
+// ReportsPage loads ReportDetail lazily via next/dynamic (so recharts is a
+// separate chunk). The detail-view suites below assert on ReportDetail's own
+// output (chart, tooltip/tick formatters, time-period select, comparison
+// checkbox, back button) and read the DOM / captured callbacks synchronously,
+// so they render ReportDetail directly rather than waiting on the async
+// dynamic() chunk. The landing-grid + navigation suites keep rendering
+// ReportsPage. onBack mirrors ReportsPage.handleBack (updates the URL) so the
+// back-navigation assertions still exercise the pushState behavior.
+function renderReportDetail() {
+  const reportId = (mockSearchParams.get('report') ?? '') as ReportType;
+  const onBack = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('report');
+    window.history.pushState({}, '', url.toString());
+  };
+  return render(<ReportDetail reportId={reportId} onBack={onBack} />);
+}
 
 // Mock recharts to avoid rendering issues in tests - capture callbacks for testing
 let capturedTickFormatter: ((value: number) => string) | undefined;
@@ -267,40 +287,39 @@ describe('ReportsPage', () => {
     });
 
     it('should render back button', () => {
-      render(<ReportsPage />);
+      renderReportDetail();
 
       expect(page.getByTestId('back-button')).toBeDefined();
     });
 
     it('should render report title in detail view', () => {
-      render(<ReportsPage />);
+      renderReportDetail();
 
-      // Title appears in both header and detail
       const titles = page.getByText('Accounts with Autopay Suspended');
 
       expect(titles.elements().length).toBeGreaterThan(0);
     });
 
     it('should render chart section', () => {
-      render(<ReportsPage />);
+      renderReportDetail();
 
       expect(page.getByText('Historical Data')).toBeDefined();
     });
 
     it('should render insights section', () => {
-      render(<ReportsPage />);
+      renderReportDetail();
 
       expect(page.getByText('Insights')).toBeDefined();
     });
 
     it('should render time period selector', () => {
-      render(<ReportsPage />);
+      renderReportDetail();
 
       expect(page.getByTestId('select')).toBeDefined();
     });
 
     it('should navigate back when back button is clicked', async () => {
-      render(<ReportsPage />);
+      renderReportDetail();
 
       const backButton = page.getByTestId('back-button');
       await userEvent.click(backButton);
@@ -316,7 +335,7 @@ describe('ReportsPage', () => {
     });
 
     it('should render amount due report title', () => {
-      render(<ReportsPage />);
+      renderReportDetail();
 
       const titles = page.getByText('Amount Due');
 
@@ -324,7 +343,7 @@ describe('ReportsPage', () => {
     });
 
     it('should render amount due current value', () => {
-      render(<ReportsPage />);
+      renderReportDetail();
 
       expect(page.getByText('$14,394.20')).toBeDefined();
     });
@@ -336,7 +355,7 @@ describe('ReportsPage', () => {
     });
 
     it('should render failed payments report title', () => {
-      render(<ReportsPage />);
+      renderReportDetail();
 
       const titles = page.getByText('Failed Payments');
 
@@ -344,7 +363,7 @@ describe('ReportsPage', () => {
     });
 
     it('should render failed payments current value', () => {
-      render(<ReportsPage />);
+      renderReportDetail();
 
       expect(page.getByText('$1,834.67')).toBeDefined();
     });
@@ -356,7 +375,7 @@ describe('ReportsPage', () => {
     });
 
     it('should render income per student report title', () => {
-      render(<ReportsPage />);
+      renderReportDetail();
 
       const titles = page.getByText('Income Per Student');
 
@@ -364,7 +383,7 @@ describe('ReportsPage', () => {
     });
 
     it('should render income per student current value', () => {
-      render(<ReportsPage />);
+      renderReportDetail();
 
       expect(page.getByText('$118.47')).toBeDefined();
     });
@@ -469,13 +488,13 @@ describe('ReportsPage', () => {
     });
 
     it('should display insights for accounts autopay suspended', () => {
-      render(<ReportsPage />);
+      renderReportDetail();
 
       expect(page.getByText(/Current suspended accounts represent/)).toBeDefined();
     });
 
     it('should display multiple insight items', () => {
-      render(<ReportsPage />);
+      renderReportDetail();
 
       expect(page.getByText(/Most suspensions occur/)).toBeDefined();
       expect(page.getByText(/Average time to resolve/)).toBeDefined();
@@ -485,28 +504,28 @@ describe('ReportsPage', () => {
   describe('Chart Components', () => {
     it('should render line chart for amount-due report', () => {
       mockSearchParams.set('report', 'amount-due');
-      render(<ReportsPage />);
+      renderReportDetail();
 
       expect(page.getByTestId('line-chart')).toBeDefined();
     });
 
     it('should render bar chart for payments-last-30-days report', () => {
       mockSearchParams.set('report', 'payments-last-30-days');
-      render(<ReportsPage />);
+      renderReportDetail();
 
       expect(page.getByTestId('bar-chart')).toBeDefined();
     });
 
     it('should render area chart for accounts-autopay-suspended report', () => {
       mockSearchParams.set('report', 'accounts-autopay-suspended');
-      render(<ReportsPage />);
+      renderReportDetail();
 
       expect(page.getByTestId('area-chart')).toBeDefined();
     });
 
     it('should render responsive container', () => {
       mockSearchParams.set('report', 'amount-due');
-      render(<ReportsPage />);
+      renderReportDetail();
 
       expect(page.getByTestId('responsive-container')).toBeDefined();
     });
@@ -528,7 +547,7 @@ describe('ReportsPage', () => {
 
     it('should remove report from URL when going back', async () => {
       mockSearchParams.set('report', 'past-due');
-      render(<ReportsPage />);
+      renderReportDetail();
 
       const backButton = page.getByTestId('back-button');
       await userEvent.click(backButton);
@@ -579,7 +598,7 @@ describe('ReportsPage - Accessibility', () => {
 
   it('should have accessible back button', () => {
     mockSearchParams.set('report', 'accounts-autopay-suspended');
-    render(<ReportsPage />);
+    renderReportDetail();
 
     const backButton = page.getByTestId('back-button');
 
@@ -601,7 +620,7 @@ describe('ReportsPage - Invalid Report Handling', () => {
 
   it('should render detail view with back button for invalid report ID', () => {
     mockSearchParams.set('report', 'invalid-report-id');
-    render(<ReportsPage />);
+    renderReportDetail();
 
     // Should render the detail view which will show back button
     // The component doesn't validate report IDs, it just renders the detail view
@@ -610,7 +629,7 @@ describe('ReportsPage - Invalid Report Handling', () => {
 
   it('should navigate back from invalid report', async () => {
     mockSearchParams.set('report', 'invalid-report-id');
-    render(<ReportsPage />);
+    renderReportDetail();
 
     // The back button in the detail view has the 'back-button' test ID
     const backButton = page.getByTestId('back-button');
@@ -635,7 +654,7 @@ describe('ReportsPage - Time Period Switching', () => {
   });
 
   it('should allow switching to yearly time period', () => {
-    render(<ReportsPage />);
+    renderReportDetail();
 
     // Check that onValueChange was captured
     expect(capturedOnValueChange).toBeDefined();
@@ -647,7 +666,7 @@ describe('ReportsPage - Time Period Switching', () => {
   });
 
   it('should allow switching back to monthly time period', () => {
-    render(<ReportsPage />);
+    renderReportDetail();
 
     // Simulate switching to yearly then back to monthly
     if (capturedOnValueChange) {
@@ -675,7 +694,7 @@ describe('ReportsPage - Value Formatting', () => {
 
   it('should format currency values >= 1000 with k suffix for amount-due report', () => {
     mockSearchParams.set('report', 'amount-due');
-    render(<ReportsPage />);
+    renderReportDetail();
 
     // Verify tickFormatter was captured
     expect(capturedTickFormatter).toBeDefined();
@@ -689,7 +708,7 @@ describe('ReportsPage - Value Formatting', () => {
 
   it('should format currency values < 1000 without k suffix for amount-due report', () => {
     mockSearchParams.set('report', 'amount-due');
-    render(<ReportsPage />);
+    renderReportDetail();
 
     if (capturedTickFormatter) {
       expect(capturedTickFormatter(500)).toBe('$500');
@@ -699,7 +718,7 @@ describe('ReportsPage - Value Formatting', () => {
 
   it('should format values for income-per-student report', () => {
     mockSearchParams.set('report', 'income-per-student');
-    render(<ReportsPage />);
+    renderReportDetail();
 
     expect(capturedTickFormatter).toBeDefined();
 
@@ -711,7 +730,7 @@ describe('ReportsPage - Value Formatting', () => {
 
   it('should format non-currency values as plain numbers for accounts-autopay-suspended', () => {
     mockSearchParams.set('report', 'accounts-autopay-suspended');
-    render(<ReportsPage />);
+    renderReportDetail();
 
     expect(capturedTickFormatter).toBeDefined();
 
@@ -723,7 +742,7 @@ describe('ReportsPage - Value Formatting', () => {
 
   it('should format values correctly via tooltip formatter for failed-payments report', () => {
     mockSearchParams.set('report', 'failed-payments');
-    render(<ReportsPage />);
+    renderReportDetail();
 
     expect(capturedTooltipFormatter).toBeDefined();
 
@@ -737,7 +756,7 @@ describe('ReportsPage - Value Formatting', () => {
 
   it('should format values correctly via tooltip formatter for past-due report', () => {
     mockSearchParams.set('report', 'past-due');
-    render(<ReportsPage />);
+    renderReportDetail();
 
     if (capturedTooltipFormatter) {
       const result = capturedTooltipFormatter(451);
@@ -749,7 +768,7 @@ describe('ReportsPage - Value Formatting', () => {
 
   it('should format values correctly via tooltip formatter for payments-pending report', () => {
     mockSearchParams.set('report', 'payments-pending');
-    render(<ReportsPage />);
+    renderReportDetail();
 
     if (capturedTooltipFormatter) {
       const result = capturedTooltipFormatter(0);
@@ -761,7 +780,7 @@ describe('ReportsPage - Value Formatting', () => {
 
   it('should format values correctly via tooltip formatter for payments-last-30-days report', () => {
     mockSearchParams.set('report', 'payments-last-30-days');
-    render(<ReportsPage />);
+    renderReportDetail();
 
     if (capturedTooltipFormatter) {
       const result = capturedTooltipFormatter(13150);
@@ -773,7 +792,7 @@ describe('ReportsPage - Value Formatting', () => {
 
   it('should format values correctly via tooltip formatter for non-currency report', () => {
     mockSearchParams.set('report', 'expiring-credit-cards');
-    render(<ReportsPage />);
+    renderReportDetail();
 
     if (capturedTooltipFormatter) {
       const result = capturedTooltipFormatter(5);
@@ -799,14 +818,14 @@ describe('ReportsPage - Year Comparison Feature', () => {
   });
 
   it('should show compare with last year checkbox in monthly view', () => {
-    render(<ReportsPage />);
+    renderReportDetail();
 
     expect(page.getByTestId('compare-years-checkbox')).toBeDefined();
     expect(page.getByText('Compare with last year')).toBeDefined();
   });
 
   it('should allow toggling year comparison', () => {
-    render(<ReportsPage />);
+    renderReportDetail();
 
     expect(capturedOnCheckedChange).toBeDefined();
 
@@ -817,7 +836,7 @@ describe('ReportsPage - Year Comparison Feature', () => {
   });
 
   it('should hide compare checkbox when switching to yearly view', () => {
-    render(<ReportsPage />);
+    renderReportDetail();
 
     // Initially checkbox should be visible in monthly view
     expect(page.getByTestId('compare-years-checkbox')).toBeDefined();

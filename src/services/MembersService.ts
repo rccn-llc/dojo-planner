@@ -2,6 +2,7 @@ import type { TransactionData } from '@/services/TransactionsService';
 import { randomUUID } from 'node:crypto';
 import { and, desc, eq, inArray, or } from 'drizzle-orm';
 import { db } from '@/libs/DB';
+import { logger } from '@/libs/Logger';
 import { addressSchema, attendanceSchema, classEnrollmentSchema, couponUsageSchema, eventRegistrationSchema, familyMemberSchema, memberMembershipSchema, memberSchema, membershipPlanSchema, noteSchema, paymentMethodSchema, signedWaiverSchema, transactionSchema } from '@/models/Schema';
 
 export type MembershipPlanData = {
@@ -131,10 +132,9 @@ export async function getOrganizationMembers(
     .from(memberSchema)
     .where(eq(memberSchema.organizationId, organizationId));
 
-  console.info('[MembersService] Fetched members from database:', {
+  logger.info('[MembersService] Fetched members from database', {
     organizationId,
     count: members.length,
-    memberIds: members.map(m => m.id),
   });
 
   // Fetch addresses for all members
@@ -248,7 +248,12 @@ export async function getOrganizationMembers(
     email: member.email,
     phone: member.phone || null,
     dateOfBirth: member.dateOfBirth || null,
-    photoUrl: member.photoUrl || null,
+    // NOTE: photoUrl is intentionally omitted from the LIST query (it's a large
+    // base64 data URL and shipping it for every member bloats the response +
+    // client heap). The list renders avatar initials as a fallback; the member
+    // detail page fetches the photo via `getMemberById` (#perf). Kept in the
+    // shape as null so downstream types don't change.
+    photoUrl: null,
     memberType: member.memberType || null,
     lastAccessedAt: member.lastAccessedAt || null,
     status: member.status,
@@ -262,6 +267,117 @@ export async function getOrganizationMembers(
 }
 
 /**
+ * Fetch a single member (with photo, address, memberships) by id, org-scoped.
+ * Used by the member detail page so the base64 photo can be dropped from the
+ * members-LIST query without losing it on the detail view. Returns null when
+ * the member is not in the org (router maps to 404).
+ */
+export async function getMemberById(
+  memberId: string,
+  organizationId: string,
+): Promise<MemberWithCustomData | null> {
+  const [member] = await db
+    .select()
+    .from(memberSchema)
+    .where(and(eq(memberSchema.id, memberId), eq(memberSchema.organizationId, organizationId)))
+    .limit(1);
+
+  if (!member) {
+    return null;
+  }
+
+  const [addresses, memberships] = await Promise.all([
+    db.select().from(addressSchema).where(eq(addressSchema.memberId, memberId)),
+    db.select().from(memberMembershipSchema).where(eq(memberMembershipSchema.memberId, memberId)),
+  ]);
+
+  const membershipPlanIds = [...new Set(memberships.map(m => m.membershipPlanId))];
+  const membershipPlans = membershipPlanIds.length > 0
+    ? await db.select().from(membershipPlanSchema).where(inArray(membershipPlanSchema.id, membershipPlanIds))
+    : [];
+
+  const planMap = new Map<string, MembershipPlan>();
+  membershipPlans.forEach((plan) => {
+    planMap.set(plan.id, {
+      id: plan.id,
+      name: plan.name,
+      slug: plan.slug,
+      category: plan.category,
+      program: plan.program,
+      price: plan.price,
+      signupFee: plan.signupFee,
+      cancellationFee: plan.cancellationFee,
+      holdFeeAmount: plan.holdFeeAmount,
+      holdFeeFrequency: plan.holdFeeFrequency,
+      holdLimitPerYear: plan.holdLimitPerYear,
+      frequency: plan.frequency,
+      contractLength: plan.contractLength,
+      accessLevel: plan.accessLevel,
+      description: plan.description,
+      isTrial: plan.isTrial,
+      isActive: plan.isActive,
+    });
+  });
+
+  const defaultAddress = addresses.find(a => a.isDefault);
+  const address: Address | undefined = defaultAddress
+    ? {
+        street: defaultAddress.street,
+        apartment: undefined,
+        city: defaultAddress.city,
+        state: defaultAddress.state,
+        zipCode: defaultAddress.zipCode,
+        country: defaultAddress.country,
+      }
+    : undefined;
+
+  const history: MemberMembership[] = memberships.map(membership => ({
+    id: membership.id,
+    membershipPlanId: membership.membershipPlanId,
+    membershipPlan: planMap.get(membership.membershipPlanId) || null,
+    status: membership.status,
+    startDate: membership.startDate,
+    endDate: membership.endDate,
+    firstPaymentDate: membership.firstPaymentDate,
+    nextPaymentDate: membership.nextPaymentDate,
+    createdAt: membership.createdAt,
+  }));
+
+  // Same "current membership" selection as the list (active preferred over hold).
+  let currentMembership: MemberMembership | null = null;
+  for (const m of history) {
+    if (m.status === 'active' || m.status === 'hold') {
+      const isMoreCurrent
+        = !currentMembership
+          || (currentMembership.status === 'hold' && m.status === 'active')
+          || (currentMembership.status === m.status && m.startDate > currentMembership.startDate);
+      if (isMoreCurrent) {
+        currentMembership = m;
+      }
+    }
+  }
+
+  return {
+    id: member.id,
+    firstName: member.firstName,
+    lastName: member.lastName,
+    email: member.email,
+    phone: member.phone || null,
+    dateOfBirth: member.dateOfBirth || null,
+    photoUrl: member.photoUrl || null,
+    memberType: member.memberType || null,
+    lastAccessedAt: member.lastAccessedAt || null,
+    status: member.status,
+    createdAt: member.createdAt,
+    updatedAt: member.updatedAt,
+    create_organization_enabled: false,
+    address,
+    currentMembership,
+    membershipHistory: history,
+  };
+}
+
+/**
  * Create a new member in the database and optional address record
  * @param member - Member data to create
  * @param organizationId - The organization ID
@@ -270,34 +386,37 @@ export async function getOrganizationMembers(
 export async function createMember(member: CreateMemberInput, organizationId: string) {
   const { address, ...memberData } = member;
 
-  const result = await db
-    .insert(memberSchema)
-    .values({
-      ...memberData,
-      id: memberData.id || randomUUID(),
-      organizationId,
-    })
-    .returning();
-
-  // Create address record if address data is provided
-  if (address && address.street && address.city && address.state && address.zipCode && result[0]) {
-    await db
-      .insert(addressSchema)
+  // Member row + optional address are one atomic unit: a failure while inserting
+  // the address must not leave a half-created member with no address (#WS3).
+  return db.transaction(async (tx) => {
+    const result = await tx
+      .insert(memberSchema)
       .values({
-        id: randomUUID(),
-        memberId: result[0].id,
-        type: 'home',
-        street: address.street,
-        city: address.city,
-        state: address.state,
-        zipCode: address.zipCode,
-        country: address.country || 'US',
-        isDefault: true,
+        ...memberData,
+        id: memberData.id || randomUUID(),
+        organizationId,
       })
       .returning();
-  }
 
-  return result;
+    // Create address record if address data is provided
+    if (address && address.street && address.city && address.state && address.zipCode && result[0]) {
+      await tx
+        .insert(addressSchema)
+        .values({
+          id: randomUUID(),
+          memberId: result[0].id,
+          type: 'home',
+          street: address.street,
+          city: address.city,
+          state: address.state,
+          zipCode: address.zipCode,
+          country: address.country || 'US',
+          isDefault: true,
+        });
+    }
+
+    return result;
+  });
 }
 
 /**
@@ -453,12 +572,61 @@ export class MemberOnHoldError extends Error {
 }
 
 /**
+ * Thrown when a member or membership plan referenced by a membership/family
+ * operation cannot be resolved within the caller's organization. Routers map
+ * this to a 404 so a cross-tenant probe is indistinguishable from a genuinely
+ * missing row.
+ */
+export class MemberNotFoundError extends Error {
+  constructor(message = 'Member not found') {
+    super(message);
+    this.name = 'MemberNotFoundError';
+  }
+}
+
+/**
+ * Verify a member belongs to the given organization. Throws
+ * MemberNotFoundError (→ 404) on miss.
+ */
+async function assertMemberInOrg(memberId: string, organizationId: string): Promise<void> {
+  const rows = await db
+    .select({ id: memberSchema.id })
+    .from(memberSchema)
+    .where(and(eq(memberSchema.id, memberId), eq(memberSchema.organizationId, organizationId)))
+    .limit(1);
+
+  if (rows.length === 0) {
+    throw new MemberNotFoundError('Member not found');
+  }
+}
+
+/**
+ * Verify a membership plan belongs to the given organization. Throws
+ * MemberNotFoundError (→ 404) on miss.
+ */
+async function assertPlanInOrg(membershipPlanId: string, organizationId: string): Promise<void> {
+  const rows = await db
+    .select({ id: membershipPlanSchema.id })
+    .from(membershipPlanSchema)
+    .where(and(eq(membershipPlanSchema.id, membershipPlanId), eq(membershipPlanSchema.organizationId, organizationId)))
+    .limit(1);
+
+  if (rows.length === 0) {
+    throw new MemberNotFoundError('Membership plan not found');
+  }
+}
+
+/**
  * Add a membership to a member
  * @param memberId - The member ID
  * @param membershipPlanId - The membership plan ID
  * @returns The created membership record
  */
-export async function addMemberMembership(memberId: string, membershipPlanId: string) {
+export async function addMemberMembership(memberId: string, membershipPlanId: string, organizationId: string) {
+  // Org-scope: both the member and the plan must belong to the caller's org.
+  await assertMemberInOrg(memberId, organizationId);
+  await assertPlanInOrg(membershipPlanId, organizationId);
+
   // A held member can't take on a new active membership — that would leave them
   // simultaneously on hold and active (#262). Require a reactivation first.
   const member = await db
@@ -491,7 +659,11 @@ export async function addMemberMembership(memberId: string, membershipPlanId: st
  * @param newMembershipPlanId - The new membership plan ID
  * @returns The new membership record
  */
-export async function changeMemberMembership(memberId: string, newMembershipPlanId: string) {
+export async function changeMemberMembership(memberId: string, newMembershipPlanId: string, organizationId: string) {
+  // Org-scope: both the member and the target plan must belong to the org.
+  await assertMemberInOrg(memberId, organizationId);
+  await assertPlanInOrg(newMembershipPlanId, organizationId);
+
   // Mark all active memberships as converted
   await db
     .update(memberMembershipSchema)
@@ -809,7 +981,12 @@ export async function linkFamilyMember(
   hohMemberId: string,
   familyMemberId: string,
   relationship: string,
+  organizationId: string,
 ) {
+  // Org-scope: both the HOH and the family member must belong to the org.
+  await assertMemberInOrg(hohMemberId, organizationId);
+  await assertMemberInOrg(familyMemberId, organizationId);
+
   return db
     .insert(familyMemberSchema)
     .values({
@@ -842,7 +1019,10 @@ export type FamilyMemberData = {
  * currently-active membership and its plan so the row can render plan name +
  * price without a follow-up query per member.
  */
-export async function getFamilyMembers(hohMemberId: string): Promise<FamilyMemberData[]> {
+export async function getFamilyMembers(hohMemberId: string, organizationId: string): Promise<FamilyMemberData[]> {
+  // Org-scope: reject a cross-tenant HOH id before reading its family roster.
+  await assertMemberInOrg(hohMemberId, organizationId);
+
   return db
     .select({
       id: memberSchema.id,
@@ -870,7 +1050,11 @@ export async function getFamilyMembers(hohMemberId: string): Promise<FamilyMembe
  * Unlink a family member from their Head of Household.
  * Deletes the relationship row from the family_member table.
  */
-export async function unlinkFamilyMember(hohMemberId: string, familyMemberId: string) {
+export async function unlinkFamilyMember(hohMemberId: string, familyMemberId: string, organizationId: string) {
+  // Org-scope: both the HOH and the family member must belong to the org.
+  await assertMemberInOrg(hohMemberId, organizationId);
+  await assertMemberInOrg(familyMemberId, organizationId);
+
   return db
     .delete(familyMemberSchema)
     .where(
@@ -886,7 +1070,10 @@ export async function unlinkFamilyMember(hohMemberId: string, familyMemberId: st
  * Get the Head of Household for a given family member.
  * Looks up the family_member table where relatedMemberId = familyMemberId.
  */
-export async function getHOHForFamilyMember(familyMemberId: string): Promise<HOHMemberData | null> {
+export async function getHOHForFamilyMember(familyMemberId: string, organizationId: string): Promise<HOHMemberData | null> {
+  // Org-scope: reject a cross-tenant family member id before resolving its HOH.
+  await assertMemberInOrg(familyMemberId, organizationId);
+
   const result = await db
     .select({
       id: memberSchema.id,

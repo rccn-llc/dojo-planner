@@ -26,8 +26,8 @@ export const MemberPhotoStep = ({ onUpdate, onNext, onBack, onCancel }: MemberPh
     compressionRatio: number;
   } | null>(null);
 
-  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const handleFiles = async (files: FileList | null) => {
+    const file = files?.[0];
     if (file) {
       // Validate file type
       if (!['image/jpeg', 'image/png', 'image/gif'].includes(file.type)) {
@@ -69,7 +69,7 @@ export const MemberPhotoStep = ({ onUpdate, onNext, onBack, onCancel }: MemberPh
     event.preventDefault();
     const file = event.dataTransfer.files?.[0];
     if (file) {
-      handleFileSelect({ target: { files: event.dataTransfer.files } } as any);
+      handleFiles(event.dataTransfer.files);
     }
   };
 
@@ -140,7 +140,7 @@ export const MemberPhotoStep = ({ onUpdate, onNext, onBack, onCancel }: MemberPh
                   <input
                     type="file"
                     accept=".jpg,.jpeg,.png,.gif"
-                    onChange={handleFileSelect}
+                    onChange={e => handleFiles(e.target.files)}
                     disabled={isCompressing}
                     className="hidden"
                     id="photo-input"

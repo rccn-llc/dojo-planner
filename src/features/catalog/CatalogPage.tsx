@@ -6,6 +6,14 @@ import { useTranslations } from 'next-intl';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Pagination } from '@/components/ui/pagination/Pagination';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCatalogCache, useCatalogCategoriesCache } from '@/hooks/useCatalogCache';
 import { useEventsCache } from '@/hooks/useEventsCache';
@@ -21,6 +29,11 @@ import { getPrimaryImage } from './types';
 type CatalogPageProps = {
   organizationId: string;
 };
+
+// Page-size options for the catalog grid. Bounds how many CatalogItemCards
+// (each carrying a base64 image) are rendered at once.
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+const DEFAULT_PAGE_SIZE = 10;
 
 function LoadingSkeleton() {
   return (
@@ -64,6 +77,23 @@ export function CatalogPage({ organizationId }: CatalogPageProps) {
   const [editingItem, setEditingItem] = useState<CatalogItem | null>(null);
   const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
   const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
+
+  // Reset to the first page whenever the filters change — otherwise a filtered
+  // result could leave you on an out-of-range page.
+  const handleFiltersChange = useCallback((newFilters: CatalogFilters) => {
+    setFilters(newFilters);
+    setCurrentPage(0);
+  }, []);
+
+  const handlePageSizeChange = useCallback((value: string) => {
+    const size = Number.parseInt(value, 10);
+    if (!Number.isNaN(size)) {
+      setPageSize(size);
+      setCurrentPage(0);
+    }
+  }, []);
 
   // Computed values
   const stats = useMemo(() => {
@@ -118,6 +148,12 @@ export function CatalogPage({ organizationId }: CatalogPageProps) {
       return true;
     });
   }, [items, filters]);
+
+  const totalPages = Math.ceil(filteredItems.length / pageSize);
+  const paginatedItems = filteredItems.slice(
+    currentPage * pageSize,
+    (currentPage + 1) * pageSize,
+  );
 
   const deleteItem = items.find(i => i.id === deleteItemId);
 
@@ -285,7 +321,7 @@ export function CatalogPage({ organizationId }: CatalogPageProps) {
           <div className="flex-1">
             <CatalogFilterBar
               filters={filters}
-              onFiltersChange={setFilters}
+              onFiltersChange={handleFiltersChange}
               categories={categories}
               items={items}
             />
@@ -310,16 +346,44 @@ export function CatalogPage({ organizationId }: CatalogPageProps) {
             </div>
           )
         : (
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              {filteredItems.map(item => (
-                <CatalogItemCard
-                  key={item.id}
-                  item={item}
-                  onEdit={handleEditItem}
-                  onDelete={handleDeleteItem}
+            <>
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                {paginatedItems.map(item => (
+                  <CatalogItemCard
+                    key={item.id}
+                    item={item}
+                    onEdit={handleEditItem}
+                    onDelete={handleDeleteItem}
+                  />
+                ))}
+              </div>
+
+              {/* Pagination + page-size selector */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Rows per page</span>
+                  <Select value={String(pageSize)} onValueChange={handlePageSizeChange}>
+                    <SelectTrigger size="sm" className="w-20" aria-label="Rows per page">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PAGE_SIZE_OPTIONS.map(size => (
+                        <SelectItem key={size} value={String(size)}>
+                          {size}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  totalItems={filteredItems.length}
+                  itemsPerPage={pageSize}
+                  onPageChangeAction={setCurrentPage}
                 />
-              ))}
-            </div>
+              </div>
+            </>
           )}
 
       {/* Modals */}

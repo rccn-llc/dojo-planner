@@ -26,6 +26,7 @@ import {
   setWaiverMembershipPlans,
   updateMergeField,
   updateWaiverTemplate,
+  WaiverNotFoundError,
 } from '@/services/WaiversService';
 import { AUDIT_ACTION, AUDIT_ENTITY_TYPE } from '@/types/Audit';
 import { ORG_ROLE } from '@/types/Auth';
@@ -50,6 +51,21 @@ import {
   UpdateWaiverTemplateValidation,
 } from '@/validations/WaiverValidation';
 import { guardRole } from './AuthGuards';
+
+/**
+ * Normalize a service error into an ORPCError. A WaiverNotFoundError (raised
+ * when a plan/template/member is missing OR belongs to another org) maps to 404
+ * so cross-tenant probes are indistinguishable from genuine misses.
+ */
+function toOrpcError(error: unknown, fallbackMessage: string): ORPCError<string, unknown> {
+  if (error instanceof ORPCError) {
+    return error;
+  }
+  if (error instanceof WaiverNotFoundError) {
+    return new ORPCError('Not Found', { status: 404, message: error.message });
+  }
+  return new ORPCError(fallbackMessage, { status: 500 });
+}
 
 // =============================================================================
 // WAIVER TEMPLATE HANDLERS
@@ -280,15 +296,15 @@ export const getTemplateVersion = os
 export const listMemberSignedWaivers = os
   .input(ListMemberSignedWaiversValidation)
   .handler(async ({ input }) => {
-    await guardRole(ORG_ROLE.FRONT_DESK);
+    const { orgId } = await guardRole(ORG_ROLE.FRONT_DESK);
 
     try {
-      const waivers = await getMemberSignedWaivers(input.memberId);
+      const waivers = await getMemberSignedWaivers(input.memberId, orgId);
       return { waivers };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       logger.error(`Failed to fetch member's signed waivers: ${errorMessage}`);
-      throw error instanceof ORPCError ? error : new ORPCError('Failed to fetch signed waivers.', { status: 500 });
+      throw toOrpcError(error, 'Failed to fetch signed waivers.');
     }
   });
 
@@ -360,15 +376,15 @@ export const createSignedWaiverRecord = os
 export const getWaiversForMembership = os
   .input(GetWaiversForMembershipValidation)
   .handler(async ({ input }) => {
-    await guardRole(ORG_ROLE.FRONT_DESK);
+    const { orgId } = await guardRole(ORG_ROLE.FRONT_DESK);
 
     try {
-      const waivers = await getWaiversForMembershipPlan(input.membershipPlanId);
+      const waivers = await getWaiversForMembershipPlan(input.membershipPlanId, orgId);
       return { waivers };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       logger.error(`Failed to fetch waivers for membership: ${errorMessage}`);
-      throw error instanceof ORPCError ? error : new ORPCError('Failed to fetch waivers.', { status: 500 });
+      throw toOrpcError(error, 'Failed to fetch waivers.');
     }
   });
 
@@ -381,7 +397,7 @@ export const setMembershipWaiverAssociations = os
     const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
-      await setMembershipPlanWaivers(input.membershipPlanId, input.waiverTemplateIds);
+      await setMembershipPlanWaivers(input.membershipPlanId, input.waiverTemplateIds, context.orgId);
 
       logger.info(`[Waivers.setMembershipWaivers] Updated waiver associations for membership: ${input.membershipPlanId}, waivers: ${input.waiverTemplateIds.join(', ')}`);
 
@@ -401,7 +417,7 @@ export const setMembershipWaiverAssociations = os
         error: errorMessage,
       });
 
-      throw error instanceof ORPCError ? error : new ORPCError('Failed to set membership waivers.', { status: 500 });
+      throw toOrpcError(error, 'Failed to set membership waivers.');
     }
   });
 
@@ -416,7 +432,7 @@ export const setWaiverMemberships = os
     const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
-      await setWaiverMembershipPlans(input.waiverTemplateId, input.membershipPlanIds);
+      await setWaiverMembershipPlans(input.waiverTemplateId, input.membershipPlanIds, context.orgId);
 
       logger.info(`[Waivers.setWaiverMemberships] Updated membership associations for waiver: ${input.waiverTemplateId}, plans: ${input.membershipPlanIds.join(', ')}`);
 
@@ -436,7 +452,7 @@ export const setWaiverMemberships = os
         error: errorMessage,
       });
 
-      throw error instanceof ORPCError ? error : new ORPCError('Failed to set waiver memberships.', { status: 500 });
+      throw toOrpcError(error, 'Failed to set waiver memberships.');
     }
   });
 
@@ -449,7 +465,7 @@ export const addWaiverToMembership = os
     const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
-      await addWaiverToMembershipPlan(input.membershipPlanId, input.waiverTemplateId, input.isRequired);
+      await addWaiverToMembershipPlan(input.membershipPlanId, input.waiverTemplateId, context.orgId, input.isRequired);
 
       logger.info(`[Waivers.addWaiverToMembership] Added waiver ${input.waiverTemplateId} to membership ${input.membershipPlanId}`);
 
@@ -469,7 +485,7 @@ export const addWaiverToMembership = os
         error: errorMessage,
       });
 
-      throw error instanceof ORPCError ? error : new ORPCError('Failed to add waiver to membership.', { status: 500 });
+      throw toOrpcError(error, 'Failed to add waiver to membership.');
     }
   });
 
@@ -482,7 +498,7 @@ export const removeWaiverFromMembership = os
     const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
-      await removeWaiverFromMembershipPlan(input.membershipPlanId, input.waiverTemplateId);
+      await removeWaiverFromMembershipPlan(input.membershipPlanId, input.waiverTemplateId, context.orgId);
 
       logger.info(`[Waivers.removeWaiverFromMembership] Removed waiver ${input.waiverTemplateId} from membership ${input.membershipPlanId}`);
 
@@ -502,7 +518,7 @@ export const removeWaiverFromMembership = os
         error: errorMessage,
       });
 
-      throw error instanceof ORPCError ? error : new ORPCError('Failed to remove waiver from membership.', { status: 500 });
+      throw toOrpcError(error, 'Failed to remove waiver from membership.');
     }
   });
 

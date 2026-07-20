@@ -138,20 +138,17 @@ async function handleSubscriptionPaymentSucceeded(data: Record<string, unknown>)
     return;
   }
 
-  // Check if this is a SaaS org subscription first
+  // Check if this is a SaaS org subscription first. Select the billing cycle in
+  // the same query so we don't re-read the same org row below.
   const org = await db.query.organizationSchema.findFirst({
     where: eq(organizationSchema.iqproSubscriptionId, subscriptionId),
-    columns: { id: true },
+    columns: { id: true, iqproBillingCycle: true },
   });
 
   if (org) {
     const now = new Date();
     // Estimate next period end based on billing cycle
-    const orgRecord = await db.query.organizationSchema.findFirst({
-      where: eq(organizationSchema.id, org.id),
-      columns: { iqproBillingCycle: true },
-    });
-    const isAnnual = orgRecord?.iqproBillingCycle === 'annual';
+    const isAnnual = org.iqproBillingCycle === 'annual';
     const nextPeriodEnd = isAnnual
       ? new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000)
       : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
