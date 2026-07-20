@@ -50,6 +50,30 @@ export async function CustomStaffPage() {
       organizationId: orgId,
     });
 
+    // Get pending invitations too, so invited-but-not-yet-accepted staff show up
+    // in the list as "Invitation sent" (#275), and so accepted members whose
+    // Clerk profile has no name can fall back to the name captured at invite
+    // time (#277). Best-effort — a failure here shouldn't blank the whole page.
+    let invitations: Awaited<ReturnType<typeof authClient.organizations.getOrganizationInvitationList>>['data'] = [];
+    try {
+      const invitationList = await authClient.organizations.getOrganizationInvitationList({
+        organizationId: orgId,
+      });
+      invitations = invitationList.data;
+    } catch (invErr) {
+      console.warn('CustomStaffPage - Failed to fetch invitations:', invErr);
+    }
+
+    // Look up invite-time name metadata by email, used as a fallback for
+    // accepted members and to populate pending-invitation rows.
+    const inviteMetaByEmail = new Map<string, { firstName: string | null; lastName: string | null }>();
+    for (const inv of invitations) {
+      inviteMetaByEmail.set(inv.emailAddress.toLowerCase(), {
+        firstName: (inv.publicMetadata?.invitedFirstName as string | undefined) ?? null,
+        lastName: (inv.publicMetadata?.invitedLastName as string | undefined) ?? null,
+      });
+    }
+
     // Check if current user is an admin or academy owner
     const userRole = memberships.data.find(
       m => m.publicUserData?.userId === userId,
@@ -70,8 +94,7 @@ export async function CustomStaffPage() {
     const photoOverrides = await getInstructorPhotoOverrides(orgId);
 
     // Keep only staff-role memberships (admins, academy owners, front desk,
-    // instructors). Pending invitations are intentionally NOT shown here —
-    // only accepted org memberships appear.
+    // instructors).
     const staffMembers: ClerkStaffMember[] = memberships.data
       .filter(membership => membership.role != null && STAFF_ROLES.has(membership.role))
       .map((membership) => {
@@ -83,21 +106,45 @@ export async function CustomStaffPage() {
         const userId = membership.publicUserData?.userId;
         const overridePhoto = userId ? photoOverrides.get(userId) : undefined;
 
+        // Accepting an invitation does NOT copy the invite-time name onto the
+        // Clerk profile, so a member who never set a profile name would show
+        // blank. Fall back to the name captured at invite time (#277).
+        const email = membership.publicUserData?.identifier || '';
+        const inviteMeta = inviteMetaByEmail.get(email.toLowerCase());
+
         return {
           id: userId || membership.id,
-          firstName: membership.publicUserData?.firstName ?? null,
-          lastName: membership.publicUserData?.lastName ?? null,
-          email: membership.publicUserData?.identifier || '',
+          firstName: membership.publicUserData?.firstName ?? inviteMeta?.firstName ?? null,
+          lastName: membership.publicUserData?.lastName ?? inviteMeta?.lastName ?? null,
+          email,
           photoUrl: overridePhoto ?? membership.publicUserData?.imageUrl ?? null,
-          emailAddress: membership.publicUserData?.identifier || '',
+          emailAddress: email,
           role: membership.role,
           status,
         };
       });
 
+    // Append pending invitations (invited but not yet accepted) so they show as
+    // "Invitation sent" (#275). The membership list only contains accepted
+    // members, so without this the invitee is invisible until they accept.
+    const acceptedEmails = new Set(staffMembers.map(m => m.email.toLowerCase()));
+    const pendingStaff: ClerkStaffMember[] = invitations
+      .filter(inv => inv.status === 'pending' && inv.role != null && STAFF_ROLES.has(inv.role)
+        && !acceptedEmails.has(inv.emailAddress.toLowerCase()))
+      .map(inv => ({
+        id: inv.id,
+        firstName: (inv.publicMetadata?.invitedFirstName as string | undefined) ?? null,
+        lastName: (inv.publicMetadata?.invitedLastName as string | undefined) ?? null,
+        email: inv.emailAddress,
+        photoUrl: null,
+        emailAddress: inv.emailAddress,
+        role: inv.role!,
+        status: 'Invitation sent' as const,
+      }));
+
     // Render the staff table with client-side modal management
     return (
-      <StaffPageClient staffMembers={staffMembers} currentUserRole={userRole} currentUserId={userId} />
+      <StaffPageClient staffMembers={[...staffMembers, ...pendingStaff]} currentUserRole={userRole} currentUserId={userId} />
     );
   } catch (error) {
     console.warn('CustomStaffPage - Failed to fetch staff members:', error);

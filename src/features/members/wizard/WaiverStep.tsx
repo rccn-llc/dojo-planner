@@ -66,10 +66,15 @@ export function WaiverStep({
     data.waiverSignedByRelationship ?? 'self',
   );
   const [guardianEmail, setGuardianEmail] = useState(data.waiverGuardianEmail ?? '');
+  // Minor member's own signature (#268) — only used/validated when a guardian is required.
+  const [memberSignatureDataUrl, setMemberSignatureDataUrl] = useState<string | null>(data.waiverMemberSignatureDataUrl ?? null);
+  const [memberSignerName, setMemberSignerName] = useState(data.waiverMemberSignedByName ?? '');
   const [hasAgreed, setHasAgreed] = useState(false);
   const [errors, setErrors] = useState<{
     signature?: string;
     signerName?: string;
+    memberSignature?: string;
+    memberSignerName?: string;
     agreement?: string;
   }>({});
 
@@ -159,6 +164,11 @@ export function WaiverStep({
     setErrors(prev => ({ ...prev, signature: undefined }));
   }, []);
 
+  const handleMemberSignatureChange = useCallback((dataUrl: string | null) => {
+    setMemberSignatureDataUrl(dataUrl);
+    setErrors(prev => ({ ...prev, memberSignature: undefined }));
+  }, []);
+
   const validate = useCallback((): boolean => {
     const newErrors: typeof errors = {};
 
@@ -170,13 +180,23 @@ export function WaiverStep({
       newErrors.signerName = t('name_required_error');
     }
 
+    // When a guardian is required, the minor member must ALSO sign (#268).
+    if (requiresGuardian) {
+      if (!memberSignatureDataUrl) {
+        newErrors.memberSignature = t('member_signature_required_error');
+      }
+      if (!memberSignerName.trim()) {
+        newErrors.memberSignerName = t('member_name_required_error');
+      }
+    }
+
     if (!hasAgreed) {
       newErrors.agreement = t('agreement_required_error');
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [signatureDataUrl, signerName, hasAgreed, t]);
+  }, [signatureDataUrl, signerName, requiresGuardian, memberSignatureDataUrl, memberSignerName, hasAgreed, t]);
 
   const handleNext = useCallback(async () => {
     if (!validate()) {
@@ -189,6 +209,8 @@ export function WaiverStep({
       waiverSignedByName: signerName,
       waiverSignedByRelationship: requiresGuardian ? signerRelationship : 'self',
       waiverGuardianEmail: requiresGuardian ? guardianEmail : undefined,
+      waiverMemberSignatureDataUrl: requiresGuardian ? (memberSignatureDataUrl ?? undefined) : undefined,
+      waiverMemberSignedByName: requiresGuardian ? memberSignerName : undefined,
       waiverSignedAt: new Date(),
       waiverSkipped: false,
       waiverRenderedContent: resolvedContent,
@@ -204,6 +226,8 @@ export function WaiverStep({
     signerRelationship,
     guardianEmail,
     requiresGuardian,
+    memberSignatureDataUrl,
+    memberSignerName,
     resolvedContent,
   ]);
 
@@ -303,9 +327,11 @@ export function WaiverStep({
         </div>
       )}
 
-      {/* Signer name */}
+      {/* Signer name — this is the guardian's name when a guardian is required. */}
       <div className="space-y-2">
-        <Label htmlFor="signer-name">{t('signer_name_label')}</Label>
+        <Label htmlFor="signer-name">
+          {requiresGuardian ? t('guardian_signer_name_label') : t('signer_name_label')}
+        </Label>
         <Input
           id="signer-name"
           placeholder={t('signer_name_placeholder')}
@@ -320,12 +346,41 @@ export function WaiverStep({
         )}
       </div>
 
-      {/* Signature canvas */}
+      {/* Primary signature — the guardian's when a guardian is required. */}
       <SignatureCanvas
-        label={t('signature_label')}
+        label={requiresGuardian ? t('guardian_signature_label') : t('signature_label')}
         onSignatureChange={handleSignatureChange}
         error={errors.signature}
       />
+
+      {/* Member (minor) signature — required alongside the guardian's (#268). */}
+      {requiresGuardian && (
+        <div className="space-y-4 rounded-lg border p-4">
+          <h3 className="font-medium">{t('member_signature_section_title')}</h3>
+
+          <div className="space-y-2">
+            <Label htmlFor="member-signer-name">{t('member_signer_name_label')}</Label>
+            <Input
+              id="member-signer-name"
+              placeholder={t('member_signer_name_placeholder')}
+              value={memberSignerName}
+              onChange={(e) => {
+                setMemberSignerName(e.target.value);
+                setErrors(prev => ({ ...prev, memberSignerName: undefined }));
+              }}
+            />
+            {errors.memberSignerName && (
+              <p className="text-sm text-destructive">{errors.memberSignerName}</p>
+            )}
+          </div>
+
+          <SignatureCanvas
+            label={t('member_signature_label')}
+            onSignatureChange={handleMemberSignatureChange}
+            error={errors.memberSignature}
+          />
+        </div>
+      )}
 
       {/* Agreement checkbox */}
       <div className="flex items-start gap-2">

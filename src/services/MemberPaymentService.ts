@@ -1601,6 +1601,30 @@ export async function cancelMembershipLifecycle(args: {
     }
   }
 
+  // Record the cancellation fee in the member's billing history even when the
+  // live IQPro charge didn't run or failed (#239). Without this, a fee owed on
+  // a member whose subscription is synthetic (Preview/seed) or whose charge
+  // errored would silently vanish from the billing history. `chargeOneTimeFee`
+  // already inserts a 'paid' row on a successful charge; here we insert a
+  // 'pending' row for the not-captured case so the fee is still visible and
+  // reconcilable. Only fires when a fee was actually owed (not waived, > 0) and
+  // no live charge transaction was produced.
+  if (feeAmount > 0 && !cancellationTransactionId) {
+    await db.insert(transactionSchema).values({
+      id: randomUUID(),
+      organizationId: ctx.member.organizationId,
+      memberId: ctx.member.id,
+      memberMembershipId: ctx.membership.id,
+      transactionType: 'cancellation_fee',
+      amount: feeAmount,
+      status: 'pending',
+      description: `Cancellation fee — ${ctx.plan.name}`,
+      createdAt: now,
+      updatedAt: now,
+    });
+    cancellationFeeCharged = feeAmount;
+  }
+
   // 2) Cancel the IQPro membership subscription
   let subscriptionCancelled = false;
   if (config && ctx.membership.iqproSubscriptionId) {

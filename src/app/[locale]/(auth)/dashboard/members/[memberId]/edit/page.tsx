@@ -940,6 +940,8 @@ export default function EditMemberPage() {
         signatureDataUrl: waiver.signatureDataUrl,
         signedByName: waiver.signedByName,
         signedByRelationship: waiver.signedByRelationship,
+        memberSignatureDataUrl: waiver.memberSignatureDataUrl,
+        memberSignedByName: waiver.memberSignedByName,
         signedAt,
         ipAddress: waiver.ipAddress,
         membershipPlanName: waiver.membershipPlanName,

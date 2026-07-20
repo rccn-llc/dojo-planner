@@ -23,6 +23,7 @@ import {
   removeWaiverFromMembershipPlan,
   resolveWaiverPlaceholders,
   setMembershipPlanWaivers,
+  setWaiverMembershipPlans,
   updateMergeField,
   updateWaiverTemplate,
 } from '@/services/WaiversService';
@@ -44,6 +45,7 @@ import {
   RemoveWaiverFromMembershipValidation,
   ResolveWaiverPlaceholdersValidation,
   SetMembershipWaiversValidation,
+  SetWaiverMembershipsValidation,
   UpdateMergeFieldValidation,
   UpdateWaiverTemplateValidation,
 } from '@/validations/WaiverValidation';
@@ -400,6 +402,41 @@ export const setMembershipWaiverAssociations = os
       });
 
       throw error instanceof ORPCError ? error : new ORPCError('Failed to set membership waivers.', { status: 500 });
+    }
+  });
+
+/**
+ * Set the membership plans associated with a waiver template (inverse of
+ * setMembershipWaiverAssociations). Backs the waiver detail page's "Associated
+ * Memberships" card — fixes the silently-failing save (#267).
+ */
+export const setWaiverMemberships = os
+  .input(SetWaiverMembershipsValidation)
+  .handler(async ({ input }) => {
+    const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
+
+    try {
+      await setWaiverMembershipPlans(input.waiverTemplateId, input.membershipPlanIds);
+
+      logger.info(`[Waivers.setWaiverMemberships] Updated membership associations for waiver: ${input.waiverTemplateId}, plans: ${input.membershipPlanIds.join(', ')}`);
+
+      await audit(context, AUDIT_ACTION.MEMBERSHIP_WAIVER_SET, AUDIT_ENTITY_TYPE.MEMBERSHIP_WAIVER, {
+        entityId: input.waiverTemplateId,
+        status: 'success',
+      });
+
+      return {};
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`Failed to set waiver memberships: ${errorMessage}`);
+
+      await audit(context, AUDIT_ACTION.MEMBERSHIP_WAIVER_SET, AUDIT_ENTITY_TYPE.MEMBERSHIP_WAIVER, {
+        entityId: input.waiverTemplateId,
+        status: 'failure',
+        error: errorMessage,
+      });
+
+      throw error instanceof ORPCError ? error : new ORPCError('Failed to set waiver memberships.', { status: 500 });
     }
   });
 

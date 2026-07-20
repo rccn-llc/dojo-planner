@@ -440,6 +440,30 @@ describe('WaiverStep', () => {
       await expect.element(page.getByText('Parent/Guardian Email')).toBeInTheDocument();
     });
 
+    it('renders TWO signature fields for a minor — guardian and member (#268)', async () => {
+      const minorDob = new Date();
+      minorDob.setFullYear(minorDob.getFullYear() - 14);
+
+      render(
+        <WaiverStep
+          data={mockData}
+          onUpdate={mockHandlers.onUpdate}
+          onNext={mockHandlers.onNext}
+          onBack={mockHandlers.onBack}
+          onCancel={mockHandlers.onCancel}
+          memberDateOfBirth={minorDob}
+        />,
+      );
+
+      // Wait for the guardian branch to render, then assert there are two
+      // signature canvases (guardian + member) rather than one.
+      await expect.element(page.getByText('Guardian Information')).toBeInTheDocument();
+
+      await vi.waitFor(() => {
+        expect(page.getByTestId('mock-signature-canvas').elements()).toHaveLength(2);
+      });
+    });
+
     it('should not show guardian section when member is an adult', async () => {
       const adultDob = new Date();
       adultDob.setFullYear(adultDob.getFullYear() - 25);
@@ -460,6 +484,8 @@ describe('WaiverStep', () => {
       const guardianTitle = page.getByText('Guardian Information');
 
       expect(guardianTitle.elements()).toHaveLength(0);
+      // Only a single signature field for an adult (no member/guardian split).
+      expect(page.getByTestId('mock-signature-canvas').elements()).toHaveLength(1);
     });
 
     it('should not show guardian section when date of birth is not provided', async () => {

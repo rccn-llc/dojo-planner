@@ -22,6 +22,8 @@ const translationKeys: Record<string, string> = {
   guardian_no: 'Not required',
   guardian_age_label: 'Guardian Age Threshold',
   guardian_age_help: 'Age below which a guardian is required',
+  guardian_age_error: 'Age threshold must be between {min} and {max}.',
+  save_error: 'Could not save changes. Please try again.',
   cancel_button: 'Cancel',
   save_button: 'Save Changes',
   saving_button: 'Saving...',
@@ -32,7 +34,13 @@ vi.mock('next-intl', () => ({
     if (key === 'description_character_count' && params) {
       return `${params.count} / ${params.max}`;
     }
-    return translationKeys[key] || key;
+    let result = translationKeys[key] || key;
+    if (params) {
+      for (const [k, v] of Object.entries(params)) {
+        result = result.replace(`{${k}}`, String(v));
+      }
+    }
+    return result;
   },
 }));
 
@@ -320,5 +328,40 @@ describe('EditWaiverBasicsModal', () => {
         name: 'Updated Waiver',
       }),
     );
+  });
+
+  describe('guardian age threshold validation (#266)', () => {
+    const guardianProps = { ...defaultProps, requiresGuardian: true, guardianAgeThreshold: 12 };
+
+    it('shows an inline error and blocks save when age is below the minimum', async () => {
+      const onSave = vi.fn().mockResolvedValue(undefined);
+      render(<EditWaiverBasicsModal {...guardianProps} onSave={onSave} />);
+
+      // The out-of-range (12) value surfaces a clear error instead of silently failing.
+      await expect.element(page.getByText('Age threshold must be between 13 and 21.')).toBeInTheDocument();
+
+      const saveButton = page.getByRole('button', { name: 'Save Changes' });
+
+      await expect.element(saveButton).toBeDisabled();
+      expect(onSave).not.toHaveBeenCalled();
+    });
+
+    it('allows save when the age is within 13-21', async () => {
+      const onSave = vi.fn().mockResolvedValue(undefined);
+      render(<EditWaiverBasicsModal {...defaultProps} requiresGuardian onSave={onSave} guardianAgeThreshold={14} />);
+
+      const saveButton = page.getByRole('button', { name: 'Save Changes' });
+
+      await expect.element(saveButton).toBeEnabled();
+    });
+
+    it('surfaces a server error instead of swallowing it', async () => {
+      const onSave = vi.fn().mockRejectedValue(new Error('Boom from server'));
+      render(<EditWaiverBasicsModal {...defaultProps} requiresGuardian onSave={onSave} guardianAgeThreshold={16} />);
+
+      await userEvent.click(page.getByRole('button', { name: 'Save Changes' }));
+
+      await expect.element(page.getByText('Boom from server')).toBeInTheDocument();
+    });
   });
 });

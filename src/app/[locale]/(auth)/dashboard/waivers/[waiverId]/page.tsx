@@ -155,9 +155,12 @@ export default function WaiverDetailPage() {
   }, [waiverId, fetchWaiver]);
 
   const handleSaveMemberships = useCallback(async (membershipIds: string[]) => {
-    await client.waivers.setMembershipWaivers({
-      membershipPlanId: waiverId,
-      waiverTemplateIds: membershipIds,
+    // membershipIds are membership PLAN ids to associate with THIS waiver. Use
+    // the inverse endpoint keyed on the waiver template (#267) — the previous
+    // call inverted the arguments so nothing ever saved.
+    await client.waivers.setWaiverMemberships({
+      waiverTemplateId: waiverId,
+      membershipPlanIds: membershipIds,
     });
     await fetchWaiver();
     setIsEditMembershipsOpen(false);

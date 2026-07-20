@@ -55,15 +55,25 @@ export function EditWaiverBasicsModal({
   const [guardianAgeThreshold, setGuardianAgeThreshold] = useState(initialGuardianAgeThreshold);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const handleInputBlur = (field: string) => {
     setTouched(prev => ({ ...prev, [field]: true }));
   };
 
   const isNameInvalid = touched.name && !name.trim();
-  const isFormValid = name.trim() !== '';
+  // The guardian age threshold is constrained server-side to 13–21
+  // (WaiverValidation). Previously an out-of-range value (e.g. 12) was rejected
+  // by the server but the error was swallowed, so the modal appeared to do
+  // nothing (#266). Validate + surface it here.
+  const AGE_MIN = 13;
+  const AGE_MAX = 21;
+  const isAgeInvalid = requiresGuardian
+    && (!Number.isInteger(guardianAgeThreshold) || guardianAgeThreshold < AGE_MIN || guardianAgeThreshold > AGE_MAX);
+  const isFormValid = name.trim() !== '' && !isAgeInvalid;
 
   const handleSubmit = async () => {
+    setSaveError(null);
     setIsLoading(true);
     try {
       await onSave({
@@ -74,6 +84,8 @@ export function EditWaiverBasicsModal({
         requiresGuardian,
         guardianAgeThreshold,
       });
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : t('save_error'));
     } finally {
       setIsLoading(false);
     }
@@ -87,6 +99,7 @@ export function EditWaiverBasicsModal({
     setRequiresGuardian(initialRequiresGuardian);
     setGuardianAgeThreshold(initialGuardianAgeThreshold);
     setTouched({});
+    setSaveError(null);
   };
 
   const handleCancel = () => {
@@ -187,13 +200,24 @@ export function EditWaiverBasicsModal({
               <label className="text-sm font-medium text-foreground">{t('guardian_age_label')}</label>
               <Input
                 type="number"
-                min={13}
-                max={21}
+                min={AGE_MIN}
+                max={AGE_MAX}
                 value={guardianAgeThreshold}
                 onChange={e => setGuardianAgeThreshold(Number(e.target.value))}
+                error={isAgeInvalid}
               />
-              <p className="text-xs text-muted-foreground">{t('guardian_age_help')}</p>
+              {isAgeInvalid
+                ? (
+                    <p className="text-xs text-destructive">{t('guardian_age_error', { min: AGE_MIN, max: AGE_MAX })}</p>
+                  )
+                : (
+                    <p className="text-xs text-muted-foreground">{t('guardian_age_help')}</p>
+                  )}
             </div>
+          )}
+
+          {saveError && (
+            <p className="rounded-md bg-destructive/10 p-2 text-sm text-destructive">{saveError}</p>
           )}
 
           {/* Action Buttons */}
