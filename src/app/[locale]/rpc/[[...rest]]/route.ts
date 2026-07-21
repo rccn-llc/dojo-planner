@@ -7,6 +7,23 @@ import { router } from '@/routers';
 const handler = new RPCHandler(router);
 
 /**
+ * Derives the ORPC prefix from the request pathname.
+ *
+ * This route is mounted under the `[locale]` segment, so an incoming request may
+ * arrive either as `/rpc/...` (default locale, no prefix) or as
+ * `/{locale}/rpc/...` (non-default locale, e.g. `/ja/rpc/...`). ORPC strips a
+ * single static prefix; if we hardcode `/rpc`, a locale-prefixed request never
+ * matches a procedure and falls through to a plain-text 404 — which the ORPC
+ * client cannot parse, surfacing as MALFORMED_ORPC_ERROR_RESPONSE.
+ */
+export function deriveRpcPrefix(pathname: string): `/${string}` {
+  const localePrefix = pathname.match(/^(\/[^/]+)?\/rpc/)?.[1];
+  // The capture group, when present, always begins with `/` (e.g. `/ja`), so the
+  // composed prefix is always `/${string}` at runtime.
+  return (localePrefix ? `${localePrefix}/rpc` : '/rpc') as `/${string}`;
+}
+
+/**
  * Applies rate limiting to the request based on authentication status.
  * Returns a 429 response if rate limit is exceeded.
  */
@@ -68,9 +85,9 @@ async function handleRequest(request: Request) {
     return rateLimitResponse;
   }
 
-  const { response } = await handler.handle(request, {
-    prefix: '/rpc',
-  });
+  const prefix = deriveRpcPrefix(new URL(request.url).pathname);
+
+  const { response } = await handler.handle(request, { prefix });
 
   return response ?? new Response('Not found', { status: 404 });
 }

@@ -383,6 +383,17 @@ function bucketKey(value: unknown): string {
   return new Date(value as string).getTime().toString();
 }
 
+// `date_trunc`'s first argument must be a literal in the SQL text (Postgres/PGlite
+// reject a bound parameter there). `period` is a fixed internal enum, so we inline
+// it as a raw quoted literal via an allowlist switch.
+function truncField(period: EarningsTruncPeriod) {
+  switch (period) {
+    case 'month': return sql.raw(`'month'`);
+    case 'year': return sql.raw(`'year'`);
+    default: throw new Error(`Unsupported trunc period: ${period as string}`);
+  }
+}
+
 async function groupedPaidSumByBucket(
   organizationId: string,
   period: EarningsTruncPeriod,
@@ -390,9 +401,10 @@ async function groupedPaidSumByBucket(
   end: Date,
 ): Promise<Map<string, number>> {
   const oneUnit = sql.raw(`interval '1 ${period}'`);
+  const truncatedCreatedAt = sql`date_trunc(${truncField(period)}, ${transactionSchema.createdAt})`;
   const rows = await db
     .select({
-      bucket: sql<Date>`date_trunc(${period}, ${transactionSchema.createdAt})`,
+      bucket: sql<Date>`${truncatedCreatedAt}`,
       total: sql<string | number | null>`COALESCE(SUM(${transactionSchema.amount}), 0)`,
     })
     .from(transactionSchema)
@@ -401,9 +413,9 @@ async function groupedPaidSumByBucket(
       eq(transactionSchema.status, 'paid'),
       gte(transactionSchema.createdAt, start),
       lte(transactionSchema.createdAt, end),
-      sql`${transactionSchema.createdAt} <= date_trunc(${period}, ${transactionSchema.createdAt}) + ${oneUnit} - interval '1 second'`,
+      sql`${transactionSchema.createdAt} <= ${truncatedCreatedAt} + ${oneUnit} - interval '1 second'`,
     ))
-    .groupBy(sql`date_trunc(${period}, ${transactionSchema.createdAt})`);
+    .groupBy(sql`${truncatedCreatedAt}`);
 
   const map = new Map<string, number>();
   for (const row of rows) {

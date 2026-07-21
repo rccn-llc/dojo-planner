@@ -1,20 +1,23 @@
 'use client';
 
 import { useLocale } from 'next-intl';
-import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { usePathname } from '@/libs/I18nNavigation';
 import { AppConfig } from '@/utils/AppConfig';
 
 export const LocaleSwitcher = () => {
-  const router = useRouter();
   const pathname = usePathname();
   const locale = useLocale();
 
   const handleChange = (value: string) => {
-    router.push(`/${value}${pathname}`);
-    router.refresh(); // Ensure the page takes the new locale into account related to the issue #395
+    // A full-document navigation (not a soft client push) so the root layout —
+    // and next-themes' flash-prevention <script> — is re-rendered on the server,
+    // not re-created during a client re-render. The client re-render path makes
+    // React 19 flag that inline <script> with "Encountered a script tag while
+    // rendering React component". A hard navigation also removes the need for the
+    // prior `router.refresh()` (issue #395) since the new locale is loaded fresh.
+    window.location.assign(`/${value}${pathname}`);
   };
 
   return (

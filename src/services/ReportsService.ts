@@ -74,16 +74,29 @@ const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Se
 
 type TruncPeriod = 'month' | 'year' | 'day';
 
+// `date_trunc`'s first argument (the "field") must be a literal in the SQL text —
+// Postgres/PGlite reject it as a bound parameter. `period` is a fixed internal
+// enum (never user input), so we inline it as a raw quoted literal. The switch is
+// an allowlist guard so nothing but the known-safe values can ever be emitted.
+export function truncField(period: TruncPeriod) {
+  switch (period) {
+    case 'month': return sql.raw(`'month'`);
+    case 'year': return sql.raw(`'year'`);
+    case 'day': return sql.raw(`'day'`);
+    default: throw new Error(`Unsupported trunc period: ${period as string}`);
+  }
+}
+
 // The SQL bucket key for a row (start of its calendar period).
-function bucketExpr(period: TruncPeriod) {
-  return sql<Date>`date_trunc(${period}, ${transactionSchema.createdAt})`;
+export function bucketExpr(period: TruncPeriod) {
+  return sql<Date>`date_trunc(${truncField(period)}, ${transactionSchema.createdAt})`;
 }
 
 // Reproduces the originals' per-bucket upper bound so gap rows (the fractional
 // tail of each period's final second) are dropped exactly as before.
 function withinBucketWindow(period: TruncPeriod) {
   const oneUnit = sql.raw(`interval '1 ${period}'`);
-  return sql`${transactionSchema.createdAt} <= date_trunc(${period}, ${transactionSchema.createdAt}) + ${oneUnit} - interval '1 second'`;
+  return sql`${transactionSchema.createdAt} <= date_trunc(${truncField(period)}, ${transactionSchema.createdAt}) + ${oneUnit} - interval '1 second'`;
 }
 
 // A stable map key for a bucket-start Date, regardless of whether the driver
