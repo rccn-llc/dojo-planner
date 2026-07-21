@@ -3,6 +3,7 @@ import { RPCHandler } from '@orpc/server/fetch';
 import { auditLogger } from '@/libs/Logger';
 import { getClientIP, isRateLimitingEnabled, rpcRateLimiter, unauthenticatedRateLimiter } from '@/libs/RateLimit';
 import { router } from '@/routers';
+import { deriveRpcPrefix } from './rpcPrefix';
 
 const handler = new RPCHandler(router);
 
@@ -68,9 +69,9 @@ async function handleRequest(request: Request) {
     return rateLimitResponse;
   }
 
-  const { response } = await handler.handle(request, {
-    prefix: '/rpc',
-  });
+  const prefix = deriveRpcPrefix(new URL(request.url).pathname);
+
+  const { response } = await handler.handle(request, { prefix });
 
   return response ?? new Response('Not found', { status: 404 });
 }

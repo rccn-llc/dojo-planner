@@ -2,7 +2,7 @@ import type { LocalizationResource } from '@clerk/types';
 import type { LocalePrefixMode } from 'next-intl/routing';
 import type { AppLocale } from '@/types/AppConfig';
 import type { PricingPlan } from '@/types/Subscription';
-import { enUS, frFR } from '@clerk/localizations';
+import { enUS, frFR, jaJP } from '@clerk/localizations';
 import { BILLING_INTERVAL } from '@/types/Subscription';
 import { version as appVersion } from '../../package.json';
 
@@ -17,6 +17,11 @@ const locales = [
     id: 'fr',
     name: 'Français',
     stripeLocale: 'fr',
+  },
+  {
+    id: 'ja',
+    name: '日本語',
+    stripeLocale: 'ja',
   },
 ] satisfies AppLocale[];
 
@@ -33,6 +38,7 @@ export const AppConfig = {
 const supportedLocales: Record<string, LocalizationResource> = {
   en: enUS,
   fr: frFR,
+  ja: jaJP,
 };
 
 export const ClerkLocalizations = {
