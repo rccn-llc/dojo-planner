@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveRpcPrefix } from './route';
+import { deriveRpcPrefix } from './rpcPrefix';
 
 describe('deriveRpcPrefix', () => {
   it('returns /rpc for the default (unprefixed) locale path', () => {
