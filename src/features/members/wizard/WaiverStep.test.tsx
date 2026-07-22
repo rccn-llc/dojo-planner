@@ -440,7 +440,7 @@ describe('WaiverStep', () => {
       await expect.element(page.getByText('Parent/Guardian Email')).toBeInTheDocument();
     });
 
-    it('renders TWO signature fields for a minor — guardian and member (#268)', async () => {
+    it('renders ONLY the guardian signature field for a minor — the minor never signs', async () => {
       const minorDob = new Date();
       minorDob.setFullYear(minorDob.getFullYear() - 14);
 
@@ -455,12 +455,12 @@ describe('WaiverStep', () => {
         />,
       );
 
-      // Wait for the guardian branch to render, then assert there are two
-      // signature canvases (guardian + member) rather than one.
+      // Wait for the guardian branch to render, then assert there is exactly
+      // one signature canvas (the guardian's) — no separate minor signature.
       await expect.element(page.getByText('Guardian Information')).toBeInTheDocument();
 
       await vi.waitFor(() => {
-        expect(page.getByTestId('mock-signature-canvas').elements()).toHaveLength(2);
+        expect(page.getByTestId('mock-signature-canvas').elements()).toHaveLength(1);
       });
     });
 

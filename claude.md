@@ -809,7 +809,7 @@ await deleteUserWithOrganization();
 - `catalog_item_category` - Item-category associations (M:N)
 - `catalog_item_image` - Product images
 - `waiver_template` - Waiver templates with placeholders, guardian settings, and immutable versioning (`parentId` for archive rows)
-- `signed_waiver` - Signed waiver records with signature data, rendered content, membership plan snapshot (name, price, frequency, contract length, signup fee, trial status), and coupon/discount snapshot (code, type, amount, discounted price). For minors requiring a guardian, `signatureDataUrl`/`signedByName` hold the **guardian's** signature and `memberSignatureDataUrl`/`memberSignedByName` (nullable) hold the **minor member's own** signature — both captured at signing (#268)
+- `signed_waiver` - Signed waiver records with signature data, rendered content, membership plan snapshot (name, price, frequency, contract length, signup fee, trial status), and coupon/discount snapshot (code, type, amount, discounted price). Only a **single** signature is captured per waiver: `signatureDataUrl`/`signedByName` hold the signer. When a minor requires a guardian (`requiresGuardian`), that single signature is the **guardian's** and `signedByRelationship` records the relationship (`parent` | `guardian` | `legal_guardian`); the minor never signs. The waiver PDF labels the line "Guardian signed by" when `signedByRelationship` is set to anything other than `self`, else "Signed by".
 - `membership_waiver` - Junction table linking memberships to required waivers
 - `waiver_merge_field` - Configurable placeholder fields for waiver templates
 

@@ -127,8 +127,6 @@ const mockSignedWaiver = {
   signedByName: 'John Doe',
   signedByEmail: 'john@example.com',
   signedByRelationship: 'self',
-  memberSignatureDataUrl: null,
-  memberSignedByName: null,
   memberFirstName: 'John',
   memberLastName: 'Doe',
   memberEmail: 'john@example.com',

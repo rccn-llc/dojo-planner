@@ -46,10 +46,6 @@ export type WizardStepData = {
   waiverSignedByName?: string;
   waiverSignedByRelationship?: SignerRelationship;
   waiverGuardianEmail?: string;
-  // The minor member's own signature, captured alongside the guardian's when a
-  // guardian signature is required (#268).
-  waiverMemberSignatureDataUrl?: string;
-  waiverMemberSignedByName?: string;
   waiverSignedAt?: Date;
   waiverSkipped?: boolean;
   waiverRenderedContent?: string;

@@ -140,25 +140,16 @@ describe('buildSignedWaiverPayload', () => {
     expect(payload).not.toHaveProperty('memberAgeAtSigning');
   });
 
-  it('omits the member (minor) signature keys when not present', () => {
-    const payload = buildSignedWaiverPayload(baseData, 'member-1');
-
-    expect(payload).not.toHaveProperty('memberSignatureDataUrl');
-    expect(payload).not.toHaveProperty('memberSignedByName');
-  });
-
-  it('includes the minor member signature alongside the guardian when present (#268)', () => {
+  it('never includes a minor member signature — only the guardian signs', () => {
     const data = {
       ...baseData,
       waiverSignedByRelationship: 'guardian',
-      waiverMemberSignatureDataUrl: 'data:image/png;base64,minor',
-      waiverMemberSignedByName: 'Little Doe',
     } as unknown as WizardStepData;
     const payload = buildSignedWaiverPayload(data, 'member-1') as Record<string, unknown>;
 
     expect(payload.signedByRelationship).toBe('guardian');
-    expect(payload.memberSignatureDataUrl).toBe('data:image/png;base64,minor');
-    expect(payload.memberSignedByName).toBe('Little Doe');
+    expect(payload).not.toHaveProperty('memberSignatureDataUrl');
+    expect(payload).not.toHaveProperty('memberSignedByName');
   });
 
   it('includes the age and DOB when dateOfBirth is present', () => {
