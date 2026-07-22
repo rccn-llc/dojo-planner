@@ -48,9 +48,6 @@ export const CreateSignedWaiverValidation = z.object({
   signedByName: z.string().min(1, 'Signer name is required').max(100),
   signedByEmail: z.string().email().optional(),
   signedByRelationship: z.enum(['self', 'parent', 'guardian', 'legal_guardian']).optional(),
-  // Minor member's own signature, captured alongside the guardian's (#268).
-  memberSignatureDataUrl: z.string().min(1).optional(),
-  memberSignedByName: z.string().min(1).max(100).optional(),
   memberFirstName: z.string().min(1),
   memberLastName: z.string().min(1),
   memberEmail: z.string().email(),

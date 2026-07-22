@@ -57,8 +57,6 @@ export type SignedWaiver = {
   signedByName: string;
   signedByEmail: string | null;
   signedByRelationship: string | null;
-  memberSignatureDataUrl: string | null;
-  memberSignedByName: string | null;
   memberFirstName: string;
   memberLastName: string;
   memberEmail: string;
@@ -125,8 +123,6 @@ type CreateSignedWaiverInput = {
   signedByName: string;
   signedByEmail?: string;
   signedByRelationship?: string;
-  memberSignatureDataUrl?: string;
-  memberSignedByName?: string;
   memberFirstName: string;
   memberLastName: string;
   memberEmail: string;
@@ -639,8 +635,6 @@ export async function getMemberSignedWaivers(memberId: string, organizationId: s
     signedByName: w.signedByName,
     signedByEmail: w.signedByEmail,
     signedByRelationship: w.signedByRelationship,
-    memberSignatureDataUrl: w.memberSignatureDataUrl,
-    memberSignedByName: w.memberSignedByName,
     memberFirstName: w.memberFirstName,
     memberLastName: w.memberLastName,
     memberEmail: w.memberEmail,
@@ -690,8 +684,6 @@ export async function getSignedWaiverById(waiverId: string, organizationId: stri
     signedByName: w.signedByName,
     signedByEmail: w.signedByEmail,
     signedByRelationship: w.signedByRelationship,
-    memberSignatureDataUrl: w.memberSignatureDataUrl,
-    memberSignedByName: w.memberSignedByName,
     memberFirstName: w.memberFirstName,
     memberLastName: w.memberLastName,
     memberEmail: w.memberEmail,
@@ -749,8 +741,6 @@ export async function createSignedWaiver(
       signedByName: input.signedByName,
       signedByEmail: input.signedByEmail,
       signedByRelationship: input.signedByRelationship,
-      memberSignatureDataUrl: input.memberSignatureDataUrl,
-      memberSignedByName: input.memberSignedByName,
       memberFirstName: input.memberFirstName,
       memberLastName: input.memberLastName,
       memberEmail: input.memberEmail,
@@ -788,8 +778,6 @@ export async function createSignedWaiver(
     signedByName: w.signedByName,
     signedByEmail: w.signedByEmail,
     signedByRelationship: w.signedByRelationship,
-    memberSignatureDataUrl: w.memberSignatureDataUrl,
-    memberSignedByName: w.memberSignedByName,
     memberFirstName: w.memberFirstName,
     memberLastName: w.memberLastName,
     memberEmail: w.memberEmail,

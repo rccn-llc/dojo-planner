@@ -191,7 +191,7 @@ describe('WaiverPdfService', () => {
       );
     });
 
-    it('should include signer name with relationship when signedByRelationship is set', async () => {
+    it('labels the line "Guardian signed by" with the relationship when a guardian signed', async () => {
       const { generateWaiverPdf } = await import('./WaiverPdfService');
       generateWaiverPdf({
         ...mockInput,
@@ -200,7 +200,21 @@ describe('WaiverPdfService', () => {
       });
 
       expect(mockSplitTextToSize).toHaveBeenCalledWith(
-        'Signed by: Jane Doe (Parent)',
+        'Guardian signed by: Jane Doe (Parent)',
+        expect.any(Number),
+      );
+    });
+
+    it('labels the line "Signed by" when the member signed for themselves (self)', async () => {
+      const { generateWaiverPdf } = await import('./WaiverPdfService');
+      generateWaiverPdf({
+        ...mockInput,
+        signedByName: 'John Doe',
+        signedByRelationship: 'self',
+      });
+
+      expect(mockSplitTextToSize).toHaveBeenCalledWith(
+        'Signed by: John Doe (self)',
         expect.any(Number),
       );
     });

@@ -339,11 +339,6 @@ export const signedWaiverSchema = pgTable(
     signedByName: text('signed_by_name').notNull(), // Name of the person who signed
     signedByEmail: text('signed_by_email'), // Email of signer (for minors, guardian email)
     signedByRelationship: text('signed_by_relationship'), // null = self, or 'parent', 'guardian', 'legal_guardian'
-    // Second signature captured when a minor's waiver requires a guardian: the
-    // MEMBER (minor) also signs alongside the guardian (#268). Nullable — only
-    // set when requiresGuardian applied at signing.
-    memberSignatureDataUrl: text('member_signature_data_url'), // Base64 signature image (the minor's own signature)
-    memberSignedByName: text('member_signed_by_name'), // The minor member's printed name on their signature
 
     // Member details at time of signing (snapshot for legal compliance)
     memberFirstName: text('member_first_name').notNull(),
