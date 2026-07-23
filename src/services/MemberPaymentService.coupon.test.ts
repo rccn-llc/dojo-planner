@@ -38,8 +38,19 @@ vi.mock('@/models/Schema', () => ({
   memberMembershipSchema: { id: 'id' },
   couponSchema: {
     id: 'id',
-    perUserLimit: 'per_user_limit',
+    organizationId: 'organization_id',
+    code: 'code',
+    description: 'description',
+    discountType: 'discount_type',
+    discountValue: 'discount_value',
+    applicableTo: 'applicable_to',
+    maxDiscountAmount: 'max_discount_amount',
+    usageLimit: 'usage_limit',
     usageCount: 'usage_count',
+    perUserLimit: 'per_user_limit',
+    validFrom: 'valid_from',
+    validUntil: 'valid_until',
+    status: 'status',
   },
   couponUsageSchema: {
     id: 'id',
@@ -125,12 +136,29 @@ describe('processMemberPayment — per-user coupon limit', () => {
     mockProvider.processPayment.mockResolvedValue({ success: true, status: 'approved', transactionId: 'tx_1' });
   });
 
+  // An active, permissive coupon row as returned by validateCouponForCharge's
+  // first select. Tests override perUserLimit/usageLimit as needed.
+  const activeCouponRow = {
+    id: 'cpn-1',
+    code: 'TEST20',
+    description: '20% off',
+    discountType: 'percentage',
+    discountValue: 20,
+    applicableTo: 'all',
+    maxDiscountAmount: null,
+    usageLimit: null,
+    usageCount: 0,
+    perUserLimit: 1,
+    validFrom: null,
+    validUntil: null,
+    status: 'active',
+  };
+
   it('rejects with a friendly error when prior usages reach perUserLimit', async () => {
-    // First select call: fetch coupon's perUserLimit
-    // Second select call: count prior usages by this member
+    // validateCouponForCharge: (1) fetch coupon row, (2) count prior usages.
     dbMocks.select
       .mockReturnValueOnce({
-        from: () => ({ where: () => ({ limit: () => Promise.resolve([{ perUserLimit: 1 }]) }) }),
+        from: () => ({ where: () => ({ limit: () => Promise.resolve([{ ...activeCouponRow, perUserLimit: 1 }]) }) }),
       })
       .mockReturnValueOnce({
         from: () => ({ where: () => Promise.resolve([{ count: 1 }]) }),
@@ -147,25 +175,22 @@ describe('processMemberPayment — per-user coupon limit', () => {
 
   it('proceeds past the limit check when prior usages are below perUserLimit', async () => {
     dbMocks.select
-      // 1) perUserLimit lookup
+      // 1) coupon row fetch
       .mockReturnValueOnce({
-        from: () => ({ where: () => ({ limit: () => Promise.resolve([{ perUserLimit: 3 }]) }) }),
+        from: () => ({ where: () => ({ limit: () => Promise.resolve([{ ...activeCouponRow, perUserLimit: 3 }]) }) }),
       })
       // 2) priorUsages count
       .mockReturnValueOnce({
         from: () => ({ where: () => Promise.resolve([{ count: 1 }]) }),
       })
-      // 3) member fetch (existing customer lookup) — not the same path as above
-      // The actual processMemberPayment also does a member.iqproCustomerId fetch
-      // but since we're stopping the test before that with a missing-state
-      // assertion, we don't need to extend the mock here.
-      .mockReturnValue({
+      // 3+) member fetch (existing customer lookup). Use mockReturnValueOnce
+      // (not a permanent mockReturnValue) so nothing leaks into later tests.
+      .mockReturnValueOnce({
         from: () => ({ where: () => ({ limit: () => Promise.resolve([{ iqproCustomerId: null }]) }) }),
       });
 
     // We don't run the full flow — the limit check should pass and then the
-    // function continues. We just need to assert it didn't short-circuit on
-    // the coupon limit. Make the IQPro side fail fast so the test stays fast.
+    // function continues. Make the IQPro side fail fast so the test stays fast.
     mockProvider.createCustomer.mockRejectedValueOnce(new Error('stop here'));
 
     const { processMemberPayment } = await import('./MemberPaymentService');
@@ -182,6 +207,9 @@ describe('processMemberPayment — per-user coupon limit', () => {
 describe('refundTransaction', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // clearAllMocks() clears call history but NOT implementations set via
+    // mockReturnValue; reset the select impl so no per-test mock leaks in.
+    dbMocks.select.mockReset();
   });
 
   const originalTx = {

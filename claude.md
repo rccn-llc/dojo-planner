@@ -1395,6 +1395,14 @@ const context = await guardRole(ORG_ROLE.ADMIN);
 - `WaiversService.ts` — `assertPlanInOrg` / `assertTemplateInOrg` guard the membership↔waiver association setters/getters and `getMemberSignedWaivers` (org filter on `signedWaiverSchema.organizationId`, PII protection); `WaiverNotFoundError` → 404.
 - `MembersService.ts` — `assertMemberInOrg` / `assertPlanInOrg` guard `addMemberMembership`/`changeMemberMembership` and the family link/unlink/read functions (`linkFamilyMember`/`unlinkFamilyMember`/`getFamilyMembers`/`getHOHForFamilyMember`); `MemberNotFoundError` → 404.
 - `ClassesService.deleteScheduleException` — JOIN up to `classSchema.organizationId`.
+- `ProgramsService.assertProgramInOrg` / `TagsService.assertTagsInOrg` — guard the client-supplied `programId` and `tagIds` on `createClass`/`updateClass`/`createEvent`/`updateEvent`/`createMembershipPlan`/`updateMembershipPlan`. An FK constraint alone is satisfied by ANY org's row, so these verify org (and, for tags, `entityType`) ownership explicitly; `ProgramNotFoundError` / `TagNotFoundError` → 404 via the shared `toTenancyOrpcError` helper in `src/routers/OrpcErrors.ts`.
+- **Coupon revalidation** (`MemberPaymentService.validateCouponForCharge`) — `processMemberPayment` re-fetches the coupon by `id AND organizationId` and rejects (declined) when it's missing/inactive/outside the validity window/over `usageLimit`/`applicableTo`-mismatched, or when the member is over `perUserLimit`. The discount is computed from the DB `discountType`/`discountValue` (+ `maxDiscountAmount` cap), never from the client's `appliedCoupon`. The global limit is enforced atomically at redemption time via a conditional `UPDATE ... WHERE usageCount < usageLimit RETURNING`.
+
+**Transactional multi-write (`db.transaction`):** `createClass`/`updateClass` and `createEvent`/`updateEvent` wrap their parent-row + schedule/session/billing/tag replacement in a single transaction so a mid-way failure can't leave a half-updated schedule (joins the existing `refundTransaction`/`createMember`/`processMemberPayment` atomicity set).
+
+**Audit logging is best-effort:** `audit()` swallows any logger-transport failure internally (logs to `console.error`), so a logging error can never turn a successful mutation into a 500 or mask a rethrown domain error in a router catch block.
+
+**Shared status vocabulary:** member lifecycle statuses live in `src/types/MemberStatus.ts` (`MEMBER_STATUS` / `MEMBER_STATUS_VALUES`); `MemberValidation.status` builds its Zod enum from it. Keep the DB `member.status` comment, filters, reports, and webhook in sync via this constant (root-cause fix for the historical `'past due'` vs `'past_due'` drift). Address shapes are centralized in `src/validations/AddressValidation.ts`.
 
 Note the pre-existing `Member.create` handler already verifies a plan is in-org before `addMemberMembership`; the standalone `addMembership`/`changeMembership` endpoints now do too.
 
