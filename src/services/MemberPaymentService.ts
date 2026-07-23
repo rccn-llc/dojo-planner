@@ -168,24 +168,36 @@ export async function processMemberPayment(
   config: IQProConfig,
   params: ProcessMemberPaymentParams,
 ): Promise<ProcessMemberPaymentResult> {
-  // Per-user redemption limit — refuse before charging if this member has
-  // already redeemed the coupon up to its perUserLimit. We re-fetch the coupon
-  // from the DB rather than trusting the client's `appliedCoupon` payload.
+  // Coupon revalidation — NEVER trust the client's `appliedCoupon` payload for
+  // the discount type/amount or eligibility. Re-fetch the coupon from the DB
+  // scoped to this org, verify it's active/in-window/under its global limit and
+  // the member is under the per-user limit, and rebuild an authoritative
+  // AppliedCoupon from the DB values. All downstream discount math then uses
+  // trusted numbers (a client can't inflate the discount, redeem a foreign or
+  // expired coupon, or exceed the limits).
   if (params.appliedCoupon?.id) {
-    const limitCheck = await checkPerUserCouponLimit(params.appliedCoupon.id, params.memberId);
-    if (!limitCheck.ok) {
-      logger.warn('[MemberPayment] Per-user coupon limit reached', {
+    const validated = await validateCouponForCharge(
+      params.appliedCoupon.id,
+      params.organizationId,
+      params.memberId,
+      params.isTaxable ? 'event' : 'membership',
+    );
+    if (!validated.ok) {
+      logger.warn('[MemberPayment] Coupon rejected', {
         couponId: params.appliedCoupon.id,
         memberId: params.memberId,
-        priorUsages: limitCheck.priorUsages,
-        perUserLimit: limitCheck.perUserLimit,
+        organizationId: params.organizationId,
+        reason: validated.reason,
       });
       return {
         success: false,
         status: 'declined',
-        error: 'You have already used this coupon the maximum number of times.',
+        error: validated.userMessage,
       };
     }
+    // Override the client-supplied coupon with the server-authoritative one so
+    // every computeCouponDiscount() call below uses DB values.
+    params = { ...params, appliedCoupon: validated.coupon };
   }
 
   const provider = await getPaymentProvider();
@@ -591,7 +603,12 @@ function computeCouponDiscount(amount: number, coupon?: AppliedCoupon | null): n
     return 0;
   }
   if (coupon.type === 'Percentage') {
-    return Math.round(amount * (couponAmount / 100) * 100) / 100;
+    let discount = Math.round(amount * (couponAmount / 100) * 100) / 100;
+    // Honor the coupon's maxDiscountAmount cap (dollars) when set.
+    if (coupon.maxDiscountAmount != null && coupon.maxDiscountAmount >= 0) {
+      discount = Math.min(discount, coupon.maxDiscountAmount);
+    }
+    return Math.min(amount, discount);
   }
   if (coupon.type === 'Fixed Amount') {
     return Math.min(amount, couponAmount);
@@ -1030,27 +1047,88 @@ async function handleOneTimePayment(args: OneTimeParams): Promise<ProcessMemberP
   };
 }
 
-// ===== Coupon redemption tracking =====
+// ===== Coupon validation & redemption tracking =====
 
-type CouponLimitCheck
-  = | { ok: true }
-    | { ok: false; priorUsages: number; perUserLimit: number };
+// Map the DB `discount_type` to the client-facing AppliedCoupon.type used by
+// the discount math. Mirrors features/marketing/couponDataTransformers.ts.
+function dbDiscountTypeToAppliedType(discountType: string): AppliedCoupon['type'] {
+  switch (discountType.toLowerCase()) {
+    case 'fixed':
+      return 'Fixed Amount';
+    case 'free_days':
+      return 'Free Trial';
+    case 'percentage':
+    default:
+      return 'Percentage';
+  }
+}
+
+type CouponValidationResult
+  = | { ok: true; coupon: AppliedCoupon }
+    | { ok: false; reason: string; userMessage: string };
 
 /**
- * Re-fetches the coupon from the DB (don't trust client) and counts prior
- * usages by this member. Returns ok:false when the per-user limit is reached.
+ * Server-authoritative coupon validation. Re-fetches the coupon from the DB
+ * scoped to `organizationId` and verifies:
+ *   - it exists and belongs to this org (blocks cross-tenant redemption),
+ *   - status is 'active',
+ *   - now is within [validFrom, validUntil],
+ *   - applicableTo matches the charge context ('all' always matches),
+ *   - the global usageLimit is not already reached,
+ *   - the member is under perUserLimit.
+ * On success returns an AppliedCoupon rebuilt from DB values (discount type +
+ * amount + maxDiscountAmount cap), so the caller never trusts the client's
+ * numbers. `now` is injected for deterministic tests.
  */
-async function checkPerUserCouponLimit(
+async function validateCouponForCharge(
   couponId: string,
+  organizationId: string,
   memberId: string,
-): Promise<CouponLimitCheck> {
+  context: 'membership' | 'event',
+  now: Date = new Date(),
+): Promise<CouponValidationResult> {
   const rows = await db
-    .select({ perUserLimit: couponSchema.perUserLimit })
+    .select({
+      id: couponSchema.id,
+      code: couponSchema.code,
+      description: couponSchema.description,
+      discountType: couponSchema.discountType,
+      discountValue: couponSchema.discountValue,
+      applicableTo: couponSchema.applicableTo,
+      maxDiscountAmount: couponSchema.maxDiscountAmount,
+      usageLimit: couponSchema.usageLimit,
+      usageCount: couponSchema.usageCount,
+      perUserLimit: couponSchema.perUserLimit,
+      validFrom: couponSchema.validFrom,
+      validUntil: couponSchema.validUntil,
+      status: couponSchema.status,
+    })
     .from(couponSchema)
-    .where(eq(couponSchema.id, couponId))
+    .where(and(eq(couponSchema.id, couponId), eq(couponSchema.organizationId, organizationId)))
     .limit(1);
-  const perUserLimit = rows[0]?.perUserLimit ?? 1;
 
+  const coupon = rows[0];
+  if (!coupon) {
+    // Missing OR belongs to another org — same generic message either way.
+    return { ok: false, reason: 'not_found_or_foreign', userMessage: 'This coupon is not valid.' };
+  }
+  if (coupon.status !== 'active') {
+    return { ok: false, reason: `status_${coupon.status}`, userMessage: 'This coupon is no longer active.' };
+  }
+  if (coupon.validFrom && now < coupon.validFrom) {
+    return { ok: false, reason: 'not_yet_valid', userMessage: 'This coupon is not valid yet.' };
+  }
+  if (coupon.validUntil && now > coupon.validUntil) {
+    return { ok: false, reason: 'expired', userMessage: 'This coupon has expired.' };
+  }
+  if (coupon.applicableTo !== 'all' && coupon.applicableTo !== context) {
+    return { ok: false, reason: 'not_applicable', userMessage: 'This coupon does not apply to this purchase.' };
+  }
+  if (coupon.usageLimit != null && (coupon.usageCount ?? 0) >= coupon.usageLimit) {
+    return { ok: false, reason: 'global_limit', userMessage: 'This coupon has reached its usage limit.' };
+  }
+
+  const perUserLimit = coupon.perUserLimit ?? 1;
   const usageCounts = await db
     .select({ count: sql<number>`cast(count(*) as integer)` })
     .from(couponUsageSchema)
@@ -1059,11 +1137,25 @@ async function checkPerUserCouponLimit(
       eq(couponUsageSchema.memberId, memberId),
     ));
   const priorUsages = usageCounts[0]?.count ?? 0;
-
   if (priorUsages >= perUserLimit) {
-    return { ok: false, priorUsages, perUserLimit };
+    return {
+      ok: false,
+      reason: 'per_user_limit',
+      userMessage: 'You have already used this coupon the maximum number of times.',
+    };
   }
-  return { ok: true };
+
+  return {
+    ok: true,
+    coupon: {
+      id: coupon.id,
+      code: coupon.code,
+      type: dbDiscountTypeToAppliedType(coupon.discountType),
+      amount: String(coupon.discountValue),
+      description: coupon.description ?? '',
+      maxDiscountAmount: coupon.maxDiscountAmount,
+    },
+  };
 }
 
 /**
@@ -1091,16 +1183,35 @@ async function recordCouponRedemption(args: {
       transactionId: args.transactionId,
       discountApplied: args.couponDiscount,
     });
-    await db
+    // Increment usageCount atomically AND enforce the global usageLimit in the
+    // same statement — the WHERE guard means two concurrent redemptions of a
+    // limit-N coupon can never push the counter past N (the pre-charge check in
+    // validateCouponForCharge can race; this is the authoritative gate). A
+    // zero-row result means the limit was already reached between the pre-check
+    // and here — the charge already happened, so we log for reconciliation
+    // rather than roll back a completed payment.
+    const incremented = await db
       .update(couponSchema)
       .set({ usageCount: sql`COALESCE(${couponSchema.usageCount}, 0) + 1` })
-      .where(eq(couponSchema.id, args.appliedCoupon.id));
-    logger.info('[MemberPayment] Coupon redemption recorded', {
-      couponId: args.appliedCoupon.id,
-      memberId: args.memberId,
-      transactionId: args.transactionId,
-      discountApplied: args.couponDiscount,
-    });
+      .where(and(
+        eq(couponSchema.id, args.appliedCoupon.id),
+        sql`(${couponSchema.usageLimit} IS NULL OR COALESCE(${couponSchema.usageCount}, 0) < ${couponSchema.usageLimit})`,
+      ))
+      .returning({ id: couponSchema.id });
+    if (incremented.length === 0) {
+      logger.warn('[MemberPayment] Coupon global usage limit reached at redemption time (charge already completed)', {
+        couponId: args.appliedCoupon.id,
+        memberId: args.memberId,
+        transactionId: args.transactionId,
+      });
+    } else {
+      logger.info('[MemberPayment] Coupon redemption recorded', {
+        couponId: args.appliedCoupon.id,
+        memberId: args.memberId,
+        transactionId: args.transactionId,
+        discountApplied: args.couponDiscount,
+      });
+    }
   } catch (error) {
     logger.error('[MemberPayment] Failed to record coupon redemption (non-fatal)', {
       error,

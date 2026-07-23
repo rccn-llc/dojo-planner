@@ -413,6 +413,18 @@ function roundCents(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/**
+ * Clamp a tax percentage to the valid [0, 100] range. A non-finite value
+ * (NaN / Infinity from a corrupt DB column) collapses to 0 rather than
+ * poisoning the charge total.
+ */
+function clampTaxPct(pct: number): number {
+  if (!Number.isFinite(pct)) {
+    return 0;
+  }
+  return Math.min(100, Math.max(0, pct));
+}
+
 export type ComputedFeeBreakdown = {
   baseAmount: number;
   taxAmount: number;
@@ -466,7 +478,10 @@ export async function computeFeeBreakdown(
   serviceFeeLookup: Omit<CalculateServiceFeeParams, 'baseAmount'>,
 ): Promise<ComputedFeeBreakdown> {
   const base = roundCents(baseAmount);
-  const taxPct = isTaxable ? taxStatePct : 0;
+  // Defend against a corrupt/negative organization.location_tax_rate (a `real`
+  // with no DB CHECK). An out-of-range value would otherwise produce a negative
+  // or oversized tax charged to the card. Clamp to [0, 100]; non-finite → 0.
+  const taxPct = isTaxable ? clampTaxPct(taxStatePct) : 0;
   const serviceFeePct = getServiceFeePct();
   const taxAmount = roundCents(base * (taxPct / 100));
   const serviceFeeAmount = await fetchServiceFeeAmount(config, { ...serviceFeeLookup, baseAmount: base });

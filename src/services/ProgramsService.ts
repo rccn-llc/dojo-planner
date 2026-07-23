@@ -136,6 +136,37 @@ export async function getProgramById(programId: string, organizationId: string):
   return toProgram(row);
 }
 
+/**
+ * Thrown when a program id doesn't exist OR belongs to a different org.
+ * Routers map this to a 404 so cross-tenant probes are indistinguishable from
+ * genuine misses.
+ */
+export class ProgramNotFoundError extends Error {
+  constructor(message = 'Program not found') {
+    super(message);
+    this.name = 'ProgramNotFoundError';
+  }
+}
+
+/**
+ * Verify a program belongs to the given organization. Throws
+ * ProgramNotFoundError (→ 404) on miss. Used by Classes / Events / Membership
+ * Plan writes to reject a client-supplied `programId` from another org — an FK
+ * constraint alone is satisfied by ANY org's program, so it does NOT enforce
+ * tenancy (see CLAUDE.md "Multi-Tenant Org-Scoping").
+ */
+export async function assertProgramInOrg(programId: string, organizationId: string): Promise<void> {
+  const rows = await db
+    .select({ id: programSchema.id })
+    .from(programSchema)
+    .where(and(eq(programSchema.id, programId), eq(programSchema.organizationId, organizationId)))
+    .limit(1);
+
+  if (rows.length === 0) {
+    throw new ProgramNotFoundError();
+  }
+}
+
 // =============================================================================
 // SERVICE FUNCTIONS — WRITES
 // =============================================================================

@@ -12,6 +12,8 @@ import {
   tagSchema,
   transactionSchema,
 } from '@/models/Schema';
+import { assertProgramInOrg } from './ProgramsService';
+import { assertTagsInOrg } from './TagsService';
 
 // =============================================================================
 // TYPES
@@ -235,65 +237,76 @@ export async function createEvent(input: CreateEventServiceInput, organizationId
   const id = randomUUID();
   const slug = slugify(input.name);
 
+  // Tenancy: a client-supplied programId / tagIds must belong to this org.
+  // FK constraints alone accept any org's rows, so verify explicitly (→ 404).
+  if (input.programId) {
+    await assertProgramInOrg(input.programId, organizationId);
+  }
+  await assertTagsInOrg(input.tagIds, organizationId, 'event');
+
+  // Parent row + sessions + billing + tags are one logical unit — persist
+  // atomically so a mid-way failure can't leave a partially-built event.
   try {
-    await db.insert(eventSchema).values({
-      id,
-      organizationId,
-      programId: input.programId ?? null,
-      name: input.name,
-      slug,
-      description: input.description ?? null,
-      eventType: input.eventType,
-      location: input.location ?? null,
-      note: input.note ?? null,
-      imageUrl: input.imageUrl ?? null,
-      maxCapacity: input.maxCapacity ?? null,
-      registrationDeadline: input.registrationDeadline ?? null,
-      isPublic: input.isPublic ?? true,
-      isActive: input.isActive,
+    await db.transaction(async (tx) => {
+      await tx.insert(eventSchema).values({
+        id,
+        organizationId,
+        programId: input.programId ?? null,
+        name: input.name,
+        slug,
+        description: input.description ?? null,
+        eventType: input.eventType,
+        location: input.location ?? null,
+        note: input.note ?? null,
+        imageUrl: input.imageUrl ?? null,
+        maxCapacity: input.maxCapacity ?? null,
+        registrationDeadline: input.registrationDeadline ?? null,
+        isPublic: input.isPublic ?? true,
+        isActive: input.isActive,
+      });
+
+      if (input.sessions.length > 0) {
+        await tx.insert(eventSessionSchema).values(
+          input.sessions.map(s => ({
+            id: randomUUID(),
+            eventId: id,
+            primaryInstructorClerkId: s.primaryInstructorClerkId ?? null,
+            sessionDate: s.sessionDate,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            room: s.room ?? null,
+            maxCapacity: s.maxCapacity ?? null,
+          })),
+        );
+      }
+
+      if (input.billing.length > 0) {
+        await tx.insert(eventBillingSchema).values(
+          input.billing.map((b, idx) => ({
+            id: randomUUID(),
+            eventId: id,
+            name: b.name,
+            price: b.price,
+            memberOnly: b.memberOnly ?? false,
+            validFrom: b.validFrom ?? null,
+            validUntil: b.validUntil ?? null,
+            maxRegistrations: b.maxRegistrations ?? null,
+            sortOrder: b.sortOrder ?? idx,
+          })),
+        );
+      }
+
+      if (input.tagIds.length > 0) {
+        await tx.insert(eventTagSchema).values(
+          input.tagIds.map(tagId => ({ eventId: id, tagId })),
+        );
+      }
     });
   } catch (error) {
     if (isUniqueViolation(error)) {
       throw new EventSlugAlreadyExistsError(slug);
     }
     throw error;
-  }
-
-  if (input.sessions.length > 0) {
-    await db.insert(eventSessionSchema).values(
-      input.sessions.map(s => ({
-        id: randomUUID(),
-        eventId: id,
-        primaryInstructorClerkId: s.primaryInstructorClerkId ?? null,
-        sessionDate: s.sessionDate,
-        startTime: s.startTime,
-        endTime: s.endTime,
-        room: s.room ?? null,
-        maxCapacity: s.maxCapacity ?? null,
-      })),
-    );
-  }
-
-  if (input.billing.length > 0) {
-    await db.insert(eventBillingSchema).values(
-      input.billing.map((b, idx) => ({
-        id: randomUUID(),
-        eventId: id,
-        name: b.name,
-        price: b.price,
-        memberOnly: b.memberOnly ?? false,
-        validFrom: b.validFrom ?? null,
-        validUntil: b.validUntil ?? null,
-        maxRegistrations: b.maxRegistrations ?? null,
-        sortOrder: b.sortOrder ?? idx,
-      })),
-    );
-  }
-
-  if (input.tagIds.length > 0) {
-    await db.insert(eventTagSchema).values(
-      input.tagIds.map(tagId => ({ eventId: id, tagId })),
-    );
   }
 
   const created = await getEventById(id, organizationId);
@@ -327,115 +340,126 @@ export async function updateEvent(
 
   const slug = slugify(input.name);
 
+  // Tenancy: a client-supplied programId / tagIds must belong to this org.
+  if (input.programId) {
+    await assertProgramInOrg(input.programId, organizationId);
+  }
+  await assertTagsInOrg(input.tagIds, organizationId, 'event');
+
+  // The event UPDATE + session/billing/tag replacement are one logical unit —
+  // wrap in a transaction so a partial failure can't leave the event updated
+  // but its sessions/billing half-deleted.
   try {
-    await db
-      .update(eventSchema)
-      .set({
-        programId: input.programId ?? null,
-        name: input.name,
-        slug,
-        description: input.description ?? null,
-        eventType: input.eventType,
-        location: input.location ?? null,
-        note: input.note ?? null,
-        imageUrl: input.imageUrl ?? null,
-        maxCapacity: input.maxCapacity ?? null,
-        registrationDeadline: input.registrationDeadline ?? null,
-        isPublic: input.isPublic ?? true,
-        isActive: input.isActive,
-      })
-      .where(and(eq(eventSchema.id, eventId), eq(eventSchema.organizationId, organizationId)));
+    await db.transaction(async (tx) => {
+      await tx
+        .update(eventSchema)
+        .set({
+          programId: input.programId ?? null,
+          name: input.name,
+          slug,
+          description: input.description ?? null,
+          eventType: input.eventType,
+          location: input.location ?? null,
+          note: input.note ?? null,
+          imageUrl: input.imageUrl ?? null,
+          maxCapacity: input.maxCapacity ?? null,
+          registrationDeadline: input.registrationDeadline ?? null,
+          isPublic: input.isPublic ?? true,
+          isActive: input.isActive,
+        })
+        .where(and(eq(eventSchema.id, eventId), eq(eventSchema.organizationId, organizationId)));
+
+      // Sessions: keep ones with attendance, hard-delete the rest, then reinsert.
+      const oldSessions = await tx
+        .select()
+        .from(eventSessionSchema)
+        .where(eq(eventSessionSchema.eventId, eventId));
+
+      if (oldSessions.length > 0) {
+        const oldIds = oldSessions.map(s => s.id);
+        const refAttendance = await tx
+          .select({ id: attendanceSchema.eventSessionId })
+          .from(attendanceSchema)
+          .where(inArray(attendanceSchema.eventSessionId, oldIds));
+        const referenced = new Set(refAttendance.map(r => r.id).filter((id): id is string => id !== null));
+        const deletable = oldIds.filter(id => !referenced.has(id));
+        if (deletable.length > 0) {
+          await tx.delete(eventSessionSchema).where(inArray(eventSessionSchema.id, deletable));
+        }
+        const referencedIds = oldIds.filter(id => referenced.has(id));
+        if (referencedIds.length > 0) {
+          await tx
+            .update(eventSessionSchema)
+            .set({ isCancelled: true })
+            .where(inArray(eventSessionSchema.id, referencedIds));
+        }
+      }
+
+      if (input.sessions.length > 0) {
+        await tx.insert(eventSessionSchema).values(
+          input.sessions.map(s => ({
+            id: randomUUID(),
+            eventId,
+            primaryInstructorClerkId: s.primaryInstructorClerkId ?? null,
+            sessionDate: s.sessionDate,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            room: s.room ?? null,
+            maxCapacity: s.maxCapacity ?? null,
+          })),
+        );
+      }
+
+      // Billing tiers: replace, but only delete tiers NOT referenced by a
+      // registration. event_registration.event_billing_id FKs to these rows, so
+      // blindly deleting all of them raised a FK violation and 500'd whenever the
+      // event already had registrations — i.e. past events (#254). Referenced tiers
+      // are kept as historical records alongside the freshly-submitted tiers.
+      const oldBilling = await tx
+        .select({ id: eventBillingSchema.id })
+        .from(eventBillingSchema)
+        .where(eq(eventBillingSchema.eventId, eventId));
+      if (oldBilling.length > 0) {
+        const oldBillingIds = oldBilling.map(b => b.id);
+        const refRegistrations = await tx
+          .select({ id: eventRegistrationSchema.eventBillingId })
+          .from(eventRegistrationSchema)
+          .where(inArray(eventRegistrationSchema.eventBillingId, oldBillingIds));
+        const referenced = new Set(refRegistrations.map(r => r.id).filter((id): id is string => id !== null));
+        const deletable = oldBillingIds.filter(id => !referenced.has(id));
+        if (deletable.length > 0) {
+          await tx.delete(eventBillingSchema).where(inArray(eventBillingSchema.id, deletable));
+        }
+      }
+      if (input.billing.length > 0) {
+        await tx.insert(eventBillingSchema).values(
+          input.billing.map((b, idx) => ({
+            id: randomUUID(),
+            eventId,
+            name: b.name,
+            price: b.price,
+            memberOnly: b.memberOnly ?? false,
+            validFrom: b.validFrom ?? null,
+            validUntil: b.validUntil ?? null,
+            maxRegistrations: b.maxRegistrations ?? null,
+            sortOrder: b.sortOrder ?? idx,
+          })),
+        );
+      }
+
+      // Tag associations: full replace.
+      await tx.delete(eventTagSchema).where(eq(eventTagSchema.eventId, eventId));
+      if (input.tagIds.length > 0) {
+        await tx.insert(eventTagSchema).values(
+          input.tagIds.map(tagId => ({ eventId, tagId })),
+        );
+      }
+    });
   } catch (error) {
     if (isUniqueViolation(error)) {
       throw new EventSlugAlreadyExistsError(slug);
     }
     throw error;
-  }
-
-  // Sessions: keep ones with attendance, hard-delete the rest, then reinsert.
-  const oldSessions = await db
-    .select()
-    .from(eventSessionSchema)
-    .where(eq(eventSessionSchema.eventId, eventId));
-
-  if (oldSessions.length > 0) {
-    const oldIds = oldSessions.map(s => s.id);
-    const refAttendance = await db
-      .select({ id: attendanceSchema.eventSessionId })
-      .from(attendanceSchema)
-      .where(inArray(attendanceSchema.eventSessionId, oldIds));
-    const referenced = new Set(refAttendance.map(r => r.id).filter((id): id is string => id !== null));
-    const deletable = oldIds.filter(id => !referenced.has(id));
-    if (deletable.length > 0) {
-      await db.delete(eventSessionSchema).where(inArray(eventSessionSchema.id, deletable));
-    }
-    const referencedIds = oldIds.filter(id => referenced.has(id));
-    if (referencedIds.length > 0) {
-      await db
-        .update(eventSessionSchema)
-        .set({ isCancelled: true })
-        .where(inArray(eventSessionSchema.id, referencedIds));
-    }
-  }
-
-  if (input.sessions.length > 0) {
-    await db.insert(eventSessionSchema).values(
-      input.sessions.map(s => ({
-        id: randomUUID(),
-        eventId,
-        primaryInstructorClerkId: s.primaryInstructorClerkId ?? null,
-        sessionDate: s.sessionDate,
-        startTime: s.startTime,
-        endTime: s.endTime,
-        room: s.room ?? null,
-        maxCapacity: s.maxCapacity ?? null,
-      })),
-    );
-  }
-
-  // Billing tiers: replace, but only delete tiers NOT referenced by a
-  // registration. event_registration.event_billing_id FKs to these rows, so
-  // blindly deleting all of them raised a FK violation and 500'd whenever the
-  // event already had registrations — i.e. past events (#254). Referenced tiers
-  // are kept as historical records alongside the freshly-submitted tiers.
-  const oldBilling = await db
-    .select({ id: eventBillingSchema.id })
-    .from(eventBillingSchema)
-    .where(eq(eventBillingSchema.eventId, eventId));
-  if (oldBilling.length > 0) {
-    const oldBillingIds = oldBilling.map(b => b.id);
-    const refRegistrations = await db
-      .select({ id: eventRegistrationSchema.eventBillingId })
-      .from(eventRegistrationSchema)
-      .where(inArray(eventRegistrationSchema.eventBillingId, oldBillingIds));
-    const referenced = new Set(refRegistrations.map(r => r.id).filter((id): id is string => id !== null));
-    const deletable = oldBillingIds.filter(id => !referenced.has(id));
-    if (deletable.length > 0) {
-      await db.delete(eventBillingSchema).where(inArray(eventBillingSchema.id, deletable));
-    }
-  }
-  if (input.billing.length > 0) {
-    await db.insert(eventBillingSchema).values(
-      input.billing.map((b, idx) => ({
-        id: randomUUID(),
-        eventId,
-        name: b.name,
-        price: b.price,
-        memberOnly: b.memberOnly ?? false,
-        validFrom: b.validFrom ?? null,
-        validUntil: b.validUntil ?? null,
-        maxRegistrations: b.maxRegistrations ?? null,
-        sortOrder: b.sortOrder ?? idx,
-      })),
-    );
-  }
-
-  // Tag associations: full replace.
-  await db.delete(eventTagSchema).where(eq(eventTagSchema.eventId, eventId));
-  if (input.tagIds.length > 0) {
-    await db.insert(eventTagSchema).values(
-      input.tagIds.map(tagId => ({ eventId, tagId })),
-    );
   }
 
   return getEventById(eventId, organizationId);

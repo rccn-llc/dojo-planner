@@ -44,6 +44,10 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
   // We use a ref (not state) because handleCancel needs to read it
   // synchronously after a chain of async setStates.
   const createdMemberIdRef = useRef<string | undefined>(undefined);
+  // The family member's membership-row id, tracked alongside createdMemberIdRef
+  // so a payment-decline "Try Again" reuses the same membership row instead of
+  // re-creating the member (#220).
+  const createdMemberMembershipIdRef = useRef<string | undefined>(undefined);
 
   // Re-entrancy guard: flips synchronously on click to drop duplicate submissions
   // that fire before React flushes the disabled-button state.
@@ -100,20 +104,18 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
     cardFirstSixRef.current = undefined;
     cardLastFourRef.current = undefined;
     createdMemberIdRef.current = undefined;
+    createdMemberMembershipIdRef.current = undefined;
     submittingRef.current = false;
     wizard.reset();
     onCloseAction();
   };
 
   const handleSuccess = async () => {
-    console.info('[Add Member Wizard] Member created successfully:', {
-      timestamp: new Date().toISOString(),
-      memberData: wizard.data,
-    });
     cardTokenRef.current = undefined;
     cardFirstSixRef.current = undefined;
     cardLastFourRef.current = undefined;
     createdMemberIdRef.current = undefined;
+    createdMemberMembershipIdRef.current = undefined;
     submittingRef.current = false;
     wizard.reset();
     onCloseAction();
@@ -198,22 +200,6 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
       wizard.setIsLoading(true);
       wizard.clearError();
 
-      // Log authorization context
-      console.info('[Add Member Wizard] Starting member creation with Clerk context:', {
-        timestamp: new Date().toISOString(),
-        user: {
-          id: user?.id,
-          email: user?.primaryEmailAddress?.emailAddress,
-          role: user?.publicMetadata?.role,
-        },
-        organization: {
-          id: organization?.id,
-          name: organization?.name,
-          subscriptionPlan: organization?.publicMetadata?.subscriptionPlan,
-        },
-        wizardData: wizard.data,
-      });
-
       // Verify authorization
       if (!user) {
         throw new Error('User not authenticated');
@@ -243,7 +229,9 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
       }
 
       // Determine member status based on payment result
-      // If payment was declined, set status to 'past due'
+      // If payment was declined, set status to 'past_due' (underscore — must
+      // match the value used by filters/reports/webhooks; see MemberFilterBar,
+      // ReportsService, and the IQPro webhook handler).
       // Note: amountDue will be calculated from a separate billing table in the future
       const isPaymentDeclined = wizard.data.paymentStatus === 'declined';
 
@@ -257,7 +245,7 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
         ...(wizard.data.membershipPlanId && { membershipPlanId: wizard.data.membershipPlanId }),
         ...(addressPayload && { address: addressPayload }),
         ...(photoUrl && { photoUrl }),
-        ...(isPaymentDeclined && { status: 'past due' as const }),
+        ...(isPaymentDeclined && { status: 'past_due' as const }),
         ...(wizard.data.appliedCoupon && {
           appliedCoupon: {
             id: wizard.data.appliedCoupon.id,
@@ -269,21 +257,10 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
         }),
       };
 
-      console.info('[Add Member Wizard] Member creation payload:', {
-        timestamp: new Date().toISOString(),
-        payload: createPayload,
-        addressPayload,
-        hasPhoto: !!photoUrl,
-      });
-
       const result = await client.member.create(createPayload);
       // Track the new member's id so handleCancel can roll back the whole
       // signup chain if the user bails after a payment decline (#132).
       createdMemberIdRef.current = result.id;
-      console.info('[Add Member Wizard] Member created successfully:', {
-        timestamp: new Date().toISOString(),
-        result,
-      });
 
       // Create signed waiver record if waiver was signed during the wizard
       if (
@@ -296,8 +273,6 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
         await client.waivers.createSignedWaiver(
           buildSignedWaiverPayload(wizard.data, result.id),
         );
-
-        console.info('[Add Member Wizard] Signed waiver created for member:', result.id);
       }
 
       // HOH capture-only: register payment method without processing a charge
@@ -549,29 +524,40 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
         }),
       };
 
-      // 1. Create the member
-      const result = await client.member.create(createPayload);
+      // 1. Create the member — but only once. If we're re-entering after a
+      // payment-decline "Try Again", the member (+ waiver + HOH link) already
+      // exists; re-running create would spawn a duplicate active member on
+      // every retry (#220). Reuse the tracked ids and jump straight to payment.
+      let result: { id: string | undefined; memberMembershipId?: string };
+      if (createdMemberIdRef.current) {
+        result = { id: createdMemberIdRef.current, memberMembershipId: createdMemberMembershipIdRef.current };
+      } else {
+        const created = await client.member.create(createPayload);
+        result = created;
+        createdMemberIdRef.current = created.id;
+        createdMemberMembershipIdRef.current = created.memberMembershipId;
 
-      // 2. Create signed waiver if applicable
-      if (
-        result.id
-        && wizard.data.waiverTemplateId
-        && wizard.data.waiverSignatureDataUrl
-        && wizard.data.waiverRenderedContent
-        && !wizard.data.waiverSkipped
-      ) {
-        await client.waivers.createSignedWaiver(
-          buildSignedWaiverPayload(wizard.data, result.id),
-        );
-      }
+        // 2. Create signed waiver if applicable
+        if (
+          created.id
+          && wizard.data.waiverTemplateId
+          && wizard.data.waiverSignatureDataUrl
+          && wizard.data.waiverRenderedContent
+          && !wizard.data.waiverSkipped
+        ) {
+          await client.waivers.createSignedWaiver(
+            buildSignedWaiverPayload(wizard.data, created.id),
+          );
+        }
 
-      // 3. Link family member to HOH
-      if (result.id && wizard.data.hohMemberId) {
-        await client.member.linkFamilyMember({
-          memberId: result.id,
-          hohMemberId: wizard.data.hohMemberId,
-          relationship: 'family-member',
-        });
+        // 3. Link family member to HOH
+        if (created.id && wizard.data.hohMemberId) {
+          await client.member.linkFamilyMember({
+            memberId: created.id,
+            hohMemberId: wizard.data.hohMemberId,
+            relationship: 'family-member',
+          });
+        }
       }
 
       // 4. Process payment using HOH's context. Recurring + signup fee are

@@ -24,6 +24,7 @@ import {
   UpdateEventValidation,
 } from '@/validations/EventsValidation';
 import { guardRole } from './AuthGuards';
+import { toTenancyOrpcError } from './OrpcErrors';
 
 export const list = os.handler(async () => {
   const { orgId } = await guardRole(ORG_ROLE.FRONT_DESK);
@@ -67,6 +68,10 @@ export const create = os
         status: 'failure',
         error: error instanceof Error ? error.message : 'Unknown error',
       });
+      const tenancy = toTenancyOrpcError(error);
+      if (tenancy) {
+        throw tenancy;
+      }
       if (error instanceof EventSlugAlreadyExistsError) {
         throw new ORPCError('Conflict', { status: 409, message: error.message });
       }
@@ -113,6 +118,10 @@ export const update = os
         status: 'failure',
         error: error instanceof Error ? error.message : 'Unknown error',
       });
+      const tenancy = toTenancyOrpcError(error);
+      if (tenancy) {
+        throw tenancy;
+      }
       if (error instanceof EventSlugAlreadyExistsError) {
         throw new ORPCError('Conflict', { status: 409, message: error.message });
       }

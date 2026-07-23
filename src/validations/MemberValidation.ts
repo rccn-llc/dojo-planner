@@ -29,7 +29,7 @@ export const MemberValidation = z.object({
     .max(PHOTO_DATA_URL_MAX, 'Photo data URL must be 400KB or less')
     .regex(PHOTO_DATA_URL_REGEX, 'photoUrl must be a data URL for an image (jpeg, png, gif)')
     .optional(),
-  status: z.enum(['active', 'hold', 'trial', 'cancelled', 'past due']).optional(),
+  status: z.enum(['active', 'hold', 'trial', 'cancelled', 'past_due']).optional(),
 });
 
 export const EditMemberValidation = z.object({

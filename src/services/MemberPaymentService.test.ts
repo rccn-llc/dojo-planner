@@ -116,32 +116,91 @@ vi.mock('./EmailService', () => ({
 // present), so the type is the union.
 type InsertArg = Record<string, unknown> | Array<Record<string, unknown>>;
 
+// A permissive, active coupon row returned by validateCouponForCharge's DB
+// lookup. Tests that exercise a coupon path override discountType/discountValue
+// to match the discount they assert. `usageCount`/limits default to unlimited.
+type CouponRow = {
+  id: string;
+  code: string;
+  description: string | null;
+  discountType: string;
+  discountValue: number;
+  applicableTo: string;
+  maxDiscountAmount: number | null;
+  usageLimit: number | null;
+  usageCount: number | null;
+  perUserLimit: number | null;
+  validFrom: Date | null;
+  validUntil: Date | null;
+  status: string;
+};
+
+function defaultCouponRow(overrides: Partial<CouponRow> = {}): CouponRow {
+  return {
+    id: 'cpn_test',
+    code: 'TEST',
+    description: 'Test coupon',
+    discountType: 'fixed',
+    discountValue: 0,
+    applicableTo: 'all',
+    maxDiscountAmount: null,
+    usageLimit: null,
+    usageCount: 0,
+    perUserLimit: null,
+    validFrom: null,
+    validUntil: null,
+    status: 'active',
+    ...overrides,
+  };
+}
+
 let dbState: {
   existingCustomerId: string | null;
   savedPmRow: { iqproPaymentMethodId: string; type: string; last4: string | null } | null;
+  couponRow: CouponRow | null;
   setCalls: Array<Record<string, unknown>>;
   insertCalls: InsertArg[];
   selectIndex: number;
+  couponSelectsRemaining: number;
 };
 
 function resetDbMock(opts: {
   existingCustomerId?: string | null;
   savedPmRow?: { iqproPaymentMethodId: string; type: string; last4: string | null } | null;
+  couponRow?: CouponRow | null;
 } = {}) {
   dbState = {
     existingCustomerId: opts.existingCustomerId ?? null,
     savedPmRow: opts.savedPmRow ?? null,
+    couponRow: opts.couponRow ?? null,
     setCalls: [],
     insertCalls: [],
     selectIndex: 0,
+    // When a coupon is configured, validateCouponForCharge runs FIRST and makes
+    // two selects: (1) the coupon row, (2) the per-user usage count. We serve
+    // those before falling through to the customer/PM chain below.
+    couponSelectsRemaining: opts.couponRow ? 2 : 0,
   };
 
   // Each call to db.select() chooses a different chain based on its order:
-  //   1. customer lookup (limit 1) → [{ iqproCustomerId }]
-  //   2. saved PM lookup (orderBy + limit 1) → [savedPmRow]
-  //   3. perUserLimit lookup (when applicableCoupon set, in checkPerUserCouponLimit)
-  // Defaulting all `where + limit` chains to read selectIndex correctly.
+  //   0..1. coupon validation (coupon row, then usage count) — only when couponRow set
+  //   next. customer lookup (limit 1) → [{ iqproCustomerId }]
+  //   then. saved PM lookup (orderBy + limit 1) → [savedPmRow]
   dbMocks.select.mockImplementation(() => {
+    // Coupon-validation selects come first when a coupon is configured.
+    if (dbState.couponSelectsRemaining > 0) {
+      const couponIdx = 2 - dbState.couponSelectsRemaining;
+      dbState.couponSelectsRemaining--;
+      return {
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue(couponIdx === 0 ? [dbState.couponRow] : []),
+            // usage-count select has no .limit(); it awaits the where directly
+            then: (resolve: (v: unknown) => unknown) => resolve([{ count: 0 }]),
+          }),
+        }),
+      };
+    }
     const idx = dbState.selectIndex++;
     return {
       from: vi.fn().mockReturnValue({
@@ -164,7 +223,12 @@ function resetDbMock(opts: {
   dbMocks.update.mockReturnValue({
     set: vi.fn((vals: Record<string, unknown>) => {
       dbState.setCalls.push(vals);
-      return { where: vi.fn().mockResolvedValue(undefined) };
+      // `.where()` is awaited directly by most callers, but the coupon
+      // usage-count increment chains `.returning()`. Support both: the returned
+      // object is thenable (resolves undefined) AND has `.returning()`.
+      const whereResult: any = Promise.resolve(undefined);
+      whereResult.returning = vi.fn().mockResolvedValue([{ id: 'cpn' }]);
+      return { where: vi.fn().mockReturnValue(whereResult) };
     }),
   });
 
@@ -563,30 +627,81 @@ describe('processMemberPayment', () => {
     );
   });
 
-  it('Fixed Amount coupon: discount applied before fee calc', async () => {
+  it('Fixed Amount coupon: discount applied before fee calc (from DB, not client)', async () => {
+    // The DB coupon is $25 fixed. Even though the client sends a different
+    // amount, the server uses the DB value — so base becomes 100 - 25 = 75.
+    resetDbMock({ couponRow: defaultCouponRow({ id: 'cpn_1', discountType: 'fixed', discountValue: 25 }) });
     const { computeFeeBreakdown } = await import('@/libs/IQPro');
     vi.mocked(computeFeeBreakdown).mockResolvedValueOnce({ ...baseFees, baseAmount: 75, amount: 78.75 });
 
     const { processMemberPayment } = await import('./MemberPaymentService');
     await processMemberPayment(testConfig, {
       ...baseParams,
-      appliedCoupon: { id: 'cpn_1', code: 'SAVE25', type: 'Fixed Amount', amount: '25', description: '$25 off' },
+      appliedCoupon: { id: 'cpn_1', code: 'SAVE25', type: 'Fixed Amount', amount: '999', description: '$25 off' },
     });
 
     expect(computeFeeBreakdown).toHaveBeenCalledWith(testConfig, 75, false, 0, expect.any(Object));
   });
 
-  it('Percentage coupon: discount applied before fee calc', async () => {
+  it('Percentage coupon: discount applied before fee calc (from DB, not client)', async () => {
+    // DB coupon is 10% off → base 100 - 10 = 90, regardless of client amount.
+    resetDbMock({ couponRow: defaultCouponRow({ id: 'cpn_2', discountType: 'percentage', discountValue: 10 }) });
     const { computeFeeBreakdown } = await import('@/libs/IQPro');
     vi.mocked(computeFeeBreakdown).mockResolvedValueOnce({ ...baseFees, baseAmount: 90, amount: 93.75 });
 
     const { processMemberPayment } = await import('./MemberPaymentService');
     await processMemberPayment(testConfig, {
       ...baseParams,
-      appliedCoupon: { id: 'cpn_2', code: 'TEN_PCT', type: 'Percentage', amount: '10', description: '10% off' },
+      appliedCoupon: { id: 'cpn_2', code: 'TEN_PCT', type: 'Percentage', amount: '99', description: '10% off' },
     });
 
     expect(computeFeeBreakdown).toHaveBeenCalledWith(testConfig, 90, false, 0, expect.any(Object));
+  });
+
+  it('rejects a coupon that is not found in the org (no cross-tenant/invalid redemption)', async () => {
+    // couponRow null → validateCouponForCharge returns not-found → declined.
+    resetDbMock({ couponRow: null });
+    const { processMemberPayment } = await import('./MemberPaymentService');
+    const result = await processMemberPayment(testConfig, {
+      ...baseParams,
+      appliedCoupon: { id: 'cpn_foreign', code: 'HAXX', type: 'Fixed Amount', amount: '25', description: 'foreign' },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.status).toBe('declined');
+  });
+
+  it('rejects an expired coupon', async () => {
+    resetDbMock({
+      couponRow: defaultCouponRow({
+        id: 'cpn_exp',
+        discountType: 'fixed',
+        discountValue: 10,
+        validUntil: new Date('2000-01-01'),
+      }),
+    });
+    const { processMemberPayment } = await import('./MemberPaymentService');
+    const result = await processMemberPayment(testConfig, {
+      ...baseParams,
+      appliedCoupon: { id: 'cpn_exp', code: 'OLD', type: 'Fixed Amount', amount: '10', description: 'expired' },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.status).toBe('declined');
+  });
+
+  it('rejects a coupon that reached its global usage limit', async () => {
+    resetDbMock({
+      couponRow: defaultCouponRow({ id: 'cpn_full', discountType: 'fixed', discountValue: 10, usageLimit: 5, usageCount: 5 }),
+    });
+    const { processMemberPayment } = await import('./MemberPaymentService');
+    const result = await processMemberPayment(testConfig, {
+      ...baseParams,
+      appliedCoupon: { id: 'cpn_full', code: 'FULL', type: 'Fixed Amount', amount: '10', description: 'maxed' },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.status).toBe('declined');
   });
 
   it('throws clear error when no gateway processor is configured', async () => {
@@ -930,6 +1045,8 @@ describe('processMemberPayment', () => {
     });
 
     it('signupFee + coupon: discount applies to membership row only', async () => {
+      // DB coupon: 10% off (server-authoritative).
+      resetDbMock({ couponRow: defaultCouponRow({ id: 'coup_10pct', discountType: 'percentage', discountValue: 10 }) });
       const { computeFeeBreakdown } = await import('@/libs/IQPro');
       // 10% off $149 = $14.90 discount → membership row $134.10, signup $99
       vi.mocked(computeFeeBreakdown).mockResolvedValueOnce({

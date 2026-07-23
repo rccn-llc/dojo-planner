@@ -14,6 +14,10 @@ export type AppliedCoupon = {
   type: 'Percentage' | 'Fixed Amount' | 'Free Trial';
   amount: string;
   description: string;
+  // Optional cap for percentage discounts (dollars). Set server-side from the
+  // coupon's `maxDiscountAmount` during payment revalidation; the client never
+  // needs to populate it.
+  maxDiscountAmount?: number | null;
 };
 
 export type SignerRelationship = 'self' | 'parent' | 'guardian' | 'legal_guardian';

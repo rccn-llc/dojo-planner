@@ -10,10 +10,8 @@
     "title": "Dojo Planner",
     "primary_button": "Démarrer"
   },
-  "Features": {
-  },
-  "Pricing": {
-  },
+  "Features": {},
+  "Pricing": {},
   "PricingPlan": {
     "free_user_plan_name": "Gratuit",
     "free_trial_plan_name": "Essai gratuit",
@@ -32,10 +30,8 @@
     "plan_interval_year": "année",
     "next_renew_date": "Votre abonnement sera renouvelé le {date}"
   },
-  "FAQ": {
-  },
-  "CTA": {
-  },
+  "FAQ": {},
+  "CTA": {},
   "ProtectFallback": {
     "not_enough_permission": "Vous n'avez pas les permissions pour effectuer cette action"
   },
@@ -184,8 +180,7 @@
     "meta_title": "Dojo Planner",
     "meta_description": "Un moyen facile de gérer votre académie."
   },
-  "DashboardIndex": {
-  },
+  "DashboardIndex": {},
   "Billing": {
     "title_bar": "Facturation",
     "title_bar_description": "Gérer votre facturation et votre abonnement",
@@ -449,7 +444,7 @@
       "processing_button": "Traitement en cours...",
       "try_again_button": "Réessayer",
       "continue_without_payment_button": "Ajouter le membre quand même",
-      "trial_title": "Essai gratuit \u2014 aucun paiement aujourd'hui",
+      "trial_title": "Essai gratuit — aucun paiement aujourd'hui",
       "trial_disclaimer": "Aucun paiement ne sera prélevé aujourd'hui. Votre période d'essai est de {duration}. Votre académie vous contactera avant tout prélèvement.",
       "payment_approved_title": "Paiement approuvé",
       "payment_approved_message": "Le paiement a été traité avec succès. Vous pouvez maintenant terminer l'inscription du membre.",
@@ -2122,7 +2117,8 @@
       "confirm_button": "Suspendre",
       "confirming_button": "Suspension...",
       "error_generic": "Échec de la suspension de l'adhésion. Veuillez réessayer.",
-      "partial_success": "Adhésion suspendue, mais le prélèvement des frais a échoué : {error}"
+      "partial_success": "Adhésion suspendue, mais le prélèvement des frais a échoué : {error}",
+      "done_button": "Terminé"
     }
   },
   "HelpButton": {
