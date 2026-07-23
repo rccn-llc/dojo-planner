@@ -76,9 +76,11 @@ describe('getPlanPrice', () => {
     expect(getPlanPrice('growth', 'annual')).toBe(99);
   });
 
-  it('returns 0 for an invalid plan id', () => {
-    expect(getPlanPrice('invalid', 'monthly')).toBe(0);
-    expect(getPlanPrice('invalid', 'annual')).toBe(0);
+  it('throws for an invalid plan id (never silently prices at $0)', () => {
+    // @ts-expect-error — deliberately passing an invalid id to assert the throw.
+    expect(() => getPlanPrice('invalid', 'monthly')).toThrow();
+    // @ts-expect-error — deliberately passing an invalid id to assert the throw.
+    expect(() => getPlanPrice('invalid', 'annual')).toThrow();
   });
 });
 
@@ -93,8 +95,10 @@ describe('getPlanTotalPrice', () => {
     expect(getPlanTotalPrice('growth', 'annual')).toBe(1188);
   });
 
-  it('returns 0 for an invalid plan id', () => {
-    expect(getPlanTotalPrice('invalid', 'monthly')).toBe(0);
-    expect(getPlanTotalPrice('invalid', 'annual')).toBe(0);
+  it('throws for an invalid plan id (never silently prices at $0)', () => {
+    // @ts-expect-error — deliberately passing an invalid id to assert the throw.
+    expect(() => getPlanTotalPrice('invalid', 'monthly')).toThrow();
+    // @ts-expect-error — deliberately passing an invalid id to assert the throw.
+    expect(() => getPlanTotalPrice('invalid', 'annual')).toThrow();
   });
 });

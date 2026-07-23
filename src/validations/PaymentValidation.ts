@@ -25,7 +25,7 @@ export const ProcessPaymentValidation = z.object({
   // subscription. Coupon discounts apply to `amount` (recurring) only, never
   // to the signup fee.
   signupFee: z.number().min(0).optional().default(0),
-  description: z.string(),
+  description: z.string().max(500),
 
   // Card fields
   cardholderName: z.string().optional(),
@@ -62,6 +62,7 @@ export const ProcessPaymentValidation = z.object({
       type: z.enum(['Percentage', 'Fixed Amount', 'Free Trial']),
       amount: z.string(),
       description: z.string(),
+      maxDiscountAmount: z.number().nullable().optional(),
     })
     .nullable()
     .optional(),
@@ -76,7 +77,32 @@ export const ProcessPaymentValidation = z.object({
   // Whether this transaction is taxable. Memberships → false; events /
   // seminars / store → true. Drives the IQPro remit + Tax paymentAdjustment.
   isTaxable: z.boolean().optional().default(false),
-});
+})
+  // When collecting a NEW payment method, the corresponding card/ACH fields must
+  // be present — catch this at the boundary instead of failing deep in IQPro.
+  // 'saved' charges carry no card/ACH data (server resolves the vaulted PM).
+  .superRefine((val, ctx) => {
+    if (val.paymentMethodSource === 'saved') {
+      return;
+    }
+    if (val.paymentMethod === 'card') {
+      if (!val.cardToken && !val.cardNumber) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Card payment requires a cardToken (tokenized) or cardNumber.',
+          path: ['cardToken'],
+        });
+      }
+    } else if (val.paymentMethod === 'ach') {
+      if (!val.achRoutingNumber || !val.achAccountNumber) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'ACH payment requires achRoutingNumber and achAccountNumber.',
+          path: ['achAccountNumber'],
+        });
+      }
+    }
+  });
 
 export const RegisterPaymentMethodValidation = z.object({
   memberId: z.string().min(1),

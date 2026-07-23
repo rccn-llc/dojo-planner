@@ -60,6 +60,8 @@ export function EditProfileForm({ onCancel, onSuccess, initialData }: EditProfil
 
     if (!email.trim()) {
       newErrors.email = t('email_required');
+    } else if (!/^[^\s@]+@[^\s@][^\s.@]*\.[^\s@]+$/.test(email.trim())) {
+      newErrors.email = t('email_invalid');
     }
 
     if (!phone.trim()) {

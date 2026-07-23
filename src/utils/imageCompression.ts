@@ -64,11 +64,16 @@ export async function compressImageForStorage(
  * Format file size for display
  */
 export function formatFileSize(sizeInBytes: number): string {
-  if (sizeInBytes === 0) {
+  if (!Number.isFinite(sizeInBytes) || sizeInBytes <= 0) {
     return '0 B';
   }
-  const units = ['B', 'KB', 'MB'];
-  const index = Math.floor(Math.log(sizeInBytes) / Math.log(1024));
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  // Clamp the index to the last unit so a size ≥ 1 GB doesn't index past the
+  // array and render "x.xx undefined".
+  const index = Math.min(
+    units.length - 1,
+    Math.floor(Math.log(sizeInBytes) / Math.log(1024)),
+  );
   const value = (sizeInBytes / 1024 ** index).toFixed(2);
   return `${value} ${units[index]}`;
 }

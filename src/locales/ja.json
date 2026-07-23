@@ -731,7 +731,8 @@
     "profile_update_error": "プロフィールの更新に失敗しました。もう一度お試しください。",
     "first_name_required": "名は必須です",
     "last_name_required": "姓は必須です",
-    "email_required": "メールアドレスは必須です"
+    "email_required": "メールアドレスは必須です",
+    "email_invalid": "有効なメールアドレスを入力してください"
   },
   "UserMenu": {
     "manage_profile": "プロフィールを管理",
