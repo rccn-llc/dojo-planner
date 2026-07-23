@@ -30,15 +30,21 @@ vi.mock('next-intl', () => ({
   },
 }));
 
-// Mock ORPC client
-const mockListMembershipPlans = vi.fn();
+// Mock the org hook — the component reads organization?.id to key the cache.
+vi.mock('@clerk/nextjs', () => ({
+  useOrganization: () => ({ organization: { id: 'org_test' } }),
+}));
 
-vi.mock('@/libs/Orpc', () => ({
-  client: {
-    member: {
-      listMembershipPlans: () => mockListMembershipPlans(),
-    },
-  },
+// Mock the shared membership-plans cache hook. The component now consumes this
+// (deduped/revalidated) instead of fetching directly. `cacheState` is the
+// controllable return value each test sets.
+let cacheState: { plans: unknown[]; loading: boolean; error: string | null } = {
+  plans: [],
+  loading: false,
+  error: null,
+};
+vi.mock('@/hooks/useMembershipPlansCache', () => ({
+  useMembershipPlansCache: () => ({ ...cacheState, revalidate: vi.fn() }),
 }));
 
 // Mock membership plans for testing (6 active plans matching Memberships page)
@@ -155,7 +161,7 @@ describe('MembershipStep', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockListMembershipPlans.mockResolvedValue({ plans: mockMembershipPlans });
+    cacheState = { plans: mockMembershipPlans, loading: false, error: null };
   });
 
   describe('Rendering', () => {
@@ -175,9 +181,7 @@ describe('MembershipStep', () => {
     });
 
     it('should show loading state initially', () => {
-      mockListMembershipPlans.mockImplementation(
-        () => new Promise(resolve => setTimeout(() => resolve({ plans: mockMembershipPlans }), 100)),
-      );
+      cacheState = { plans: [], loading: true, error: null };
 
       render(
         <MembershipStep
@@ -440,8 +444,8 @@ describe('MembershipStep', () => {
   });
 
   describe('Error States', () => {
-    it('should show empty state when no plans available', async () => {
-      mockListMembershipPlans.mockResolvedValue({ plans: [] });
+    it('should show the empty state when no plans are available (no fabricated mock plans)', async () => {
+      cacheState = { plans: [], loading: false, error: null };
 
       render(
         <MembershipStep
@@ -453,13 +457,13 @@ describe('MembershipStep', () => {
         />,
       );
 
-      // Wait for the empty state - but since we fall back to mocks, we might see plans
-      // The component falls back to mock plans when API returns empty
-      await expect.element(page.getByText('12 Month Commitment (Gold)')).toBeInTheDocument();
+      await expect
+        .element(page.getByText('No membership plans available. Please create membership plans first.'))
+        .toBeInTheDocument();
     });
 
-    it('should fall back to mock plans on API error', async () => {
-      mockListMembershipPlans.mockRejectedValue(new Error('Network error'));
+    it('should surface the fetch error (not fall back to mock plans)', async () => {
+      cacheState = { plans: [], loading: false, error: 'Network error' };
 
       render(
         <MembershipStep
@@ -471,8 +475,7 @@ describe('MembershipStep', () => {
         />,
       );
 
-      // Should show mock plans as fallback
-      await expect.element(page.getByText('12 Month Commitment (Gold)')).toBeInTheDocument();
+      await expect.element(page.getByText('Network error')).toBeInTheDocument();
     });
   });
 

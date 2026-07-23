@@ -697,6 +697,8 @@ export const couponUsageSchema = pgTable(
   table => [
     index('coupon_usage_coupon_idx').on(table.couponId),
     index('coupon_usage_member_idx').on(table.memberId),
+    // Refund reversal looks up usage rows by transaction_id (refundTransaction).
+    index('coupon_usage_transaction_idx').on(table.transactionId),
   ],
 );
 
@@ -918,6 +920,9 @@ export const eventRegistrationSchema = pgTable(
   table => [
     index('event_registration_member_idx').on(table.memberId),
     index('event_registration_event_idx').on(table.eventId),
+    // updateEvent checks which billing tiers are still referenced before
+    // deleting them (WHERE event_billing_id IN (...)).
+    index('event_registration_billing_idx').on(table.eventBillingId),
   ],
 );
 
@@ -980,5 +985,8 @@ export const transactionSchema = pgTable(
     // organization_id = ? ORDER BY created_at DESC) from one index.
     index('transaction_org_created_idx').on(table.organizationId, table.createdAt),
     uniqueIndex('transaction_stripe_idx').on(table.stripePaymentIntentId),
+    // FKs joined from the membership / event-registration detail views.
+    index('transaction_member_membership_idx').on(table.memberMembershipId),
+    index('transaction_event_registration_idx').on(table.eventRegistrationId),
   ],
 );

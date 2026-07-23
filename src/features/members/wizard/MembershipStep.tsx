@@ -2,11 +2,12 @@
 
 import type { MemberType, WizardStepData } from '@/hooks/useAddMemberWizard';
 import type { MembershipPlanData } from '@/services/MembersService';
+import { useOrganization } from '@clerk/nextjs';
 import { Check } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { client } from '@/libs/Orpc';
+import { useMembershipPlansCache } from '@/hooks/useMembershipPlansCache';
 
 /**
  * The AddMember flow has a HOH-only "Skip for now" button that the convert
@@ -30,125 +31,6 @@ type MembershipStepProps = {
   isLoading?: boolean;
 };
 
-// Mock membership plans matching the Memberships landing page (6 active plans)
-// These are used as fallback when the API is not available
-const mockMembershipPlans: MembershipPlanData[] = [
-  {
-    id: 'mock-plan-1',
-    name: '12 Month Commitment (Gold)',
-    slug: '12_month_commitment_gold',
-    category: 'Adult Brazilian Jiu-Jitsu',
-    program: 'Adult',
-    price: 150,
-    signupFee: 35,
-    cancellationFee: 0,
-    holdFeeAmount: 0,
-    holdFeeFrequency: null,
-    holdLimitPerYear: null,
-    frequency: 'Monthly',
-    contractLength: '12 Months',
-    accessLevel: 'Unlimited',
-    description: '12 month contract with unlimited access',
-    isTrial: false,
-    isActive: true,
-  },
-  {
-    id: 'mock-plan-2',
-    name: 'Month to Month (Gold)',
-    slug: 'month_to_month_gold',
-    category: 'Adult Brazilian Jiu-Jitsu',
-    program: 'Adult',
-    price: 170,
-    signupFee: 35,
-    cancellationFee: 0,
-    holdFeeAmount: 0,
-    holdFeeFrequency: null,
-    holdLimitPerYear: null,
-    frequency: 'Monthly',
-    contractLength: 'Month-to-Month',
-    accessLevel: 'Unlimited',
-    description: 'No commitment, month-to-month with unlimited access',
-    isTrial: false,
-    isActive: true,
-  },
-  {
-    id: 'mock-plan-3',
-    name: '7-Day Free Trial',
-    slug: '7_day_free_trial',
-    category: 'Adult Brazilian Jiu-Jitsu',
-    program: 'Adult',
-    price: 0,
-    signupFee: 0,
-    cancellationFee: 0,
-    holdFeeAmount: 0,
-    holdFeeFrequency: null,
-    holdLimitPerYear: null,
-    frequency: 'None',
-    contractLength: '7 Days',
-    accessLevel: '3 Classes Total',
-    description: '7-day trial with 3 classes',
-    isTrial: true,
-    isActive: true,
-  },
-  {
-    id: 'mock-plan-4',
-    name: 'Kids Monthly',
-    slug: 'kids_monthly',
-    category: 'Kids Program',
-    program: 'Kids',
-    price: 95,
-    signupFee: 25,
-    cancellationFee: 0,
-    holdFeeAmount: 0,
-    holdFeeFrequency: null,
-    holdLimitPerYear: null,
-    frequency: 'Monthly',
-    contractLength: 'Month-to-Month',
-    accessLevel: '8 Classes/mo',
-    description: 'Monthly membership for kids program',
-    isTrial: false,
-    isActive: true,
-  },
-  {
-    id: 'mock-plan-5',
-    name: 'Kids Free Trial Week',
-    slug: 'kids_free_trial_week',
-    category: 'Kids Program',
-    program: 'Kids',
-    price: 0,
-    signupFee: 0,
-    cancellationFee: 0,
-    holdFeeAmount: 0,
-    holdFeeFrequency: null,
-    holdLimitPerYear: null,
-    frequency: 'None',
-    contractLength: '7 Days',
-    accessLevel: '2 Classes Total',
-    description: '7-day trial with 2 classes for kids',
-    isTrial: true,
-    isActive: true,
-  },
-  {
-    id: 'mock-plan-6',
-    name: 'Competition Team',
-    slug: 'competition_team',
-    category: 'Competition Team',
-    program: 'Competition',
-    price: 200,
-    signupFee: 50,
-    cancellationFee: 0,
-    holdFeeAmount: 0,
-    holdFeeFrequency: null,
-    holdLimitPerYear: null,
-    frequency: 'Monthly',
-    contractLength: '6 Months',
-    accessLevel: 'Unlimited',
-    description: '6 month commitment for competition team members',
-    isTrial: false,
-    isActive: true,
-  },
-];
-
 export const MembershipStep = ({
   data,
   onUpdate,
@@ -158,10 +40,14 @@ export const MembershipStep = ({
   isLoading = false,
 }: MembershipStepProps) => {
   const t = useTranslations('AddMemberWizard.MembershipStep');
+  const { organization } = useOrganization();
 
-  const [membershipPlans, setMembershipPlans] = useState<MembershipPlanData[]>([]);
-  const [isFetchingPlans, setIsFetchingPlans] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Membership plans come from the shared cache (deduped + revalidated on
+  // mutation) instead of a per-mount fetch. We show only active plans and
+  // surface a real error state — never fabricated mock plans, which would let
+  // an operator create a member against a non-existent plan id.
+  const { plans: allPlans, loading: isFetchingPlans, error } = useMembershipPlansCache(organization?.id);
+  const membershipPlans: MembershipPlanData[] = allPlans.filter(plan => plan.isActive);
 
   // #133: when the user reaches this step (which includes navigating Back from
   // a later step after previously clicking Skip), clear the stale
@@ -175,31 +61,6 @@ export const MembershipStep = ({
     // Run once on mount only — the click on Skip happens AFTER mount, and we
     // don't want this effect to wipe the flag the user just set.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Fetch membership plans from database or use mocks
-  useEffect(() => {
-    const fetchPlans = async () => {
-      setIsFetchingPlans(true);
-      try {
-        const result = await client.member.listMembershipPlans();
-        // Filter to only show active plans
-        const activePlans = result.plans.filter(plan => plan.isActive);
-        if (activePlans.length > 0) {
-          setMembershipPlans(activePlans);
-        } else {
-          // Use mock plans if no plans in database
-          setMembershipPlans(mockMembershipPlans);
-        }
-      } catch (err) {
-        console.error('Failed to fetch membership plans, using mocks:', err);
-        // Fall back to mock plans on error
-        setMembershipPlans(mockMembershipPlans);
-      } finally {
-        setIsFetchingPlans(false);
-      }
-    };
-    fetchPlans();
   }, []);
 
   const handleSelect = (planId: string) => {
@@ -234,7 +95,6 @@ export const MembershipStep = ({
       membershipPlanSignupFee: selectedPlan?.signupFee,
       ...trialClears,
     });
-    setError(null);
   };
 
   const handleNext = async () => {
