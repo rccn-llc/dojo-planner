@@ -1,6 +1,63 @@
 import type { AppliedCoupon, WizardStepData } from '@/hooks/useAddMemberWizard';
 
 /**
+ * Mutable refs holding the card token / BIN / last-four captured synchronously
+ * from the TokenEx iframe callback (React setState is async, so the submit
+ * handler reads these refs to avoid a stale closure).
+ */
+export type CardRefs = {
+  cardToken: { current: string | undefined };
+  cardFirstSix: { current: string | undefined };
+  cardLastFour: { current: string | undefined };
+};
+
+/**
+ * Capture tokenized-card fields from a wizard `updateData` payload into refs,
+ * synchronously. Previously each of the three wizards inlined this with subtly
+ * different truthiness (`!== undefined` vs `'k' in updates && updates.k`),
+ * which is a latent divergence bug. We treat "key present" as the signal — a
+ * key set to `undefined` (an explicit clear) still resets the ref.
+ */
+export function captureCardRefs(updates: Partial<WizardStepData>, refs: CardRefs): void {
+  if ('cardToken' in updates) {
+    refs.cardToken.current = updates.cardToken;
+  }
+  if ('cardFirstSix' in updates) {
+    refs.cardFirstSix.current = updates.cardFirstSix;
+  }
+  if ('cardLastFour' in updates) {
+    refs.cardLastFour.current = updates.cardLastFour;
+  }
+}
+
+/**
+ * Build the card/ACH sub-fields of a `client.payment.process` request from
+ * wizard data + the synchronously-captured card refs. Refs win over state
+ * (they're fresher). Only present values are included, and a raw card number is
+ * only sent when there is no token (tokenized path is preferred). Centralizes
+ * the block that was copy-pasted — with identical semantics — across all three
+ * wizards and their family-payment branches.
+ */
+export function buildPaymentMethodFields(data: WizardStepData, refs: CardRefs): Record<string, unknown> {
+  const cardToken = refs.cardToken.current || data.cardToken;
+  const cardFirstSix = refs.cardFirstSix.current || data.cardFirstSix;
+  const cardLastFour = refs.cardLastFour.current || data.cardLastFour;
+  return {
+    ...(data.cardholderName && { cardholderName: data.cardholderName }),
+    ...(cardToken && { cardToken }),
+    ...(cardFirstSix && { cardFirstSix }),
+    ...(cardLastFour && { cardLastFour }),
+    ...(data.cardNumber && !cardToken && { cardNumber: data.cardNumber }),
+    ...(data.cardExpiry && { cardExpiry: data.cardExpiry }),
+    ...(data.cardCvc && { cardCvc: data.cardCvc }),
+    ...(data.achAccountHolder && { achAccountHolder: data.achAccountHolder }),
+    ...(data.achRoutingNumber && { achRoutingNumber: data.achRoutingNumber }),
+    ...(data.achAccountNumber && { achAccountNumber: data.achAccountNumber }),
+    ...(data.achAccountType && { achAccountType: data.achAccountType }),
+  };
+}
+
+/**
  * Apply a coupon discount to a recurring plan price.
  *
  * - `Percentage` / `Fixed Amount`: parse the leading number out of the coupon's

@@ -16,7 +16,7 @@ import { FamilyPaymentStep } from './FamilyPaymentStep';
 import { MemberDetailsStep } from './MemberDetailsStep';
 import { MemberPhotoStep } from './MemberPhotoStep';
 import { MembershipStep } from './MembershipStep';
-import { buildSignedWaiverPayload, computeDiscountedPrice, fileToDataUrl } from './memberWizardUtils';
+import { buildPaymentMethodFields, buildSignedWaiverPayload, captureCardRefs, computeDiscountedPrice, fileToDataUrl } from './memberWizardUtils';
 import { WaiverStep } from './WaiverStep';
 
 type AddFamilyMembersModalProps = {
@@ -75,16 +75,9 @@ export const AddFamilyMembersModal = ({
     fetchConfig();
   }, [isOpen]);
 
+  const cardRefs = { cardToken: cardTokenRef, cardFirstSix: cardFirstSixRef, cardLastFour: cardLastFourRef };
   const updateDataWithRef = (updates: Parameters<typeof wizard.updateData>[0]) => {
-    if ('cardToken' in updates && updates.cardToken) {
-      cardTokenRef.current = updates.cardToken;
-    }
-    if ('cardFirstSix' in updates && updates.cardFirstSix) {
-      cardFirstSixRef.current = updates.cardFirstSix;
-    }
-    if ('cardLastFour' in updates && updates.cardLastFour) {
-      cardLastFourRef.current = updates.cardLastFour;
-    }
+    captureCardRefs(updates, cardRefs);
     wizard.updateData(updates);
   };
 
@@ -330,19 +323,7 @@ export const AddFamilyMembersModal = ({
             description: wizard.data.membershipPlanName
               ? `Membership: ${wizard.data.membershipPlanName}`
               : 'Membership payment',
-            ...(!wizard.data.hohHasPaymentMethod && {
-              ...(wizard.data.cardholderName && { cardholderName: wizard.data.cardholderName }),
-              ...((cardTokenRef.current || wizard.data.cardToken) && { cardToken: cardTokenRef.current || wizard.data.cardToken }),
-              ...((cardFirstSixRef.current || wizard.data.cardFirstSix) && { cardFirstSix: cardFirstSixRef.current || wizard.data.cardFirstSix }),
-              ...((cardLastFourRef.current || wizard.data.cardLastFour) && { cardLastFour: cardLastFourRef.current || wizard.data.cardLastFour }),
-              ...(wizard.data.cardNumber && !cardTokenRef.current && !wizard.data.cardToken && { cardNumber: wizard.data.cardNumber }),
-              ...(wizard.data.cardExpiry && { cardExpiry: wizard.data.cardExpiry }),
-              ...(wizard.data.cardCvc && { cardCvc: wizard.data.cardCvc }),
-              ...(wizard.data.achAccountHolder && { achAccountHolder: wizard.data.achAccountHolder }),
-              ...(wizard.data.achRoutingNumber && { achRoutingNumber: wizard.data.achRoutingNumber }),
-              ...(wizard.data.achAccountNumber && { achAccountNumber: wizard.data.achAccountNumber }),
-              ...(wizard.data.achAccountType && { achAccountType: wizard.data.achAccountType }),
-            }),
+            ...(!wizard.data.hohHasPaymentMethod && buildPaymentMethodFields(wizard.data, cardRefs)),
             ...(wizard.data.membershipPlanId && { membershipPlanId: wizard.data.membershipPlanId }),
             ...(wizard.data.membershipPlanFrequency && { membershipPlanFrequency: wizard.data.membershipPlanFrequency }),
             // Family member's own membership row id — the payment service

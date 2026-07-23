@@ -96,6 +96,20 @@ describe('Classes Router', () => {
         expect.objectContaining({ entityId: 'class-1', status: 'success' }),
       );
     });
+
+    it('maps a cross-tenant ProgramNotFoundError to a 404', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { createClass } = await import('@/services/ClassesService');
+      const { ProgramNotFoundError } = await import('@/services/ProgramsService');
+      vi.mocked(guardRole).mockResolvedValue(frontDeskContext);
+      vi.mocked(createClass).mockRejectedValue(new ProgramNotFoundError());
+
+      const { create } = await import('./Classes');
+
+      await expect(
+        callHandler(create, { ...baseInput, programId: 'prog-from-other-org' }),
+      ).rejects.toMatchObject({ status: 404 });
+    });
   });
 
   describe('update', () => {

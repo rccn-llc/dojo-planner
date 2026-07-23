@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useConvertMemberWizard } from '@/hooks/useConvertMemberWizard';
 import { client } from '@/libs/Orpc';
 import { MembershipStep } from '../wizard/MembershipStep';
-import { buildSignedWaiverPayload, computeDiscountedPrice } from '../wizard/memberWizardUtils';
+import { buildPaymentMethodFields, buildSignedWaiverPayload, captureCardRefs, computeDiscountedPrice } from '../wizard/memberWizardUtils';
 import { PaymentStep } from '../wizard/PaymentStep';
 import { WaiverStep } from '../wizard/WaiverStep';
 import { ConvertConfirmStep } from './ConvertConfirmStep';
@@ -77,16 +77,9 @@ export const ConvertMemberModal = ({
   // Re-entrancy guard for handleConvert — see AddMemberModal for rationale.
   const submittingRef = useRef(false);
 
+  const cardRefs = { cardToken: cardTokenRef, cardFirstSix: cardFirstSixRef, cardLastFour: cardLastFourRef };
   const updateDataWithRef = (updates: Partial<ConvertMemberWizardData>) => {
-    if (updates.cardToken !== undefined) {
-      cardTokenRef.current = updates.cardToken;
-    }
-    if (updates.cardFirstSix !== undefined) {
-      cardFirstSixRef.current = updates.cardFirstSix;
-    }
-    if (updates.cardLastFour !== undefined) {
-      cardLastFourRef.current = updates.cardLastFour;
-    }
+    captureCardRefs(updates, cardRefs);
     wizard.updateData(updates);
   };
 
@@ -223,17 +216,7 @@ export const ConvertMemberModal = ({
             description: wizard.data.membershipPlanName
               ? `Membership: ${wizard.data.membershipPlanName}`
               : 'Membership payment',
-            ...(wizard.data.cardholderName && { cardholderName: wizard.data.cardholderName }),
-            ...((cardTokenRef.current || wizard.data.cardToken) && { cardToken: cardTokenRef.current || wizard.data.cardToken }),
-            ...((cardFirstSixRef.current || wizard.data.cardFirstSix) && { cardFirstSix: cardFirstSixRef.current || wizard.data.cardFirstSix }),
-            ...((cardLastFourRef.current || wizard.data.cardLastFour) && { cardLastFour: cardLastFourRef.current || wizard.data.cardLastFour }),
-            ...(wizard.data.cardNumber && !cardTokenRef.current && !wizard.data.cardToken && { cardNumber: wizard.data.cardNumber }),
-            ...(wizard.data.cardExpiry && { cardExpiry: wizard.data.cardExpiry }),
-            ...(wizard.data.cardCvc && { cardCvc: wizard.data.cardCvc }),
-            ...(wizard.data.achAccountHolder && { achAccountHolder: wizard.data.achAccountHolder }),
-            ...(wizard.data.achRoutingNumber && { achRoutingNumber: wizard.data.achRoutingNumber }),
-            ...(wizard.data.achAccountNumber && { achAccountNumber: wizard.data.achAccountNumber }),
-            ...(wizard.data.achAccountType && { achAccountType: wizard.data.achAccountType }),
+            ...buildPaymentMethodFields(wizard.data, cardRefs),
             ...(wizard.data.membershipPlanId && { membershipPlanId: wizard.data.membershipPlanId }),
             ...(wizard.data.membershipPlanFrequency && { membershipPlanFrequency: wizard.data.membershipPlanFrequency }),
             // New membership row from step 3 — payment service attaches the

@@ -159,6 +159,23 @@ describe('AuthGuards', () => {
       expect(result.role).toBe(ORG_ROLE.FRONT_DESK);
     });
 
+    it('should grant a FRONT_DESK-guarded endpoint to an ACADEMY_OWNER (payment/coupon access)', async () => {
+      // Payment, coupon, and membership-lifecycle endpoints guard with
+      // FRONT_DESK; ACADEMY_OWNER (and ADMIN) must inherit access.
+      const { auth } = await import('@clerk/nextjs/server');
+      const mockHas = vi.fn().mockImplementation(({ role }) => role === ORG_ROLE.ACADEMY_OWNER);
+
+      vi.mocked(auth).mockResolvedValue({
+        userId: 'owner-1',
+        orgId: 'org-1',
+        has: mockHas,
+      } as any);
+
+      const { guardRole } = await import('./AuthGuards');
+
+      await expect(guardRole(ORG_ROLE.FRONT_DESK)).resolves.toMatchObject({ userId: 'owner-1' });
+    });
+
     it('should throw 401 when not authenticated before checking role', async () => {
       const { auth } = await import('@clerk/nextjs/server');
 

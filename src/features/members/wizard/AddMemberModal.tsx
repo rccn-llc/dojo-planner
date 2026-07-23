@@ -16,7 +16,7 @@ import { MemberPhotoStep } from './MemberPhotoStep';
 import { MembershipStep } from './MembershipStep';
 import { MemberSuccessStep } from './MemberSuccessStep';
 import { MemberTypeStep } from './MemberTypeStep';
-import { buildSignedWaiverPayload, computeDiscountedPrice, fileToDataUrl } from './memberWizardUtils';
+import { buildPaymentMethodFields, buildSignedWaiverPayload, captureCardRefs, computeDiscountedPrice, fileToDataUrl } from './memberWizardUtils';
 import { PaymentStep } from './PaymentStep';
 import { WaiverStep } from './WaiverStep';
 
@@ -55,16 +55,9 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
 
   // Wrapper around wizard.updateData that also captures card refs synchronously
   // so handleFinalNext can read them (React setState is async).
+  const cardRefs = { cardToken: cardTokenRef, cardFirstSix: cardFirstSixRef, cardLastFour: cardLastFourRef };
   const updateDataWithRef = (updates: Partial<typeof wizard.data>) => {
-    if (updates.cardToken !== undefined) {
-      cardTokenRef.current = updates.cardToken;
-    }
-    if (updates.cardFirstSix !== undefined) {
-      cardFirstSixRef.current = updates.cardFirstSix;
-    }
-    if (updates.cardLastFour !== undefined) {
-      cardLastFourRef.current = updates.cardLastFour;
-    }
+    captureCardRefs(updates, cardRefs);
     wizard.updateData(updates);
   };
 
@@ -288,17 +281,7 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
             ...(wizard.data.phone && { memberPhone: wizard.data.phone }),
             ...(wizard.data.address && { memberAddress: wizard.data.address }),
             paymentMethod: wizard.data.paymentMethod,
-            ...(wizard.data.cardholderName && { cardholderName: wizard.data.cardholderName }),
-            ...((cardTokenRef.current || wizard.data.cardToken) && { cardToken: cardTokenRef.current || wizard.data.cardToken }),
-            ...((cardFirstSixRef.current || wizard.data.cardFirstSix) && { cardFirstSix: cardFirstSixRef.current || wizard.data.cardFirstSix }),
-            ...((cardLastFourRef.current || wizard.data.cardLastFour) && { cardLastFour: cardLastFourRef.current || wizard.data.cardLastFour }),
-            ...(wizard.data.cardNumber && !cardTokenRef.current && !wizard.data.cardToken && { cardNumber: wizard.data.cardNumber }),
-            ...(wizard.data.cardExpiry && { cardExpiry: wizard.data.cardExpiry }),
-            ...(wizard.data.cardCvc && { cardCvc: wizard.data.cardCvc }),
-            ...(wizard.data.achAccountHolder && { achAccountHolder: wizard.data.achAccountHolder }),
-            ...(wizard.data.achRoutingNumber && { achRoutingNumber: wizard.data.achRoutingNumber }),
-            ...(wizard.data.achAccountNumber && { achAccountNumber: wizard.data.achAccountNumber }),
-            ...(wizard.data.achAccountType && { achAccountType: wizard.data.achAccountType }),
+            ...buildPaymentMethodFields(wizard.data, cardRefs),
           });
 
           if (!registerResult.success) {
@@ -360,21 +343,10 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
             description: wizard.data.membershipPlanName
               ? `Membership: ${wizard.data.membershipPlanName}`
               : 'Membership payment',
-            // Card fields (cardToken = PCI-compliant tokenized card; cardNumber = fallback)
-            // Read cardToken from ref because React setState in PaymentStep is async
+            // Card + ACH fields. cardToken (PCI-compliant tokenized card) is
+            // read from the ref because React setState in PaymentStep is async
             // and wizard.data.cardToken may not yet reflect the tokenized value.
-            ...(wizard.data.cardholderName && { cardholderName: wizard.data.cardholderName }),
-            ...((cardTokenRef.current || wizard.data.cardToken) && { cardToken: cardTokenRef.current || wizard.data.cardToken }),
-            ...((cardFirstSixRef.current || wizard.data.cardFirstSix) && { cardFirstSix: cardFirstSixRef.current || wizard.data.cardFirstSix }),
-            ...((cardLastFourRef.current || wizard.data.cardLastFour) && { cardLastFour: cardLastFourRef.current || wizard.data.cardLastFour }),
-            ...(wizard.data.cardNumber && !cardTokenRef.current && !wizard.data.cardToken && { cardNumber: wizard.data.cardNumber }),
-            ...(wizard.data.cardExpiry && { cardExpiry: wizard.data.cardExpiry }),
-            ...(wizard.data.cardCvc && { cardCvc: wizard.data.cardCvc }),
-            // ACH fields
-            ...(wizard.data.achAccountHolder && { achAccountHolder: wizard.data.achAccountHolder }),
-            ...(wizard.data.achRoutingNumber && { achRoutingNumber: wizard.data.achRoutingNumber }),
-            ...(wizard.data.achAccountNumber && { achAccountNumber: wizard.data.achAccountNumber }),
-            ...(wizard.data.achAccountType && { achAccountType: wizard.data.achAccountType }),
+            ...buildPaymentMethodFields(wizard.data, cardRefs),
             // Membership context — including memberMembershipId so the
             // service can attach the IQPro subscription id + first/next
             // payment dates to the right row on success.
@@ -604,19 +576,7 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
               ? `Membership: ${wizard.data.membershipPlanName}`
               : 'Membership payment',
             // If HOH has no card, use newly collected card/ACH details
-            ...(!wizard.data.hohHasPaymentMethod && {
-              ...(wizard.data.cardholderName && { cardholderName: wizard.data.cardholderName }),
-              ...((cardTokenRef.current || wizard.data.cardToken) && { cardToken: cardTokenRef.current || wizard.data.cardToken }),
-              ...((cardFirstSixRef.current || wizard.data.cardFirstSix) && { cardFirstSix: cardFirstSixRef.current || wizard.data.cardFirstSix }),
-              ...((cardLastFourRef.current || wizard.data.cardLastFour) && { cardLastFour: cardLastFourRef.current || wizard.data.cardLastFour }),
-              ...(wizard.data.cardNumber && !cardTokenRef.current && !wizard.data.cardToken && { cardNumber: wizard.data.cardNumber }),
-              ...(wizard.data.cardExpiry && { cardExpiry: wizard.data.cardExpiry }),
-              ...(wizard.data.cardCvc && { cardCvc: wizard.data.cardCvc }),
-              ...(wizard.data.achAccountHolder && { achAccountHolder: wizard.data.achAccountHolder }),
-              ...(wizard.data.achRoutingNumber && { achRoutingNumber: wizard.data.achRoutingNumber }),
-              ...(wizard.data.achAccountNumber && { achAccountNumber: wizard.data.achAccountNumber }),
-              ...(wizard.data.achAccountType && { achAccountType: wizard.data.achAccountType }),
-            }),
+            ...(!wizard.data.hohHasPaymentMethod && buildPaymentMethodFields(wizard.data, cardRefs)),
             ...(wizard.data.membershipPlanId && { membershipPlanId: wizard.data.membershipPlanId }),
             ...(wizard.data.membershipPlanFrequency && { membershipPlanFrequency: wizard.data.membershipPlanFrequency }),
             // result.memberMembershipId belongs to the FAMILY member's

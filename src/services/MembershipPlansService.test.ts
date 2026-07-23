@@ -9,6 +9,14 @@ const dbMock = {
 
 vi.mock('@/libs/DB', () => ({ db: dbMock }));
 
+// assertProgramInOrg lives in ProgramsService and hits its own DB select; the
+// FK-violation tests below still exercise the update path, so default this to a
+// resolving no-op (a passing tenancy check) and let the update mock decide.
+const assertProgramInOrgMock = vi.fn().mockResolvedValue(undefined);
+vi.mock('./ProgramsService', () => ({
+  assertProgramInOrg: (...args: unknown[]) => assertProgramInOrgMock(...args),
+}));
+
 vi.mock('@/models/Schema', () => ({
   membershipPlanSchema: {
     id: 'id',
