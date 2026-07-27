@@ -57,12 +57,14 @@ export default function TransactionsPage() {
       purpose: TRANSACTION_TYPE_LABELS[tx.transactionType] ?? tx.transactionType,
       method: formatPaymentMethod(tx.paymentMethod, tx.description),
       transactionId: `TXN${tx.id.slice(0, 12).toUpperCase()}`,
-      memberName: [tx.memberFirstName, tx.memberLastName].filter(Boolean).join(' '),
+      // Guest / non-member transactions (e.g. kiosk store sales) have no member
+      // — show a "Non-member" label instead of a blank cell.
+      memberName: [tx.memberFirstName, tx.memberLastName].filter(Boolean).join(' ') || t('non_member'),
       memberId: tx.memberId,
       status: tx.status as Transaction['status'],
       transactionType: tx.transactionType,
     }));
-  }, [rawTransactions]);
+  }, [rawTransactions, t]);
 
   const stats = useMemo(() => {
     const recentTransactions = getTransactionsInPast30Days(transactions);

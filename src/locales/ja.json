@@ -939,6 +939,7 @@
     "stats_refunded_label": "返金済み（過去30日間）",
     "table_date": "日付",
     "table_member": "会員",
+    "non_member": "非会員",
     "table_amount": "金額",
     "table_origin": "区分",
     "table_method": "支払い方法",

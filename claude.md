@@ -796,7 +796,7 @@ await deleteUserWithOrganization();
 - `event_billing` - Event pricing tiers
 - `tag` - Polymorphic tags for classes/memberships/events
 - `coupon` - Discount codes
-- `transaction` - Financial transactions (membership payments, signup fees, event registrations, refunds, adjustments), optional `iqproTransactionId`
+- `transaction` - Financial transactions (membership payments, signup fees, event registrations, refunds, adjustments), optional `iqproTransactionId`. `member_id` is **nullable**: a null member = a guest / non-member sale (e.g. a kiosk store purchase by someone who isn't a member). Member-scoped queries filter on `member_id` so guest rows don't appear on a member's page; the org-wide transactions list/detail (`TransactionsService`) `leftJoin` member (NOT inner — an inner join would drop guest rows) and the UI shows "Non-member" when there's no member name. Guest purchase detail rides in `description`; there is no separate customer-name column.
 - `attendance` - Check-in records
 - `audit_event` - SOC2 compliance audit logging
 - `payment_method` - Saved payment methods (card, bank_transfer, cash, check), optional `iqproPaymentMethodId`

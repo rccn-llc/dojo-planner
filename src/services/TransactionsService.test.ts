@@ -96,8 +96,8 @@ describe('TransactionsService', () => {
       const mockLimit = vi.fn().mockReturnValue({ offset: mockOffset });
       const mockOrderBy = vi.fn().mockReturnValue({ limit: mockLimit });
       const mockWhere = vi.fn().mockReturnValue({ orderBy: mockOrderBy });
-      const mockInnerJoin = vi.fn().mockReturnValue({ where: mockWhere });
-      const mockFrom = vi.fn().mockReturnValue({ innerJoin: mockInnerJoin });
+      const mockMemberJoin = vi.fn().mockReturnValue({ where: mockWhere });
+      const mockFrom = vi.fn().mockReturnValue({ leftJoin: mockMemberJoin });
       const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
 
       const { db } = await import('@/libs/DB');
@@ -110,11 +110,51 @@ describe('TransactionsService', () => {
       expect(result).toEqual(mockTransactions);
       expect(db.select).toHaveBeenCalledTimes(1);
       expect(mockFrom).toHaveBeenCalledTimes(1);
-      expect(mockInnerJoin).toHaveBeenCalledTimes(1);
+      expect(mockMemberJoin).toHaveBeenCalledTimes(1);
       expect(mockWhere).toHaveBeenCalledTimes(1);
       expect(mockOrderBy).toHaveBeenCalledTimes(1);
       expect(mockLimit).toHaveBeenCalledWith(500);
       expect(mockOffset).toHaveBeenCalledWith(0);
+    });
+
+    it('returns guest/non-member transactions (null member) via the leftJoin', async () => {
+      // A kiosk store sale has member_id = NULL and no member row. The leftJoin
+      // must keep it in the list (an innerJoin would drop it) with null names.
+      const mockTransactions = [
+        {
+          id: 'txn-guest',
+          memberId: null,
+          memberFirstName: null,
+          memberLastName: null,
+          transactionType: 'adjustment',
+          amount: 8000,
+          currency: 'USD',
+          status: 'paid',
+          paymentMethod: 'card',
+          description: 'Store: Black Belt — John Customer',
+          processedAt: new Date('2026-01-20'),
+          createdAt: new Date('2026-01-20'),
+        },
+      ];
+
+      const mockOffset = vi.fn().mockResolvedValue(mockTransactions);
+      const mockLimit = vi.fn().mockReturnValue({ offset: mockOffset });
+      const mockOrderBy = vi.fn().mockReturnValue({ limit: mockLimit });
+      const mockWhere = vi.fn().mockReturnValue({ orderBy: mockOrderBy });
+      const mockMemberJoin = vi.fn().mockReturnValue({ where: mockWhere });
+      const mockFrom = vi.fn().mockReturnValue({ leftJoin: mockMemberJoin });
+      const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
+
+      const { db } = await import('@/libs/DB');
+      vi.mocked(db.select).mockReturnValue(mockSelect() as any);
+
+      const { getOrganizationTransactions } = await import('./TransactionsService');
+      const result = await getOrganizationTransactions('org-test-123');
+
+      expect(result).toEqual(mockTransactions);
+      expect(result[0]?.memberId).toBeNull();
+      expect(result[0]?.memberFirstName).toBeNull();
+      expect(mockMemberJoin).toHaveBeenCalledTimes(1);
     });
 
     it('should filter by status when provided', async () => {
@@ -139,8 +179,8 @@ describe('TransactionsService', () => {
       const mockLimit = vi.fn().mockReturnValue({ offset: mockOffset });
       const mockOrderBy = vi.fn().mockReturnValue({ limit: mockLimit });
       const mockWhere = vi.fn().mockReturnValue({ orderBy: mockOrderBy });
-      const mockInnerJoin = vi.fn().mockReturnValue({ where: mockWhere });
-      const mockFrom = vi.fn().mockReturnValue({ innerJoin: mockInnerJoin });
+      const mockMemberJoin = vi.fn().mockReturnValue({ where: mockWhere });
+      const mockFrom = vi.fn().mockReturnValue({ leftJoin: mockMemberJoin });
       const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
 
       const { db } = await import('@/libs/DB');
@@ -179,8 +219,8 @@ describe('TransactionsService', () => {
       const mockLimit = vi.fn().mockReturnValue({ offset: mockOffset });
       const mockOrderBy = vi.fn().mockReturnValue({ limit: mockLimit });
       const mockWhere = vi.fn().mockReturnValue({ orderBy: mockOrderBy });
-      const mockInnerJoin = vi.fn().mockReturnValue({ where: mockWhere });
-      const mockFrom = vi.fn().mockReturnValue({ innerJoin: mockInnerJoin });
+      const mockMemberJoin = vi.fn().mockReturnValue({ where: mockWhere });
+      const mockFrom = vi.fn().mockReturnValue({ leftJoin: mockMemberJoin });
       const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
 
       const { db } = await import('@/libs/DB');
@@ -219,8 +259,8 @@ describe('TransactionsService', () => {
       const mockLimit = vi.fn().mockReturnValue({ offset: mockOffset });
       const mockOrderBy = vi.fn().mockReturnValue({ limit: mockLimit });
       const mockWhere = vi.fn().mockReturnValue({ orderBy: mockOrderBy });
-      const mockInnerJoin = vi.fn().mockReturnValue({ where: mockWhere });
-      const mockFrom = vi.fn().mockReturnValue({ innerJoin: mockInnerJoin });
+      const mockMemberJoin = vi.fn().mockReturnValue({ where: mockWhere });
+      const mockFrom = vi.fn().mockReturnValue({ leftJoin: mockMemberJoin });
       const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
 
       const { db } = await import('@/libs/DB');
@@ -245,8 +285,8 @@ describe('TransactionsService', () => {
       const mockLimit = vi.fn().mockReturnValue({ offset: mockOffset });
       const mockOrderBy = vi.fn().mockReturnValue({ limit: mockLimit });
       const mockWhere = vi.fn().mockReturnValue({ orderBy: mockOrderBy });
-      const mockInnerJoin = vi.fn().mockReturnValue({ where: mockWhere });
-      const mockFrom = vi.fn().mockReturnValue({ innerJoin: mockInnerJoin });
+      const mockMemberJoin = vi.fn().mockReturnValue({ where: mockWhere });
+      const mockFrom = vi.fn().mockReturnValue({ leftJoin: mockMemberJoin });
       const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
 
       const { db } = await import('@/libs/DB');
@@ -283,8 +323,8 @@ describe('TransactionsService', () => {
       const mockLimit = vi.fn().mockReturnValue({ offset: mockOffset });
       const mockOrderBy = vi.fn().mockReturnValue({ limit: mockLimit });
       const mockWhere = vi.fn().mockReturnValue({ orderBy: mockOrderBy });
-      const mockInnerJoin = vi.fn().mockReturnValue({ where: mockWhere });
-      const mockFrom = vi.fn().mockReturnValue({ innerJoin: mockInnerJoin });
+      const mockMemberJoin = vi.fn().mockReturnValue({ where: mockWhere });
+      const mockFrom = vi.fn().mockReturnValue({ leftJoin: mockMemberJoin });
       const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
 
       const { db } = await import('@/libs/DB');
@@ -323,8 +363,8 @@ describe('TransactionsService', () => {
       const mockLimit = vi.fn().mockReturnValue({ offset: mockOffset });
       const mockOrderBy = vi.fn().mockReturnValue({ limit: mockLimit });
       const mockWhere = vi.fn().mockReturnValue({ orderBy: mockOrderBy });
-      const mockInnerJoin = vi.fn().mockReturnValue({ where: mockWhere });
-      const mockFrom = vi.fn().mockReturnValue({ innerJoin: mockInnerJoin });
+      const mockMemberJoin = vi.fn().mockReturnValue({ where: mockWhere });
+      const mockFrom = vi.fn().mockReturnValue({ leftJoin: mockMemberJoin });
       const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
 
       const { db } = await import('@/libs/DB');
@@ -376,8 +416,8 @@ describe('TransactionsService', () => {
       const mockLeftJoin3 = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin4 });
       const mockLeftJoin2 = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin3 });
       const mockLeftJoin1 = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin2 });
-      const mockInnerJoin = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin1 });
-      const mockFrom = vi.fn().mockReturnValue({ innerJoin: mockInnerJoin });
+      const mockMemberJoin = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin1 });
+      const mockFrom = vi.fn().mockReturnValue({ leftJoin: mockMemberJoin });
       const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
 
       const { db } = await import('@/libs/DB');
@@ -388,7 +428,7 @@ describe('TransactionsService', () => {
 
       expect(result).toEqual(mockRow);
       expect(db.select).toHaveBeenCalledTimes(1);
-      expect(mockInnerJoin).toHaveBeenCalledTimes(1);
+      expect(mockMemberJoin).toHaveBeenCalledTimes(1);
       expect(mockLeftJoin1).toHaveBeenCalledTimes(1);
       expect(mockLeftJoin2).toHaveBeenCalledTimes(1);
       expect(mockLeftJoin3).toHaveBeenCalledTimes(1);
@@ -428,8 +468,8 @@ describe('TransactionsService', () => {
       const mockLeftJoin3 = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin4 });
       const mockLeftJoin2 = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin3 });
       const mockLeftJoin1 = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin2 });
-      const mockInnerJoin = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin1 });
-      const mockFrom = vi.fn().mockReturnValue({ innerJoin: mockInnerJoin });
+      const mockMemberJoin = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin1 });
+      const mockFrom = vi.fn().mockReturnValue({ leftJoin: mockMemberJoin });
       const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
 
       const { db } = await import('@/libs/DB');
@@ -451,8 +491,8 @@ describe('TransactionsService', () => {
       const mockLeftJoin3 = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin4 });
       const mockLeftJoin2 = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin3 });
       const mockLeftJoin1 = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin2 });
-      const mockInnerJoin = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin1 });
-      const mockFrom = vi.fn().mockReturnValue({ innerJoin: mockInnerJoin });
+      const mockMemberJoin = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin1 });
+      const mockFrom = vi.fn().mockReturnValue({ leftJoin: mockMemberJoin });
       const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
 
       const { db } = await import('@/libs/DB');
@@ -496,8 +536,8 @@ describe('TransactionsService', () => {
       const mockLeftJoin3 = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin4 });
       const mockLeftJoin2 = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin3 });
       const mockLeftJoin1 = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin2 });
-      const mockInnerJoin = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin1 });
-      const mockFrom = vi.fn().mockReturnValue({ innerJoin: mockInnerJoin });
+      const mockMemberJoin = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin1 });
+      const mockFrom = vi.fn().mockReturnValue({ leftJoin: mockMemberJoin });
       const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
 
       const { db } = await import('@/libs/DB');

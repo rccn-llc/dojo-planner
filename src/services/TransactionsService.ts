@@ -4,7 +4,7 @@ import { eventRegistrationSchema, eventSchema, memberMembershipSchema, memberSch
 
 export type TransactionData = {
   id: string;
-  memberId: string;
+  memberId: string | null;
   memberFirstName: string | null;
   memberLastName: string | null;
   transactionType: string;
@@ -53,7 +53,9 @@ export async function getOrganizationTransactions(
       createdAt: transactionSchema.createdAt,
     })
     .from(transactionSchema)
-    .innerJoin(memberSchema, eq(transactionSchema.memberId, memberSchema.id))
+    // leftJoin (not inner): a guest/non-member transaction has a null member_id
+    // and no member row — an inner join would silently drop it from the list.
+    .leftJoin(memberSchema, eq(transactionSchema.memberId, memberSchema.id))
     .where(and(...conditions))
     .orderBy(desc(transactionSchema.createdAt))
     .limit(options?.limit ?? 500)
@@ -64,7 +66,7 @@ export async function getOrganizationTransactions(
 
 export type TransactionDetailData = {
   id: string;
-  memberId: string;
+  memberId: string | null;
   memberFirstName: string | null;
   memberLastName: string | null;
   memberType: string | null;
@@ -119,7 +121,9 @@ export async function getTransactionById(
       eventType: eventSchema.eventType,
     })
     .from(transactionSchema)
-    .innerJoin(memberSchema, eq(transactionSchema.memberId, memberSchema.id))
+    // leftJoin (not inner): a guest/non-member transaction has a null member_id
+    // and no member row — an inner join would 404 the detail lookup.
+    .leftJoin(memberSchema, eq(transactionSchema.memberId, memberSchema.id))
     .leftJoin(memberMembershipSchema, eq(transactionSchema.memberMembershipId, memberMembershipSchema.id))
     .leftJoin(membershipPlanSchema, eq(memberMembershipSchema.membershipPlanId, membershipPlanSchema.id))
     .leftJoin(eventRegistrationSchema, eq(transactionSchema.eventRegistrationId, eventRegistrationSchema.id))

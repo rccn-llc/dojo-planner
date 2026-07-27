@@ -340,6 +340,27 @@ describe('FinancesTable', () => {
       expect(table.getByText('Alice Brown')).toBeInTheDocument();
       expect(table.getByText('Zack Williams')).toBeInTheDocument();
     });
+
+    it('renders a guest/non-member transaction (null memberId) and sorts without error', async () => {
+      // The page maps a memberless row to the "Non-member" label; memberId is
+      // null. The table must render/sort it without crashing.
+      const mockTransactions = [
+        createMockTransaction({ id: '1', memberName: 'Alice Brown', memberId: 'M001' }),
+        createMockTransaction({ id: '2', memberName: 'Non-member', memberId: null }),
+      ];
+
+      render(<FinancesTable transactions={mockTransactions} />);
+
+      const table = page.getByRole('table');
+
+      expect(table.getByText('Non-member')).toBeInTheDocument();
+
+      const memberHeader = page.getByRole('button', { name: /table_member/i });
+      await memberHeader.click();
+
+      expect(table.getByText('Alice Brown')).toBeInTheDocument();
+      expect(table.getByText('Non-member')).toBeInTheDocument();
+    });
   });
 
   describe('Status column', () => {

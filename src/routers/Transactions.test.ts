@@ -75,6 +75,21 @@ describe('Transactions Router', () => {
           processedAt: new Date('2026-01-02'),
           createdAt: new Date('2026-01-02'),
         },
+        {
+          // Guest / non-member sale (e.g. kiosk store purchase): null member.
+          id: 'txn_guest',
+          memberId: null,
+          memberFirstName: null,
+          memberLastName: null,
+          transactionType: 'adjustment',
+          amount: 8000,
+          currency: 'USD',
+          status: 'paid',
+          paymentMethod: 'card',
+          description: 'Store: Black Belt — John Customer',
+          processedAt: new Date('2026-01-03'),
+          createdAt: new Date('2026-01-03'),
+        },
       ];
 
       vi.mocked(guardRole).mockResolvedValue(mockContext);

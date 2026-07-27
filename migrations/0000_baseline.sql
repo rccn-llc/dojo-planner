@@ -499,7 +499,7 @@ CREATE TABLE "tag" (
 CREATE TABLE "transaction" (
 	"id" text PRIMARY KEY NOT NULL,
 	"organization_id" text NOT NULL,
-	"member_id" text NOT NULL,
+	"member_id" text,
 	"member_membership_id" text,
 	"event_registration_id" text,
 	"stripe_payment_intent_id" text,
