@@ -195,7 +195,7 @@ export async function getFinancialStats(organizationId: string): Promise<Financi
 
   const [
     [suspendedResult],
-    amountDueRows,
+    [amountDueResult],
     [pastDueResult],
     [paymentsResult],
     [pendingResult],
@@ -212,8 +212,10 @@ export async function getFinancialStats(organizationId: string): Promise<Financi
         eq(memberMembershipSchema.billingType, 'autopay'),
       )),
 
-    // Amount due next 30 days (sum of active autopay membership plan prices)
-    db.select({ price: membershipPlanSchema.price })
+    // Amount due next 30 days (SUM of active autopay membership plan prices) —
+    // aggregate in SQL rather than fetching one row per membership and summing
+    // in JS.
+    db.select({ total: sum(membershipPlanSchema.price) })
       .from(memberMembershipSchema)
       .innerJoin(memberSchema, eq(memberMembershipSchema.memberId, memberSchema.id))
       .innerJoin(membershipPlanSchema, eq(memberMembershipSchema.membershipPlanId, membershipPlanSchema.id))
@@ -267,7 +269,7 @@ export async function getFinancialStats(organizationId: string): Promise<Financi
   ]);
 
   const autopaysSuspended = suspendedResult?.count ?? 0;
-  const amountDueNext30Days = amountDueRows.reduce((s, row) => s + (row.price ?? 0), 0);
+  const amountDueNext30Days = Number(amountDueResult?.total ?? 0);
   const pastDueTotal = Number(pastDueResult?.total ?? 0);
   const paymentsLast30Days = Number(paymentsResult?.total ?? 0);
   const paymentsPending = Number(pendingResult?.total ?? 0);

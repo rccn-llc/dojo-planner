@@ -19,9 +19,22 @@ const dbMock = {
   insert: vi.fn(),
   update: vi.fn(),
   delete: vi.fn(),
+  transaction: vi.fn(),
 };
 
 vi.mock('@/libs/DB', () => ({ db: dbMock }));
+
+// createEvent/updateEvent now wrap their writes in db.transaction; run the
+// callback with a `tx` that reuses the same spies so existing assertions keep
+// working.
+dbMock.transaction.mockImplementation(async (cb: any) =>
+  cb({
+    insert: dbMock.insert,
+    update: dbMock.update,
+    select: dbMock.select,
+    delete: dbMock.delete,
+  }),
+);
 
 vi.mock('@/models/Schema', () => ({
   attendanceSchema: {},

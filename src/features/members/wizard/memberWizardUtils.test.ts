@@ -1,6 +1,14 @@
 import type { AppliedCoupon, WizardStepData } from '@/hooks/useAddMemberWizard';
 import { describe, expect, it, vi } from 'vitest';
-import { buildSignedWaiverPayload, calculateAge, computeDiscountedPrice, fileToDataUrl } from './memberWizardUtils';
+import { buildPaymentMethodFields, buildSignedWaiverPayload, calculateAge, captureCardRefs, computeDiscountedPrice, fileToDataUrl } from './memberWizardUtils';
+
+function makeRefs() {
+  return {
+    cardToken: { current: undefined as string | undefined },
+    cardFirstSix: { current: undefined as string | undefined },
+    cardLastFour: { current: undefined as string | undefined },
+  };
+}
 
 function coupon(type: AppliedCoupon['type'], amount: string): AppliedCoupon {
   return {
@@ -183,5 +191,69 @@ describe('buildSignedWaiverPayload', () => {
     expect(payload.memberLastName).toBe('Name');
     expect(payload.memberEmail).toBe('override@example.com');
     expect(payload.signedByName).toBe('Override');
+  });
+});
+
+describe('captureCardRefs', () => {
+  it('captures present card fields into refs (key present is the signal)', () => {
+    const refs = makeRefs();
+    captureCardRefs({ cardToken: 'tok_1', cardFirstSix: '424242', cardLastFour: '4242' } as Partial<WizardStepData>, refs);
+
+    expect(refs.cardToken.current).toBe('tok_1');
+    expect(refs.cardFirstSix.current).toBe('424242');
+    expect(refs.cardLastFour.current).toBe('4242');
+  });
+
+  it('resets a ref when the key is explicitly set to undefined (clear)', () => {
+    const refs = makeRefs();
+    refs.cardToken.current = 'stale';
+    captureCardRefs({ cardToken: undefined } as Partial<WizardStepData>, refs);
+
+    expect(refs.cardToken.current).toBeUndefined();
+  });
+
+  it('leaves refs untouched when the key is absent', () => {
+    const refs = makeRefs();
+    refs.cardToken.current = 'keep';
+    captureCardRefs({ firstName: 'X' } as Partial<WizardStepData>, refs);
+
+    expect(refs.cardToken.current).toBe('keep');
+  });
+});
+
+describe('buildPaymentMethodFields', () => {
+  it('prefers refs over state and omits absent fields', () => {
+    const refs = makeRefs();
+    refs.cardToken.current = 'tok_ref';
+    const data = { cardToken: 'tok_state', cardholderName: 'Jane Doe', cardExpiry: '12/28' } as WizardStepData;
+    const fields = buildPaymentMethodFields(data, refs);
+
+    expect(fields.cardToken).toBe('tok_ref'); // ref wins
+    expect(fields.cardholderName).toBe('Jane Doe');
+    expect(fields.cardExpiry).toBe('12/28');
+    expect(fields).not.toHaveProperty('cardCvc');
+    expect(fields).not.toHaveProperty('achRoutingNumber');
+  });
+
+  it('sends a raw cardNumber only when there is no token', () => {
+    const refs = makeRefs();
+    const withToken = buildPaymentMethodFields({ cardToken: 'tok', cardNumber: '4242424242424242' } as WizardStepData, refs);
+
+    expect(withToken).not.toHaveProperty('cardNumber');
+
+    const noToken = buildPaymentMethodFields({ cardNumber: '4242424242424242' } as WizardStepData, makeRefs());
+
+    expect(noToken.cardNumber).toBe('4242424242424242');
+  });
+
+  it('includes ACH fields when present', () => {
+    const fields = buildPaymentMethodFields(
+      { achRoutingNumber: '123456789', achAccountNumber: '000111', achAccountType: 'Checking' } as WizardStepData,
+      makeRefs(),
+    );
+
+    expect(fields.achRoutingNumber).toBe('123456789');
+    expect(fields.achAccountNumber).toBe('000111');
+    expect(fields.achAccountType).toBe('Checking');
   });
 });

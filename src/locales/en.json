@@ -10,10 +10,8 @@
     "title": "Dojo Planner",
     "primary_button": "Get Started"
   },
-  "Features": {
-  },
-  "Pricing": {
-  },
+  "Features": {},
+  "Pricing": {},
   "PricingPlan": {
     "free_user_plan_name": "Free",
     "free_trial_plan_name": "Free Trial",
@@ -32,10 +30,8 @@
     "plan_interval_year": "year",
     "next_renew_date": "Your subscription renews on {date}"
   },
-  "FAQ": {
-  },
-  "CTA": {
-  },
+  "FAQ": {},
+  "CTA": {},
   "ProtectFallback": {
     "not_enough_permission": "You do not have the permissions to perform this action"
   },
@@ -184,8 +180,7 @@
     "meta_title": "Dojo Planner",
     "meta_description": "An easy way to manage your academy."
   },
-  "DashboardIndex": {
-  },
+  "DashboardIndex": {},
   "Billing": {
     "title_bar": "Billing",
     "title_bar_description": "Manage your billing and subscription",
@@ -449,7 +444,7 @@
       "processing_button": "Processing...",
       "try_again_button": "Try Again",
       "continue_without_payment_button": "Add Member Anyway",
-      "trial_title": "Free Trial \u2014 No Payment Today",
+      "trial_title": "Free Trial — No Payment Today",
       "trial_disclaimer": "No payment will be collected today. Your trial period is {duration}. Your academy will follow up before any charges.",
       "payment_approved_title": "Payment Approved",
       "payment_approved_message": "The payment has been successfully processed. You can now proceed to complete member registration.",
@@ -736,7 +731,8 @@
     "profile_update_error": "Failed to update profile. Please try again.",
     "first_name_required": "First name is required",
     "last_name_required": "Last name is required",
-    "email_required": "Email is required"
+    "email_required": "Email is required",
+    "email_invalid": "Please enter a valid email"
   },
   "UserMenu": {
     "manage_profile": "Manage Profile",
@@ -1421,7 +1417,7 @@
   },
   "RemoveStaffAlertDialog": {
     "title": "Remove staff member?",
-    "description": "{staffName} will lose access to this organization. Their user account is preserved \u2014 only their organization membership is revoked.",
+    "description": "{staffName} will lose access to this organization. Their user account is preserved — only their organization membership is revoked.",
     "cancel_button": "Cancel",
     "remove_button": "Remove",
     "removing_button": "Removing..."
@@ -2117,7 +2113,8 @@
       "confirm_button": "Place on Hold",
       "confirming_button": "Placing on hold...",
       "error_generic": "Failed to place the membership on hold. Please try again.",
-      "partial_success": "Membership placed on hold, but the fee charge failed: {error}"
+      "partial_success": "Membership placed on hold, but the fee charge failed: {error}",
+      "done_button": "Done"
     }
   },
   "HelpButton": {

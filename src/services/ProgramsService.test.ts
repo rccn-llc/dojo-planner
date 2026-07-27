@@ -176,3 +176,29 @@ describe('ProgramsService.deleteProgram', () => {
     await expect(deleteProgram('p-1', 'org-1')).rejects.toBeInstanceOf(ProgramInUseError);
   });
 });
+
+describe('ProgramsService.assertProgramInOrg', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('resolves when the program belongs to the org', async () => {
+    dbMock.select.mockReturnValueOnce({
+      from: () => ({ where: () => ({ limit: () => Promise.resolve([{ id: 'p-1' }]) }) }),
+    });
+
+    const { assertProgramInOrg } = await import('./ProgramsService');
+
+    await expect(assertProgramInOrg('p-1', 'org-1')).resolves.toBeUndefined();
+  });
+
+  it('throws ProgramNotFoundError when the program is missing or in another org', async () => {
+    dbMock.select.mockReturnValueOnce({
+      from: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
+    });
+
+    const { assertProgramInOrg, ProgramNotFoundError } = await import('./ProgramsService');
+
+    await expect(assertProgramInOrg('p-foreign', 'org-1')).rejects.toBeInstanceOf(ProgramNotFoundError);
+  });
+});

@@ -10,6 +10,8 @@ const validCardPayment = {
   billingType: 'autopay' as const,
   amount: 150,
   description: 'Monthly membership payment',
+  // A 'new' card charge requires a token (or raw number) — see the superRefine.
+  cardToken: 'tok_test_1234567890',
 };
 
 const validAchPayment = {
@@ -21,6 +23,9 @@ const validAchPayment = {
   billingType: 'one-time' as const,
   amount: 200,
   description: 'Annual membership payment',
+  // A 'new' ACH charge requires routing + account number.
+  achRoutingNumber: '123456789',
+  achAccountNumber: '000123456789',
 };
 
 describe('ProcessPaymentValidation', () => {
@@ -343,8 +348,10 @@ describe('ProcessPaymentValidation', () => {
       }
     });
 
-    it('should accept without cardToken', () => {
-      const result = ProcessPaymentValidation.safeParse(validCardPayment);
+    it('should accept a saved-source card charge without card data', () => {
+      // 'saved' charges carry no card fields — the server resolves the vaulted PM.
+      const { cardToken: _t, ...noCard } = validCardPayment;
+      const result = ProcessPaymentValidation.safeParse({ ...noCard, paymentMethodSource: 'saved' });
 
       expect(result.success).toBe(true);
 
@@ -353,8 +360,16 @@ describe('ProcessPaymentValidation', () => {
       }
     });
 
-    it('should accept without ACH fields', () => {
-      const result = ProcessPaymentValidation.safeParse(validAchPayment);
+    it('should reject a new-source card charge with no cardToken or cardNumber', () => {
+      const { cardToken: _t, ...noCard } = validCardPayment;
+      const result = ProcessPaymentValidation.safeParse(noCard);
+
+      expect(result.success).toBe(false);
+    });
+
+    it('should accept a saved-source ACH charge without ACH fields', () => {
+      const { achRoutingNumber: _r, achAccountNumber: _a, ...noAch } = validAchPayment;
+      const result = ProcessPaymentValidation.safeParse({ ...noAch, paymentMethodSource: 'saved' });
 
       expect(result.success).toBe(true);
 
@@ -640,9 +655,12 @@ describe('ProcessPaymentValidation', () => {
       const methods = ['card', 'ach'] as const;
 
       for (const method of methods) {
+        // Use the saved source so the enum is checked independently of the
+        // new-charge card/ACH-field requirement (covered by its own tests).
         const result = ProcessPaymentValidation.safeParse({
           ...validCardPayment,
           paymentMethod: method,
+          paymentMethodSource: 'saved',
         });
 
         expect(result.success).toBe(true);

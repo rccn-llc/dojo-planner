@@ -16,6 +16,7 @@ import {
   UpdateMembershipPlanValidation,
 } from '@/validations/MembershipPlanValidation';
 import { guardRole } from './AuthGuards';
+import { toTenancyOrpcError } from './OrpcErrors';
 
 export const create = os
   .input(CreateMembershipPlanValidation)
@@ -54,6 +55,10 @@ export const create = os
         status: 'failure',
         error: error instanceof Error ? error.message : 'Unknown error',
       });
+      const tenancy = toTenancyOrpcError(error);
+      if (tenancy) {
+        throw tenancy;
+      }
       if (error instanceof MembershipPlanSlugAlreadyExistsError) {
         throw new ORPCError('Conflict', { status: 409, message: error.message });
       }
@@ -106,6 +111,10 @@ export const update = os
         status: 'failure',
         error: error instanceof Error ? error.message : 'Unknown error',
       });
+      const tenancy = toTenancyOrpcError(error);
+      if (tenancy) {
+        throw tenancy;
+      }
       if (error instanceof MembershipPlanSlugAlreadyExistsError) {
         throw new ORPCError('Conflict', { status: 409, message: error.message });
       }

@@ -623,9 +623,11 @@ CREATE UNIQUE INDEX "coupon_org_code_idx" ON "coupon" USING btree ("organization
 CREATE INDEX "coupon_status_idx" ON "coupon" USING btree ("status");--> statement-breakpoint
 CREATE INDEX "coupon_usage_coupon_idx" ON "coupon_usage" USING btree ("coupon_id");--> statement-breakpoint
 CREATE INDEX "coupon_usage_member_idx" ON "coupon_usage" USING btree ("member_id");--> statement-breakpoint
+CREATE INDEX "coupon_usage_transaction_idx" ON "coupon_usage" USING btree ("transaction_id");--> statement-breakpoint
 CREATE INDEX "event_billing_event_idx" ON "event_billing" USING btree ("event_id");--> statement-breakpoint
 CREATE INDEX "event_registration_member_idx" ON "event_registration" USING btree ("member_id");--> statement-breakpoint
 CREATE INDEX "event_registration_event_idx" ON "event_registration" USING btree ("event_id");--> statement-breakpoint
+CREATE INDEX "event_registration_billing_idx" ON "event_registration" USING btree ("event_billing_id");--> statement-breakpoint
 CREATE INDEX "event_org_idx" ON "event" USING btree ("organization_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "event_org_slug_idx" ON "event" USING btree ("organization_id","slug");--> statement-breakpoint
 CREATE INDEX "event_session_event_idx" ON "event_session" USING btree ("event_id");--> statement-breakpoint
@@ -659,6 +661,8 @@ CREATE INDEX "transaction_status_idx" ON "transaction" USING btree ("status");--
 CREATE INDEX "transaction_date_idx" ON "transaction" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "transaction_org_created_idx" ON "transaction" USING btree ("organization_id","created_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "transaction_stripe_idx" ON "transaction" USING btree ("stripe_payment_intent_id");--> statement-breakpoint
+CREATE INDEX "transaction_member_membership_idx" ON "transaction" USING btree ("member_membership_id");--> statement-breakpoint
+CREATE INDEX "transaction_event_registration_idx" ON "transaction" USING btree ("event_registration_id");--> statement-breakpoint
 CREATE INDEX "waiver_merge_field_org_idx" ON "waiver_merge_field" USING btree ("organization_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "waiver_merge_field_org_key_idx" ON "waiver_merge_field" USING btree ("organization_id","key");--> statement-breakpoint
 CREATE INDEX "waiver_template_org_idx" ON "waiver_template" USING btree ("organization_id");--> statement-breakpoint

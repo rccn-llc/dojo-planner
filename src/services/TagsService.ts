@@ -38,6 +38,47 @@ export class TagNameAlreadyExistsError extends Error {
   }
 }
 
+/**
+ * Thrown when one or more supplied tag ids don't exist, belong to a different
+ * org, or are the wrong entity type. Routers map this to a 404.
+ */
+export class TagNotFoundError extends Error {
+  constructor(message = 'One or more tags were not found') {
+    super(message);
+    this.name = 'TagNotFoundError';
+  }
+}
+
+/**
+ * Verify every id in `tagIds` is a tag in the given org AND of the given
+ * entity type. Throws TagNotFoundError (→ 404) if any id is missing/foreign.
+ * Used by Class / Event writes to reject a client-supplied tag from another
+ * org — the junction-table FK alone does not enforce tenancy (see CLAUDE.md
+ * "Multi-Tenant Org-Scoping"). A no-op for an empty list.
+ */
+export async function assertTagsInOrg(
+  tagIds: string[],
+  organizationId: string,
+  entityType: TagEntityType,
+): Promise<void> {
+  if (tagIds.length === 0) {
+    return;
+  }
+  const uniqueIds = [...new Set(tagIds)];
+  const rows = await db
+    .select({ id: tagSchema.id })
+    .from(tagSchema)
+    .where(and(
+      inArray(tagSchema.id, uniqueIds),
+      eq(tagSchema.organizationId, organizationId),
+      eq(tagSchema.entityType, entityType),
+    ));
+
+  if (rows.length !== uniqueIds.length) {
+    throw new TagNotFoundError();
+  }
+}
+
 // =============================================================================
 // SERVICE FUNCTIONS — READS (existing)
 // =============================================================================

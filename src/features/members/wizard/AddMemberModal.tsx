@@ -16,7 +16,7 @@ import { MemberPhotoStep } from './MemberPhotoStep';
 import { MembershipStep } from './MembershipStep';
 import { MemberSuccessStep } from './MemberSuccessStep';
 import { MemberTypeStep } from './MemberTypeStep';
-import { buildSignedWaiverPayload, computeDiscountedPrice, fileToDataUrl } from './memberWizardUtils';
+import { buildPaymentMethodFields, buildSignedWaiverPayload, captureCardRefs, computeDiscountedPrice, fileToDataUrl } from './memberWizardUtils';
 import { PaymentStep } from './PaymentStep';
 import { WaiverStep } from './WaiverStep';
 
@@ -44,6 +44,10 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
   // We use a ref (not state) because handleCancel needs to read it
   // synchronously after a chain of async setStates.
   const createdMemberIdRef = useRef<string | undefined>(undefined);
+  // The family member's membership-row id, tracked alongside createdMemberIdRef
+  // so a payment-decline "Try Again" reuses the same membership row instead of
+  // re-creating the member (#220).
+  const createdMemberMembershipIdRef = useRef<string | undefined>(undefined);
 
   // Re-entrancy guard: flips synchronously on click to drop duplicate submissions
   // that fire before React flushes the disabled-button state.
@@ -51,16 +55,9 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
 
   // Wrapper around wizard.updateData that also captures card refs synchronously
   // so handleFinalNext can read them (React setState is async).
+  const cardRefs = { cardToken: cardTokenRef, cardFirstSix: cardFirstSixRef, cardLastFour: cardLastFourRef };
   const updateDataWithRef = (updates: Partial<typeof wizard.data>) => {
-    if (updates.cardToken !== undefined) {
-      cardTokenRef.current = updates.cardToken;
-    }
-    if (updates.cardFirstSix !== undefined) {
-      cardFirstSixRef.current = updates.cardFirstSix;
-    }
-    if (updates.cardLastFour !== undefined) {
-      cardLastFourRef.current = updates.cardLastFour;
-    }
+    captureCardRefs(updates, cardRefs);
     wizard.updateData(updates);
   };
 
@@ -100,20 +97,18 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
     cardFirstSixRef.current = undefined;
     cardLastFourRef.current = undefined;
     createdMemberIdRef.current = undefined;
+    createdMemberMembershipIdRef.current = undefined;
     submittingRef.current = false;
     wizard.reset();
     onCloseAction();
   };
 
   const handleSuccess = async () => {
-    console.info('[Add Member Wizard] Member created successfully:', {
-      timestamp: new Date().toISOString(),
-      memberData: wizard.data,
-    });
     cardTokenRef.current = undefined;
     cardFirstSixRef.current = undefined;
     cardLastFourRef.current = undefined;
     createdMemberIdRef.current = undefined;
+    createdMemberMembershipIdRef.current = undefined;
     submittingRef.current = false;
     wizard.reset();
     onCloseAction();
@@ -198,22 +193,6 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
       wizard.setIsLoading(true);
       wizard.clearError();
 
-      // Log authorization context
-      console.info('[Add Member Wizard] Starting member creation with Clerk context:', {
-        timestamp: new Date().toISOString(),
-        user: {
-          id: user?.id,
-          email: user?.primaryEmailAddress?.emailAddress,
-          role: user?.publicMetadata?.role,
-        },
-        organization: {
-          id: organization?.id,
-          name: organization?.name,
-          subscriptionPlan: organization?.publicMetadata?.subscriptionPlan,
-        },
-        wizardData: wizard.data,
-      });
-
       // Verify authorization
       if (!user) {
         throw new Error('User not authenticated');
@@ -243,7 +222,9 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
       }
 
       // Determine member status based on payment result
-      // If payment was declined, set status to 'past due'
+      // If payment was declined, set status to 'past_due' (underscore — must
+      // match the value used by filters/reports/webhooks; see MemberFilterBar,
+      // ReportsService, and the IQPro webhook handler).
       // Note: amountDue will be calculated from a separate billing table in the future
       const isPaymentDeclined = wizard.data.paymentStatus === 'declined';
 
@@ -257,7 +238,7 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
         ...(wizard.data.membershipPlanId && { membershipPlanId: wizard.data.membershipPlanId }),
         ...(addressPayload && { address: addressPayload }),
         ...(photoUrl && { photoUrl }),
-        ...(isPaymentDeclined && { status: 'past due' as const }),
+        ...(isPaymentDeclined && { status: 'past_due' as const }),
         ...(wizard.data.appliedCoupon && {
           appliedCoupon: {
             id: wizard.data.appliedCoupon.id,
@@ -269,21 +250,10 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
         }),
       };
 
-      console.info('[Add Member Wizard] Member creation payload:', {
-        timestamp: new Date().toISOString(),
-        payload: createPayload,
-        addressPayload,
-        hasPhoto: !!photoUrl,
-      });
-
       const result = await client.member.create(createPayload);
       // Track the new member's id so handleCancel can roll back the whole
       // signup chain if the user bails after a payment decline (#132).
       createdMemberIdRef.current = result.id;
-      console.info('[Add Member Wizard] Member created successfully:', {
-        timestamp: new Date().toISOString(),
-        result,
-      });
 
       // Create signed waiver record if waiver was signed during the wizard
       if (
@@ -296,8 +266,6 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
         await client.waivers.createSignedWaiver(
           buildSignedWaiverPayload(wizard.data, result.id),
         );
-
-        console.info('[Add Member Wizard] Signed waiver created for member:', result.id);
       }
 
       // HOH capture-only: register payment method without processing a charge
@@ -313,17 +281,7 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
             ...(wizard.data.phone && { memberPhone: wizard.data.phone }),
             ...(wizard.data.address && { memberAddress: wizard.data.address }),
             paymentMethod: wizard.data.paymentMethod,
-            ...(wizard.data.cardholderName && { cardholderName: wizard.data.cardholderName }),
-            ...((cardTokenRef.current || wizard.data.cardToken) && { cardToken: cardTokenRef.current || wizard.data.cardToken }),
-            ...((cardFirstSixRef.current || wizard.data.cardFirstSix) && { cardFirstSix: cardFirstSixRef.current || wizard.data.cardFirstSix }),
-            ...((cardLastFourRef.current || wizard.data.cardLastFour) && { cardLastFour: cardLastFourRef.current || wizard.data.cardLastFour }),
-            ...(wizard.data.cardNumber && !cardTokenRef.current && !wizard.data.cardToken && { cardNumber: wizard.data.cardNumber }),
-            ...(wizard.data.cardExpiry && { cardExpiry: wizard.data.cardExpiry }),
-            ...(wizard.data.cardCvc && { cardCvc: wizard.data.cardCvc }),
-            ...(wizard.data.achAccountHolder && { achAccountHolder: wizard.data.achAccountHolder }),
-            ...(wizard.data.achRoutingNumber && { achRoutingNumber: wizard.data.achRoutingNumber }),
-            ...(wizard.data.achAccountNumber && { achAccountNumber: wizard.data.achAccountNumber }),
-            ...(wizard.data.achAccountType && { achAccountType: wizard.data.achAccountType }),
+            ...buildPaymentMethodFields(wizard.data, cardRefs),
           });
 
           if (!registerResult.success) {
@@ -385,21 +343,10 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
             description: wizard.data.membershipPlanName
               ? `Membership: ${wizard.data.membershipPlanName}`
               : 'Membership payment',
-            // Card fields (cardToken = PCI-compliant tokenized card; cardNumber = fallback)
-            // Read cardToken from ref because React setState in PaymentStep is async
+            // Card + ACH fields. cardToken (PCI-compliant tokenized card) is
+            // read from the ref because React setState in PaymentStep is async
             // and wizard.data.cardToken may not yet reflect the tokenized value.
-            ...(wizard.data.cardholderName && { cardholderName: wizard.data.cardholderName }),
-            ...((cardTokenRef.current || wizard.data.cardToken) && { cardToken: cardTokenRef.current || wizard.data.cardToken }),
-            ...((cardFirstSixRef.current || wizard.data.cardFirstSix) && { cardFirstSix: cardFirstSixRef.current || wizard.data.cardFirstSix }),
-            ...((cardLastFourRef.current || wizard.data.cardLastFour) && { cardLastFour: cardLastFourRef.current || wizard.data.cardLastFour }),
-            ...(wizard.data.cardNumber && !cardTokenRef.current && !wizard.data.cardToken && { cardNumber: wizard.data.cardNumber }),
-            ...(wizard.data.cardExpiry && { cardExpiry: wizard.data.cardExpiry }),
-            ...(wizard.data.cardCvc && { cardCvc: wizard.data.cardCvc }),
-            // ACH fields
-            ...(wizard.data.achAccountHolder && { achAccountHolder: wizard.data.achAccountHolder }),
-            ...(wizard.data.achRoutingNumber && { achRoutingNumber: wizard.data.achRoutingNumber }),
-            ...(wizard.data.achAccountNumber && { achAccountNumber: wizard.data.achAccountNumber }),
-            ...(wizard.data.achAccountType && { achAccountType: wizard.data.achAccountType }),
+            ...buildPaymentMethodFields(wizard.data, cardRefs),
             // Membership context — including memberMembershipId so the
             // service can attach the IQPro subscription id + first/next
             // payment dates to the right row on success.
@@ -549,29 +496,40 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
         }),
       };
 
-      // 1. Create the member
-      const result = await client.member.create(createPayload);
+      // 1. Create the member — but only once. If we're re-entering after a
+      // payment-decline "Try Again", the member (+ waiver + HOH link) already
+      // exists; re-running create would spawn a duplicate active member on
+      // every retry (#220). Reuse the tracked ids and jump straight to payment.
+      let result: { id: string | undefined; memberMembershipId?: string };
+      if (createdMemberIdRef.current) {
+        result = { id: createdMemberIdRef.current, memberMembershipId: createdMemberMembershipIdRef.current };
+      } else {
+        const created = await client.member.create(createPayload);
+        result = created;
+        createdMemberIdRef.current = created.id;
+        createdMemberMembershipIdRef.current = created.memberMembershipId;
 
-      // 2. Create signed waiver if applicable
-      if (
-        result.id
-        && wizard.data.waiverTemplateId
-        && wizard.data.waiverSignatureDataUrl
-        && wizard.data.waiverRenderedContent
-        && !wizard.data.waiverSkipped
-      ) {
-        await client.waivers.createSignedWaiver(
-          buildSignedWaiverPayload(wizard.data, result.id),
-        );
-      }
+        // 2. Create signed waiver if applicable
+        if (
+          created.id
+          && wizard.data.waiverTemplateId
+          && wizard.data.waiverSignatureDataUrl
+          && wizard.data.waiverRenderedContent
+          && !wizard.data.waiverSkipped
+        ) {
+          await client.waivers.createSignedWaiver(
+            buildSignedWaiverPayload(wizard.data, created.id),
+          );
+        }
 
-      // 3. Link family member to HOH
-      if (result.id && wizard.data.hohMemberId) {
-        await client.member.linkFamilyMember({
-          memberId: result.id,
-          hohMemberId: wizard.data.hohMemberId,
-          relationship: 'family-member',
-        });
+        // 3. Link family member to HOH
+        if (created.id && wizard.data.hohMemberId) {
+          await client.member.linkFamilyMember({
+            memberId: created.id,
+            hohMemberId: wizard.data.hohMemberId,
+            relationship: 'family-member',
+          });
+        }
       }
 
       // 4. Process payment using HOH's context. Recurring + signup fee are
@@ -618,19 +576,7 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
               ? `Membership: ${wizard.data.membershipPlanName}`
               : 'Membership payment',
             // If HOH has no card, use newly collected card/ACH details
-            ...(!wizard.data.hohHasPaymentMethod && {
-              ...(wizard.data.cardholderName && { cardholderName: wizard.data.cardholderName }),
-              ...((cardTokenRef.current || wizard.data.cardToken) && { cardToken: cardTokenRef.current || wizard.data.cardToken }),
-              ...((cardFirstSixRef.current || wizard.data.cardFirstSix) && { cardFirstSix: cardFirstSixRef.current || wizard.data.cardFirstSix }),
-              ...((cardLastFourRef.current || wizard.data.cardLastFour) && { cardLastFour: cardLastFourRef.current || wizard.data.cardLastFour }),
-              ...(wizard.data.cardNumber && !cardTokenRef.current && !wizard.data.cardToken && { cardNumber: wizard.data.cardNumber }),
-              ...(wizard.data.cardExpiry && { cardExpiry: wizard.data.cardExpiry }),
-              ...(wizard.data.cardCvc && { cardCvc: wizard.data.cardCvc }),
-              ...(wizard.data.achAccountHolder && { achAccountHolder: wizard.data.achAccountHolder }),
-              ...(wizard.data.achRoutingNumber && { achRoutingNumber: wizard.data.achRoutingNumber }),
-              ...(wizard.data.achAccountNumber && { achAccountNumber: wizard.data.achAccountNumber }),
-              ...(wizard.data.achAccountType && { achAccountType: wizard.data.achAccountType }),
-            }),
+            ...(!wizard.data.hohHasPaymentMethod && buildPaymentMethodFields(wizard.data, cardRefs)),
             ...(wizard.data.membershipPlanId && { membershipPlanId: wizard.data.membershipPlanId }),
             ...(wizard.data.membershipPlanFrequency && { membershipPlanFrequency: wizard.data.membershipPlanFrequency }),
             // result.memberMembershipId belongs to the FAMILY member's

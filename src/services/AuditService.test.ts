@@ -153,6 +153,25 @@ describe('AuditService', () => {
         }),
       );
     });
+
+    it('never throws when the logger transport fails (best-effort, must not alter the caller outcome)', async () => {
+      const { auditLogger } = await import('@/libs/Logger');
+      (auditLogger.info as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
+        throw new Error('logtape transport down');
+      });
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      await expect(
+        audit(mockContext, AUDIT_ACTION.MEMBER_CREATE, AUDIT_ENTITY_TYPE.MEMBER, {
+          entityId: 'm-1',
+          status: 'success',
+        }),
+      ).resolves.toBeUndefined();
+
+      expect(consoleSpy).toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
+    });
   });
 
   describe('computeChanges', () => {

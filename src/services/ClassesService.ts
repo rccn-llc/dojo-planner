@@ -11,6 +11,8 @@ import {
   programSchema,
   tagSchema,
 } from '@/models/Schema';
+import { assertProgramInOrg } from './ProgramsService';
+import { assertTagsInOrg } from './TagsService';
 
 // =============================================================================
 // TYPES
@@ -360,48 +362,59 @@ export async function createClass(input: CreateClassServiceInput, organizationId
   const id = randomUUID();
   const slug = slugify(input.name);
 
+  // Tenancy: a client-supplied programId / tagIds must belong to this org.
+  // FK constraints alone accept any org's rows, so verify explicitly (→ 404).
+  if (input.programId) {
+    await assertProgramInOrg(input.programId, organizationId);
+  }
+  await assertTagsInOrg(input.tagIds, organizationId, 'class');
+
+  // Parent row + schedule + tags are one logical unit — persist atomically so a
+  // mid-way failure can't leave a class with no schedule/tags.
   try {
-    await db.insert(classSchema).values({
-      id,
-      organizationId,
-      programId: input.programId ?? null,
-      name: input.name,
-      slug,
-      description: input.description ?? null,
-      color: input.color ?? null,
-      defaultDurationMinutes: input.defaultDurationMinutes ?? 60,
-      maxCapacity: input.maxCapacity ?? null,
-      minAge: input.minAge ?? null,
-      maxAge: input.maxAge ?? null,
-      allowWalkIns: input.allowWalkIns ?? 'Yes',
-      isActive: input.isActive,
+    await db.transaction(async (tx) => {
+      await tx.insert(classSchema).values({
+        id,
+        organizationId,
+        programId: input.programId ?? null,
+        name: input.name,
+        slug,
+        description: input.description ?? null,
+        color: input.color ?? null,
+        defaultDurationMinutes: input.defaultDurationMinutes ?? 60,
+        maxCapacity: input.maxCapacity ?? null,
+        minAge: input.minAge ?? null,
+        maxAge: input.maxAge ?? null,
+        allowWalkIns: input.allowWalkIns ?? 'Yes',
+        isActive: input.isActive,
+      });
+
+      if (input.schedule.length > 0) {
+        await tx.insert(classScheduleInstanceSchema).values(
+          input.schedule.map(s => ({
+            id: randomUUID(),
+            classId: id,
+            primaryInstructorClerkId: s.primaryInstructorClerkId ?? null,
+            dayOfWeek: s.dayOfWeek,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            room: s.room ?? null,
+            isActive: true,
+          })),
+        );
+      }
+
+      if (input.tagIds.length > 0) {
+        await tx.insert(classTagSchema).values(
+          input.tagIds.map(tagId => ({ classId: id, tagId })),
+        );
+      }
     });
   } catch (error) {
     if (isUniqueViolation(error)) {
       throw new ClassSlugAlreadyExistsError(slug);
     }
     throw error;
-  }
-
-  if (input.schedule.length > 0) {
-    await db.insert(classScheduleInstanceSchema).values(
-      input.schedule.map(s => ({
-        id: randomUUID(),
-        classId: id,
-        primaryInstructorClerkId: s.primaryInstructorClerkId ?? null,
-        dayOfWeek: s.dayOfWeek,
-        startTime: s.startTime,
-        endTime: s.endTime,
-        room: s.room ?? null,
-        isActive: true,
-      })),
-    );
-  }
-
-  if (input.tagIds.length > 0) {
-    await db.insert(classTagSchema).values(
-      input.tagIds.map(tagId => ({ classId: id, tagId })),
-    );
   }
 
   const created = await getClassById(id, organizationId);
@@ -434,91 +447,102 @@ export async function updateClass(
 
   const slug = slugify(input.name);
 
+  // Tenancy: a client-supplied programId / tagIds must belong to this org.
+  if (input.programId) {
+    await assertProgramInOrg(input.programId, organizationId);
+  }
+  await assertTagsInOrg(input.tagIds, organizationId, 'class');
+
+  // The class UPDATE + schedule replacement + tag replacement are one logical
+  // unit — wrap in a transaction so a partial failure (e.g. a schedule insert
+  // throwing) can't leave the class updated but its schedule half-deleted.
   try {
-    await db
-      .update(classSchema)
-      .set({
-        programId: input.programId ?? null,
-        name: input.name,
-        slug,
-        description: input.description ?? null,
-        color: input.color ?? null,
-        defaultDurationMinutes: input.defaultDurationMinutes ?? 60,
-        maxCapacity: input.maxCapacity ?? null,
-        minAge: input.minAge ?? null,
-        maxAge: input.maxAge ?? null,
-        allowWalkIns: input.allowWalkIns ?? 'Yes',
-        isActive: input.isActive,
-      })
-      .where(and(eq(classSchema.id, classId), eq(classSchema.organizationId, organizationId)));
+    await db.transaction(async (tx) => {
+      await tx
+        .update(classSchema)
+        .set({
+          programId: input.programId ?? null,
+          name: input.name,
+          slug,
+          description: input.description ?? null,
+          color: input.color ?? null,
+          defaultDurationMinutes: input.defaultDurationMinutes ?? 60,
+          maxCapacity: input.maxCapacity ?? null,
+          minAge: input.minAge ?? null,
+          maxAge: input.maxAge ?? null,
+          allowWalkIns: input.allowWalkIns ?? 'Yes',
+          isActive: input.isActive,
+        })
+        .where(and(eq(classSchema.id, classId), eq(classSchema.organizationId, organizationId)));
+
+      // Replace schedule instances. We keep instances that have attendance or
+      // exception rows pointing at them (deleting would cascade-fail), and only
+      // wipe-and-recreate the rest. For the common path (no historical data),
+      // this reduces to a full delete-and-reinsert.
+      const oldInstances = await tx
+        .select()
+        .from(classScheduleInstanceSchema)
+        .where(eq(classScheduleInstanceSchema.classId, classId));
+
+      if (oldInstances.length > 0) {
+        const oldIds = oldInstances.map(i => i.id);
+        const [refExceptions, refAttendance] = await Promise.all([
+          tx.select({ id: classScheduleExceptionSchema.classScheduleInstanceId })
+            .from(classScheduleExceptionSchema)
+            .where(inArray(classScheduleExceptionSchema.classScheduleInstanceId, oldIds)),
+          tx.select({ id: attendanceSchema.classScheduleInstanceId })
+            .from(attendanceSchema)
+            .where(inArray(attendanceSchema.classScheduleInstanceId, oldIds)),
+        ]);
+        const referenced = new Set([
+          ...refExceptions.map(r => r.id),
+          ...refAttendance.map(r => r.id).filter((id): id is string => id !== null),
+        ]);
+        const deletable = oldIds.filter(id => !referenced.has(id));
+        if (deletable.length > 0) {
+          await tx
+            .delete(classScheduleInstanceSchema)
+            .where(inArray(classScheduleInstanceSchema.id, deletable));
+        }
+        // Mark referenced (but no-longer-current) instances inactive so the
+        // calendar stops showing them, but historical joins still resolve.
+        const referencedIds = oldIds.filter(id => referenced.has(id));
+        if (referencedIds.length > 0) {
+          await tx
+            .update(classScheduleInstanceSchema)
+            .set({ isActive: false })
+            .where(inArray(classScheduleInstanceSchema.id, referencedIds));
+        }
+      }
+
+      if (input.schedule.length > 0) {
+        await tx.insert(classScheduleInstanceSchema).values(
+          input.schedule.map(s => ({
+            id: randomUUID(),
+            classId,
+            primaryInstructorClerkId: s.primaryInstructorClerkId ?? null,
+            dayOfWeek: s.dayOfWeek,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            room: s.room ?? null,
+            isActive: true,
+          })),
+        );
+      }
+
+      // Replace tag associations.
+      await tx.delete(classTagSchema).where(eq(classTagSchema.classId, classId));
+      if (input.tagIds.length > 0) {
+        await tx.insert(classTagSchema).values(
+          input.tagIds.map(tagId => ({ classId, tagId })),
+        );
+      }
+    });
   } catch (error) {
     if (isUniqueViolation(error)) {
       throw new ClassSlugAlreadyExistsError(slug);
     }
     throw error;
-  }
-
-  // Replace schedule instances. We keep instances that have attendance or
-  // exception rows pointing at them (deleting would cascade-fail), and only
-  // wipe-and-recreate the rest. For the common path (no historical data),
-  // this reduces to a full delete-and-reinsert.
-  const oldInstances = await db
-    .select()
-    .from(classScheduleInstanceSchema)
-    .where(eq(classScheduleInstanceSchema.classId, classId));
-
-  if (oldInstances.length > 0) {
-    const oldIds = oldInstances.map(i => i.id);
-    const [refExceptions, refAttendance] = await Promise.all([
-      db.select({ id: classScheduleExceptionSchema.classScheduleInstanceId })
-        .from(classScheduleExceptionSchema)
-        .where(inArray(classScheduleExceptionSchema.classScheduleInstanceId, oldIds)),
-      db.select({ id: attendanceSchema.classScheduleInstanceId })
-        .from(attendanceSchema)
-        .where(inArray(attendanceSchema.classScheduleInstanceId, oldIds)),
-    ]);
-    const referenced = new Set([
-      ...refExceptions.map(r => r.id),
-      ...refAttendance.map(r => r.id).filter((id): id is string => id !== null),
-    ]);
-    const deletable = oldIds.filter(id => !referenced.has(id));
-    if (deletable.length > 0) {
-      await db
-        .delete(classScheduleInstanceSchema)
-        .where(inArray(classScheduleInstanceSchema.id, deletable));
-    }
-    // Mark referenced (but no-longer-current) instances inactive so the
-    // calendar stops showing them, but historical joins still resolve.
-    const referencedIds = oldIds.filter(id => referenced.has(id));
-    if (referencedIds.length > 0) {
-      await db
-        .update(classScheduleInstanceSchema)
-        .set({ isActive: false })
-        .where(inArray(classScheduleInstanceSchema.id, referencedIds));
-    }
-  }
-
-  if (input.schedule.length > 0) {
-    await db.insert(classScheduleInstanceSchema).values(
-      input.schedule.map(s => ({
-        id: randomUUID(),
-        classId,
-        primaryInstructorClerkId: s.primaryInstructorClerkId ?? null,
-        dayOfWeek: s.dayOfWeek,
-        startTime: s.startTime,
-        endTime: s.endTime,
-        room: s.room ?? null,
-        isActive: true,
-      })),
-    );
-  }
-
-  // Replace tag associations.
-  await db.delete(classTagSchema).where(eq(classTagSchema.classId, classId));
-  if (input.tagIds.length > 0) {
-    await db.insert(classTagSchema).values(
-      input.tagIds.map(tagId => ({ classId, tagId })),
-    );
   }
 
   return getClassById(classId, organizationId);

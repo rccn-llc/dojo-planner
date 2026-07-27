@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/libs/DB';
 import { memberMembershipSchema, membershipPlanSchema } from '@/models/Schema';
+import { assertProgramInOrg } from './ProgramsService';
 
 // =============================================================================
 // TYPES
@@ -157,6 +158,12 @@ function toMembershipPlan(row: MembershipPlanRow): MembershipPlan {
  */
 export async function createMembershipPlan(input: MembershipPlanInput, organizationId: string): Promise<MembershipPlan> {
   const id = randomUUID();
+  // Tenancy: a client-supplied programId must belong to this org. The FK
+  // constraint alone is satisfied by ANY org's program, so it can't enforce
+  // tenancy — verify explicitly (→ ProgramNotFoundError → 404).
+  if (input.programId) {
+    await assertProgramInOrg(input.programId, organizationId);
+  }
   try {
     const inserted = await db
       .insert(membershipPlanSchema)
@@ -214,6 +221,11 @@ export async function updateMembershipPlan(
     .limit(1);
   if (existing.length === 0) {
     return null;
+  }
+
+  // Tenancy: a client-supplied programId must belong to this org.
+  if (input.programId) {
+    await assertProgramInOrg(input.programId, organizationId);
   }
 
   try {

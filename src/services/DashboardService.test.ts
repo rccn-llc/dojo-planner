@@ -160,7 +160,7 @@ describe('DashboardService', () => {
 
       expect(result.autopaysSuspended).toBe(5);
       expect(result.expiringCreditCards60Days).toBe(0);
-      expect(result.amountDueNext30Days).toBe(100); // Single row with price: 100
+      expect(result.amountDueNext30Days).toBe(500); // SUM(price) aggregate → total: 500
       expect(result.pastDueTotal).toBe(500);
       expect(result.paymentsLast30Days).toBe(500);
       expect(result.paymentsPending).toBe(500);

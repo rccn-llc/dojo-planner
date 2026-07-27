@@ -76,17 +76,29 @@ export async function audit(
     requestId: options.requestId,
   };
 
-  // Log with structured data for SOC2 audit trail
-  if (options.status === 'success') {
-    auditLogger.info(
-      `[AUDIT] ${action} on ${entityType}${options.entityId ? `:${options.entityId}` : ''} by user:${context.userId} in org:${context.orgId}`,
-      { audit: event },
-    );
-  } else {
-    auditLogger.warn(
-      `[AUDIT] FAILED ${action} on ${entityType}${options.entityId ? `:${options.entityId}` : ''} by user:${context.userId} in org:${context.orgId}: ${options.error}`,
-      { audit: event },
-    );
+  // Log with structured data for SOC2 audit trail.
+  //
+  // Audit logging is BEST-EFFORT and must never alter the outcome of the
+  // operation it records. Router handlers call `await audit(...)` inside both
+  // the success path and the catch-then-rethrow path; if the logger transport
+  // rejected here, an un-caught rejection would (a) turn a successful mutation
+  // into a 500, or (b) replace the meaningful domain error being rethrown with
+  // an audit-logging error. Swallow any logging failure (recording it to the
+  // console as a last resort) so the caller's control flow is unaffected.
+  try {
+    if (options.status === 'success') {
+      auditLogger.info(
+        `[AUDIT] ${action} on ${entityType}${options.entityId ? `:${options.entityId}` : ''} by user:${context.userId} in org:${context.orgId}`,
+        { audit: event },
+      );
+    } else {
+      auditLogger.warn(
+        `[AUDIT] FAILED ${action} on ${entityType}${options.entityId ? `:${options.entityId}` : ''} by user:${context.userId} in org:${context.orgId}: ${options.error}`,
+        { audit: event },
+      );
+    }
+  } catch (logError) {
+    console.error('[AuditService] Failed to write audit log (non-fatal)', logError);
   }
 }
 

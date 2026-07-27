@@ -221,3 +221,38 @@ describe('TagsService mutations', () => {
     });
   });
 });
+
+describe('TagsService.assertTagsInOrg', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('is a no-op for an empty tag list', async () => {
+    const { assertTagsInOrg } = await import('./TagsService');
+
+    await expect(assertTagsInOrg([], 'org-1', 'class')).resolves.toBeUndefined();
+    expect(dbMock.select).not.toHaveBeenCalled();
+  });
+
+  it('resolves when every tag belongs to the org + entity type', async () => {
+    // Two unique ids requested → two matching rows returned.
+    dbMock.select.mockReturnValueOnce({
+      from: () => ({ where: () => Promise.resolve([{ id: 't-1' }, { id: 't-2' }]) }),
+    });
+
+    const { assertTagsInOrg } = await import('./TagsService');
+
+    await expect(assertTagsInOrg(['t-1', 't-2'], 'org-1', 'class')).resolves.toBeUndefined();
+  });
+
+  it('throws TagNotFoundError when a tag is missing / foreign / wrong entity type', async () => {
+    // Requested 2, only 1 matched.
+    dbMock.select.mockReturnValueOnce({
+      from: () => ({ where: () => Promise.resolve([{ id: 't-1' }]) }),
+    });
+
+    const { assertTagsInOrg, TagNotFoundError } = await import('./TagsService');
+
+    await expect(assertTagsInOrg(['t-1', 't-foreign'], 'org-1', 'class')).rejects.toBeInstanceOf(TagNotFoundError);
+  });
+});

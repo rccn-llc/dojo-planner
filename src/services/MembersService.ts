@@ -455,7 +455,7 @@ export function updateMemberPhoto(
  * Update a member's status
  * @param memberId - The member ID to update
  * @param organizationId - The organization ID
- * @param status - The new status (active, hold, trial, cancelled, past due)
+ * @param status - The new status (active, hold, trial, cancelled, past_due)
  * @returns The updated member record
  */
 export function updateMemberStatus(memberId: string, organizationId: string, status: string) {

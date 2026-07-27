@@ -731,7 +731,8 @@
     "profile_update_error": "プロフィールの更新に失敗しました。もう一度お試しください。",
     "first_name_required": "名は必須です",
     "last_name_required": "姓は必須です",
-    "email_required": "メールアドレスは必須です"
+    "email_required": "メールアドレスは必須です",
+    "email_invalid": "有効なメールアドレスを入力してください"
   },
   "UserMenu": {
     "manage_profile": "プロフィールを管理",
@@ -2109,6 +2110,7 @@
       "recurring_fee_body": "メンバーシップが保留である間、${fee}{cadence} の保留手数料が請求されます。",
       "explanation": "メンバーシップのサブスクリプションは一時停止されます（自動請求なし）。いつでも再開して請求を再開できます。",
       "back_button": "戻る",
+      "done_button": "完了",
       "confirm_button": "保留にする",
       "confirming_button": "保留処理中...",
       "error_generic": "メンバーシップの保留に失敗しました。もう一度お試しください。",

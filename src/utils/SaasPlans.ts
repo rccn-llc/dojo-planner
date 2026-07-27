@@ -56,22 +56,36 @@ export const SaasPlanList: Record<string, SaasPlan> = {
   },
 };
 
+export type SaasBillingCycle = 'monthly' | 'annual';
+
 export function getSaasPlan(planId: string): SaasPlan | undefined {
   return SaasPlanList[planId];
 }
 
-export function getPlanPrice(planId: string, billingCycle: string): number {
-  const plan = getSaasPlan(planId);
+/**
+ * Resolve a plan or throw. Prefer this in charge paths — an unknown plan id
+ * must fail loudly rather than silently price a subscription at $0.
+ */
+function requireSaasPlan(planId: SaasPlanId): SaasPlan {
+  const plan = SaasPlanList[planId];
   if (!plan) {
-    return 0;
+    throw new Error(`Unknown SaaS plan id: "${planId}"`);
   }
+  return plan;
+}
+
+/** Per-month display price. */
+export function getPlanPrice(planId: SaasPlanId, billingCycle: SaasBillingCycle): number {
+  const plan = requireSaasPlan(planId);
   return billingCycle === 'annual' ? plan.annualPricePerMonth : plan.monthlyPrice;
 }
 
-export function getPlanTotalPrice(planId: string, billingCycle: string): number {
-  const plan = getSaasPlan(planId);
-  if (!plan) {
-    return 0;
-  }
+/**
+ * The amount actually charged: the full annual total for an annual cycle, or
+ * the monthly price for a monthly cycle. Throws on an unknown plan id so a bad
+ * id can never charge $0 or fall through to the monthly branch.
+ */
+export function getPlanTotalPrice(planId: SaasPlanId, billingCycle: SaasBillingCycle): number {
+  const plan = requireSaasPlan(planId);
   return billingCycle === 'annual' ? plan.annualTotal : plan.monthlyPrice;
 }

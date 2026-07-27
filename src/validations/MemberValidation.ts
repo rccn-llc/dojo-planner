@@ -1,4 +1,9 @@
 import * as z from 'zod';
+import { MEMBER_STATUS_VALUES } from '@/types/MemberStatus';
+import { AddressValidation } from './AddressValidation';
+
+// Reasonable upper bound for a phone string (international + formatting).
+const PHONE_MAX = 40;
 
 // Base64 data URLs inflate the raw byte size by ~33%. The client compresses
 // avatars to ≤200KB (see compressImageForStorage), so ≤400KB of base64 leaves
@@ -8,20 +13,13 @@ const PHOTO_DATA_URL_REGEX = /^data:image\/(jpeg|png|gif);base64,/;
 
 export const MemberValidation = z.object({
   email: z.string().email(),
-  firstName: z.string().min(1),
-  lastName: z.string().min(1),
-  phone: z.string().optional(),
+  firstName: z.string().min(1).max(100),
+  lastName: z.string().min(1).max(100),
+  phone: z.string().max(PHONE_MAX).optional(),
   dateOfBirth: z.coerce.date(),
   memberType: z.enum(['individual', 'family-member', 'head-of-household']).optional(),
   membershipPlanId: z.string().optional(),
-  address: z.object({
-    street: z.string(),
-    apartment: z.string().optional(),
-    city: z.string(),
-    state: z.string(),
-    zipCode: z.string(),
-    country: z.string(),
-  }).optional(),
+  address: AddressValidation.optional(),
   // Optional avatar as a base64 image data URL, capped so the create payload
   // stays manageable (same limit as UpdateMemberPhotoValidation).
   photoUrl: z
@@ -29,15 +27,15 @@ export const MemberValidation = z.object({
     .max(PHOTO_DATA_URL_MAX, 'Photo data URL must be 400KB or less')
     .regex(PHOTO_DATA_URL_REGEX, 'photoUrl must be a data URL for an image (jpeg, png, gif)')
     .optional(),
-  status: z.enum(['active', 'hold', 'trial', 'cancelled', 'past due']).optional(),
+  status: z.enum(MEMBER_STATUS_VALUES).optional(),
 });
 
 export const EditMemberValidation = z.object({
   id: z.string(),
   email: z.string().email(),
-  firstName: z.string().min(1),
-  lastName: z.string().min(1),
-  phone: z.string().nullable().optional(),
+  firstName: z.string().min(1).max(100),
+  lastName: z.string().min(1).max(100),
+  phone: z.string().max(PHONE_MAX).nullable().optional(),
 });
 
 export const DeleteMemberValidation = z.object({
@@ -50,19 +48,12 @@ export const RemoveFullyMemberValidation = z.object({
 
 export const UpdateMemberContactInfoValidation = z.object({
   id: z.string(),
-  firstName: z.string().min(1),
-  lastName: z.string().min(1),
+  firstName: z.string().min(1).max(100),
+  lastName: z.string().min(1).max(100),
   email: z.string().email(),
-  phone: z.string().nullable().optional(),
+  phone: z.string().max(PHONE_MAX).nullable().optional(),
   dateOfBirth: z.coerce.date().optional(),
-  address: z.object({
-    street: z.string(),
-    apartment: z.string().optional(),
-    city: z.string(),
-    state: z.string(),
-    zipCode: z.string(),
-    country: z.string(),
-  }).optional(),
+  address: AddressValidation.optional(),
 });
 
 export const UpdateMemberPhotoValidation = z.object({

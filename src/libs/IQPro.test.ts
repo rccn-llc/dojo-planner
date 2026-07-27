@@ -437,6 +437,45 @@ describe('computeFeeBreakdown', () => {
     expect(result.amount).toBe(109); // 100 + 5.25 + 3.75
   });
 
+  it('clamps a negative taxStatePct to 0 (corrupt location_tax_rate must not credit the card)', async () => {
+    const mod = await import('./IQPro');
+    mod.resetOAuthTokenCache();
+
+    mockOAuthOk();
+    mockFetch.mockResolvedValueOnce(new Response(
+      JSON.stringify({ data: { serviceFeesAmount: 3.75 } }),
+      { status: 200 },
+    ));
+
+    const result = await mod.computeFeeBreakdown(testConfig, 100, /* isTaxable */ true, /* taxStatePct */ -50, {
+      processorId: 'proc_1',
+      token: 'tok_xyz',
+    });
+
+    expect(result.taxAmount).toBe(0);
+    expect(result.taxPct).toBe(0);
+    expect(result.amount).toBe(103.75); // 100 + 0 + 3.75
+  });
+
+  it('clamps an over-100 taxStatePct to 100', async () => {
+    const mod = await import('./IQPro');
+    mod.resetOAuthTokenCache();
+
+    mockOAuthOk();
+    mockFetch.mockResolvedValueOnce(new Response(
+      JSON.stringify({ data: { serviceFeesAmount: 0 } }),
+      { status: 200 },
+    ));
+
+    const result = await mod.computeFeeBreakdown(testConfig, 100, /* isTaxable */ true, /* taxStatePct */ 999, {
+      processorId: 'proc_1',
+      token: 'tok_xyz',
+    });
+
+    expect(result.taxPct).toBe(100);
+    expect(result.taxAmount).toBe(100);
+  });
+
   it('falls back to creditCardBin when token is not provided', async () => {
     const mod = await import('./IQPro');
     mod.resetOAuthTokenCache();
