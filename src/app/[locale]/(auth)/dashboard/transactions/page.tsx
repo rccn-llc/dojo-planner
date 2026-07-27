@@ -13,6 +13,8 @@ const TRANSACTION_TYPE_LABELS: Record<string, string> = {
   signup_fee: 'Signup Fee',
   refund: 'Refund',
   adjustment: 'Adjustment',
+  // Kiosk store sale — matches the detail modal's product_purchase label.
+  product_purchase: 'Product Purchase',
 };
 
 function formatPaymentMethod(paymentMethod: string | null, description: string | null): string {
