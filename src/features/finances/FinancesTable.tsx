@@ -21,7 +21,8 @@ export type Transaction = {
   method: string;
   transactionId: string;
   memberName: string;
-  memberId: string;
+  // null for a guest / non-member transaction (e.g. a kiosk store sale).
+  memberId: string | null;
   status: TransactionStatus;
   transactionType: string;
 };

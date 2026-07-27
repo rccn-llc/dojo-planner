@@ -958,7 +958,11 @@ export const transactionSchema = pgTable(
   {
     id: text('id').primaryKey(), // UUID v4
     organizationId: text('organization_id').notNull(),
-    memberId: text('member_id').references(() => memberSchema.id).notNull(),
+    // Nullable: a null member_id is a guest / non-member sale (e.g. a kiosk
+    // store purchase by someone who isn't a member). Member-scoped queries
+    // filter on member_id so guest rows simply don't match; the org-wide
+    // transactions list leftJoins member and shows "Non-member" for these.
+    memberId: text('member_id').references(() => memberSchema.id),
     memberMembershipId: text('member_membership_id').references(() => memberMembershipSchema.id),
     eventRegistrationId: text('event_registration_id').references(() => eventRegistrationSchema.id),
     stripePaymentIntentId: text('stripe_payment_intent_id'),

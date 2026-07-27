@@ -939,6 +939,7 @@
     "stats_refunded_label": "Refunded (Last 30 Days)",
     "table_date": "Date",
     "table_member": "Member",
+    "non_member": "Non-member",
     "table_amount": "Amount",
     "table_origin": "Origin",
     "table_method": "Method",
