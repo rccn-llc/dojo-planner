@@ -37,16 +37,6 @@ function formatPaymentMethod(paymentMethod: string | null, description: string |
   }
 }
 
-function getTransactionsInPast30Days(transactions: Transaction[]): Transaction[] {
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-  return transactions.filter((transaction) => {
-    const transactionDate = new Date(transaction.date);
-    return transactionDate >= thirtyDaysAgo;
-  });
-}
-
 export default function TransactionsPage() {
   const t = useTranslations('TransactionsPage');
   const { transactions: rawTransactions, loading } = useTransactionsCache();
@@ -69,14 +59,23 @@ export default function TransactionsPage() {
   }, [rawTransactions, t]);
 
   const stats = useMemo(() => {
-    const recentTransactions = getTransactionsInPast30Days(transactions);
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    // Filter on the raw `createdAt` timestamp (a real Date from ORPC), NOT the
+    // localized display string on the transformed Transaction — re-parsing that
+    // string with `new Date()` is locale/environment-dependent and can yield
+    // Invalid Date, silently dropping rows from the count.
+    const recentTransactions = rawTransactions.filter(
+      tx => new Date(tx.createdAt) >= thirtyDaysAgo,
+    );
 
     const paid = recentTransactions.filter(tx => tx.status === 'paid').length;
     const declined = recentTransactions.filter(tx => tx.status === 'declined').length;
     const refunded = recentTransactions.filter(tx => tx.status === 'refunded').length;
 
     return { paid, declined, refunded };
-  }, [transactions]);
+  }, [rawTransactions]);
 
   const statsData = useMemo(() => [
     { id: 'paid', label: t('stats_paid_label'), value: stats.paid },

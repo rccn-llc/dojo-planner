@@ -79,11 +79,24 @@ function selectResolving(rows: SelectResult) {
   };
 }
 
-// getOrganizationEvents chain: an event with one billing tier.
-function queueGetOrganizationEvents(event: Record<string, unknown>, billing: Array<Record<string, unknown>> = []) {
+// Like selectResolving but the chain ends in .limit() — used for the single-row
+// lookups (getEventById's event query, member/registration lookups).
+function selectResolvingWithLimit(rows: SelectResult) {
+  return {
+    from: () => ({
+      where: () => ({
+        limit: () => Promise.resolve(rows),
+      }),
+    }),
+  };
+}
+
+// getEventById chain: the single event query (.limit(1)) followed by its four
+// related-data fetches (sessions, billing, eventTags, allTags).
+function queueGetEventById(event: Record<string, unknown>, billing: Array<Record<string, unknown>> = []) {
   const eventRow = { isActive: true, ...event };
   dbMock.select
-    .mockReturnValueOnce(selectResolving([eventRow])) // events
+    .mockReturnValueOnce(selectResolvingWithLimit([eventRow])) // event (.limit(1))
     .mockReturnValueOnce(selectResolving([])) // sessions
     .mockReturnValueOnce(selectResolving(billing)) // billing
     .mockReturnValueOnce(selectResolving([])) // eventTags
@@ -137,7 +150,7 @@ describe('EventsService.registerMemberForEvent', () => {
   });
 
   it('inserts a registration and returns the registrant (with tier price)', async () => {
-    queueGetOrganizationEvents(EVENT, [TIER]);
+    queueGetEventById(EVENT, [TIER]);
     dbMock.select
       .mockReturnValueOnce({ from: () => ({ where: () => ({ limit: () => Promise.resolve([MEMBER]) }) }) }) // member
       .mockReturnValueOnce({ from: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }) }); // existing reg (none)
@@ -168,7 +181,7 @@ describe('EventsService.registerMemberForEvent', () => {
   });
 
   it('records amountPaid = 0 / null tier when no billing tier is chosen', async () => {
-    queueGetOrganizationEvents(EVENT, [TIER]);
+    queueGetEventById(EVENT, [TIER]);
     dbMock.select
       .mockReturnValueOnce({ from: () => ({ where: () => ({ limit: () => Promise.resolve([MEMBER]) }) }) })
       .mockReturnValueOnce({ from: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }) });
@@ -189,7 +202,7 @@ describe('EventsService.registerMemberForEvent', () => {
   });
 
   it('back-links a supplied transaction to the new registration', async () => {
-    queueGetOrganizationEvents(EVENT, [TIER]);
+    queueGetEventById(EVENT, [TIER]);
     dbMock.select
       .mockReturnValueOnce({ from: () => ({ where: () => ({ limit: () => Promise.resolve([MEMBER]) }) }) })
       .mockReturnValueOnce({ from: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }) });
@@ -209,7 +222,7 @@ describe('EventsService.registerMemberForEvent', () => {
   });
 
   it('rejects a duplicate non-cancelled registration', async () => {
-    queueGetOrganizationEvents(EVENT, [TIER]);
+    queueGetEventById(EVENT, [TIER]);
     dbMock.select
       .mockReturnValueOnce({ from: () => ({ where: () => ({ limit: () => Promise.resolve([MEMBER]) }) }) })
       .mockReturnValueOnce({ from: () => ({ where: () => ({ limit: () => Promise.resolve([{ id: 'existing' }]) }) }) });
@@ -222,8 +235,8 @@ describe('EventsService.registerMemberForEvent', () => {
   });
 
   it('throws EventNotFoundError when the event is not in the org', async () => {
-    // getOrganizationEvents returns no events → getEventById → null
-    dbMock.select.mockReturnValueOnce(selectResolving([]));
+    // getEventById returns no event row → null
+    dbMock.select.mockReturnValueOnce(selectResolvingWithLimit([]));
 
     const { registerMemberForEvent, EventNotFoundError } = await import('./EventsService');
 
@@ -233,7 +246,7 @@ describe('EventsService.registerMemberForEvent', () => {
   });
 
   it('throws MemberNotFoundError when the member is not in the org', async () => {
-    queueGetOrganizationEvents(EVENT, [TIER]);
+    queueGetEventById(EVENT, [TIER]);
     dbMock.select
       .mockReturnValueOnce({ from: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }) }); // member missing
 
@@ -252,7 +265,7 @@ describe('EventsService.getEventRegistrations', () => {
   });
 
   it('returns joined registrants with the tier name resolved', async () => {
-    queueGetOrganizationEvents(EVENT, [TIER]);
+    queueGetEventById(EVENT, [TIER]);
     dbMock.select.mockReturnValueOnce({
       from: () => ({
         innerJoin: () => ({
@@ -288,7 +301,7 @@ describe('EventsService.getEventRegistrations', () => {
   });
 
   it('returns [] when the event is not in the org', async () => {
-    dbMock.select.mockReturnValueOnce(selectResolving([]));
+    dbMock.select.mockReturnValueOnce(selectResolvingWithLimit([]));
 
     const { getEventRegistrations } = await import('./EventsService');
     const result = await getEventRegistrations('ev-1', 'org-1');
@@ -307,7 +320,7 @@ describe('EventsService.cancelEventRegistration', () => {
     dbMock.select.mockReturnValueOnce({
       from: () => ({ where: () => ({ limit: () => Promise.resolve([{ eventId: 'ev-1' }]) }) }),
     });
-    queueGetOrganizationEvents(EVENT, [TIER]);
+    queueGetEventById(EVENT, [TIER]);
     const updateWhere = vi.fn().mockResolvedValue(undefined);
     const updateSet = vi.fn().mockReturnValue({ where: updateWhere });
     dbMock.update.mockReturnValue({ set: updateSet });
@@ -339,7 +352,7 @@ describe('EventsService.cancelEventRegistration', () => {
       from: () => ({ where: () => ({ limit: () => Promise.resolve([{ eventId: 'ev-1' }]) }) }),
     });
     // getEventById resolves no events for this org → cross-org guard
-    dbMock.select.mockReturnValueOnce(selectResolving([]));
+    dbMock.select.mockReturnValueOnce(selectResolvingWithLimit([]));
 
     const { cancelEventRegistration } = await import('./EventsService');
     const ok = await cancelEventRegistration('reg-1', 'other-org');

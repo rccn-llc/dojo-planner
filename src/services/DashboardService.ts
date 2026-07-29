@@ -274,7 +274,7 @@ export async function getFinancialStats(organizationId: string): Promise<Financi
   const paymentsLast30Days = Number(paymentsResult?.total ?? 0);
   const paymentsPending = Number(pendingResult?.total ?? 0);
   const failedPaymentsLast30Days = Number(failedResult?.total ?? 0);
-  const totalStudents = studentsResult?.count ?? 1;
+  const totalStudents = studentsResult?.count ?? 0;
   const incomePerStudent30Days = totalStudents > 0 ? paymentsLast30Days / totalStudents : 0;
 
   return {

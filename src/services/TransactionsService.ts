@@ -17,6 +17,11 @@ export type TransactionData = {
   createdAt: Date;
 };
 
+// Default page size for the org-wide transactions list when the caller doesn't
+// specify one. Bounds payload/heap for orgs with large histories; the list UI
+// paginates client-side over this slice.
+const DEFAULT_TRANSACTION_LIMIT = 500;
+
 export type TransactionListOptions = {
   limit?: number;
   offset?: number;
@@ -58,7 +63,7 @@ export async function getOrganizationTransactions(
     .leftJoin(memberSchema, eq(transactionSchema.memberId, memberSchema.id))
     .where(and(...conditions))
     .orderBy(desc(transactionSchema.createdAt))
-    .limit(options?.limit ?? 500)
+    .limit(options?.limit ?? DEFAULT_TRANSACTION_LIMIT)
     .offset(options?.offset ?? 0);
 
   return rows;
