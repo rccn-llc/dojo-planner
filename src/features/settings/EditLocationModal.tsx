@@ -46,6 +46,26 @@ export function EditLocationModal({
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(false);
 
+  // Re-seed the form from the incoming props each time the modal transitions
+  // to open. The `useState` initializers only run on mount, and Radix's
+  // `onOpenChange` does not fire when the parent flips `isOpen`
+  // programmatically — so without this re-seed the form keeps whatever (often
+  // empty, still-loading) values it captured at mount time and the edit dialog
+  // appears blank. This is the React "adjust state during render" pattern
+  // (https://react.dev/reference/react/useState#storing-information-from-previous-renders),
+  // which avoids a state-syncing effect.
+  const [wasOpen, setWasOpen] = useState(isOpen);
+  if (isOpen && !wasOpen) {
+    setWasOpen(true);
+    setAddress(initialAddress);
+    setPhone(initialPhone);
+    setEmail(initialEmail);
+    setTaxRate(initialTaxRate.toFixed(2));
+    setTouched({});
+  } else if (!isOpen && wasOpen) {
+    setWasOpen(false);
+  }
+
   const handleInputBlur = (field: string) => {
     setTouched(prev => ({ ...prev, [field]: true }));
   };

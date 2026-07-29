@@ -234,6 +234,46 @@ describe('EditLocationModal', () => {
     expect(page.getByText('Please enter a valid email address.')).toBeDefined();
   });
 
+  it('should populate fields from props supplied after mount when opened', async () => {
+    // Reproduces the location-settings bug: the modal first mounts while the
+    // location is still loading (closed, empty props), then the parent flips
+    // isOpen to true once real data has arrived. The programmatic open does not
+    // fire Radix's onOpenChange, so the sync must come from the isOpen effect.
+    const { rerender } = await render(
+      <EditLocationModal
+        {...defaultProps}
+        isOpen={false}
+        address=""
+        phone=""
+        email=""
+        taxRate={0}
+      />,
+    );
+
+    await rerender(
+      <EditLocationModal
+        {...defaultProps}
+        isOpen
+        address="123 Main St. San Francisco. CA"
+        phone="(415) 555-0123"
+        email="downtown@example.com"
+        taxRate={9.75}
+      />,
+    );
+
+    await vi.waitFor(() => {
+      const addressInput = page.getByPlaceholder('Enter address');
+      const phoneInput = page.getByPlaceholder('(555) 123-4567');
+      const emailInput = page.getByPlaceholder('location@example.com');
+      const taxRateInput = page.getByPlaceholder('0.00');
+
+      expect(addressInput.element()).toHaveProperty('value', '123 Main St. San Francisco. CA');
+      expect(phoneInput.element()).toHaveProperty('value', '(415) 555-0123');
+      expect(emailInput.element()).toHaveProperty('value', 'downtown@example.com');
+      expect(taxRateInput.element()).toHaveProperty('value', '9.75');
+    });
+  });
+
   it('should accept valid email format', async () => {
     render(<EditLocationModal {...defaultProps} />);
 

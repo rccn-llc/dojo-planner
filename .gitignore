@@ -63,3 +63,4 @@ build-archive.log
 /playwright/.cache/
 .playwright/auth.json
 .playwright/e2e-credentials.json
+.env*
