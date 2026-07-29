@@ -101,7 +101,7 @@ describe('TransactionsService', () => {
       const mockSelect = vi.fn().mockReturnValue({ from: mockFrom });
 
       const { db } = await import('@/libs/DB');
-      vi.mocked(db.select).mockReturnValue(mockSelect() as any);
+      vi.mocked(db.select).mockImplementation(mockSelect as any);
 
       const { getOrganizationTransactions } = await import('./TransactionsService');
 
