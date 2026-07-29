@@ -1856,7 +1856,7 @@ export default function EditMemberPage() {
 
       {currentMember && archiveModalMode && (
         <ArchiveMemberModal
-          isOpen={archiveModalMode !== null}
+          isOpen={true}
           onClose={() => setArchiveModalMode(null)}
           memberId={currentMember.id}
           memberName={`${currentMember.firstName || ''} ${currentMember.lastName || ''}`.trim()}

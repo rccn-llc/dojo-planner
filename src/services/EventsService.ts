@@ -92,6 +92,21 @@ export async function getOrganizationEvents(organizationId: string): Promise<Eve
     db.select().from(tagSchema).where(eq(tagSchema.organizationId, organizationId)),
   ]);
 
+  return assembleEventData(events, sessions, billings, eventTags, allTags);
+}
+
+/**
+ * Assemble the EventData shape from raw event rows and their related
+ * sessions / billing / tag rows. Shared by getOrganizationEvents (whole
+ * catalog) and getEventById (single event) so the mapping stays in one place.
+ */
+function assembleEventData(
+  events: typeof eventSchema.$inferSelect[],
+  sessions: typeof eventSessionSchema.$inferSelect[],
+  billings: typeof eventBillingSchema.$inferSelect[],
+  eventTags: typeof eventTagSchema.$inferSelect[],
+  allTags: typeof tagSchema.$inferSelect[],
+): EventData[] {
   // Create lookup maps
   const tagMap = new Map(allTags.map(t => [t.id, t]));
 
@@ -157,11 +172,37 @@ export async function getOrganizationEvents(organizationId: string): Promise<Eve
 }
 
 /**
- * Get a single event by ID
+ * Get a single event by ID (org-scoped). Queries only the one event row and
+ * its related sessions / billing / tags — NOT the whole org catalog — since
+ * this is called on every event registration read/write/cancel.
  */
 export async function getEventById(eventId: string, organizationId: string): Promise<EventData | null> {
-  const events = await getOrganizationEvents(organizationId);
-  return events.find(e => e.id === eventId) || null;
+  const events = await db
+    .select()
+    .from(eventSchema)
+    .where(and(
+      eq(eventSchema.id, eventId),
+      eq(eventSchema.organizationId, organizationId),
+      eq(eventSchema.isActive, true),
+    ))
+    .limit(1);
+
+  if (events.length === 0) {
+    return null;
+  }
+
+  // Fetch related data for just this event in parallel. Tags still scope to the
+  // org (the tag rows themselves are org-owned), but sessions/billing/tag-links
+  // are constrained to this one event.
+  const [sessions, billings, eventTags, allTags] = await Promise.all([
+    db.select().from(eventSessionSchema).where(eq(eventSessionSchema.eventId, eventId)),
+    db.select().from(eventBillingSchema).where(eq(eventBillingSchema.eventId, eventId)),
+    db.select().from(eventTagSchema).where(eq(eventTagSchema.eventId, eventId)),
+    db.select().from(tagSchema).where(eq(tagSchema.organizationId, organizationId)),
+  ]);
+
+  const [assembled] = assembleEventData(events, sessions, billings, eventTags, allTags);
+  return assembled ?? null;
 }
 
 // =============================================================================
