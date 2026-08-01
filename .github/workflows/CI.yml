@@ -106,7 +106,7 @@ jobs:
           node-version: ${{ matrix.node-version }}
 
       - name: Run unit tests
-        uses: docker://mcr.microsoft.com/playwright:v1.58.1-noble
+        uses: docker://mcr.microsoft.com/playwright:v1.62.0-noble
         with:
           args: npm run test -- --coverage
 
@@ -134,7 +134,7 @@ jobs:
           node-version: ${{ matrix.node-version }}
 
       - name: Run storybook tests
-        uses: docker://mcr.microsoft.com/playwright:v1.58.1-noble
+        uses: docker://mcr.microsoft.com/playwright:v1.62.0-noble
         with:
           args: npm run storybook:test
 
@@ -160,7 +160,7 @@ jobs:
           restore-nextjs-cache: true
 
       - name: Run E2E tests
-        uses: docker://mcr.microsoft.com/playwright:v1.58.1-noble
+        uses: docker://mcr.microsoft.com/playwright:v1.62.0-noble
         with:
           args: npm run test:e2e
         env:
