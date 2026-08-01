@@ -24,6 +24,12 @@ export default defineConfig({
           include: ['src/**/*.test.{js,ts}'],
           exclude: ['src/hooks/**/*.test.ts'],
           environment: 'node',
+          // Tests that `vi.mock('@/libs/DB')` without a factory resolve to
+          // src/libs/__mocks__/DB.ts, which boots a real PGlite instance and
+          // runs migrations in a top-level await. That import can exceed the
+          // 5s default under CI contention — more so since pglite 0.5, which
+          // ships a newer (slower to start) Postgres build.
+          testTimeout: 30_000,
         },
       },
       {
@@ -35,7 +41,16 @@ export default defineConfig({
           browser: {
             enabled: true,
             headless: true,
-            provider: playwright(),
+            provider: playwright({
+              launchOptions: {
+                // CI runs this suite inside the Playwright docker image via the
+                // `docker://` action form, which cannot set --shm-size. Docker's
+                // default 64MB /dev/shm is not enough for Chromium across 265
+                // test files: it dies partway through with no output. Writing
+                // shared memory to /tmp instead avoids the limit.
+                args: ['--disable-dev-shm-usage'],
+              },
+            }),
             screenshotDirectory: 'vitest-test-results',
             instances: [
               { browser: 'chromium' },
