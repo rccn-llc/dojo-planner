@@ -26,22 +26,41 @@ const STAFF_ROLES = new Set<string>([
   ORG_ROLE.INSTRUCTOR,
 ]);
 
+// Result of loading the staff page's data: either the rows to render, or a
+// signal that the viewer may not see them.
+type StaffPageData
+  = | { kind: 'denied' }
+    | { kind: 'ok'; staff: ClerkStaffMember[]; currentUserRole: string };
+
+// Thrown when the viewer lacks an admin/academy-owner role. Signalled as an
+// error so the data-loading block has a single exit path, which keeps JSX out
+// of the try/catch.
+class AccessDeniedError extends Error {}
+
+function AccessDenied({ title, message }: { title: string; message: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-background p-8 text-center">
+      <h2 className="text-xl font-semibold text-foreground">{title}</h2>
+      <p className="mt-2 text-muted-foreground">
+        {message}
+      </p>
+    </div>
+  );
+}
+
 export async function CustomStaffPage() {
   const t = await getTranslations('Staff');
   const { userId, orgId } = await auth();
 
   // Check authentication and authorization
   if (!userId || !orgId) {
-    return (
-      <div className="rounded-lg border border-border bg-background p-8 text-center">
-        <h2 className="text-xl font-semibold text-foreground">{t('access_denied_title')}</h2>
-        <p className="mt-2 text-muted-foreground">
-          {t('access_denied_message')}
-        </p>
-      </div>
-    );
+    return <AccessDenied title={t('access_denied_title')} message={t('access_denied_message')} />;
   }
 
+  // Only the data fetching is wrapped in try/catch; the JSX is rendered after
+  // it. React renders lazily, so errors thrown while rendering a component are
+  // not caught by a surrounding try/catch — that needs an error boundary.
+  let result: StaffPageData;
   try {
     const authClient = await clerkClient();
 
@@ -80,15 +99,9 @@ export async function CustomStaffPage() {
     )?.role;
 
     if (userRole !== 'org:admin' && userRole !== 'org:academy_owner') {
-      return (
-        <div className="rounded-lg border border-border bg-background p-8 text-center">
-          <h2 className="text-xl font-semibold text-foreground">{t('access_denied_title')}</h2>
-          <p className="mt-2 text-muted-foreground">
-            {t('access_denied_message')}
-          </p>
-        </div>
-      );
+      throw new AccessDeniedError();
     }
+    const currentUserRole = userRole;
 
     // In-app instructor photo overrides take precedence over the Clerk avatar.
     const photoOverrides = await getInstructorPhotoOverrides(orgId);
@@ -142,19 +155,20 @@ export async function CustomStaffPage() {
         status: 'Invitation sent' as const,
       }));
 
-    // Render the staff table with client-side modal management
-    return (
-      <StaffPageClient staffMembers={[...staffMembers, ...pendingStaff]} currentUserRole={userRole} currentUserId={userId} />
-    );
+    result = { kind: 'ok', staff: [...staffMembers, ...pendingStaff], currentUserRole };
   } catch (error) {
-    console.warn('CustomStaffPage - Failed to fetch staff members:', error);
-    return (
-      <div className="rounded-lg border border-border bg-background p-8 text-center">
-        <h2 className="text-xl font-semibold text-foreground">{t('access_denied_title')}</h2>
-        <p className="mt-2 text-muted-foreground">
-          {t('access_denied_message')}
-        </p>
-      </div>
-    );
+    if (!(error instanceof AccessDeniedError)) {
+      console.warn('CustomStaffPage - Failed to fetch staff members:', error);
+    }
+    result = { kind: 'denied' };
   }
+
+  if (result.kind === 'denied') {
+    return <AccessDenied title={t('access_denied_title')} message={t('access_denied_message')} />;
+  }
+
+  // Render the staff table with client-side modal management
+  return (
+    <StaffPageClient staffMembers={result.staff} currentUserRole={result.currentUserRole} currentUserId={userId} />
+  );
 }

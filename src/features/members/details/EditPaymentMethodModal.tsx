@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { dedupeRequest } from '@/hooks/dedupeRequest';
 import { useTokenExIframe } from '@/hooks/useTokenExIframe';
 import { client } from '@/libs/Orpc';
 
@@ -121,7 +122,7 @@ export function EditPaymentMethodModal({
     if (!isOpen) {
       return;
     }
-    client.payment.getTokenizationConfig({ origin: window.location.origin })
+    dedupeRequest(`payment.getTokenizationConfig:${JSON.stringify({ origin: window.location.origin })}`, async () => client.payment.getTokenizationConfig({ origin: window.location.origin }))
       .then(config => setTokenizationConfig(config ?? null))
       .catch(() => setTokenizationConfig(null));
   }, [isOpen]);
@@ -240,7 +241,7 @@ export function EditPaymentMethodModal({
                   : 'border-border bg-background hover:border-primary/50 hover:bg-accent/50'
               } ${isSaving ? 'cursor-not-allowed opacity-50' : ''}`}
             >
-              <CreditCard className="h-5 w-5" />
+              <CreditCard className="size-5" />
               <span className="font-medium">{t('card_tab_label')}</span>
             </button>
             <button
@@ -253,7 +254,7 @@ export function EditPaymentMethodModal({
                   : 'border-border bg-background hover:border-primary/50 hover:bg-accent/50'
               } ${isSaving ? 'cursor-not-allowed opacity-50' : ''}`}
             >
-              <Landmark className="h-5 w-5" />
+              <Landmark className="size-5" />
               <span className="font-medium">{t('ach_tab_label')}</span>
             </button>
           </div>
@@ -284,7 +285,7 @@ export function EditPaymentMethodModal({
                       <div>
                         {!iframeLoaded && !iframeError && (
                           <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <Loader2 className="size-4 animate-spin" />
                             {t('card_number_iframe_loading')}
                           </div>
                         )}
@@ -413,7 +414,7 @@ export function EditPaymentMethodModal({
               {isSaving
                 ? (
                     <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <Loader2 className="mr-2 size-4 animate-spin" />
                       {tEdit('saving_button')}
                     </>
                   )

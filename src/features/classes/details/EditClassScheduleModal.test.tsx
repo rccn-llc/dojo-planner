@@ -107,48 +107,48 @@ describe('EditClassScheduleModal', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the modal with title when open', () => {
-    render(<EditClassScheduleModal {...defaultProps} />);
+  it('should render the modal with title when open', async () => {
+    await render(<EditClassScheduleModal {...defaultProps} />);
 
     const heading = page.getByText('Edit Schedule');
 
     expect(heading).toBeTruthy();
   });
 
-  it('should not render when isOpen is false', () => {
-    render(<EditClassScheduleModal {...defaultProps} isOpen={false} />);
+  it('should not render when isOpen is false', async () => {
+    await render(<EditClassScheduleModal {...defaultProps} isOpen={false} />);
 
     const heading = document.body.textContent?.includes('Edit Schedule');
 
     expect(heading).toBe(false);
   });
 
-  it('should render schedule instances label', () => {
-    render(<EditClassScheduleModal {...defaultProps} />);
+  it('should render schedule instances label', async () => {
+    await render(<EditClassScheduleModal {...defaultProps} />);
 
     const instancesLabel = page.getByText('Schedule Instances');
 
     expect(instancesLabel).toBeTruthy();
   });
 
-  it('should render Cancel button', () => {
-    render(<EditClassScheduleModal {...defaultProps} />);
+  it('should render Cancel button', async () => {
+    await render(<EditClassScheduleModal {...defaultProps} />);
 
     const cancelButton = page.getByText('Cancel');
 
     expect(cancelButton).toBeTruthy();
   });
 
-  it('should render Save Changes button', () => {
-    render(<EditClassScheduleModal {...defaultProps} />);
+  it('should render Save Changes button', async () => {
+    await render(<EditClassScheduleModal {...defaultProps} />);
 
     const saveButton = page.getByText('Save Changes');
 
     expect(saveButton).toBeTruthy();
   });
 
-  it('should render field labels in schedule cards', () => {
-    render(<EditClassScheduleModal {...defaultProps} />);
+  it('should render field labels in schedule cards', async () => {
+    await render(<EditClassScheduleModal {...defaultProps} />);
 
     // Labels are now inside cards, not table headers
     const dayLabels = document.querySelectorAll('label');
@@ -159,16 +159,16 @@ describe('EditClassScheduleModal', () => {
     expect(labelTexts).toContain('Duration');
   });
 
-  it('should render location input', () => {
-    render(<EditClassScheduleModal {...defaultProps} />);
+  it('should render location input', async () => {
+    await render(<EditClassScheduleModal {...defaultProps} />);
 
     const locationLabel = page.getByText('Location');
 
     expect(locationLabel).toBeTruthy();
   });
 
-  it('should render calendar color label', () => {
-    render(<EditClassScheduleModal {...defaultProps} />);
+  it('should render calendar color label', async () => {
+    await render(<EditClassScheduleModal {...defaultProps} />);
 
     const colorLabel = page.getByText('Calendar Color');
 
@@ -176,7 +176,7 @@ describe('EditClassScheduleModal', () => {
   });
 
   it('should call onClose when Cancel button is clicked', async () => {
-    render(<EditClassScheduleModal {...defaultProps} />);
+    await render(<EditClassScheduleModal {...defaultProps} />);
 
     const cancelButton = page.getByText('Cancel');
     await userEvent.click(cancelButton);
@@ -184,8 +184,8 @@ describe('EditClassScheduleModal', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it('should have Save button enabled when form is valid', () => {
-    render(<EditClassScheduleModal {...defaultProps} />);
+  it('should have Save button enabled when form is valid', async () => {
+    await render(<EditClassScheduleModal {...defaultProps} />);
 
     const buttons = Array.from(document.querySelectorAll('button'));
     const saveButton = buttons.find(btn => btn.textContent?.includes('Save Changes'));
@@ -193,8 +193,8 @@ describe('EditClassScheduleModal', () => {
     expect(saveButton?.disabled).toBe(false);
   });
 
-  it('should render schedule instances', () => {
-    render(<EditClassScheduleModal {...defaultProps} />);
+  it('should render schedule instances', async () => {
+    await render(<EditClassScheduleModal {...defaultProps} />);
 
     // Should have 3 instances
     const rows = document.querySelectorAll('[data-testid^="schedule-row-"]');
@@ -203,7 +203,7 @@ describe('EditClassScheduleModal', () => {
   });
 
   it('should call onSave with updated values when Save button is clicked', async () => {
-    render(<EditClassScheduleModal {...defaultProps} />);
+    await render(<EditClassScheduleModal {...defaultProps} />);
 
     const saveButton = page.getByText('Save Changes');
     await userEvent.click(saveButton);
@@ -223,7 +223,7 @@ describe('EditClassScheduleModal', () => {
   });
 
   it('should show saving state when submitting', async () => {
-    render(<EditClassScheduleModal {...defaultProps} />);
+    await render(<EditClassScheduleModal {...defaultProps} />);
 
     const saveButton = page.getByText('Save Changes');
     await userEvent.click(saveButton);
@@ -234,8 +234,8 @@ describe('EditClassScheduleModal', () => {
     expect(savingButton).toBeTruthy();
   });
 
-  it('should render Add Time Slot button', () => {
-    render(<EditClassScheduleModal {...defaultProps} />);
+  it('should render Add Time Slot button', async () => {
+    await render(<EditClassScheduleModal {...defaultProps} />);
 
     const addButton = document.querySelector('[data-testid="add-schedule-instance"]');
 
@@ -243,7 +243,7 @@ describe('EditClassScheduleModal', () => {
   });
 
   it('should update location when input changes', async () => {
-    render(<EditClassScheduleModal {...defaultProps} />);
+    await render(<EditClassScheduleModal {...defaultProps} />);
 
     const locationInput = page.getByPlaceholder('e.g., Downtown HQ');
     await userEvent.clear(locationInput);
@@ -259,16 +259,16 @@ describe('EditClassScheduleModal', () => {
     }));
   });
 
-  it('should render with empty schedule instances', () => {
-    render(<EditClassScheduleModal {...defaultProps} scheduleInstances={[]} />);
+  it('should render with empty schedule instances', async () => {
+    await render(<EditClassScheduleModal {...defaultProps} scheduleInstances={[]} />);
 
     const noInstancesMsg = page.getByText('No schedule instances. Click "Add Time Slot" to create one.');
 
     expect(noInstancesMsg).toBeTruthy();
   });
 
-  it('should disable Save button when no instances exist', () => {
-    render(<EditClassScheduleModal {...defaultProps} scheduleInstances={[]} />);
+  it('should disable Save button when no instances exist', async () => {
+    await render(<EditClassScheduleModal {...defaultProps} scheduleInstances={[]} />);
 
     const buttons = Array.from(document.querySelectorAll('button'));
     const saveButton = buttons.find(btn => btn.textContent?.includes('Save Changes'));

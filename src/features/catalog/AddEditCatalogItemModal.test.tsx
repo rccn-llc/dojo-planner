@@ -90,8 +90,8 @@ describe('AddEditCatalogItemModal', () => {
   });
 
   describe('Modal rendering', () => {
-    it('should not render dialog when isOpen is false', () => {
-      render(
+    it('should not render dialog when isOpen is false', async () => {
+      await render(
         <AddEditCatalogItemModal
           isOpen={false}
           onCloseAction={mockHandlers.onCloseAction}
@@ -111,7 +111,7 @@ describe('AddEditCatalogItemModal', () => {
     });
 
     it('should render dialog when isOpen is true', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -127,7 +127,7 @@ describe('AddEditCatalogItemModal', () => {
     });
 
     it('should display add title when no item is provided', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -141,7 +141,7 @@ describe('AddEditCatalogItemModal', () => {
     });
 
     it('should display edit title when item is provided', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -158,7 +158,7 @@ describe('AddEditCatalogItemModal', () => {
 
   describe('Form fields', () => {
     it('should render all form fields', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -183,7 +183,7 @@ describe('AddEditCatalogItemModal', () => {
     });
 
     it('should render image upload field', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -197,7 +197,7 @@ describe('AddEditCatalogItemModal', () => {
     });
 
     it('should pre-fill form fields when editing an item', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -218,7 +218,7 @@ describe('AddEditCatalogItemModal', () => {
     });
 
     it('should update form fields when user types', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -241,7 +241,7 @@ describe('AddEditCatalogItemModal', () => {
 
   describe('Modal close behavior', () => {
     it('should call onCloseAction when X button is clicked', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -258,7 +258,7 @@ describe('AddEditCatalogItemModal', () => {
     });
 
     it('should call onCloseAction when Cancel button is clicked', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -277,7 +277,7 @@ describe('AddEditCatalogItemModal', () => {
 
   describe('Form validation', () => {
     it('should show validation error when name is empty', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -295,7 +295,7 @@ describe('AddEditCatalogItemModal', () => {
     });
 
     it('should clear validation error when field is corrected', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -322,7 +322,7 @@ describe('AddEditCatalogItemModal', () => {
 
   describe('Form submission', () => {
     it('should call onSaveAction when form is valid and submitted for add', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -353,7 +353,7 @@ describe('AddEditCatalogItemModal', () => {
     });
 
     it('should call onSaveAction with isEdit=true when editing', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -378,7 +378,7 @@ describe('AddEditCatalogItemModal', () => {
     });
 
     it('reorders variants and persists the new order on save (#271)', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -401,7 +401,7 @@ describe('AddEditCatalogItemModal', () => {
     });
 
     it('disables move-up on the first variant and move-down on the last (#271)', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -417,7 +417,7 @@ describe('AddEditCatalogItemModal', () => {
     });
 
     it('should display success message after successful add', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -443,7 +443,7 @@ describe('AddEditCatalogItemModal', () => {
     });
 
     it('should display success message after successful edit', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -468,7 +468,7 @@ describe('AddEditCatalogItemModal', () => {
 
   describe('Type selection', () => {
     it('should allow selecting item type', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -505,7 +505,7 @@ describe('AddEditCatalogItemModal', () => {
 
   describe('Variants management', () => {
     it('should render variant management section', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -523,7 +523,7 @@ describe('AddEditCatalogItemModal', () => {
     });
 
     it('should allow adding a variant', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -552,7 +552,7 @@ describe('AddEditCatalogItemModal', () => {
     });
 
     it('should show variants from existing item when editing', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -569,7 +569,7 @@ describe('AddEditCatalogItemModal', () => {
     });
 
     it('should allow deleting a variant', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -603,7 +603,7 @@ describe('AddEditCatalogItemModal', () => {
         })),
       };
 
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -622,7 +622,7 @@ describe('AddEditCatalogItemModal', () => {
 
   describe('Categories', () => {
     it('should only show active categories', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -641,7 +641,7 @@ describe('AddEditCatalogItemModal', () => {
     });
 
     it('should pre-select categories when editing', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -671,7 +671,7 @@ describe('AddEditCatalogItemModal', () => {
 
   describe('Inventory settings', () => {
     it('should show low stock threshold when track inventory is checked', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -686,7 +686,7 @@ describe('AddEditCatalogItemModal', () => {
     });
 
     it('should hide low stock threshold when track inventory is unchecked', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -707,7 +707,7 @@ describe('AddEditCatalogItemModal', () => {
 
   describe('Boolean flags', () => {
     it('should allow toggling is active', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -740,7 +740,7 @@ describe('AddEditCatalogItemModal', () => {
     });
 
     it('should allow toggling is featured', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -773,7 +773,7 @@ describe('AddEditCatalogItemModal', () => {
     });
 
     it('should allow toggling show on kiosk', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -808,7 +808,7 @@ describe('AddEditCatalogItemModal', () => {
 
   describe('Price fields', () => {
     it('should allow setting base price', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -840,7 +840,7 @@ describe('AddEditCatalogItemModal', () => {
     });
 
     it('should allow setting compare at price', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -874,7 +874,7 @@ describe('AddEditCatalogItemModal', () => {
 
   describe('Empty categories', () => {
     it('should not render categories section when no active categories exist', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -891,7 +891,7 @@ describe('AddEditCatalogItemModal', () => {
 
   describe('Event selector', () => {
     it('should show event selector when type is event_access', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -912,7 +912,7 @@ describe('AddEditCatalogItemModal', () => {
     });
 
     it('should not show event selector when type is merchandise', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -927,7 +927,7 @@ describe('AddEditCatalogItemModal', () => {
     });
 
     it('should only show active events in the dropdown', async () => {
-      render(
+      await render(
         <AddEditCatalogItemModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}

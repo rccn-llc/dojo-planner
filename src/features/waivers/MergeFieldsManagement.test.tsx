@@ -71,7 +71,7 @@ describe('MergeFieldsManagement', () => {
   describe('Sheet Display', () => {
     it('should render the sheet when open is true', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -80,9 +80,9 @@ describe('MergeFieldsManagement', () => {
       await expect.element(page.getByText('Waiver Merge Fields')).toBeInTheDocument();
     });
 
-    it('should not render the sheet content when open is false', () => {
+    it('should not render the sheet content when open is false', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={false} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -95,7 +95,7 @@ describe('MergeFieldsManagement', () => {
 
     it('should render the sheet title as a heading', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -106,13 +106,13 @@ describe('MergeFieldsManagement', () => {
   });
 
   describe('Loading State', () => {
-    it('should show loading skeleton while fetching merge fields', () => {
+    it('should show loading skeleton while fetching merge fields', async () => {
       mockListMergeFields.mockImplementation(
         () => new Promise(resolve => setTimeout(() => resolve({ mergeFields: mockMergeFields }), 500)),
       );
 
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -127,7 +127,7 @@ describe('MergeFieldsManagement', () => {
 
     it('should show merge fields after loading completes', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -142,7 +142,7 @@ describe('MergeFieldsManagement', () => {
   describe('Merge Fields List', () => {
     it('should display field keys in angle brackets', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -155,7 +155,7 @@ describe('MergeFieldsManagement', () => {
 
     it('should display field labels', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -168,7 +168,7 @@ describe('MergeFieldsManagement', () => {
 
     it('should display field default values', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -181,7 +181,7 @@ describe('MergeFieldsManagement', () => {
 
     it('should render table headers', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -195,7 +195,7 @@ describe('MergeFieldsManagement', () => {
 
     it('should render Edit buttons for each field', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -211,7 +211,7 @@ describe('MergeFieldsManagement', () => {
 
     it('should render Delete buttons for each field', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -227,7 +227,7 @@ describe('MergeFieldsManagement', () => {
 
     it('should have proper table structure with rows', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -248,7 +248,7 @@ describe('MergeFieldsManagement', () => {
       mockListMergeFields.mockResolvedValue({ mergeFields: [] });
 
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -263,7 +263,7 @@ describe('MergeFieldsManagement', () => {
   describe('Search Functionality', () => {
     it('should render the search input', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -279,7 +279,7 @@ describe('MergeFieldsManagement', () => {
 
     it('should filter fields by key when searching', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -300,7 +300,7 @@ describe('MergeFieldsManagement', () => {
 
     it('should filter fields by label when searching', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -323,7 +323,7 @@ describe('MergeFieldsManagement', () => {
 
     it('should filter fields by default value when searching', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -343,7 +343,7 @@ describe('MergeFieldsManagement', () => {
 
     it('should show no fields message when search has no results', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -361,7 +361,7 @@ describe('MergeFieldsManagement', () => {
 
     it('should be case-insensitive when searching', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -377,7 +377,7 @@ describe('MergeFieldsManagement', () => {
 
     it('should show all fields when search is cleared', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -405,7 +405,7 @@ describe('MergeFieldsManagement', () => {
   describe('Add Button', () => {
     it('should render the Add Field button', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -420,7 +420,7 @@ describe('MergeFieldsManagement', () => {
 
     it('should open AddMergeFieldModal when Add Field is clicked', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -439,7 +439,7 @@ describe('MergeFieldsManagement', () => {
   describe('Edit Action', () => {
     it('should open EditMergeFieldModal when Edit button is clicked', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -459,7 +459,7 @@ describe('MergeFieldsManagement', () => {
   describe('Delete Action', () => {
     it('should open delete confirmation dialog when Delete button is clicked', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -477,7 +477,7 @@ describe('MergeFieldsManagement', () => {
 
     it('should show the field key in the delete confirmation description', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -497,7 +497,7 @@ describe('MergeFieldsManagement', () => {
 
     it('should call delete API when confirm delete is clicked', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -518,7 +518,7 @@ describe('MergeFieldsManagement', () => {
 
     it('should close delete confirmation dialog when Cancel is clicked', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -547,7 +547,7 @@ describe('MergeFieldsManagement', () => {
   describe('Sheet Close Functionality', () => {
     it('should call onOpenChange when close button is clicked', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -565,7 +565,7 @@ describe('MergeFieldsManagement', () => {
   describe('Accessibility', () => {
     it('should have accessible search input with aria-label', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -584,7 +584,7 @@ describe('MergeFieldsManagement', () => {
       mockListMergeFields.mockRejectedValue(new Error('Network error'));
 
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MergeFieldsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,

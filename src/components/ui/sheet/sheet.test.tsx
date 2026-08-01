@@ -15,7 +15,7 @@ import {
 describe('Sheet', () => {
   describe('Sheet with Trigger', () => {
     it('should render SheetTrigger and open sheet when clicked', async () => {
-      render(
+      await render(
         <Sheet>
           <SheetTrigger>Open Sheet</SheetTrigger>
           <SheetContent>
@@ -40,7 +40,7 @@ describe('Sheet', () => {
 
   describe('SheetContent sides', () => {
     it('should render sheet from the right side by default', async () => {
-      render(
+      await render(
         <Sheet open={true}>
           <SheetContent>
             <SheetTitle>Right Sheet</SheetTitle>
@@ -54,7 +54,7 @@ describe('Sheet', () => {
     });
 
     it('should render sheet from the left side', async () => {
-      render(
+      await render(
         <Sheet open={true}>
           <SheetContent side="left">
             <SheetTitle>Left Sheet</SheetTitle>
@@ -68,7 +68,7 @@ describe('Sheet', () => {
     });
 
     it('should render sheet from the top side', async () => {
-      render(
+      await render(
         <Sheet open={true}>
           <SheetContent side="top">
             <SheetTitle>Top Sheet</SheetTitle>
@@ -82,7 +82,7 @@ describe('Sheet', () => {
     });
 
     it('should render sheet from the bottom side', async () => {
-      render(
+      await render(
         <Sheet open={true}>
           <SheetContent side="bottom">
             <SheetTitle>Bottom Sheet</SheetTitle>
@@ -99,7 +99,7 @@ describe('Sheet', () => {
   describe('SheetClose', () => {
     it('should render SheetClose button and close sheet when clicked', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <Sheet open={true} onOpenChange={onOpenChange}>
           <SheetContent>
             <SheetHeader>
@@ -121,8 +121,8 @@ describe('Sheet', () => {
   });
 
   describe('SheetFooter', () => {
-    it('should render SheetFooter with content', () => {
-      render(
+    it('should render SheetFooter with content', async () => {
+      await render(
         <Sheet open={true}>
           <SheetContent>
             <SheetHeader>
@@ -143,8 +143,8 @@ describe('Sheet', () => {
       expect(cancelButton).toBeInTheDocument();
     });
 
-    it('should apply custom className to SheetFooter', () => {
-      render(
+    it('should apply custom className to SheetFooter', async () => {
+      await render(
         <Sheet open={true}>
           <SheetContent>
             <SheetTitle>Test Sheet</SheetTitle>
@@ -162,8 +162,8 @@ describe('Sheet', () => {
   });
 
   describe('SheetDescription', () => {
-    it('should render SheetDescription with text', () => {
-      render(
+    it('should render SheetDescription with text', async () => {
+      await render(
         <Sheet open={true}>
           <SheetContent>
             <SheetHeader>
@@ -179,8 +179,8 @@ describe('Sheet', () => {
       expect(description).toBeInTheDocument();
     });
 
-    it('should apply custom className to SheetDescription', () => {
-      render(
+    it('should apply custom className to SheetDescription', async () => {
+      await render(
         <Sheet open={true}>
           <SheetContent>
             <SheetHeader>
@@ -198,8 +198,8 @@ describe('Sheet', () => {
   });
 
   describe('SheetHeader', () => {
-    it('should render SheetHeader with custom className', () => {
-      render(
+    it('should render SheetHeader with custom className', async () => {
+      await render(
         <Sheet open={true}>
           <SheetContent>
             <SheetHeader className="pb-4">
@@ -216,8 +216,8 @@ describe('Sheet', () => {
   });
 
   describe('SheetTitle', () => {
-    it('should render SheetTitle with custom className', () => {
-      render(
+    it('should render SheetTitle with custom className', async () => {
+      await render(
         <Sheet open={true}>
           <SheetContent>
             <SheetTitle className="text-xl">Custom Title</SheetTitle>
@@ -234,7 +234,7 @@ describe('Sheet', () => {
   describe('Close button', () => {
     it('should call onOpenChange when built-in close button is clicked', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <Sheet open={true} onOpenChange={onOpenChange}>
           <SheetContent>
             <SheetTitle>Test Sheet</SheetTitle>

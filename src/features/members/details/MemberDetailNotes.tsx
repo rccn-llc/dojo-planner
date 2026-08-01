@@ -198,13 +198,13 @@ export function MemberDetailNotes({
 
     if (field === 'date') {
       return sortDirection === 'asc'
-        ? <ArrowDown01 className="h-4 w-4" />
-        : <ArrowUp10 className="h-4 w-4" />;
+        ? <ArrowDown01 className="size-4" />
+        : <ArrowUp10 className="size-4" />;
     }
 
     return sortDirection === 'asc'
-      ? <ArrowDownAZ className="h-4 w-4" />
-      : <ArrowUpZA className="h-4 w-4" />;
+      ? <ArrowDownAZ className="size-4" />
+      : <ArrowUpZA className="size-4" />;
   };
 
   return (
@@ -245,7 +245,7 @@ export function MemberDetailNotes({
         {notes.length > 0 && (
           <div className="border-b border-border px-6 py-4">
             <div className="relative w-full sm:w-80">
-              <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="text"
                 placeholder={t('search_placeholder')}
@@ -368,7 +368,7 @@ export function MemberDetailNotes({
                                             disabled={isPending}
                                             aria-label={t('edit_note_aria')}
                                           >
-                                            <Pencil className="h-4 w-4" />
+                                            <Pencil className="size-4" />
                                           </Button>
                                         )}
                                         {onDeleteNote && (
@@ -379,7 +379,7 @@ export function MemberDetailNotes({
                                             disabled={isPending}
                                             aria-label={t('delete_note_aria')}
                                           >
-                                            <Trash2 className="h-4 w-4" />
+                                            <Trash2 className="size-4" />
                                           </Button>
                                         )}
                                       </div>
@@ -460,7 +460,7 @@ export function MemberDetailNotes({
                                       onClick={() => handleStartEdit(note)}
                                       disabled={isPending}
                                     >
-                                      <Pencil className="mr-1 h-4 w-4" />
+                                      <Pencil className="mr-1 size-4" />
                                       {t('edit_button')}
                                     </Button>
                                   )}
@@ -471,7 +471,7 @@ export function MemberDetailNotes({
                                       onClick={() => handleRequestDelete(note.id)}
                                       disabled={isPending}
                                     >
-                                      <Trash2 className="mr-1 h-4 w-4" />
+                                      <Trash2 className="mr-1 size-4" />
                                       {t('delete_button')}
                                     </Button>
                                   )}

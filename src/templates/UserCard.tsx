@@ -97,7 +97,7 @@ export function UserCard({
       <div className="space-y-4">
         {/* User Name and Avatar */}
         <div className="flex items-center gap-3 border-b border-border pb-4">
-          <Avatar className="h-10 w-10 shrink-0">
+          <Avatar className="size-10 shrink-0">
             {avatar && (
               <AvatarImage src={avatar} alt={name} />
             )}

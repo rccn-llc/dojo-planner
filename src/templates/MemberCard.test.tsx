@@ -24,60 +24,60 @@ describe('MemberCard', () => {
     vi.clearAllMocks();
   });
 
-  it('should render member information correctly', () => {
-    render(<MemberCard {...defaultProps} />);
+  it('should render member information correctly', async () => {
+    await render(<MemberCard {...defaultProps} />);
 
     expect(page.getByText('John Doe')).toBeTruthy();
     expect(page.getByText('john.doe@example.com')).toBeTruthy();
     expect(page.getByText('$99.00')).toBeTruthy();
   });
 
-  it('should render member initials when no avatar is provided', () => {
-    render(<MemberCard {...defaultProps} />);
+  it('should render member initials when no avatar is provided', async () => {
+    await render(<MemberCard {...defaultProps} />);
 
     const avatar = page.getByText('JD');
 
     expect(avatar).toBeTruthy();
   });
 
-  it('should render avatar image when provided', () => {
-    render(<MemberCard {...defaultProps} photoUrl="https://example.com/avatar.jpg" />);
+  it('should render avatar image when provided', async () => {
+    await render(<MemberCard {...defaultProps} photoUrl="https://example.com/avatar.jpg" />);
 
     const avatarImage = page.getByRole('img');
 
     expect(avatarImage).toBeTruthy();
   });
 
-  it('should handle null names for initials', () => {
-    render(<MemberCard {...defaultProps} firstName={null} lastName={null} />);
+  it('should handle null names for initials', async () => {
+    await render(<MemberCard {...defaultProps} firstName={null} lastName={null} />);
 
     const avatar = page.getByText('?');
 
     expect(avatar).toBeTruthy();
   });
 
-  it('should handle single name for initials', () => {
-    render(<MemberCard {...defaultProps} firstName="John" lastName={null} />);
+  it('should handle single name for initials', async () => {
+    await render(<MemberCard {...defaultProps} firstName="John" lastName={null} />);
 
     const avatar = page.getByText('J');
 
     expect(avatar).toBeTruthy();
   });
 
-  it('should display membership type badge correctly', () => {
-    render(<MemberCard {...defaultProps} membershipType="annual" />);
+  it('should display membership type badge correctly', async () => {
+    await render(<MemberCard {...defaultProps} membershipType="annual" />);
 
     expect(page.getByText('Annual')).toBeTruthy();
   });
 
-  it('should display free trial membership correctly', () => {
-    render(<MemberCard {...defaultProps} membershipType="free-trial" />);
+  it('should display free trial membership correctly', async () => {
+    await render(<MemberCard {...defaultProps} membershipType="free-trial" />);
 
     expect(page.getByText('Free Trial')).toBeTruthy();
   });
 
-  it('should handle missing membership type', () => {
-    render(<MemberCard {...defaultProps} membershipType={undefined} />);
+  it('should handle missing membership type', async () => {
+    await render(<MemberCard {...defaultProps} membershipType={undefined} />);
 
     // Should still render other content
     expect(page.getByText('John Doe')).toBeTruthy();
@@ -85,7 +85,7 @@ describe('MemberCard', () => {
 
   it('should handle onClick when provided', async () => {
     const mockOnClick = vi.fn();
-    render(<MemberCard {...defaultProps} onClick={mockOnClick} />);
+    await render(<MemberCard {...defaultProps} onClick={mockOnClick} />);
 
     const card = page.getByRole('button');
     await card.click();
@@ -93,8 +93,8 @@ describe('MemberCard', () => {
     expect(mockOnClick).toHaveBeenCalledWith('1');
   });
 
-  it('should not be clickable when onClick is not provided', () => {
-    render(<MemberCard {...defaultProps} />);
+  it('should not be clickable when onClick is not provided', async () => {
+    await render(<MemberCard {...defaultProps} />);
 
     // Should not have button role when onClick is not provided
     const buttons = page.getByRole('button', { includeHidden: true });
@@ -102,19 +102,19 @@ describe('MemberCard', () => {
     expect(buttons.elements()).toHaveLength(0);
   });
 
-  it('should format text by default', () => {
-    render(<MemberCard {...defaultProps} membershipType="free-trial" />);
+  it('should format text by default', async () => {
+    await render(<MemberCard {...defaultProps} membershipType="free-trial" />);
 
     expect(page.getByText('Free Trial')).toBeTruthy();
   });
 
-  it('should not format text when formatText is false', () => {
-    render(<MemberCard {...defaultProps} membershipType="free-trial" formatText={false} />);
+  it('should not format text when formatText is false', async () => {
+    await render(<MemberCard {...defaultProps} membershipType="free-trial" formatText={false} />);
 
     expect(page.getByText('free-trial')).toBeTruthy();
   });
 
-  it('should render custom labels', () => {
+  it('should render custom labels', async () => {
     const customLabels = {
       membership: 'Plan Type',
       amountDue: 'Balance',
@@ -122,7 +122,7 @@ describe('MemberCard', () => {
       lastVisited: 'Last Seen',
     };
 
-    render(<MemberCard {...defaultProps} labels={customLabels} />);
+    await render(<MemberCard {...defaultProps} labels={customLabels} />);
 
     expect(page.getByText('Plan Type')).toBeTruthy();
     expect(page.getByText('Balance')).toBeTruthy();
@@ -130,7 +130,7 @@ describe('MemberCard', () => {
     expect(page.getByText('Last Seen')).toBeTruthy();
   });
 
-  it('should use custom formatters when provided', () => {
+  it('should use custom formatters when provided', async () => {
     const customFormatters = {
       currency: (amount: string) => `€${amount.replace('$', '')}`,
       date: (date: Date | null) => date ? 'Custom Date' : 'No Date',
@@ -138,7 +138,7 @@ describe('MemberCard', () => {
       status: (status: string) => `Status: ${status}`,
     };
 
-    render(
+    await render(
       <MemberCard
         {...defaultProps}
         formatters={customFormatters}
@@ -151,8 +151,8 @@ describe('MemberCard', () => {
     expect(page.getByText('Status: Active')).toBeTruthy();
   });
 
-  it('should handle null dates correctly', () => {
-    render(
+  it('should handle null dates correctly', async () => {
+    await render(
       <MemberCard
         {...defaultProps}
         nextPayment={null}
@@ -163,13 +163,13 @@ describe('MemberCard', () => {
     expect(page.getByText('Never')).toBeTruthy();
   });
 
-  it('should display status badge with correct variant', () => {
-    render(<MemberCard {...defaultProps} status="Active" />);
+  it('should display status badge with correct variant', async () => {
+    await render(<MemberCard {...defaultProps} status="Active" />);
 
     expect(page.getByText('Active')).toBeTruthy();
   });
 
-  it('should handle different membership types correctly', () => {
+  it('should handle different membership types correctly', async () => {
     const membershipTypes: Array<'free' | 'free-trial' | 'monthly' | 'annual'> = [
       'free',
       'free-trial',
@@ -186,12 +186,12 @@ describe('MemberCard', () => {
 
       expect(page.getByText(expectedText)).toBeTruthy();
 
-      renderResult.unmount();
+      await renderResult.unmount();
     });
   });
 
-  it('should render all grid sections', () => {
-    render(<MemberCard {...defaultProps} />);
+  it('should render all grid sections', async () => {
+    await render(<MemberCard {...defaultProps} />);
 
     expect(page.getByText('Membership')).toBeTruthy();
     expect(page.getByText('Amount Due')).toBeTruthy();
@@ -199,8 +199,8 @@ describe('MemberCard', () => {
     expect(page.getByText('Last Visited')).toBeTruthy();
   });
 
-  it('should handle missing amount due', () => {
-    render(<MemberCard {...defaultProps} amountDue={undefined} />);
+  it('should handle missing amount due', async () => {
+    await render(<MemberCard {...defaultProps} amountDue={undefined} />);
 
     expect(page.getByText('$0.00')).toBeTruthy();
   });

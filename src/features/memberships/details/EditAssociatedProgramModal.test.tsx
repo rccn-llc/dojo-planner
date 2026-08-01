@@ -120,8 +120,8 @@ describe('EditAssociatedProgramModal', () => {
     });
   });
 
-  it('should render modal with title when open', () => {
-    render(
+  it('should render modal with title when open', async () => {
+    await render(
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
@@ -137,8 +137,8 @@ describe('EditAssociatedProgramModal', () => {
     expect(title).toBeTruthy();
   });
 
-  it('should not render modal content when closed', () => {
-    render(
+  it('should not render modal content when closed', async () => {
+    await render(
       <EditAssociatedProgramModal
         isOpen={false}
         onClose={mockOnClose}
@@ -154,8 +154,8 @@ describe('EditAssociatedProgramModal', () => {
     expect(title).toBeNull();
   });
 
-  it('should render program label', () => {
-    render(
+  it('should render program label', async () => {
+    await render(
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
@@ -171,8 +171,8 @@ describe('EditAssociatedProgramModal', () => {
     expect(label).toBeTruthy();
   });
 
-  it('should render help text', () => {
-    render(
+  it('should render help text', async () => {
+    await render(
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
@@ -188,8 +188,8 @@ describe('EditAssociatedProgramModal', () => {
     expect(helpText).toBeTruthy();
   });
 
-  it('should render Cancel button', () => {
-    render(
+  it('should render Cancel button', async () => {
+    await render(
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
@@ -205,8 +205,8 @@ describe('EditAssociatedProgramModal', () => {
     expect(cancelButton).toBeTruthy();
   });
 
-  it('should render Save button', () => {
-    render(
+  it('should render Save button', async () => {
+    await render(
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
@@ -223,7 +223,7 @@ describe('EditAssociatedProgramModal', () => {
   });
 
   it('should call onClose when Cancel button is clicked', async () => {
-    render(
+    await render(
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
@@ -240,8 +240,8 @@ describe('EditAssociatedProgramModal', () => {
     expect(mockOnClose).toHaveBeenCalled();
   });
 
-  it('should disable Save button when no program is selected', () => {
-    render(
+  it('should disable Save button when no program is selected', async () => {
+    await render(
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
@@ -258,8 +258,8 @@ describe('EditAssociatedProgramModal', () => {
     expect(saveButton?.disabled).toBe(true);
   });
 
-  it('should enable Save button when program is selected', () => {
-    render(
+  it('should enable Save button when program is selected', async () => {
+    await render(
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
@@ -276,8 +276,8 @@ describe('EditAssociatedProgramModal', () => {
     expect(saveButton?.disabled).toBe(false);
   });
 
-  it('should render program select dropdown', () => {
-    render(
+  it('should render program select dropdown', async () => {
+    await render(
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
@@ -294,7 +294,7 @@ describe('EditAssociatedProgramModal', () => {
   });
 
   it('should show program options when dropdown is clicked', async () => {
-    render(
+    await render(
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
@@ -316,7 +316,7 @@ describe('EditAssociatedProgramModal', () => {
   });
 
   it('should call onSave with selected program when Save is clicked', async () => {
-    render(
+    await render(
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
@@ -350,7 +350,7 @@ describe('EditAssociatedProgramModal', () => {
   });
 
   it('should select a different program and save', async () => {
-    render(
+    await render(
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
@@ -386,7 +386,7 @@ describe('EditAssociatedProgramModal', () => {
   });
 
   it('should reset to initial program when dialog is closed via backdrop', async () => {
-    render(
+    await render(
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
@@ -414,7 +414,7 @@ describe('EditAssociatedProgramModal', () => {
   });
 
   it('should show Saving... text during save operation', async () => {
-    render(
+    await render(
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
@@ -440,7 +440,7 @@ describe('EditAssociatedProgramModal', () => {
   });
 
   it('should only show active programs in dropdown', async () => {
-    render(
+    await render(
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
@@ -469,7 +469,7 @@ describe('EditAssociatedProgramModal', () => {
   });
 
   it('should show 4 active programs in dropdown', async () => {
-    render(
+    await render(
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
@@ -496,7 +496,7 @@ describe('EditAssociatedProgramModal', () => {
   });
 
   it('should render waiver dropdown', async () => {
-    render(
+    await render(
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
@@ -516,7 +516,7 @@ describe('EditAssociatedProgramModal', () => {
   });
 
   it('should show waiver options when dropdown is clicked', async () => {
-    render(
+    await render(
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
@@ -543,7 +543,7 @@ describe('EditAssociatedProgramModal', () => {
   });
 
   it('should call onSave with selected waiver when Save is clicked', async () => {
-    render(
+    await render(
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}
@@ -583,7 +583,7 @@ describe('EditAssociatedProgramModal', () => {
   it('should source programs from the API, not a hardcoded mock list', async () => {
     // Regression guard for the FK-violation 500 bug: options must come from
     // client.programs.list() with real program ids.
-    render(
+    await render(
       <EditAssociatedProgramModal
         isOpen={true}
         onClose={mockOnClose}

@@ -101,11 +101,11 @@ export const NotificationButton = () => {
           className="relative"
           aria-label={t('view_notifications')}
         >
-          <Bell className="h-5 w-5" />
+          <Bell className="size-5" />
           <span className="sr-only">{t('view_notifications')}</span>
           {hasUnread && (
             <span
-              className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500"
+              className="absolute -top-1 -right-1 size-3 rounded-full bg-red-500"
               aria-label={t('unread_indicator')}
             />
           )}
@@ -138,7 +138,7 @@ export const NotificationButton = () => {
           )}
         </div>
         <DropdownMenuSeparator />
-        <div className="max-h-[400px] overflow-y-auto">
+        <div className="max-h-100 overflow-y-auto">
           {notifications.length === 0
             ? (
                 <div className="px-4 py-8 text-center text-sm text-muted-foreground">
@@ -152,7 +152,7 @@ export const NotificationButton = () => {
                     <div
                       key={notification.id}
                       className={cn(
-                        'relative flex gap-3 px-3 py-3 hover:bg-accent/50 transition-colors cursor-pointer',
+                        'relative flex cursor-pointer gap-3 p-3 transition-colors hover:bg-accent/50',
                         !notification.read && notificationBgMap[notification.type],
                       )}
                       onClick={() => markAsRead(notification.id)}
@@ -171,12 +171,12 @@ export const NotificationButton = () => {
                           notificationColorMap[notification.type],
                         )}
                       >
-                        <Icon className="h-5 w-5" />
+                        <Icon className="size-5" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <p
                           className={cn(
-                            'text-sm font-medium leading-tight',
+                            'text-sm leading-tight font-medium',
                             !notification.read && 'font-semibold',
                           )}
                         >
@@ -198,11 +198,11 @@ export const NotificationButton = () => {
                         }}
                         aria-label={t('dismiss_notification')}
                       >
-                        <X className="h-3.5 w-3.5 text-muted-foreground" />
+                        <X className="size-3.5 text-muted-foreground" />
                       </button>
                       {!notification.read && (
                         <span
-                          className="absolute top-1/2 left-1 h-2 w-2 -translate-y-1/2 rounded-full bg-blue-500"
+                          className="absolute top-1/2 left-1 size-2 -translate-y-1/2 rounded-full bg-blue-500"
                           aria-label={t('unread_indicator')}
                         />
                       )}

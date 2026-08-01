@@ -18,7 +18,7 @@ describe('StaffFilterBar', () => {
 
   describe('Rendering', () => {
     it('should render search input and role filter', async () => {
-      render(
+      await render(
         <StaffFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableRoles={mockAvailableRoles}
@@ -30,7 +30,7 @@ describe('StaffFilterBar', () => {
     });
 
     it('should show placeholder text in search input', async () => {
-      render(
+      await render(
         <StaffFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableRoles={mockAvailableRoles}
@@ -45,7 +45,7 @@ describe('StaffFilterBar', () => {
 
   describe('Search functionality', () => {
     it('should call onFiltersChangeAction when search input changes', async () => {
-      render(
+      await render(
         <StaffFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableRoles={mockAvailableRoles}
@@ -63,7 +63,7 @@ describe('StaffFilterBar', () => {
     });
 
     it('should update filter with each keystroke', async () => {
-      render(
+      await render(
         <StaffFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableRoles={mockAvailableRoles}

@@ -17,7 +17,7 @@ export default function SubscriptionExpiredPage() {
   return (
     <div className="flex min-h-[60vh] items-center justify-center">
       <Card className="max-w-md space-y-4 p-8 text-center">
-        <AlertTriangle className="mx-auto h-12 w-12 text-amber-500" />
+        <AlertTriangle className="mx-auto size-12 text-amber-500" />
         <h1 className="text-2xl font-bold text-foreground">{t('title')}</h1>
         <p className="text-sm text-muted-foreground">{t('message')}</p>
         <p className="text-sm text-muted-foreground">

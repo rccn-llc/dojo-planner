@@ -21,7 +21,7 @@ vi.mock('next/link', () => {
     return React.createElement('a', { href, className }, children);
   }
   MockLink.displayName = 'Link';
-  return { default: MockLink };
+  return { __esModule: true, default: MockLink };
 });
 
 // Mock sidebar components
@@ -104,12 +104,12 @@ describe('AppSidebarNav', () => {
     vi.clearAllMocks();
   });
 
-  afterEach(() => {
-    cleanup();
+  afterEach(async () => {
+    await cleanup();
   });
 
-  it('should render the sidebar group', () => {
-    render(
+  it('should render the sidebar group', async () => {
+    await render(
       <AppSidebarNav
         label="Test Section"
         items={[
@@ -121,8 +121,8 @@ describe('AppSidebarNav', () => {
     expect(page.getByTestId('sidebar-group')).toBeDefined();
   });
 
-  it('should render the section label', () => {
-    render(
+  it('should render the section label', async () => {
+    await render(
       <AppSidebarNav
         label="Test Section"
         items={[
@@ -134,8 +134,8 @@ describe('AppSidebarNav', () => {
     expect(page.getByText('Test Section')).toBeDefined();
   });
 
-  it('should not render label when empty', () => {
-    render(
+  it('should not render label when empty', async () => {
+    await render(
       <AppSidebarNav
         label=""
         items={[
@@ -147,8 +147,8 @@ describe('AppSidebarNav', () => {
     expect(page.getByTestId('sidebar-group-label').elements().length).toBe(0);
   });
 
-  it('should render menu items', () => {
-    render(
+  it('should render menu items', async () => {
+    await render(
       <AppSidebarNav
         label="Test"
         items={[
@@ -164,8 +164,8 @@ describe('AppSidebarNav', () => {
     expect(page.getByText('Settings')).toBeDefined();
   });
 
-  it('should not render hidden items', () => {
-    render(
+  it('should not render hidden items', async () => {
+    await render(
       <AppSidebarNav
         label="Test"
         items={[
@@ -179,8 +179,8 @@ describe('AppSidebarNav', () => {
     expect(page.getByText('Hidden Item').elements().length).toBe(0);
   });
 
-  it('should return null when hidden prop is true', () => {
-    render(
+  it('should return null when hidden prop is true', async () => {
+    await render(
       <AppSidebarNav
         label="Test"
         hidden
@@ -193,8 +193,8 @@ describe('AppSidebarNav', () => {
     expect(page.getByTestId('sidebar-group').elements().length).toBe(0);
   });
 
-  it('should render badge when provided', () => {
-    render(
+  it('should render badge when provided', async () => {
+    await render(
       <AppSidebarNav
         label="Test"
         items={[
@@ -214,7 +214,7 @@ describe('AppSidebarNav', () => {
   it('should call onClick handler when provided', async () => {
     const handleClick = vi.fn();
 
-    render(
+    await render(
       <AppSidebarNav
         label="Test"
         items={[
@@ -237,7 +237,7 @@ describe('AppSidebarNav', () => {
   it('should not call onClick when item is disabled', async () => {
     const handleClick = vi.fn();
 
-    render(
+    await render(
       <AppSidebarNav
         label="Test"
         items={[
@@ -258,10 +258,10 @@ describe('AppSidebarNav', () => {
     expect(handleClick).not.toHaveBeenCalled();
   });
 
-  it('should render switch item when isSwitchItem is true', () => {
+  it('should render switch item when isSwitchItem is true', async () => {
     const handleSwitch = vi.fn();
 
-    render(
+    await render(
       <AppSidebarNav
         label="Test"
         items={[
@@ -283,7 +283,7 @@ describe('AppSidebarNav', () => {
   it('should call onSwitchChange when switch is toggled', async () => {
     const handleSwitch = vi.fn();
 
-    render(
+    await render(
       <AppSidebarNav
         label="Test"
         items={[
@@ -304,8 +304,8 @@ describe('AppSidebarNav', () => {
     expect(handleSwitch).toHaveBeenCalledWith(true);
   });
 
-  it('should apply disabled styling to disabled items', () => {
-    render(
+  it('should apply disabled styling to disabled items', async () => {
+    await render(
       <AppSidebarNav
         label="Test"
         items={[
@@ -323,8 +323,8 @@ describe('AppSidebarNav', () => {
     // The component should have disabled styling (opacity-50, cursor-not-allowed)
   });
 
-  it('should filter out all hidden items', () => {
-    render(
+  it('should filter out all hidden items', async () => {
+    await render(
       <AppSidebarNav
         label="Test"
         items={[
@@ -342,12 +342,12 @@ describe('AppSidebarNav', () => {
 });
 
 describe('AppSidebarNav - Hidden Entire Section', () => {
-  afterEach(() => {
-    cleanup();
+  afterEach(async () => {
+    await cleanup();
   });
 
-  it('should return null when hidden prop is true on the component', () => {
-    render(
+  it('should return null when hidden prop is true on the component', async () => {
+    await render(
       <AppSidebarNav
         label="Hidden Section"
         hidden={true}
@@ -364,8 +364,8 @@ describe('AppSidebarNav - Hidden Entire Section', () => {
     expect(page.getByText('Settings').elements().length).toBe(0);
   });
 
-  it('should render when hidden prop is false', () => {
-    render(
+  it('should render when hidden prop is false', async () => {
+    await render(
       <AppSidebarNav
         label="Visible Section"
         hidden={false}
@@ -379,8 +379,8 @@ describe('AppSidebarNav - Hidden Entire Section', () => {
     expect(page.getByText('Dashboard')).toBeDefined();
   });
 
-  it('should render when hidden prop is undefined (default)', () => {
-    render(
+  it('should render when hidden prop is undefined (default)', async () => {
+    await render(
       <AppSidebarNav
         label="Default Section"
         items={[

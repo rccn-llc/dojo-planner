@@ -139,13 +139,13 @@ export function ClassScheduleCard({
   const getExceptionTypeIcon = (type: ScheduleException['type']) => {
     switch (type) {
       case 'deleted':
-        return <Trash2 className="h-3.5 w-3.5 text-destructive" />;
+        return <Trash2 className="size-3.5 text-destructive" />;
       case 'modified':
-        return <Pencil className="h-3.5 w-3.5 text-amber-500" />;
+        return <Pencil className="size-3.5 text-amber-500" />;
       case 'modified-forward':
-        return <Calendar className="h-3.5 w-3.5 text-blue-500" />;
+        return <Calendar className="size-3.5 text-blue-500" />;
       default:
-        return <AlertCircle className="h-3.5 w-3.5" />;
+        return <AlertCircle className="size-3.5" />;
     }
   };
 
@@ -214,11 +214,11 @@ export function ClassScheduleCard({
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      className="h-8 w-8"
+                                      className="size-8"
                                       aria-label={t('add_exception_aria')}
                                       data-testid={`add-exception-${instance.id}`}
                                     >
-                                      <Edit className="h-4 w-4" />
+                                      <Edit className="size-4" />
                                     </Button>
                                   </PopoverTrigger>
                                   <PopoverContent align="end" className="w-64">
@@ -356,12 +356,12 @@ export function ClassScheduleCard({
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8"
+                          className="size-8"
                           onClick={() => onEditInstance(instance, exception.date, exception)}
                           aria-label={t('edit_exception_aria')}
                           data-testid={`edit-exception-${exception.id}`}
                         >
-                          <Edit className="h-3.5 w-3.5" />
+                          <Edit className="size-3.5" />
                         </Button>
                       )}
                     </div>
@@ -391,7 +391,7 @@ export function ClassScheduleCard({
         {onEdit && (
           <div className="mt-6 flex justify-end">
             <Button variant="outline" size="icon" onClick={onEdit} data-testid="edit-schedule-button">
-              <Edit className="h-4 w-4" />
+              <Edit className="size-4" />
             </Button>
           </div>
         )}

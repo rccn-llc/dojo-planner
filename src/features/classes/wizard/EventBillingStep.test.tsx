@@ -69,8 +69,8 @@ describe('EventBillingStep', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the step with title and subtitle', () => {
-    render(
+  it('should render the step with title and subtitle', async () => {
+    await render(
       <EventBillingStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -86,8 +86,8 @@ describe('EventBillingStep', () => {
     expect(heading).toBeTruthy();
   });
 
-  it('should render has fee radio options', () => {
-    render(
+  it('should render has fee radio options', async () => {
+    await render(
       <EventBillingStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -105,8 +105,8 @@ describe('EventBillingStep', () => {
     expect(noLabel).toBeTruthy();
   });
 
-  it('should not show pricing fields when no fee is selected', () => {
-    render(
+  it('should not show pricing fields when no fee is selected', async () => {
+    await render(
       <EventBillingStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -124,7 +124,7 @@ describe('EventBillingStep', () => {
     expect(priceLabels.length).toBe(0);
   });
 
-  it('should show pricing fields when fee is selected', () => {
+  it('should show pricing fields when fee is selected', async () => {
     const dataWithFee: AddClassWizardData = {
       ...mockData,
       eventBilling: {
@@ -133,7 +133,7 @@ describe('EventBillingStep', () => {
       },
     };
 
-    render(
+    await render(
       <EventBillingStep
         data={dataWithFee}
         onUpdate={mockHandlers.onUpdate}
@@ -149,8 +149,8 @@ describe('EventBillingStep', () => {
     expect(priceLabel).toBeTruthy();
   });
 
-  it('should have Next button enabled when no fee is selected', () => {
-    render(
+  it('should have Next button enabled when no fee is selected', async () => {
+    await render(
       <EventBillingStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -167,7 +167,7 @@ describe('EventBillingStep', () => {
     expect(nextButton?.disabled).toBe(false);
   });
 
-  it('should have Next button disabled when fee is selected but no price', () => {
+  it('should have Next button disabled when fee is selected but no price', async () => {
     const dataWithFee: AddClassWizardData = {
       ...mockData,
       eventBilling: {
@@ -177,7 +177,7 @@ describe('EventBillingStep', () => {
       },
     };
 
-    render(
+    await render(
       <EventBillingStep
         data={dataWithFee}
         onUpdate={mockHandlers.onUpdate}
@@ -194,7 +194,7 @@ describe('EventBillingStep', () => {
     expect(nextButton?.disabled).toBe(true);
   });
 
-  it('should enable Next button when fee is selected and price is set', () => {
+  it('should enable Next button when fee is selected and price is set', async () => {
     const dataWithPrice: AddClassWizardData = {
       ...mockData,
       eventBilling: {
@@ -204,7 +204,7 @@ describe('EventBillingStep', () => {
       },
     };
 
-    render(
+    await render(
       <EventBillingStep
         data={dataWithPrice}
         onUpdate={mockHandlers.onUpdate}
@@ -222,7 +222,7 @@ describe('EventBillingStep', () => {
   });
 
   it('should call onCancel when Cancel button is clicked', async () => {
-    render(
+    await render(
       <EventBillingStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -244,7 +244,7 @@ describe('EventBillingStep', () => {
   });
 
   it('should call onBack when Back button is clicked', async () => {
-    render(
+    await render(
       <EventBillingStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -266,7 +266,7 @@ describe('EventBillingStep', () => {
   });
 
   it('should call onNext when Next button is clicked', async () => {
-    render(
+    await render(
       <EventBillingStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -287,8 +287,8 @@ describe('EventBillingStep', () => {
     }
   });
 
-  it('should display error message when provided', () => {
-    render(
+  it('should display error message when provided', async () => {
+    await render(
       <EventBillingStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -305,7 +305,7 @@ describe('EventBillingStep', () => {
     expect(errorMessage).toBeTruthy();
   });
 
-  it('should show early bird section when fee is selected', () => {
+  it('should show early bird section when fee is selected', async () => {
     const dataWithFee: AddClassWizardData = {
       ...mockData,
       eventBilling: {
@@ -314,7 +314,7 @@ describe('EventBillingStep', () => {
       },
     };
 
-    render(
+    await render(
       <EventBillingStep
         data={dataWithFee}
         onUpdate={mockHandlers.onUpdate}
@@ -330,7 +330,7 @@ describe('EventBillingStep', () => {
     expect(earlyBirdLabel).toBeTruthy();
   });
 
-  it('should show member discount section when fee is selected', () => {
+  it('should show member discount section when fee is selected', async () => {
     const dataWithFee: AddClassWizardData = {
       ...mockData,
       eventBilling: {
@@ -339,7 +339,7 @@ describe('EventBillingStep', () => {
       },
     };
 
-    render(
+    await render(
       <EventBillingStep
         data={dataWithFee}
         onUpdate={mockHandlers.onUpdate}
@@ -355,7 +355,7 @@ describe('EventBillingStep', () => {
     expect(memberDiscountLabel).toBeTruthy();
   });
 
-  it('should show early bird price fields when early bird is enabled', () => {
+  it('should show early bird price fields when early bird is enabled', async () => {
     const dataWithEarlyBird: AddClassWizardData = {
       ...mockData,
       eventBilling: {
@@ -365,7 +365,7 @@ describe('EventBillingStep', () => {
       },
     };
 
-    render(
+    await render(
       <EventBillingStep
         data={dataWithEarlyBird}
         onUpdate={mockHandlers.onUpdate}
@@ -383,7 +383,7 @@ describe('EventBillingStep', () => {
     expect(deadlineLabel).toBeTruthy();
   });
 
-  it('should show member discount fields when member discount is enabled', () => {
+  it('should show member discount fields when member discount is enabled', async () => {
     const dataWithDiscount: AddClassWizardData = {
       ...mockData,
       eventBilling: {
@@ -393,7 +393,7 @@ describe('EventBillingStep', () => {
       },
     };
 
-    render(
+    await render(
       <EventBillingStep
         data={dataWithDiscount}
         onUpdate={mockHandlers.onUpdate}
@@ -411,8 +411,8 @@ describe('EventBillingStep', () => {
     expect(amountLabel).toBeTruthy();
   });
 
-  it('should render has fee question label', () => {
-    render(
+  it('should render has fee question label', async () => {
+    await render(
       <EventBillingStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}

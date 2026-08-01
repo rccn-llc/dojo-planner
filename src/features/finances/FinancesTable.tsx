@@ -258,8 +258,8 @@ export function FinancesTable({
                               {t('table_date')}
                               {sortField === 'date' && (
                                 sortDirection === 'asc'
-                                  ? <ArrowDownAZ className="h-4 w-4" />
-                                  : <ArrowUpZA className="h-4 w-4" />
+                                  ? <ArrowDownAZ className="size-4" />
+                                  : <ArrowUpZA className="size-4" />
                               )}
                             </button>
                           </th>
@@ -272,8 +272,8 @@ export function FinancesTable({
                               {t('table_status')}
                               {sortField === 'status' && (
                                 sortDirection === 'asc'
-                                  ? <ArrowDownAZ className="h-4 w-4" />
-                                  : <ArrowUpZA className="h-4 w-4" />
+                                  ? <ArrowDownAZ className="size-4" />
+                                  : <ArrowUpZA className="size-4" />
                               )}
                             </button>
                           </th>
@@ -286,8 +286,8 @@ export function FinancesTable({
                               {t('table_member')}
                               {sortField === 'memberName' && (
                                 sortDirection === 'asc'
-                                  ? <ArrowDownAZ className="h-4 w-4" />
-                                  : <ArrowUpZA className="h-4 w-4" />
+                                  ? <ArrowDownAZ className="size-4" />
+                                  : <ArrowUpZA className="size-4" />
                               )}
                             </button>
                           </th>
@@ -300,8 +300,8 @@ export function FinancesTable({
                               {t('table_amount')}
                               {sortField === 'amount' && (
                                 sortDirection === 'asc'
-                                  ? <ArrowDown01 className="h-4 w-4" />
-                                  : <ArrowUp10 className="h-4 w-4" />
+                                  ? <ArrowDown01 className="size-4" />
+                                  : <ArrowUp10 className="size-4" />
                               )}
                             </button>
                           </th>
@@ -314,8 +314,8 @@ export function FinancesTable({
                               {t('table_origin')}
                               {sortField === 'purpose' && (
                                 sortDirection === 'asc'
-                                  ? <ArrowDownAZ className="h-4 w-4" />
-                                  : <ArrowUpZA className="h-4 w-4" />
+                                  ? <ArrowDownAZ className="size-4" />
+                                  : <ArrowUpZA className="size-4" />
                               )}
                             </button>
                           </th>
@@ -328,8 +328,8 @@ export function FinancesTable({
                               {t('table_method')}
                               {sortField === 'method' && (
                                 sortDirection === 'asc'
-                                  ? <ArrowDownAZ className="h-4 w-4" />
-                                  : <ArrowUpZA className="h-4 w-4" />
+                                  ? <ArrowDownAZ className="size-4" />
+                                  : <ArrowUpZA className="size-4" />
                               )}
                             </button>
                           </th>
@@ -342,8 +342,8 @@ export function FinancesTable({
                               {t('table_transaction_id')}
                               {sortField === 'transactionId' && (
                                 sortDirection === 'asc'
-                                  ? <ArrowDownAZ className="h-4 w-4" />
-                                  : <ArrowUpZA className="h-4 w-4" />
+                                  ? <ArrowDownAZ className="size-4" />
+                                  : <ArrowUpZA className="size-4" />
                               )}
                             </button>
                           </th>

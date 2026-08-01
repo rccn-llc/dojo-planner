@@ -34,12 +34,25 @@ export default antfu(
   // --- Accessibility Rules ---
   jsxA11y.flatConfigs.recommended,
   // --- Tailwind CSS Rules ---
-  ...tailwind.configs['flat/recommended'],
+  // Note: v4 exports a single flat-config object as `configs.recommended`
+  // (the former `configs['flat/recommended']` array was removed), and it
+  // carries its own `files` scoping — so the settings must live on the same
+  // config object rather than in a separate unscoped one.
   {
+    ...tailwind.configs.recommended,
     settings: {
       tailwindcss: {
-        config: `${dirname(fileURLToPath(import.meta.url))}/src/styles/global.css`,
+        cssConfigPath: `${dirname(fileURLToPath(import.meta.url))}/src/styles/global.css`,
       },
+    },
+  },
+  // `cn(...inputs: ClassValue[])` in src/utils/Helpers.ts forwards its rest
+  // parameter to clsx. The plugin parses clsx arguments and reads the
+  // identifier `inputs` as a literal class name, which it is not.
+  {
+    files: ['src/utils/Helpers.ts'],
+    rules: {
+      'tailwindcss/no-custom-classname': 'off',
     },
   },
   // --- E2E Testing Rules ---

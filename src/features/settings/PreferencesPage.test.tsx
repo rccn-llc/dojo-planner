@@ -41,14 +41,14 @@ vi.mock('next-intl', () => ({
 }));
 
 describe('PreferencesPage', () => {
-  it('should render the page title', () => {
-    render(<PreferencesPage />);
+  it('should render the page title', async () => {
+    await render(<PreferencesPage />);
 
     expect(page.getByText('Preferences')).toBeDefined();
   });
 
-  it('should render all tab buttons', () => {
-    render(<PreferencesPage />);
+  it('should render all tab buttons', async () => {
+    await render(<PreferencesPage />);
 
     expect(page.getByRole('button', { name: /notifications/i })).toBeDefined();
     expect(page.getByRole('button', { name: /appearance/i })).toBeDefined();
@@ -56,15 +56,15 @@ describe('PreferencesPage', () => {
     expect(page.getByRole('button', { name: /data export/i })).toBeDefined();
   });
 
-  it('should render notifications tab content by default', () => {
-    render(<PreferencesPage />);
+  it('should render notifications tab content by default', async () => {
+    await render(<PreferencesPage />);
 
     expect(page.getByText('Email Notifications')).toBeDefined();
     expect(page.getByText('Communication Emails')).toBeDefined();
   });
 
-  it('should render notification preference options', () => {
-    render(<PreferencesPage />);
+  it('should render notification preference options', async () => {
+    await render(<PreferencesPage />);
 
     expect(page.getByText('Communication Emails')).toBeDefined();
     expect(page.getByText('Member Change Emails')).toBeDefined();
@@ -72,16 +72,16 @@ describe('PreferencesPage', () => {
     expect(page.getByText('Announcements & Updates')).toBeDefined();
   });
 
-  it('should render text notification options', () => {
-    render(<PreferencesPage />);
+  it('should render text notification options', async () => {
+    await render(<PreferencesPage />);
 
     expect(page.getByText('Communication Texts')).toBeDefined();
     expect(page.getByText('Member Change Texts')).toBeDefined();
     expect(page.getByText('Financial Transaction Texts')).toBeDefined();
   });
 
-  it('should render danger zone section', () => {
-    render(<PreferencesPage />);
+  it('should render danger zone section', async () => {
+    await render(<PreferencesPage />);
 
     expect(page.getByText('Turn off all notifications')).toBeDefined();
   });

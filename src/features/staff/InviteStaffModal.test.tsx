@@ -48,8 +48,8 @@ describe('InviteStaffModal', () => {
   });
 
   describe('Modal rendering', () => {
-    it('should not render dialog when isOpen is false', () => {
-      render(
+    it('should not render dialog when isOpen is false', async () => {
+      await render(
         <InviteStaffModal
           isOpen={false}
           onCloseAction={mockHandlers.onCloseAction}
@@ -66,7 +66,7 @@ describe('InviteStaffModal', () => {
     });
 
     it('should render dialog when isOpen is true', async () => {
-      render(
+      await render(
         <InviteStaffModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -79,7 +79,7 @@ describe('InviteStaffModal', () => {
     });
 
     it('should display dialog title', async () => {
-      render(
+      await render(
         <InviteStaffModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -94,7 +94,7 @@ describe('InviteStaffModal', () => {
 
   describe('Form fields', () => {
     it('should render all form fields', async () => {
-      render(
+      await render(
         <InviteStaffModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -113,7 +113,7 @@ describe('InviteStaffModal', () => {
     });
 
     it('should render Cancel and Save buttons', async () => {
-      render(
+      await render(
         <InviteStaffModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -128,7 +128,7 @@ describe('InviteStaffModal', () => {
     });
 
     it('should update form fields when user types', async () => {
-      render(
+      await render(
         <InviteStaffModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -152,7 +152,7 @@ describe('InviteStaffModal', () => {
 
   describe('Roles from Clerk', () => {
     it('should fetch roles on mount', async () => {
-      render(
+      await render(
         <InviteStaffModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -172,7 +172,7 @@ describe('InviteStaffModal', () => {
         ),
       );
 
-      render(
+      await render(
         <InviteStaffModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -191,7 +191,7 @@ describe('InviteStaffModal', () => {
         error: 'Failed to load roles',
       });
 
-      render(
+      await render(
         <InviteStaffModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -208,7 +208,7 @@ describe('InviteStaffModal', () => {
 
   describe('Button states', () => {
     it('should render Cancel button that can be clicked', async () => {
-      render(
+      await render(
         <InviteStaffModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -222,7 +222,7 @@ describe('InviteStaffModal', () => {
     });
 
     it('should have Save button disabled when form is incomplete', async () => {
-      render(
+      await render(
         <InviteStaffModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -242,7 +242,7 @@ describe('InviteStaffModal', () => {
 
   describe('Info message', () => {
     it('should display info message', async () => {
-      render(
+      await render(
         <InviteStaffModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -257,7 +257,7 @@ describe('InviteStaffModal', () => {
 
   describe('Modal close behavior', () => {
     it('should call onCloseAction once when X button is clicked while input is focused', async () => {
-      render(
+      await render(
         <InviteStaffModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -278,7 +278,7 @@ describe('InviteStaffModal', () => {
     });
 
     it('should call onCloseAction once when Cancel button is clicked', async () => {
-      render(
+      await render(
         <InviteStaffModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -300,7 +300,7 @@ describe('InviteStaffModal', () => {
 
   describe('Form submission', () => {
     it('should call inviteStaffMember when form is valid and submitted', async () => {
-      render(
+      await render(
         <InviteStaffModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -345,7 +345,7 @@ describe('InviteStaffModal', () => {
     });
 
     it('should display success message after successful invitation', async () => {
-      render(
+      await render(
         <InviteStaffModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -382,7 +382,7 @@ describe('InviteStaffModal', () => {
         error: 'Email already exists',
       });
 
-      render(
+      await render(
         <InviteStaffModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -414,7 +414,7 @@ describe('InviteStaffModal', () => {
     });
 
     it('should show validation error when form is incomplete', async () => {
-      render(
+      await render(
         <InviteStaffModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -435,7 +435,7 @@ describe('InviteStaffModal', () => {
 
   describe('No permission switches', () => {
     it('should not render any permission toggle switches', async () => {
-      render(
+      await render(
         <InviteStaffModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -472,7 +472,7 @@ describe('InviteStaffModal', () => {
 
   describe('Role description display', () => {
     it('should display role description when a role is selected', async () => {
-      render(
+      await render(
         <InviteStaffModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}

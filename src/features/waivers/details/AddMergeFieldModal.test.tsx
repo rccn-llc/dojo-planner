@@ -43,56 +43,56 @@ describe('AddMergeFieldModal', () => {
     vi.clearAllMocks();
   });
 
-  it('should render dialog with correct title when open', () => {
-    render(<AddMergeFieldModal {...defaultProps} />);
+  it('should render dialog with correct title when open', async () => {
+    await render(<AddMergeFieldModal {...defaultProps} />);
 
     const heading = page.getByText('Add Merge Field');
 
     expect(heading).toBeTruthy();
   });
 
-  it('should not render dialog content when closed', () => {
-    render(<AddMergeFieldModal {...defaultProps} isOpen={false} />);
+  it('should not render dialog content when closed', async () => {
+    await render(<AddMergeFieldModal {...defaultProps} isOpen={false} />);
 
     const heading = page.getByText('Add Merge Field');
 
     expect(heading.elements()).toHaveLength(0);
   });
 
-  it('should render key input with placeholder', () => {
-    render(<AddMergeFieldModal {...defaultProps} />);
+  it('should render key input with placeholder', async () => {
+    await render(<AddMergeFieldModal {...defaultProps} />);
 
     const keyInput = page.getByPlaceholder('e.g. member_name');
 
     expect(keyInput).toBeTruthy();
   });
 
-  it('should render label input with placeholder', () => {
-    render(<AddMergeFieldModal {...defaultProps} />);
+  it('should render label input with placeholder', async () => {
+    await render(<AddMergeFieldModal {...defaultProps} />);
 
     const labelInput = page.getByPlaceholder('e.g. Member Name');
 
     expect(labelInput).toBeTruthy();
   });
 
-  it('should render default value input with placeholder', () => {
-    render(<AddMergeFieldModal {...defaultProps} />);
+  it('should render default value input with placeholder', async () => {
+    await render(<AddMergeFieldModal {...defaultProps} />);
 
     const defaultValueInput = page.getByPlaceholder('e.g. John Doe');
 
     expect(defaultValueInput).toBeTruthy();
   });
 
-  it('should render description textarea with placeholder', () => {
-    render(<AddMergeFieldModal {...defaultProps} />);
+  it('should render description textarea with placeholder', async () => {
+    await render(<AddMergeFieldModal {...defaultProps} />);
 
     const descriptionTextarea = page.getByPlaceholder('Optional description...');
 
     expect(descriptionTextarea).toBeTruthy();
   });
 
-  it('should render all four field labels', () => {
-    render(<AddMergeFieldModal {...defaultProps} />);
+  it('should render all four field labels', async () => {
+    await render(<AddMergeFieldModal {...defaultProps} />);
 
     expect(page.getByText('Key')).toBeTruthy();
     expect(page.getByText('Label')).toBeTruthy();
@@ -100,8 +100,8 @@ describe('AddMergeFieldModal', () => {
     expect(page.getByText('Description')).toBeTruthy();
   });
 
-  it('should show key help text initially', () => {
-    render(<AddMergeFieldModal {...defaultProps} />);
+  it('should show key help text initially', async () => {
+    await render(<AddMergeFieldModal {...defaultProps} />);
 
     const helpText = page.getByText('Lowercase letters, numbers, and underscores only');
 
@@ -109,7 +109,7 @@ describe('AddMergeFieldModal', () => {
   });
 
   it('should show key validation error when key is empty and blurred', async () => {
-    render(<AddMergeFieldModal {...defaultProps} />);
+    await render(<AddMergeFieldModal {...defaultProps} />);
 
     const keyInput = page.getByPlaceholder('e.g. member_name');
     await userEvent.click(keyInput);
@@ -121,7 +121,7 @@ describe('AddMergeFieldModal', () => {
   });
 
   it('should show label validation error when label is empty and blurred', async () => {
-    render(<AddMergeFieldModal {...defaultProps} />);
+    await render(<AddMergeFieldModal {...defaultProps} />);
 
     const labelInput = page.getByPlaceholder('e.g. Member Name');
     await userEvent.click(labelInput);
@@ -133,7 +133,7 @@ describe('AddMergeFieldModal', () => {
   });
 
   it('should show default value validation error when default value is empty and blurred', async () => {
-    render(<AddMergeFieldModal {...defaultProps} />);
+    await render(<AddMergeFieldModal {...defaultProps} />);
 
     const defaultValueInput = page.getByPlaceholder('e.g. John Doe');
     await userEvent.click(defaultValueInput);
@@ -145,7 +145,7 @@ describe('AddMergeFieldModal', () => {
   });
 
   it('should format key input to lowercase with underscores', async () => {
-    render(<AddMergeFieldModal {...defaultProps} />);
+    await render(<AddMergeFieldModal {...defaultProps} />);
 
     const keyInput = page.getByPlaceholder('e.g. member_name');
     await userEvent.type(keyInput, 'Member Name');
@@ -156,7 +156,7 @@ describe('AddMergeFieldModal', () => {
   });
 
   it('should strip invalid characters from key input', async () => {
-    render(<AddMergeFieldModal {...defaultProps} />);
+    await render(<AddMergeFieldModal {...defaultProps} />);
 
     const keyInput = page.getByPlaceholder('e.g. member_name');
     await userEvent.type(keyInput, 'test@key!#');
@@ -167,7 +167,7 @@ describe('AddMergeFieldModal', () => {
   });
 
   it('should show key preview when key is valid', async () => {
-    render(<AddMergeFieldModal {...defaultProps} />);
+    await render(<AddMergeFieldModal {...defaultProps} />);
 
     const keyInput = page.getByPlaceholder('e.g. member_name');
     await userEvent.type(keyInput, 'member_name');
@@ -181,8 +181,8 @@ describe('AddMergeFieldModal', () => {
     expect(code?.textContent).toBe('<member_name>');
   });
 
-  it('should disable save button when form is empty', () => {
-    render(<AddMergeFieldModal {...defaultProps} />);
+  it('should disable save button when form is empty', async () => {
+    await render(<AddMergeFieldModal {...defaultProps} />);
 
     const buttons = Array.from(document.querySelectorAll('button'));
     const saveButton = buttons.find(btn => btn.textContent?.includes('Add Field'));
@@ -191,7 +191,7 @@ describe('AddMergeFieldModal', () => {
   });
 
   it('should disable save button when only key is filled', async () => {
-    render(<AddMergeFieldModal {...defaultProps} />);
+    await render(<AddMergeFieldModal {...defaultProps} />);
 
     const keyInput = page.getByPlaceholder('e.g. member_name');
     await userEvent.type(keyInput, 'member_name');
@@ -203,7 +203,7 @@ describe('AddMergeFieldModal', () => {
   });
 
   it('should enable save button when all required fields are filled', async () => {
-    render(<AddMergeFieldModal {...defaultProps} />);
+    await render(<AddMergeFieldModal {...defaultProps} />);
 
     const keyInput = page.getByPlaceholder('e.g. member_name');
     await userEvent.type(keyInput, 'member_name');
@@ -221,7 +221,7 @@ describe('AddMergeFieldModal', () => {
   });
 
   it('should call onSave with correct data when save is clicked', async () => {
-    render(<AddMergeFieldModal {...defaultProps} />);
+    await render(<AddMergeFieldModal {...defaultProps} />);
 
     const keyInput = page.getByPlaceholder('e.g. member_name');
     await userEvent.type(keyInput, 'member_name');
@@ -246,7 +246,7 @@ describe('AddMergeFieldModal', () => {
   });
 
   it('should include description in onSave data when provided', async () => {
-    render(<AddMergeFieldModal {...defaultProps} />);
+    await render(<AddMergeFieldModal {...defaultProps} />);
 
     const keyInput = page.getByPlaceholder('e.g. member_name');
     await userEvent.type(keyInput, 'member_name');
@@ -274,7 +274,7 @@ describe('AddMergeFieldModal', () => {
   });
 
   it('should call onClose when cancel is clicked', async () => {
-    render(<AddMergeFieldModal {...defaultProps} />);
+    await render(<AddMergeFieldModal {...defaultProps} />);
 
     // Fill key first to avoid layout shift from validation on blur
     const keyInput = page.getByPlaceholder('e.g. member_name');
@@ -293,7 +293,7 @@ describe('AddMergeFieldModal', () => {
       resolvePromise = resolve;
     }));
 
-    render(<AddMergeFieldModal {...defaultProps} onSave={slowOnSave} />);
+    await render(<AddMergeFieldModal {...defaultProps} onSave={slowOnSave} />);
 
     const keyInput = page.getByPlaceholder('e.g. member_name');
     await userEvent.type(keyInput, 'member_name');
@@ -322,7 +322,7 @@ describe('AddMergeFieldModal', () => {
       resolvePromise = resolve;
     }));
 
-    render(<AddMergeFieldModal {...defaultProps} onSave={slowOnSave} />);
+    await render(<AddMergeFieldModal {...defaultProps} onSave={slowOnSave} />);
 
     const keyInput = page.getByPlaceholder('e.g. member_name');
     await userEvent.type(keyInput, 'member_name');
@@ -347,7 +347,7 @@ describe('AddMergeFieldModal', () => {
   });
 
   it('should reset form state after successful save', async () => {
-    render(<AddMergeFieldModal {...defaultProps} />);
+    await render(<AddMergeFieldModal {...defaultProps} />);
 
     const keyInput = page.getByPlaceholder('e.g. member_name');
     await userEvent.type(keyInput, 'member_name');

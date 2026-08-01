@@ -2,7 +2,7 @@
 
 import type { StaffMemberData } from '@/hooks/useInviteStaffForm';
 import { useTranslations } from 'next-intl';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { inviteStaffMember, updateStaffMember } from '@/actions/staff';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useInviteStaffForm } from '@/hooks/useInviteStaffForm';
@@ -23,7 +23,8 @@ export const InviteStaffModal = ({
 }: InviteStaffModalProps) => {
   const t = useTranslations('Staff.InviteStaffModal');
   const form = useInviteStaffForm(staffMember);
-  const prevIsOpenRef = useRef(isOpen);
+  // State rather than a ref: refs must not be read or written during render.
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Determine if we're in edit mode
@@ -36,10 +37,12 @@ export const InviteStaffModal = ({
   }, [form]);
 
   // Check if modal just closed and reset state
-  if (prevIsOpenRef.current && !isOpen) {
-    resetModalState();
+  if (prevIsOpen !== isOpen) {
+    setPrevIsOpen(isOpen);
+    if (prevIsOpen && !isOpen) {
+      resetModalState();
+    }
   }
-  prevIsOpenRef.current = isOpen;
 
   const handleSave = async () => {
     // Mark all fields as touched to show validation errors

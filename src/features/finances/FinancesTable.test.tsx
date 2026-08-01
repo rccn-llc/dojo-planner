@@ -46,10 +46,10 @@ const createMockTransaction = (overrides: Partial<Transaction> = {}): Transactio
 
 describe('FinancesTable', () => {
   describe('Page Header', () => {
-    it('should render filter bar', () => {
+    it('should render filter bar', async () => {
       const mockTransactions = [createMockTransaction()];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       // Title is now rendered by the page component, not the table
       // Check for search input instead
@@ -60,34 +60,34 @@ describe('FinancesTable', () => {
   });
 
   describe('Render method', () => {
-    it('should render transactions table with transactions list', () => {
+    it('should render transactions table with transactions list', async () => {
       const mockTransactions = [createMockTransaction()];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const table = page.getByRole('table');
 
       expect(table.getByText('April 15, 2025')).toBeInTheDocument();
     });
 
-    it('should render empty state when no transactions', () => {
-      render(<FinancesTable transactions={[]} />);
+    it('should render empty state when no transactions', async () => {
+      await render(<FinancesTable transactions={[]} />);
 
       const emptyState = page.getByText('no_transactions').first();
 
       expect(emptyState).toBeInTheDocument();
     });
 
-    it('should render loading state when loading prop is true', () => {
-      render(<FinancesTable transactions={[]} loading />);
+    it('should render loading state when loading prop is true', async () => {
+      await render(<FinancesTable transactions={[]} loading />);
 
       const loadingText = page.getByText('loading_transactions').first();
 
       expect(loadingText).toBeInTheDocument();
     });
 
-    it('should render header actions when provided', () => {
-      render(
+    it('should render header actions when provided', async () => {
+      await render(
         <FinancesTable
           transactions={[]}
           headerActions={<button type="button">Add Transaction</button>}
@@ -107,7 +107,7 @@ describe('FinancesTable', () => {
         createMockTransaction({ id: '2', date: 'March 15, 2025' }),
       ];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const dateHeader = page.getByRole('button', { name: /table_date/i });
       await dateHeader.click();
@@ -124,7 +124,7 @@ describe('FinancesTable', () => {
         createMockTransaction({ id: '2', amount: '$100.00' }),
       ];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const amountHeader = page.getByRole('button', { name: /table_amount/i });
       await amountHeader.click();
@@ -141,7 +141,7 @@ describe('FinancesTable', () => {
         createMockTransaction({ id: '2', purpose: 'Membership Dues' }),
       ];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const originHeader = page.getByRole('button', { name: /table_origin/i });
       await originHeader.click();
@@ -158,7 +158,7 @@ describe('FinancesTable', () => {
         createMockTransaction({ id: '2', date: 'March 15, 2025' }),
       ];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const dateHeader = page.getByRole('button', { name: /table_date/i });
       await dateHeader.click();
@@ -171,10 +171,10 @@ describe('FinancesTable', () => {
   });
 
   describe('Filtering', () => {
-    it('should have a search input', () => {
+    it('should have a search input', async () => {
       const mockTransactions = [createMockTransaction()];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const searchInput = page.getByPlaceholder('search_placeholder');
 
@@ -184,7 +184,7 @@ describe('FinancesTable', () => {
     it('should allow typing in search input', async () => {
       const mockTransactions = [createMockTransaction()];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const searchInput = page.getByPlaceholder('search_placeholder');
       await userEvent.fill(searchInput.element() as HTMLInputElement, 'Membership');
@@ -200,7 +200,7 @@ describe('FinancesTable', () => {
         createMockTransaction({ id: '2', purpose: 'Merchandise' }),
       ];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const searchInput = page.getByPlaceholder('search_placeholder');
       await userEvent.fill(searchInput.element() as HTMLInputElement, 'Merchandise');
@@ -216,7 +216,7 @@ describe('FinancesTable', () => {
         createMockTransaction({ id: '2', purpose: 'Merchandise' }),
       ];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const originFilter = page.getByTestId('finances-origin-filter');
       await originFilter.click();
@@ -231,7 +231,7 @@ describe('FinancesTable', () => {
         createMockTransaction({ id: '2', purpose: 'Merchandise', memberName: 'Jane Doe' }),
       ];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const originFilter = page.getByTestId('finances-origin-filter');
       await originFilter.click();
@@ -248,7 +248,7 @@ describe('FinancesTable', () => {
     it('should show no results message when filter has no matches', async () => {
       const mockTransactions = [createMockTransaction()];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const searchInput = page.getByPlaceholder('search_placeholder');
       await userEvent.fill(searchInput.element() as HTMLInputElement, 'NonexistentItem');
@@ -258,21 +258,21 @@ describe('FinancesTable', () => {
   });
 
   describe('Pagination', () => {
-    it('should show pagination when there are more than 10 transactions', () => {
+    it('should show pagination when there are more than 10 transactions', async () => {
       const mockTransactions = Array.from({ length: 15 }, (_, i) =>
         createMockTransaction({ id: `${i}`, date: `April ${i + 1}, 2025` }));
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       expect(page.getByRole('button', { name: /Previous/i })).toBeInTheDocument();
       expect(page.getByRole('button', { name: 'Next', exact: true })).toBeInTheDocument();
     });
 
-    it('should only show first 10 transactions on first page', () => {
+    it('should only show first 10 transactions on first page', async () => {
       const mockTransactions = Array.from({ length: 15 }, (_, i) =>
         createMockTransaction({ id: `${i}`, transactionId: `TXN${String(i).padStart(2, '0')}` }));
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const table = page.getByRole('table');
 
@@ -285,7 +285,7 @@ describe('FinancesTable', () => {
       const mockTransactions = Array.from({ length: 15 }, (_, i) =>
         createMockTransaction({ id: `${i}`, transactionId: `TXN${String(i).padStart(2, '0')}` }));
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const nextButton = page.getByRole('button', { name: 'Next', exact: true });
       await nextButton.click();
@@ -299,7 +299,7 @@ describe('FinancesTable', () => {
       const mockTransactions = Array.from({ length: 15 }, (_, i) =>
         createMockTransaction({ id: `${i}`, transactionId: `TXN${String(i).padStart(2, '0')}` }));
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const nextButton = page.getByRole('button', { name: 'Next', exact: true });
       await nextButton.click();
@@ -314,10 +314,10 @@ describe('FinancesTable', () => {
   });
 
   describe('Member column', () => {
-    it('should display member name in table', () => {
+    it('should display member name in table', async () => {
       const mockTransactions = [createMockTransaction({ memberName: 'Jane Doe' })];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const table = page.getByRole('table');
 
@@ -330,7 +330,7 @@ describe('FinancesTable', () => {
         createMockTransaction({ id: '2', memberName: 'Alice Brown' }),
       ];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const memberHeader = page.getByRole('button', { name: /table_member/i });
       await memberHeader.click();
@@ -349,7 +349,7 @@ describe('FinancesTable', () => {
         createMockTransaction({ id: '2', memberName: 'Non-member', memberId: null }),
       ];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const table = page.getByRole('table');
 
@@ -364,50 +364,50 @@ describe('FinancesTable', () => {
   });
 
   describe('Status column', () => {
-    it('should display status badge for paid transactions', () => {
+    it('should display status badge for paid transactions', async () => {
       const mockTransactions = [createMockTransaction({ status: 'paid' })];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const table = page.getByRole('table');
 
       expect(table.getByText('status_paid')).toBeInTheDocument();
     });
 
-    it('should display status badge for declined transactions', () => {
+    it('should display status badge for declined transactions', async () => {
       const mockTransactions = [createMockTransaction({ status: 'declined' })];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const table = page.getByRole('table');
 
       expect(table.getByText('status_declined')).toBeInTheDocument();
     });
 
-    it('should display status badge for pending transactions', () => {
+    it('should display status badge for pending transactions', async () => {
       const mockTransactions = [createMockTransaction({ status: 'pending' })];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const table = page.getByRole('table');
 
       expect(table.getByText('status_pending')).toBeInTheDocument();
     });
 
-    it('should display status badge for refunded transactions', () => {
+    it('should display status badge for refunded transactions', async () => {
       const mockTransactions = [createMockTransaction({ status: 'refunded' })];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const table = page.getByRole('table');
 
       expect(table.getByText('status_refunded')).toBeInTheDocument();
     });
 
-    it('should display status badge for processing transactions', () => {
+    it('should display status badge for processing transactions', async () => {
       const mockTransactions = [createMockTransaction({ status: 'processing' })];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const table = page.getByRole('table');
 
@@ -420,7 +420,7 @@ describe('FinancesTable', () => {
         createMockTransaction({ id: '2', status: 'declined' }),
       ];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const statusHeader = page.getByRole('button', { name: /table_status/i });
       await statusHeader.click();
@@ -436,7 +436,7 @@ describe('FinancesTable', () => {
     it('should open transaction detail modal when clicking a row', async () => {
       const mockTransactions = [createMockTransaction()];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       // Click the table row (which has role="button" and contains the member name)
       // Use first() since there's both a table row and mobile card with the same name
@@ -446,10 +446,10 @@ describe('FinancesTable', () => {
       expect(page.getByRole('dialog')).toBeInTheDocument();
     });
 
-    it('should have accessible row with tabIndex', () => {
+    it('should have accessible row with tabIndex', async () => {
       const mockTransactions = [createMockTransaction()];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       // Verify the row is rendered with button role (making it keyboard accessible)
       const dataRow = page.getByRole('button', { name: /John Smith/i }).first();
@@ -460,7 +460,7 @@ describe('FinancesTable', () => {
     it('should close modal when clicking close button', async () => {
       const mockTransactions = [createMockTransaction()];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       // Click the table row (which has role="button" and contains the member name)
       // Use first() since there's both a table row and mobile card with the same name
@@ -481,7 +481,7 @@ describe('FinancesTable', () => {
         createMockTransaction({ id: '2', transactionId: 'TXN002' }),
       ];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const searchInput = page.getByPlaceholder('search_placeholder');
       await userEvent.fill(searchInput.element() as HTMLInputElement, 'TXN001');
@@ -498,7 +498,7 @@ describe('FinancesTable', () => {
         createMockTransaction({ id: '2', method: 'Cash' }),
       ];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const searchInput = page.getByPlaceholder('search_placeholder');
       await userEvent.fill(searchInput.element() as HTMLInputElement, 'Cash');
@@ -514,7 +514,7 @@ describe('FinancesTable', () => {
         createMockTransaction({ id: '2', memberName: 'Jane Doe' }),
       ];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const searchInput = page.getByPlaceholder('search_placeholder');
       await userEvent.fill(searchInput.element() as HTMLInputElement, 'Jane');
@@ -530,7 +530,7 @@ describe('FinancesTable', () => {
         createMockTransaction({ id: '2', status: 'declined' }),
       ];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const searchInput = page.getByPlaceholder('search_placeholder');
       await userEvent.fill(searchInput.element() as HTMLInputElement, 'declined');
@@ -548,7 +548,7 @@ describe('FinancesTable', () => {
         createMockTransaction({ id: '2', purpose: 'Merchandise' }),
       ];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       const originFilter = page.getByTestId('finances-origin-filter');
       await originFilter.click();
@@ -565,7 +565,7 @@ describe('FinancesTable', () => {
         createMockTransaction({ id: '3', purpose: 'Seminar', status: 'paid' }),
       ];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       // Select 'paid' status
       const statusFilter = page.getByTestId('finances-status-filter');
@@ -589,7 +589,7 @@ describe('FinancesTable', () => {
         createMockTransaction({ id: '3', purpose: 'Merchandise', status: 'declined' }),
       ];
 
-      render(<FinancesTable transactions={mockTransactions} />);
+      await render(<FinancesTable transactions={mockTransactions} />);
 
       // Select 'Membership Dues' origin
       const originFilter = page.getByTestId('finances-origin-filter');

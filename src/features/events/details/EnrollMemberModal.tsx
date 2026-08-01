@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { dedupeRequest } from '@/hooks/dedupeRequest';
 import { client } from '@/libs/Orpc';
 import { rankMembersByQuery } from '@/utils/MemberSearch';
 
@@ -101,7 +102,7 @@ export function EnrollMemberModal({
       return;
     }
     let cancelled = false;
-    client.members.list()
+    dedupeRequest('members.list', async () => client.members.list())
       .then((result) => {
         if (!cancelled) {
           setMembers(result.members as EnrollMember[]);
@@ -221,7 +222,7 @@ export function EnrollMemberModal({
           <div className="space-y-2">
             <Label>{t('member_label')}</Label>
             <div className="relative">
-              <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
@@ -233,7 +234,7 @@ export function EnrollMemberModal({
             {loadingMembers
               ? (
                   <div className="flex justify-center py-6">
-                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    <Loader2 className="size-5 animate-spin text-muted-foreground" />
                   </div>
                 )
               : (
@@ -249,7 +250,7 @@ export function EnrollMemberModal({
                               selected?.id === member.id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted'
                             }`}
                           >
-                            <Avatar className="h-9 w-9">
+                            <Avatar className="size-9">
                               <AvatarImage src={member.photoUrl ?? undefined} alt={`${member.firstName} ${member.lastName}`} />
                               <AvatarFallback>{initials(member.firstName, member.lastName)}</AvatarFallback>
                             </Avatar>
@@ -263,7 +264,7 @@ export function EnrollMemberModal({
                             </div>
                             {selected?.id === member.id && (
                               <Badge variant="secondary" className="shrink-0">
-                                <UserCheck className="mr-1 h-3 w-3" />
+                                <UserCheck className="mr-1 size-3" />
                                 {t('selected')}
                               </Badge>
                             )}
@@ -301,7 +302,7 @@ export function EnrollMemberModal({
               {loadingPayment
                 ? (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <Loader2 className="size-4 animate-spin" />
                       {t('checking_payment')}
                     </div>
                   )
@@ -339,7 +340,7 @@ export function EnrollMemberModal({
             {t('cancel')}
           </Button>
           <Button onClick={handleSubmit} disabled={!selected || submitting || loadingPayment}>
-            {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {submitting && <Loader2 className="mr-2 size-4 animate-spin" />}
             {chargeCard && canCharge ? t('enroll_and_charge') : t('enroll')}
           </Button>
         </DialogFooter>

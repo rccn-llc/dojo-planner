@@ -64,7 +64,9 @@ export default function WaiverDetailPage() {
   }, [waiverId, t]);
 
   useEffect(() => {
-    fetchWaiver();
+    void (async () => {
+      await fetchWaiver();
+    })();
   }, [fetchWaiver]);
 
   const handleBack = useCallback(() => {
@@ -170,7 +172,7 @@ export default function WaiverDetailPage() {
     return (
       <div className="w-full space-y-6">
         <div className="flex items-center gap-4">
-          <Skeleton className="h-10 w-10" />
+          <Skeleton className="size-10" />
           <Skeleton className="h-8 w-64" />
         </div>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -251,7 +253,7 @@ export default function WaiverDetailPage() {
               </p>
               <div className="mt-6 flex justify-end">
                 <Button variant="outline" size="icon" onClick={() => setIsEditContentOpen(true)} aria-label={t('edit_content_aria')}>
-                  <Edit className="h-4 w-4" />
+                  <Edit className="size-4" />
                 </Button>
               </div>
             </CardContent>
@@ -292,7 +294,7 @@ export default function WaiverDetailPage() {
               )}
               <div className="mt-6 flex justify-end">
                 <Button variant="outline" size="icon" onClick={() => setIsEditBasicsOpen(true)} aria-label={t('edit_settings_aria')}>
-                  <Edit className="h-4 w-4" />
+                  <Edit className="size-4" />
                 </Button>
               </div>
             </CardContent>
@@ -322,7 +324,7 @@ export default function WaiverDetailPage() {
                   )}
               <div className="mt-6 flex justify-end">
                 <Button variant="outline" size="icon" onClick={() => setIsEditMembershipsOpen(true)} aria-label={t('edit_memberships_aria')}>
-                  <Edit className="h-4 w-4" />
+                  <Edit className="size-4" />
                 </Button>
               </div>
             </CardContent>
@@ -359,7 +361,7 @@ export default function WaiverDetailPage() {
                               onClick={() => setViewingVersion(version)}
                               aria-label={t('view_version_button')}
                             >
-                              <Eye className="h-4 w-4" />
+                              <Eye className="size-4" />
                             </Button>
                           </li>
                         ))}

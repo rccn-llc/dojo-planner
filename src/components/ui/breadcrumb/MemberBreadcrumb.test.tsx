@@ -12,28 +12,28 @@ vi.mock('next/navigation', () => ({
 
 describe('MemberBreadcrumb', () => {
   describe('Render method', () => {
-    it('should render back button with chevron icon', () => {
-      render(<MemberBreadcrumb memberName="Anika Smith" />);
+    it('should render back button with chevron icon', async () => {
+      await render(<MemberBreadcrumb memberName="Anika Smith" />);
 
       const button = page.getByRole('button', { name: /Go back to members/i });
 
       expect(button).toBeInTheDocument();
     });
 
-    it('should render Members link text', () => {
-      render(<MemberBreadcrumb memberName="Anika Smith" />);
+    it('should render Members link text', async () => {
+      await render(<MemberBreadcrumb memberName="Anika Smith" />);
 
       expect(page.getByText('Members')).toBeInTheDocument();
     });
 
-    it('should render member name', () => {
-      render(<MemberBreadcrumb memberName="Anika Smith" />);
+    it('should render member name', async () => {
+      await render(<MemberBreadcrumb memberName="Anika Smith" />);
 
       expect(page.getByText('Anika Smith')).toBeInTheDocument();
     });
 
-    it('should render greater-than separator', () => {
-      render(<MemberBreadcrumb memberName="John Doe" />);
+    it('should render greater-than separator', async () => {
+      await render(<MemberBreadcrumb memberName="John Doe" />);
 
       const separator = page.getByText('>');
 
@@ -44,7 +44,7 @@ describe('MemberBreadcrumb', () => {
   describe('Navigation', () => {
     it('should call onBackClick when back button is clicked', async () => {
       const onBackClick = vi.fn();
-      render(<MemberBreadcrumb memberName="Anika Smith" onBackClick={onBackClick} />);
+      await render(<MemberBreadcrumb memberName="Anika Smith" onBackClick={onBackClick} />);
 
       const backButton = page.getByRole('button', { name: /Go back to members/i });
       await backButton.click();

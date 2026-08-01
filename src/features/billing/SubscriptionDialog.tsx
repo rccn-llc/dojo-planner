@@ -70,28 +70,31 @@ export function SubscriptionDialog({ open, onOpenChange }: SubscriptionDialogPro
     theme: resolvedTheme === 'dark' ? 'dark' : 'light',
   });
 
+  // Fetches once and no-ops thereafter: the functional setState lets us skip
+  // an already-loaded config without depending on `tokenizationConfig`, which
+  // would otherwise re-run the pre-load effect below after its own update.
   const loadTokenizationConfig = useCallback(async () => {
-    if (tokenizationConfig) {
-      return;
-    }
     try {
       const config = await client.saasSubscription.getTokenizationConfig({
         origin: window.location.origin,
       });
-      setTokenizationConfig(config as TokenizationIframeConfig);
+      setTokenizationConfig(prev => prev ?? (config as TokenizationIframeConfig));
     } catch {
       // If tokenization config fails, user will use plain card input
     }
-  }, [tokenizationConfig]);
+  }, []);
 
   // Pre-load the tokenization config when the dialog opens for a not-yet-
   // subscribed org. By the time the user clicks a plan and the payment form
   // renders, the config is already cached and the iframe can mount without
   // a visible loading delay (#160).
   useEffect(() => {
-    if (open && !isPaidSubscriber) {
-      void loadTokenizationConfig();
+    if (!open || isPaidSubscriber) {
+      return;
     }
+    void (async () => {
+      await loadTokenizationConfig();
+    })();
   }, [open, isPaidSubscriber, loadTokenizationConfig]);
 
   const handleSubscribe = async (planId: SaasPlanId) => {
@@ -261,7 +264,7 @@ export function SubscriptionDialog({ open, onOpenChange }: SubscriptionDialogPro
           <div className="flex-1 space-y-4 overflow-y-auto px-4 pb-4 sm:space-y-6 sm:px-6 sm:pb-6">
             {loading && (
               <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                <Loader2 className="size-6 animate-spin text-muted-foreground" />
                 <span className="ml-2 text-sm text-muted-foreground">{t('loading')}</span>
               </div>
             )}
@@ -341,7 +344,7 @@ export function SubscriptionDialog({ open, onOpenChange }: SubscriptionDialogPro
                             disabled={btnProps.disabled || subscribing}
                             onClick={() => plan.isContactUs ? undefined : handleSubscribe(planId)}
                           >
-                            {subscribing ? <Loader2 className="h-4 w-4 animate-spin" /> : btnProps.text}
+                            {subscribing ? <Loader2 className="size-4 animate-spin" /> : btnProps.text}
                           </Button>
                         </div>
                         <p className="mt-3 text-xs text-muted-foreground">{plan.description}</p>
@@ -350,8 +353,8 @@ export function SubscriptionDialog({ open, onOpenChange }: SubscriptionDialogPro
                           {plan.features.map(feature => (
                             <div key={feature.name} className="flex items-start gap-2">
                               {feature.included
-                                ? <Check className="h-3.5 w-3.5 shrink-0 text-green-600" />
-                                : <X className="h-3.5 w-3.5 shrink-0 text-gray-400" />}
+                                ? <Check className="size-3.5 shrink-0 text-green-600" />
+                                : <X className="size-3.5 shrink-0 text-gray-400" />}
                               <span className={`text-xs leading-tight ${feature.included ? 'text-foreground' : 'text-muted-foreground line-through'}`}>
                                 {feature.name}
                               </span>
@@ -373,11 +376,11 @@ export function SubscriptionDialog({ open, onOpenChange }: SubscriptionDialogPro
                       <label className="mb-1 block text-sm font-medium">{t('card_number_label')}</label>
                       <div
                         id={TOKENEX_CONTAINER_ID}
-                        className="h-9 w-full overflow-hidden rounded-md border border-neutral-600 bg-neutral-100 shadow-xs dark:bg-input/30 [&_iframe]:block [&_iframe]:h-full [&_iframe]:w-full [&_iframe]:border-none [&_iframe]:bg-transparent"
+                        className="h-9 w-full overflow-hidden rounded-md border border-neutral-600 bg-neutral-100 shadow-xs dark:bg-input/30 [&_iframe]:block [&_iframe]:size-full [&_iframe]:border-none [&_iframe]:bg-transparent"
                       />
                       {!iframeLoaded && tokenizationConfig && (
                         <p className="mt-1 text-xs text-muted-foreground">
-                          <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />
+                          <Loader2 className="mr-1 inline size-3 animate-spin" />
                           {t('loading')}
                         </p>
                       )}
@@ -406,7 +409,7 @@ export function SubscriptionDialog({ open, onOpenChange }: SubscriptionDialogPro
                         disabled={subscribing || (tokenizationConfig ? (!iframeLoaded || !iframeValid) : false)}
                         onClick={handleSubmitSubscription}
                       >
-                        {subscribing ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+                        {subscribing ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
                         {subscribing ? t('processing') : t('subscribe_button')}
                       </Button>
                     </div>
@@ -423,7 +426,7 @@ export function SubscriptionDialog({ open, onOpenChange }: SubscriptionDialogPro
                         onClick={handleSort}
                         className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
                       >
-                        {sortDirection === 'asc' ? <ArrowDownAZ className="h-4 w-4" /> : <ArrowUpZA className="h-4 w-4" />}
+                        {sortDirection === 'asc' ? <ArrowDownAZ className="size-4" /> : <ArrowUpZA className="size-4" />}
                       </button>
                     )}
                   </div>
@@ -466,7 +469,7 @@ export function SubscriptionDialog({ open, onOpenChange }: SubscriptionDialogPro
                           onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                           disabled={currentPage === 1}
                         >
-                          <ChevronLeft className="h-4 w-4" />
+                          <ChevronLeft className="size-4" />
                           {t('previous_button')}
                         </Button>
                         <Button
@@ -476,7 +479,7 @@ export function SubscriptionDialog({ open, onOpenChange }: SubscriptionDialogPro
                           disabled={currentPage === totalPages}
                         >
                           {t('next_button')}
-                          <ChevronRight className="h-4 w-4" />
+                          <ChevronRight className="size-4" />
                         </Button>
                       </div>
                     </div>
@@ -520,7 +523,7 @@ export function SubscriptionDialog({ open, onOpenChange }: SubscriptionDialogPro
               disabled={cancelling}
               className="bg-destructive text-white hover:bg-destructive/90"
             >
-              {cancelling ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+              {cancelling ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
               {t('cancel_confirm_button')}
             </AlertDialogAction>
           </AlertDialogFooter>

@@ -135,8 +135,8 @@ describe('SubscriptionDialog', () => {
     };
   });
 
-  it('should not render dialog when open is false', () => {
-    render(
+  it('should not render dialog when open is false', async () => {
+    await render(
       <SubscriptionDialog
         open={false}
         onOpenChange={mockHandlers.onOpenChange}
@@ -146,8 +146,8 @@ describe('SubscriptionDialog', () => {
     expect(page.getByRole('dialog').elements().length).toBe(0);
   });
 
-  it('should render dialog when open is true', () => {
-    render(
+  it('should render dialog when open is true', async () => {
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -160,7 +160,7 @@ describe('SubscriptionDialog', () => {
   });
 
   it('should display the responsible academy owner name and email', async () => {
-    render(
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -178,7 +178,7 @@ describe('SubscriptionDialog', () => {
       currentPlan: { ...mockCurrentPlan, responsibleOwner: null },
     };
 
-    render(
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -205,7 +205,7 @@ describe('SubscriptionDialog', () => {
     });
 
     it('shows a trial notice banner (and no per-plan Trial badge)', async () => {
-      render(<SubscriptionDialog open={true} onOpenChange={mockHandlers.onOpenChange} />);
+      await render(<SubscriptionDialog open={true} onOpenChange={mockHandlers.onOpenChange} />);
 
       await expect.element(page.getByText(/free trial/i)).toBeInTheDocument();
       // A trial is plan-agnostic: no "Trial" badge on any plan card.
@@ -213,7 +213,7 @@ describe('SubscriptionDialog', () => {
     });
 
     it('does NOT lock the trial plan as Current Plan and offers Subscribe instead', async () => {
-      render(<SubscriptionDialog open={true} onOpenChange={mockHandlers.onOpenChange} />);
+      await render(<SubscriptionDialog open={true} onOpenChange={mockHandlers.onOpenChange} />);
 
       // No plan should show the locked "Current Plan" button while on trial.
       expect(page.getByRole('button', { name: /current plan/i }).elements().length).toBe(0);
@@ -225,14 +225,14 @@ describe('SubscriptionDialog', () => {
       expect(subscribeButtons.every(b => !b.hasAttribute('disabled'))).toBe(true);
     });
 
-    it('does not show the cancel button while on trial (no paid subscription)', () => {
-      render(<SubscriptionDialog open={true} onOpenChange={mockHandlers.onOpenChange} />);
+    it('does not show the cancel button while on trial (no paid subscription)', async () => {
+      await render(<SubscriptionDialog open={true} onOpenChange={mockHandlers.onOpenChange} />);
 
       expect(page.getByRole('button', { name: /cancel membership/i }).elements().length).toBe(0);
     });
 
     it('highlights the chosen plan card when its Subscribe button is clicked', async () => {
-      render(<SubscriptionDialog open={true} onOpenChange={mockHandlers.onOpenChange} />);
+      await render(<SubscriptionDialog open={true} onOpenChange={mockHandlers.onOpenChange} />);
 
       const subscribeButtons = page.getByRole('button', { name: /^subscribe$/i }).elements();
       const firstButton = subscribeButtons[0] as HTMLElement;
@@ -247,8 +247,8 @@ describe('SubscriptionDialog', () => {
     });
   });
 
-  it('should display dialog title', () => {
-    render(
+  it('should display dialog title', async () => {
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -258,13 +258,13 @@ describe('SubscriptionDialog', () => {
     expect(page.getByText('Subscription')).toBeTruthy();
   });
 
-  it('should show loading state', () => {
+  it('should show loading state', async () => {
     mockSubscriptionData = {
       ...mockSubscriptionData,
       loading: true,
     };
 
-    render(
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -274,14 +274,14 @@ describe('SubscriptionDialog', () => {
     expect(page.getByText('Loading...')).toBeTruthy();
   });
 
-  it('should show error state', () => {
+  it('should show error state', async () => {
     mockSubscriptionData = {
       ...mockSubscriptionData,
       loading: false,
       error: 'Something went wrong',
     };
 
-    render(
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -291,8 +291,8 @@ describe('SubscriptionDialog', () => {
     expect(page.getByText('Error loading data')).toBeTruthy();
   });
 
-  it('should render billing cycle toggle buttons', () => {
-    render(
+  it('should render billing cycle toggle buttons', async () => {
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -306,8 +306,8 @@ describe('SubscriptionDialog', () => {
     expect(annualButton).toBeTruthy();
   });
 
-  it('should render pricing cards', () => {
-    render(
+  it('should render pricing cards', async () => {
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -321,8 +321,8 @@ describe('SubscriptionDialog', () => {
     expect(growthCard).toBeTruthy();
   });
 
-  it('should render monthly pricing by default', () => {
-    render(
+  it('should render monthly pricing by default', async () => {
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -334,7 +334,7 @@ describe('SubscriptionDialog', () => {
   });
 
   it('should render annual pricing when annual tab is selected', async () => {
-    render(
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -349,7 +349,7 @@ describe('SubscriptionDialog', () => {
   });
 
   it('should switch prices when toggling between monthly and annual', async () => {
-    render(
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -372,8 +372,8 @@ describe('SubscriptionDialog', () => {
     expect(page.getByText('$125 / month')).toBeTruthy();
   });
 
-  it('should render plan buttons with Current Plan for Basic Monthly', () => {
-    render(
+  it('should render plan buttons with Current Plan for Basic Monthly', async () => {
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -389,8 +389,8 @@ describe('SubscriptionDialog', () => {
     expect(contactButton).toBeTruthy();
   });
 
-  it('should have Current Plan button disabled', () => {
-    render(
+  it('should have Current Plan button disabled', async () => {
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -403,7 +403,7 @@ describe('SubscriptionDialog', () => {
   });
 
   it('should show Upgrade Plan for Basic when Annual is selected', async () => {
-    render(
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -420,8 +420,8 @@ describe('SubscriptionDialog', () => {
     expect(currentPlanButtons.length).toBe(0);
   });
 
-  it('should render features list', () => {
-    render(
+  it('should render features list', async () => {
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -432,8 +432,8 @@ describe('SubscriptionDialog', () => {
     expect(page.getByText('Digital attendance & student profiles').first()).toBeTruthy();
   });
 
-  it('should render billing history heading', () => {
-    render(
+  it('should render billing history heading', async () => {
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -443,8 +443,8 @@ describe('SubscriptionDialog', () => {
     expect(page.getByText('My Billing History')).toBeTruthy();
   });
 
-  it('should render billing history data', () => {
-    render(
+  it('should render billing history data', async () => {
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -456,8 +456,8 @@ describe('SubscriptionDialog', () => {
     expect(paymentMethod).toBeTruthy();
   });
 
-  it('should render bottom action buttons', () => {
-    render(
+  it('should render bottom action buttons', async () => {
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -469,13 +469,13 @@ describe('SubscriptionDialog', () => {
     expect(cancelButton).toBeTruthy();
   });
 
-  it('should not show cancel button for super admins', () => {
+  it('should not show cancel button for super admins', async () => {
     mockSubscriptionData = {
       ...mockSubscriptionData,
       currentPlan: { ...mockCurrentPlan, isSuperAdmin: true },
     };
 
-    render(
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -488,7 +488,7 @@ describe('SubscriptionDialog', () => {
   });
 
   it('should call onOpenChange when close button is clicked', async () => {
-    render(
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -501,8 +501,8 @@ describe('SubscriptionDialog', () => {
     expect(mockHandlers.onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it('should render plan descriptions', () => {
-    render(
+  it('should render plan descriptions', async () => {
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -514,8 +514,8 @@ describe('SubscriptionDialog', () => {
     expect(page.getByText('All of the above plus custom branded experiences and more, get in touch!')).toBeTruthy();
   });
 
-  it('should render excluded features with strikethrough styling', () => {
-    render(
+  it('should render excluded features with strikethrough styling', async () => {
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -525,8 +525,8 @@ describe('SubscriptionDialog', () => {
     expect(page.getByText('Payment processing integration')).toBeTruthy();
   });
 
-  it('should render payment method information in billing history', () => {
-    render(
+  it('should render payment method information in billing history', async () => {
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -538,8 +538,8 @@ describe('SubscriptionDialog', () => {
     expect(paymentMethod).toBeTruthy();
   });
 
-  it('should render invoice IDs in billing history', () => {
-    render(
+  it('should render invoice IDs in billing history', async () => {
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -551,8 +551,8 @@ describe('SubscriptionDialog', () => {
     expect(invoiceId).toBeTruthy();
   });
 
-  it('should render correct features for each plan', () => {
-    render(
+  it('should render correct features for each plan', async () => {
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -565,8 +565,8 @@ describe('SubscriptionDialog', () => {
     expect(page.getByText('Custom branded website')).toBeTruthy();
   });
 
-  it('should display Upgrade Plan button as enabled', () => {
-    render(
+  it('should display Upgrade Plan button as enabled', async () => {
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -578,8 +578,8 @@ describe('SubscriptionDialog', () => {
     expect(upgradePlanButton.element().hasAttribute('disabled')).toBe(false);
   });
 
-  it('should have green background on active subscription card', () => {
-    render(
+  it('should have green background on active subscription card', async () => {
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -592,7 +592,7 @@ describe('SubscriptionDialog', () => {
   });
 
   it('should remove green background from Basic when Annual is selected', async () => {
-    render(
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -611,13 +611,13 @@ describe('SubscriptionDialog', () => {
     expect(basicCard).toBeNull();
   });
 
-  it('should show no billing history message when history is empty', () => {
+  it('should show no billing history message when history is empty', async () => {
     mockSubscriptionData = {
       ...mockSubscriptionData,
       billingHistory: [],
     };
 
-    render(
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -627,14 +627,14 @@ describe('SubscriptionDialog', () => {
     expect(page.getByText('No billing history')).toBeTruthy();
   });
 
-  it('should show complimentary plan message for super admins with no billing history', () => {
+  it('should show complimentary plan message for super admins with no billing history', async () => {
     mockSubscriptionData = {
       ...mockSubscriptionData,
       currentPlan: { ...mockCurrentPlan, isSuperAdmin: true },
       billingHistory: [],
     };
 
-    render(
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}
@@ -644,13 +644,13 @@ describe('SubscriptionDialog', () => {
     expect(page.getByText('Complimentary plan')).toBeTruthy();
   });
 
-  it('should show Subscribe button when no active subscription', () => {
+  it('should show Subscribe button when no active subscription', async () => {
     mockSubscriptionData = {
       ...mockSubscriptionData,
       currentPlan: { ...mockCurrentPlan, hasActiveSubscription: false, planId: null, planName: null },
     };
 
-    render(
+    await render(
       <SubscriptionDialog
         open={true}
         onOpenChange={mockHandlers.onOpenChange}

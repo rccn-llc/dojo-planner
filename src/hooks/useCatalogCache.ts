@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { client } from '@/libs/Orpc';
+import { clearInFlight, dedupeRequest } from './dedupeRequest';
 
 // =============================================================================
 // TYPES
@@ -155,7 +156,9 @@ export const useCatalogCache = (organizationId?: string | undefined) => {
 
       console.info('[Catalog Cache] Fetching fresh catalog data for organization:', organizationId);
 
-      const catalogData = await client.catalog.list();
+      // Several components can mount this hook in the same tick; without
+      // de-duping, each one fires its own request against the cold cache.
+      const catalogData = await dedupeRequest(`catalog:${organizationId || ''}`, async () => client.catalog.list());
       const items = (catalogData.items || []) as CatalogItem[];
 
       cacheStore = {
@@ -196,6 +199,7 @@ export const useCatalogCache = (organizationId?: string | undefined) => {
     console.info('[Catalog Cache] Manual revalidation triggered');
     dispatch({ type: 'REVALIDATING_START' });
     cacheStore = null;
+    clearInFlight();
     await fetchCatalogItems();
   }, [fetchCatalogItems]);
 
@@ -240,6 +244,7 @@ export const useCatalogCache = (organizationId?: string | undefined) => {
 export const invalidateCatalogCache = async () => {
   console.info('[Catalog Cache] Global cache invalidation triggered');
   cacheStore = null;
+  clearInFlight();
   await Promise.all(revalidateCallbacks.map(callback => callback()));
 };
 
@@ -324,7 +329,7 @@ export const useCatalogCategoriesCache = (organizationId?: string | undefined) =
 
       console.info('[Catalog Categories Cache] Fetching fresh categories data for organization:', organizationId);
 
-      const categoryData = await client.catalog.categoryList();
+      const categoryData = await dedupeRequest(`catalogCategories:${organizationId || ''}`, async () => client.catalog.categoryList());
       const categories = (categoryData.categories || []) as CatalogCategory[];
 
       categoryCacheStore = {
@@ -364,6 +369,7 @@ export const useCatalogCategoriesCache = (organizationId?: string | undefined) =
   const revalidate = useCallback(async () => {
     console.info('[Catalog Categories Cache] Manual revalidation triggered');
     categoryCacheStore = null;
+    clearInFlight();
     await fetchCategories();
   }, [fetchCategories]);
 
@@ -407,5 +413,6 @@ export const useCatalogCategoriesCache = (organizationId?: string | undefined) =
 export const invalidateCatalogCategoriesCache = async () => {
   console.info('[Catalog Categories Cache] Global cache invalidation triggered');
   categoryCacheStore = null;
+  clearInFlight();
   await Promise.all(categoryRevalidateCallbacks.map(callback => callback()));
 };

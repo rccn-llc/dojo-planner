@@ -60,8 +60,8 @@ describe('ViewVersionModal', () => {
     vi.clearAllMocks();
   });
 
-  it('should not render content when template is null', () => {
-    render(
+  it('should not render content when template is null', async () => {
+    await render(
       <ViewVersionModal
         {...defaultProps}
         template={null}
@@ -73,8 +73,8 @@ describe('ViewVersionModal', () => {
     expect(hasContent).toBe(false);
   });
 
-  it('should render version title and date when open with template', () => {
-    render(<ViewVersionModal {...defaultProps} />);
+  it('should render version title and date when open with template', async () => {
+    await render(<ViewVersionModal {...defaultProps} />);
 
     const title = page.getByText('title');
     const versionDate = page.getByText('version_date');
@@ -83,16 +83,16 @@ describe('ViewVersionModal', () => {
     expect(versionDate).toBeTruthy();
   });
 
-  it('should render waiver content text', () => {
-    render(<ViewVersionModal {...defaultProps} />);
+  it('should render waiver content text', async () => {
+    await render(<ViewVersionModal {...defaultProps} />);
 
     const content = page.getByText(/This is waiver content with/);
 
     expect(content).toBeTruthy();
   });
 
-  it('should highlight merge fields with mark elements when merge fields are provided', () => {
-    render(<ViewVersionModal {...defaultProps} />);
+  it('should highlight merge fields with mark elements when merge fields are provided', async () => {
+    await render(<ViewVersionModal {...defaultProps} />);
 
     const markElements = document.querySelectorAll('mark');
 
@@ -100,8 +100,8 @@ describe('ViewVersionModal', () => {
     expect(markElements[0]!.textContent).toBe('Test Academy');
   });
 
-  it('should return plain content when no merge fields are provided', () => {
-    render(
+  it('should return plain content when no merge fields are provided', async () => {
+    await render(
       <ViewVersionModal
         {...defaultProps}
         mergeFields={[]}
@@ -116,7 +116,7 @@ describe('ViewVersionModal', () => {
   });
 
   it('should call onClose when close button is clicked', async () => {
-    render(<ViewVersionModal {...defaultProps} />);
+    await render(<ViewVersionModal {...defaultProps} />);
 
     const closeButton = page.getByRole('button', { name: 'close_button' });
     await userEvent.click(closeButton);

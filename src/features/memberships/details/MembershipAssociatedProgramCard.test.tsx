@@ -31,8 +31,8 @@ describe('MembershipAssociatedProgramCard', () => {
     vi.clearAllMocks();
   });
 
-  it('should render card with title', () => {
-    render(
+  it('should render card with title', async () => {
+    await render(
       <MembershipAssociatedProgramCard
         associatedProgramId="1"
         associatedProgramName="Adult Brazilian Jiu-jitsu"
@@ -47,8 +47,8 @@ describe('MembershipAssociatedProgramCard', () => {
     expect(title).toBeTruthy();
   });
 
-  it('should display program name when program is associated', () => {
-    render(
+  it('should display program name when program is associated', async () => {
+    await render(
       <MembershipAssociatedProgramCard
         associatedProgramId="1"
         associatedProgramName="Adult Brazilian Jiu-jitsu"
@@ -63,8 +63,8 @@ describe('MembershipAssociatedProgramCard', () => {
     expect(programName).toBeTruthy();
   });
 
-  it('should display no program message when no program is associated', () => {
-    render(
+  it('should display no program message when no program is associated', async () => {
+    await render(
       <MembershipAssociatedProgramCard
         associatedProgramId={null}
         associatedProgramName={null}
@@ -79,8 +79,8 @@ describe('MembershipAssociatedProgramCard', () => {
     expect(noProgram).toBeTruthy();
   });
 
-  it('should display no program message when program ID is null but name exists', () => {
-    render(
+  it('should display no program message when program ID is null but name exists', async () => {
+    await render(
       <MembershipAssociatedProgramCard
         associatedProgramId={null}
         associatedProgramName="Some Program"
@@ -95,8 +95,8 @@ describe('MembershipAssociatedProgramCard', () => {
     expect(noProgram).toBeTruthy();
   });
 
-  it('should display program label', () => {
-    render(
+  it('should display program label', async () => {
+    await render(
       <MembershipAssociatedProgramCard
         associatedProgramId="1"
         associatedProgramName="Adult Brazilian Jiu-jitsu"
@@ -111,8 +111,8 @@ describe('MembershipAssociatedProgramCard', () => {
     expect(label).toBeTruthy();
   });
 
-  it('should render edit button', () => {
-    render(
+  it('should render edit button', async () => {
+    await render(
       <MembershipAssociatedProgramCard
         associatedProgramId="1"
         associatedProgramName="Adult Brazilian Jiu-jitsu"
@@ -128,7 +128,7 @@ describe('MembershipAssociatedProgramCard', () => {
   });
 
   it('should call onEdit when edit button is clicked', async () => {
-    render(
+    await render(
       <MembershipAssociatedProgramCard
         associatedProgramId="1"
         associatedProgramName="Adult Brazilian Jiu-jitsu"
@@ -146,8 +146,8 @@ describe('MembershipAssociatedProgramCard', () => {
     }
   });
 
-  it('should render different program names correctly', () => {
-    render(
+  it('should render different program names correctly', async () => {
+    await render(
       <MembershipAssociatedProgramCard
         associatedProgramId="2"
         associatedProgramName="Kids Program"
@@ -162,8 +162,8 @@ describe('MembershipAssociatedProgramCard', () => {
     expect(programName).toBeTruthy();
   });
 
-  it('should render Competition Team program', () => {
-    render(
+  it('should render Competition Team program', async () => {
+    await render(
       <MembershipAssociatedProgramCard
         associatedProgramId="3"
         associatedProgramName="Competition Team"
@@ -178,8 +178,8 @@ describe('MembershipAssociatedProgramCard', () => {
     expect(programName).toBeTruthy();
   });
 
-  it('should be wrapped in a Card component', () => {
-    render(
+  it('should be wrapped in a Card component', async () => {
+    await render(
       <MembershipAssociatedProgramCard
         associatedProgramId="1"
         associatedProgramName="Adult Brazilian Jiu-jitsu"
@@ -194,8 +194,8 @@ describe('MembershipAssociatedProgramCard', () => {
     expect(card).toBeTruthy();
   });
 
-  it('should display waiver label', () => {
-    render(
+  it('should display waiver label', async () => {
+    await render(
       <MembershipAssociatedProgramCard
         associatedProgramId="1"
         associatedProgramName="Adult Brazilian Jiu-jitsu"
@@ -210,8 +210,8 @@ describe('MembershipAssociatedProgramCard', () => {
     expect(label).toBeTruthy();
   });
 
-  it('should display waiver name when waiver is associated', () => {
-    render(
+  it('should display waiver name when waiver is associated', async () => {
+    await render(
       <MembershipAssociatedProgramCard
         associatedProgramId="1"
         associatedProgramName="Adult Brazilian Jiu-jitsu"
@@ -226,8 +226,8 @@ describe('MembershipAssociatedProgramCard', () => {
     expect(waiverName).toBeTruthy();
   });
 
-  it('should display no waiver message when no waiver is associated', () => {
-    render(
+  it('should display no waiver message when no waiver is associated', async () => {
+    await render(
       <MembershipAssociatedProgramCard
         associatedProgramId="1"
         associatedProgramName="Adult Brazilian Jiu-jitsu"
@@ -242,8 +242,8 @@ describe('MembershipAssociatedProgramCard', () => {
     expect(noWaiver).toBeTruthy();
   });
 
-  it('should display no waiver message when waiver ID is null but name exists', () => {
-    render(
+  it('should display no waiver message when waiver ID is null but name exists', async () => {
+    await render(
       <MembershipAssociatedProgramCard
         associatedProgramId="1"
         associatedProgramName="Adult Brazilian Jiu-jitsu"

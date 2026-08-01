@@ -26,8 +26,8 @@ describe('AddEditRoleModal', () => {
   });
 
   describe('Add Mode', () => {
-    it('renders add role title when role is null', () => {
-      render(
+    it('renders add role title when role is null', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -38,8 +38,8 @@ describe('AddEditRoleModal', () => {
       expect(title).toBeInTheDocument();
     });
 
-    it('renders empty form fields in add mode', () => {
-      render(
+    it('renders empty form fields in add mode', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -52,8 +52,8 @@ describe('AddEditRoleModal', () => {
       expect(descriptionInput).toHaveValue('');
     });
 
-    it('renders add role button in add mode', () => {
-      render(
+    it('renders add role button in add mode', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -64,8 +64,8 @@ describe('AddEditRoleModal', () => {
       expect(addButton).toBeInTheDocument();
     });
 
-    it('renders empty role key in add mode', () => {
-      render(
+    it('renders empty role key in add mode', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -87,8 +87,8 @@ describe('AddEditRoleModal', () => {
       isSystemRole: false,
     };
 
-    it('renders edit role title when role is provided', () => {
-      render(
+    it('renders edit role title when role is provided', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} role={editRole} />
         </I18nWrapper>,
@@ -99,8 +99,8 @@ describe('AddEditRoleModal', () => {
       expect(title).toBeInTheDocument();
     });
 
-    it('populates form fields with role data', () => {
-      render(
+    it('populates form fields with role data', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} role={editRole} />
         </I18nWrapper>,
@@ -115,8 +115,8 @@ describe('AddEditRoleModal', () => {
       expect(keyInput).toHaveValue('org:test_role');
     });
 
-    it('renders save changes button in edit mode', () => {
-      render(
+    it('renders save changes button in edit mode', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} role={editRole} />
         </I18nWrapper>,
@@ -127,8 +127,8 @@ describe('AddEditRoleModal', () => {
       expect(saveButton).toBeInTheDocument();
     });
 
-    it('pre-selects permissions that role has', () => {
-      render(
+    it('pre-selects permissions that role has', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} role={editRole} />
         </I18nWrapper>,
@@ -150,8 +150,8 @@ describe('AddEditRoleModal', () => {
       isSystemRole: true,
     };
 
-    it('shows system role warning for system roles', () => {
-      render(
+    it('shows system role warning for system roles', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} role={systemRole} />
         </I18nWrapper>,
@@ -162,8 +162,8 @@ describe('AddEditRoleModal', () => {
       expect(warning).toBeInTheDocument();
     });
 
-    it('disables form fields for system roles when canEditSystemRoles is false', () => {
-      render(
+    it('disables form fields for system roles when canEditSystemRoles is false', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} role={systemRole} canEditSystemRoles={false} />
         </I18nWrapper>,
@@ -176,8 +176,8 @@ describe('AddEditRoleModal', () => {
       expect(descriptionInput).toBeDisabled();
     });
 
-    it('enables form fields for system roles when canEditSystemRoles is true', () => {
-      render(
+    it('enables form fields for system roles when canEditSystemRoles is true', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} role={systemRole} canEditSystemRoles />
         </I18nWrapper>,
@@ -190,8 +190,8 @@ describe('AddEditRoleModal', () => {
       expect(descriptionInput).not.toBeDisabled();
     });
 
-    it('disables save button for system roles when canEditSystemRoles is false', () => {
-      render(
+    it('disables save button for system roles when canEditSystemRoles is false', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} role={systemRole} canEditSystemRoles={false} />
         </I18nWrapper>,
@@ -205,7 +205,7 @@ describe('AddEditRoleModal', () => {
 
   describe('Form Interactions', () => {
     it('updates name field when user types', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -219,7 +219,7 @@ describe('AddEditRoleModal', () => {
     });
 
     it('auto-generates role key when typing name in add mode', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -243,7 +243,7 @@ describe('AddEditRoleModal', () => {
         isSystemRole: false,
       };
 
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} role={editRole} />
         </I18nWrapper>,
@@ -259,7 +259,7 @@ describe('AddEditRoleModal', () => {
     });
 
     it('updates description field when user types', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -272,7 +272,7 @@ describe('AddEditRoleModal', () => {
     });
 
     it('toggles permission when switch is clicked', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -292,7 +292,7 @@ describe('AddEditRoleModal', () => {
     });
 
     it('can toggle multiple permissions', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -322,7 +322,7 @@ describe('AddEditRoleModal', () => {
         isSystemRole: false,
       };
 
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} role={editRole} />
         </I18nWrapper>,
@@ -339,8 +339,8 @@ describe('AddEditRoleModal', () => {
   });
 
   describe('Form Validation', () => {
-    it('disables submit button when name is empty', () => {
-      render(
+    it('disables submit button when name is empty', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -352,7 +352,7 @@ describe('AddEditRoleModal', () => {
     });
 
     it('disables submit button when description is empty', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -367,7 +367,7 @@ describe('AddEditRoleModal', () => {
     });
 
     it('disables submit button when name has only whitespace', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -385,7 +385,7 @@ describe('AddEditRoleModal', () => {
     });
 
     it('disables submit button when description has only whitespace', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -403,7 +403,7 @@ describe('AddEditRoleModal', () => {
     });
 
     it('enables submit button when both name and description have values', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -423,7 +423,7 @@ describe('AddEditRoleModal', () => {
     it('does not call onSaveAction when button is disabled', async () => {
       const onSaveAction = vi.fn();
 
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} onSaveAction={onSaveAction} />
         </I18nWrapper>,
@@ -442,7 +442,7 @@ describe('AddEditRoleModal', () => {
     it('does not call onSaveAction when form is submitted programmatically with invalid data', async () => {
       const onSaveAction = vi.fn();
 
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} onSaveAction={onSaveAction} />
         </I18nWrapper>,
@@ -468,7 +468,7 @@ describe('AddEditRoleModal', () => {
     it('calls onSaveAction with trimmed data when form is valid', async () => {
       const onSaveAction = vi.fn();
 
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} onSaveAction={onSaveAction} />
         </I18nWrapper>,
@@ -502,7 +502,7 @@ describe('AddEditRoleModal', () => {
         isSystemRole: false,
       };
 
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} role={editRole} onSaveAction={onSaveAction} />
         </I18nWrapper>,
@@ -522,7 +522,7 @@ describe('AddEditRoleModal', () => {
     it('includes selected permissions in submission', async () => {
       const onSaveAction = vi.fn();
 
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} onSaveAction={onSaveAction} />
         </I18nWrapper>,
@@ -552,7 +552,7 @@ describe('AddEditRoleModal', () => {
     it('calls onCloseAction when cancel button is clicked', async () => {
       const onCloseAction = vi.fn();
 
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} onCloseAction={onCloseAction} />
         </I18nWrapper>,
@@ -570,7 +570,7 @@ describe('AddEditRoleModal', () => {
     it('calls onCloseAction when dialog close button is clicked', async () => {
       const onCloseAction = vi.fn();
 
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} onCloseAction={onCloseAction} />
         </I18nWrapper>,
@@ -587,8 +587,8 @@ describe('AddEditRoleModal', () => {
   });
 
   describe('Loading State', () => {
-    it('shows saving button text when loading', () => {
-      render(
+    it('shows saving button text when loading', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} isLoading />
         </I18nWrapper>,
@@ -599,8 +599,8 @@ describe('AddEditRoleModal', () => {
       expect(savingButton).toBeInTheDocument();
     });
 
-    it('disables inputs when loading', () => {
-      render(
+    it('disables inputs when loading', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} isLoading />
         </I18nWrapper>,
@@ -613,8 +613,8 @@ describe('AddEditRoleModal', () => {
       expect(descriptionInput).toBeDisabled();
     });
 
-    it('disables permission switches when loading', () => {
-      render(
+    it('disables permission switches when loading', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} isLoading />
         </I18nWrapper>,
@@ -625,8 +625,8 @@ describe('AddEditRoleModal', () => {
       expect(permissionSwitch).toBeDisabled();
     });
 
-    it('disables buttons when loading', () => {
-      render(
+    it('disables buttons when loading', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} isLoading />
         </I18nWrapper>,
@@ -641,8 +641,8 @@ describe('AddEditRoleModal', () => {
   });
 
   describe('Modal Visibility', () => {
-    it('does not render content when isOpen is false', () => {
-      render(
+    it('does not render content when isOpen is false', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} isOpen={false} />
         </I18nWrapper>,
@@ -653,8 +653,8 @@ describe('AddEditRoleModal', () => {
       expect(titles.length).toBe(0);
     });
 
-    it('renders content when isOpen is true', () => {
-      render(
+    it('renders content when isOpen is true', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} isOpen />
         </I18nWrapper>,
@@ -667,8 +667,8 @@ describe('AddEditRoleModal', () => {
   });
 
   describe('Form Labels', () => {
-    it('renders role name label', () => {
-      render(
+    it('renders role name label', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -679,8 +679,8 @@ describe('AddEditRoleModal', () => {
       expect(nameLabel).toBeInTheDocument();
     });
 
-    it('renders role key label', () => {
-      render(
+    it('renders role key label', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -691,8 +691,8 @@ describe('AddEditRoleModal', () => {
       expect(keyLabel).toBeInTheDocument();
     });
 
-    it('renders description label', () => {
-      render(
+    it('renders description label', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -703,8 +703,8 @@ describe('AddEditRoleModal', () => {
       expect(descriptionLabel).toBeInTheDocument();
     });
 
-    it('renders permissions label', () => {
-      render(
+    it('renders permissions label', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -715,8 +715,8 @@ describe('AddEditRoleModal', () => {
       expect(permissionsLabel).toBeInTheDocument();
     });
 
-    it('renders cancel button', () => {
-      render(
+    it('renders cancel button', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -729,8 +729,8 @@ describe('AddEditRoleModal', () => {
   });
 
   describe('Permissions Display', () => {
-    it('renders all available permissions', () => {
-      render(
+    it('renders all available permissions', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -741,8 +741,8 @@ describe('AddEditRoleModal', () => {
       expect(page.getByText('View Reports')).toBeInTheDocument();
     });
 
-    it('renders permission descriptions', () => {
-      render(
+    it('renders permission descriptions', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -752,8 +752,8 @@ describe('AddEditRoleModal', () => {
       expect(page.getByText('Can create and manage class schedules')).toBeInTheDocument();
     });
 
-    it('shows no permissions message when no permissions available', () => {
-      render(
+    it('shows no permissions message when no permissions available', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} availablePermissions={[]} />
         </I18nWrapper>,
@@ -767,7 +767,7 @@ describe('AddEditRoleModal', () => {
 
   describe('Role Key Generation', () => {
     it('handles special characters in name', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -782,7 +782,7 @@ describe('AddEditRoleModal', () => {
     });
 
     it('handles multiple spaces in name', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -797,7 +797,7 @@ describe('AddEditRoleModal', () => {
     });
 
     it('generates lowercase key', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -814,7 +814,7 @@ describe('AddEditRoleModal', () => {
 
   describe('Input Error States', () => {
     it('does not show error state on name input before blur', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -826,7 +826,7 @@ describe('AddEditRoleModal', () => {
     });
 
     it('shows error state and message on name input after blur when empty', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -844,7 +844,7 @@ describe('AddEditRoleModal', () => {
     });
 
     it('shows error state on description input after blur when empty', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -862,7 +862,7 @@ describe('AddEditRoleModal', () => {
     });
 
     it('clears error state when user enters valid content', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -883,7 +883,7 @@ describe('AddEditRoleModal', () => {
   });
 
   describe('Edit Mode Button State', () => {
-    it('enables save button when edit mode has valid data', () => {
+    it('enables save button when edit mode has valid data', async () => {
       const editRole = {
         id: 'role-1',
         key: 'org:test_role',
@@ -893,7 +893,7 @@ describe('AddEditRoleModal', () => {
         isSystemRole: false,
       };
 
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} role={editRole} />
         </I18nWrapper>,
@@ -914,7 +914,7 @@ describe('AddEditRoleModal', () => {
         isSystemRole: false,
       };
 
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} role={editRole} />
         </I18nWrapper>,
@@ -938,7 +938,7 @@ describe('AddEditRoleModal', () => {
         isSystemRole: false,
       };
 
-      render(
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} role={editRole} />
         </I18nWrapper>,
@@ -954,8 +954,8 @@ describe('AddEditRoleModal', () => {
   });
 
   describe('Accessibility', () => {
-    it('has accessible name input with label', () => {
-      render(
+    it('has accessible name input with label', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -966,8 +966,8 @@ describe('AddEditRoleModal', () => {
       expect(nameInput).toBeInTheDocument();
     });
 
-    it('has role key input that is read-only', () => {
-      render(
+    it('has role key input that is read-only', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,
@@ -978,8 +978,8 @@ describe('AddEditRoleModal', () => {
       expect(keyInput).toHaveAttribute('readonly');
     });
 
-    it('has helper text for role key', () => {
-      render(
+    it('has helper text for role key', async () => {
+      await render(
         <I18nWrapper>
           <AddEditRoleModal {...defaultProps} />
         </I18nWrapper>,

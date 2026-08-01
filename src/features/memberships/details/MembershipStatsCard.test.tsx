@@ -27,72 +27,72 @@ describe('MembershipStatsCard', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the price', () => {
-    render(<MembershipStatsCard {...defaultProps} />);
+  it('should render the price', async () => {
+    await render(<MembershipStatsCard {...defaultProps} />);
 
     const price = page.getByText('$150.00/mo');
 
     expect(price).toBeTruthy();
   });
 
-  it('should render the price label', () => {
-    render(<MembershipStatsCard {...defaultProps} />);
+  it('should render the price label', async () => {
+    await render(<MembershipStatsCard {...defaultProps} />);
 
     const priceLabel = page.getByText('Price');
 
     expect(priceLabel).toBeTruthy();
   });
 
-  it('should render the active count', () => {
-    render(<MembershipStatsCard {...defaultProps} />);
+  it('should render the active count', async () => {
+    await render(<MembershipStatsCard {...defaultProps} />);
 
     const activeCount = page.getByText('89');
 
     expect(activeCount).toBeTruthy();
   });
 
-  it('should render Active Members label for standard membership', () => {
-    render(<MembershipStatsCard {...defaultProps} />);
+  it('should render Active Members label for standard membership', async () => {
+    await render(<MembershipStatsCard {...defaultProps} />);
 
     const activeLabel = page.getByText('Active Members');
 
     expect(activeLabel).toBeTruthy();
   });
 
-  it('should render Active Trials label for trial membership', () => {
-    render(<MembershipStatsCard {...defaultProps} isTrial={true} />);
+  it('should render Active Trials label for trial membership', async () => {
+    await render(<MembershipStatsCard {...defaultProps} isTrial={true} />);
 
     const activeLabel = page.getByText('Active Trials');
 
     expect(activeLabel).toBeTruthy();
   });
 
-  it('should render the revenue', () => {
-    render(<MembershipStatsCard {...defaultProps} />);
+  it('should render the revenue', async () => {
+    await render(<MembershipStatsCard {...defaultProps} />);
 
     const revenue = page.getByText('$13,350/mo revenue');
 
     expect(revenue).toBeTruthy();
   });
 
-  it('should render the revenue label', () => {
-    render(<MembershipStatsCard {...defaultProps} />);
+  it('should render the revenue label', async () => {
+    await render(<MembershipStatsCard {...defaultProps} />);
 
     const revenueLabel = page.getByText('Revenue');
 
     expect(revenueLabel).toBeTruthy();
   });
 
-  it('should render Free price correctly', () => {
-    render(<MembershipStatsCard {...defaultProps} price="Free" />);
+  it('should render Free price correctly', async () => {
+    await render(<MembershipStatsCard {...defaultProps} price="Free" />);
 
     const price = page.getByText('Free');
 
     expect(price).toBeTruthy();
   });
 
-  it('should render zero active count correctly', () => {
-    render(<MembershipStatsCard {...defaultProps} activeCount={0} />);
+  it('should render zero active count correctly', async () => {
+    await render(<MembershipStatsCard {...defaultProps} activeCount={0} />);
 
     const activeCount = page.getByText('0');
 

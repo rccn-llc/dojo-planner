@@ -87,14 +87,14 @@ beforeEach(() => {
 });
 
 describe('EditPaymentMethodModal', () => {
-  it('does not render when isOpen is false', () => {
-    render(<EditPaymentMethodModal {...baseProps} isOpen={false} />);
+  it('does not render when isOpen is false', async () => {
+    await render(<EditPaymentMethodModal {...baseProps} isOpen={false} />);
 
     expect(document.body.textContent).not.toContain('Edit payment method');
   });
 
-  it('renders the title and tab buttons when open', () => {
-    render(<EditPaymentMethodModal {...baseProps} />);
+  it('renders the title and tab buttons when open', async () => {
+    await render(<EditPaymentMethodModal {...baseProps} />);
 
     expect(page.getByText('Edit payment method')).toBeTruthy();
 
@@ -106,7 +106,7 @@ describe('EditPaymentMethodModal', () => {
   });
 
   it('switches to the ACH tab when the ACH button is clicked', async () => {
-    render(<EditPaymentMethodModal {...baseProps} />);
+    await render(<EditPaymentMethodModal {...baseProps} />);
 
     const achButton = Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'ACH') as HTMLButtonElement;
     await userEvent.click(achButton);
@@ -115,8 +115,8 @@ describe('EditPaymentMethodModal', () => {
     expect(page.getByLabelText(/routing number/i)).toBeTruthy();
   });
 
-  it('disables the Save button while form is incomplete', () => {
-    render(<EditPaymentMethodModal {...baseProps} />);
+  it('disables the Save button while form is incomplete', async () => {
+    await render(<EditPaymentMethodModal {...baseProps} />);
 
     const saveButton = Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Save') as HTMLButtonElement;
 
@@ -127,7 +127,7 @@ describe('EditPaymentMethodModal', () => {
   it('submits ACH form via client.payment.registerPaymentMethod and calls onSavedAction + onCloseAction', async () => {
     const onSaved = vi.fn();
     const onClose = vi.fn();
-    render(
+    await render(
       <EditPaymentMethodModal
         {...baseProps}
         onCloseAction={onClose}
@@ -166,7 +166,7 @@ describe('EditPaymentMethodModal', () => {
   it('surfaces the server error message when registerPaymentMethod returns success: false', async () => {
     mockRegisterPaymentMethod.mockResolvedValueOnce({ success: false, error: 'Card declined by issuer' });
 
-    render(<EditPaymentMethodModal {...baseProps} />);
+    await render(<EditPaymentMethodModal {...baseProps} />);
 
     // Use ACH to skip the iframe path
     const achButton = Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'ACH') as HTMLButtonElement;

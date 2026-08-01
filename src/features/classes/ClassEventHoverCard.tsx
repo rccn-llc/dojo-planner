@@ -46,13 +46,13 @@ function formatDuration(minutes: number): string {
 function getExceptionIcon(type: CalendarScheduleException['type']) {
   switch (type) {
     case 'deleted':
-      return <Trash2 className="h-3 w-3 text-destructive" />;
+      return <Trash2 className="size-3 text-destructive" />;
     case 'modified':
-      return <Pencil className="h-3 w-3 text-amber-500" />;
+      return <Pencil className="size-3 text-amber-500" />;
     case 'modified-forward':
-      return <Calendar className="h-3 w-3 text-blue-500" />;
+      return <Calendar className="size-3 text-blue-500" />;
     default:
-      return <AlertCircle className="h-3 w-3" />;
+      return <AlertCircle className="size-3" />;
   }
 }
 
@@ -140,7 +140,7 @@ export function ClassEventHoverCard({
           data-exception-type={exception?.type}
         >
           {hasException && (
-            <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-background shadow-sm">
+            <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-background shadow-sm">
               {getExceptionIcon(exception.type)}
             </span>
           )}
@@ -157,7 +157,7 @@ export function ClassEventHoverCard({
           <div className="flex items-start justify-between gap-2">
             <h4 className="text-sm font-semibold text-foreground">{className}</h4>
             <div
-              className="mt-0.5 h-3 w-3 shrink-0 rounded"
+              className="mt-0.5 size-3 shrink-0 rounded"
               style={{ backgroundColor: color }}
             />
           </div>

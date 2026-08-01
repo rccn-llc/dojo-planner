@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { dedupeRequest } from '@/hooks/dedupeRequest';
 import { client } from '@/libs/Orpc';
 import { rankMembersByQuery } from '@/utils/MemberSearch';
 
@@ -46,7 +47,7 @@ export const HOHSelectionStep = ({
 
   // Fetch HOH members on mount
   useEffect(() => {
-    client.member.searchHOH({})
+    dedupeRequest(`member.searchHOH:${JSON.stringify({})}`, async () => client.member.searchHOH({}))
       .then((result) => {
         setHohMembers(result.members as HOHMember[]);
       })
@@ -134,7 +135,7 @@ export const HOHSelectionStep = ({
 
       {/* Search */}
       <div className="relative">
-        <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder={t('search_placeholder')}
           value={searchQuery}
@@ -148,7 +149,7 @@ export const HOHSelectionStep = ({
       <div className="max-h-72 space-y-2 overflow-y-auto">
         {loadingHOH && (
           <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <Loader2 className="size-6 animate-spin text-muted-foreground" />
           </div>
         )}
 
@@ -176,7 +177,7 @@ export const HOHSelectionStep = ({
                 : 'border-border bg-background hover:border-primary/50 hover:bg-accent/50'
             } ${isLoading || loadingPayment ? 'cursor-not-allowed opacity-50' : ''}`}
           >
-            <Avatar className="h-10 w-10 shrink-0">
+            <Avatar className="size-10 shrink-0">
               {member.photoUrl && <AvatarImage src={member.photoUrl} alt={`${member.firstName} ${member.lastName}`} />}
               <AvatarFallback>{getInitials(member.firstName, member.lastName)}</AvatarFallback>
             </Avatar>
@@ -190,7 +191,7 @@ export const HOHSelectionStep = ({
             </div>
             {data.hohMemberId === member.id && (
               <Badge variant="default" className="shrink-0">
-                <UserCheck className="mr-1 h-3 w-3" />
+                <UserCheck className="mr-1 size-3" />
                 {t('selected_label')}
               </Badge>
             )}
@@ -206,8 +207,8 @@ export const HOHSelectionStep = ({
             ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   {data.hohPaymentMethodType === 'ach'
-                    ? <Landmark className="h-4 w-4" />
-                    : <CreditCard className="h-4 w-4" />}
+                    ? <Landmark className="size-4" />
+                    : <CreditCard className="size-4" />}
                   {t('payment_method_value', {
                     type: data.hohPaymentMethodType === 'ach' ? 'ACH' : 'Card',
                     last4: data.hohPaymentMethodLast4 || '****',
@@ -222,7 +223,7 @@ export const HOHSelectionStep = ({
 
       {loadingPayment && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <Loader2 className="size-4 animate-spin" />
           Loading payment information...
         </div>
       )}

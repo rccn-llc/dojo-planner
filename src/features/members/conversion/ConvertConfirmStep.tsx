@@ -48,7 +48,7 @@ export const ConvertConfirmStep = ({ data, onNext, onCancel }: ConvertConfirmSte
           <p className="mb-1 text-xs text-muted-foreground">{t('current_type')}</p>
           <Badge variant="secondary" className="text-sm">{currentLabel}</Badge>
         </div>
-        <ArrowRight className="h-5 w-5 text-muted-foreground" />
+        <ArrowRight className="size-5 text-muted-foreground" />
         <div className="text-center">
           <p className="mb-1 text-xs text-muted-foreground">{t('new_type')}</p>
           <Badge className="text-sm">{targetLabel}</Badge>
@@ -58,7 +58,7 @@ export const ConvertConfirmStep = ({ data, onNext, onCancel }: ConvertConfirmSte
       {/* Conversion-specific description */}
       <div className="rounded-lg border bg-blue-50 p-4 dark:bg-blue-950/30">
         <div className="flex gap-3">
-          <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+          <Info className="mt-0.5 size-4 shrink-0 text-blue-600 dark:text-blue-400" />
           <p className="text-sm text-blue-900 dark:text-blue-200">
             {data.conversionType === 'hoh-to-individual' && t('hoh_to_individual_description')}
             {data.conversionType === 'individual-to-hoh' && t('individual_to_hoh_description')}

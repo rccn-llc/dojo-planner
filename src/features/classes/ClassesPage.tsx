@@ -205,15 +205,15 @@ export function ClassesPage() {
             {/* View Toggle Button Group */}
             <ButtonGroupRoot value={viewType} onValueChange={handleViewChange}>
               <ButtonGroupItem value="grid" title="Grid view">
-                <Grid3x3 className="h-4 w-4" />
+                <Grid3x3 className="size-4" />
                 <span className="hidden text-sm sm:ml-1 sm:inline">{t('grid_view_label')}</span>
               </ButtonGroupItem>
               <ButtonGroupItem value="weekly" title="Weekly view">
-                <CalendarRange className="h-4 w-4" />
+                <CalendarRange className="size-4" />
                 <span className="hidden text-sm sm:ml-1 sm:inline">Weekly</span>
               </ButtonGroupItem>
               <ButtonGroupItem value="monthly" title="Monthly view">
-                <CalendarDays className="h-4 w-4" />
+                <CalendarDays className="size-4" />
                 <span className="hidden text-sm sm:ml-1 sm:inline">Monthly</span>
               </ButtonGroupItem>
             </ButtonGroupRoot>
@@ -221,7 +221,7 @@ export function ClassesPage() {
             {/* Add New Class Button */}
             {canEdit && (
               <Button onClick={() => setIsAddClassModalOpen(true)}>
-                <Plus className="h-4 w-4" />
+                <Plus className="size-4" />
                 <span className="ml-1 hidden sm:inline">{t('add_new_class_button')}</span>
               </Button>
             )}

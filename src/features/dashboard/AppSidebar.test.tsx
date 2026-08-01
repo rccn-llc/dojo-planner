@@ -49,6 +49,7 @@ vi.mock('next/navigation', () => ({
 
 // Mock next/link
 vi.mock('next/link', () => ({
+  __esModule: true,
   default: ({ children, href }: { children: React.ReactNode; href: string }) => (
     <a href={href}>{children}</a>
   ),
@@ -187,26 +188,26 @@ describe('AppSidebar - Component Rendering', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the sidebar', () => {
-    render(<AppSidebar />);
+  it('should render the sidebar', async () => {
+    await render(<AppSidebar />);
 
     expect(page.getByTestId('sidebar')).toBeDefined();
   });
 
-  it('should render the logo', () => {
-    render(<AppSidebar />);
+  it('should render the logo', async () => {
+    await render(<AppSidebar />);
 
     expect(page.getByTestId('logo')).toBeDefined();
   });
 
-  it('should render the organization selector', () => {
-    render(<AppSidebar />);
+  it('should render the organization selector', async () => {
+    await render(<AppSidebar />);
 
     expect(page.getByTestId('organization-selector')).toBeDefined();
   });
 
-  it('should render Academy section with menu items', () => {
-    render(<AppSidebar />);
+  it('should render Academy section with menu items', async () => {
+    await render(<AppSidebar />);
 
     expect(page.getByText('Academy')).toBeDefined();
     expect(page.getByText('Programs')).toBeDefined();
@@ -216,8 +217,8 @@ describe('AppSidebar - Component Rendering', () => {
     expect(page.getByText('Staff')).toBeDefined();
   });
 
-  it('should render Business section with menu items', () => {
-    render(<AppSidebar />);
+  it('should render Business section with menu items', async () => {
+    await render(<AppSidebar />);
 
     expect(page.getByText('Business')).toBeDefined();
     expect(page.getByText('Performance')).toBeDefined();
@@ -227,48 +228,48 @@ describe('AppSidebar - Component Rendering', () => {
     expect(page.getByText('Marketing')).toBeDefined();
   });
 
-  it('should NOT render Settings section (hidden)', () => {
-    render(<AppSidebar />);
+  it('should NOT render Settings section (hidden)', async () => {
+    await render(<AppSidebar />);
 
     // Settings section should be hidden (only Preferences lived there now, also hidden)
     expect(page.getByText('Settings').elements().length).toBe(0);
     expect(page.getByText('Preferences').elements().length).toBe(0);
   });
 
-  it('should render Location item under Academy as visible last item', () => {
-    render(<AppSidebar />);
+  it('should render Location item under Academy as visible last item', async () => {
+    await render(<AppSidebar />);
 
     // Location Settings now lives under Academy (no role passed = manager by default)
     expect(page.getByText('Location')).toBeDefined();
   });
 
-  it('should render Log Out option', () => {
-    render(<AppSidebar />);
+  it('should render Log Out option', async () => {
+    await render(<AppSidebar />);
 
     expect(page.getByText('Log Out')).toBeDefined();
   });
 
-  it('should not render Messaging when hidden', () => {
-    render(<AppSidebar />);
+  it('should not render Messaging when hidden', async () => {
+    await render(<AppSidebar />);
 
     // Messaging is marked as hidden in the sidebar
     expect(page.getByText('Messaging').elements().length).toBe(0);
   });
 
-  it('should render sidebar header', () => {
-    render(<AppSidebar />);
+  it('should render sidebar header', async () => {
+    await render(<AppSidebar />);
 
     expect(page.getByTestId('sidebar-header')).toBeDefined();
   });
 
-  it('should render sidebar content', () => {
-    render(<AppSidebar />);
+  it('should render sidebar content', async () => {
+    await render(<AppSidebar />);
 
     expect(page.getByTestId('sidebar-content')).toBeDefined();
   });
 
-  it('should render sidebar rail', () => {
-    render(<AppSidebar />);
+  it('should render sidebar rail', async () => {
+    await render(<AppSidebar />);
 
     expect(page.getByTestId('sidebar-rail')).toBeDefined();
   });
@@ -279,8 +280,8 @@ describe('AppSidebar - Role-based visibility', () => {
     vi.clearAllMocks();
   });
 
-  it('should show all items for admin role', () => {
-    render(<AppSidebar userRole="org:admin" />);
+  it('should show all items for admin role', async () => {
+    await render(<AppSidebar userRole="org:admin" />);
 
     expect(page.getByText('Reports')).toBeDefined();
 
@@ -295,8 +296,8 @@ describe('AppSidebar - Role-based visibility', () => {
     expect(page.getByText('Location')).toBeDefined();
   });
 
-  it('should show all items for academy owner role', () => {
-    render(<AppSidebar userRole="org:academy_owner" />);
+  it('should show all items for academy owner role', async () => {
+    await render(<AppSidebar userRole="org:academy_owner" />);
 
     expect(page.getByText('Reports')).toBeDefined();
 
@@ -311,8 +312,8 @@ describe('AppSidebar - Role-based visibility', () => {
     expect(page.getByText('Location')).toBeDefined();
   });
 
-  it('should hide management items for front desk role', () => {
-    render(<AppSidebar userRole="org:front_desk" />);
+  it('should hide management items for front desk role', async () => {
+    await render(<AppSidebar userRole="org:front_desk" />);
 
     // Front desk should see these
     expect(page.getByText('Performance')).toBeDefined();
@@ -343,8 +344,8 @@ describe('AppSidebar - Role-based visibility', () => {
     expect(page.getByText('Location').elements().length).toBe(0);
   });
 
-  it('should always show log out for any role', () => {
-    render(<AppSidebar userRole="org:front_desk" />);
+  it('should always show log out for any role', async () => {
+    await render(<AppSidebar userRole="org:front_desk" />);
 
     expect(page.getByText('Log Out')).toBeDefined();
   });

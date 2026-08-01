@@ -16,8 +16,8 @@ describe('DeleteWaiverAlertDialog', () => {
     vi.clearAllMocks();
   });
 
-  it('renders the title and waiver-name interpolated description', () => {
-    render(
+  it('renders the title and waiver-name interpolated description', async () => {
+    await render(
       <I18nWrapper>
         <DeleteWaiverAlertDialog {...defaultProps} />
       </I18nWrapper>,
@@ -27,8 +27,8 @@ describe('DeleteWaiverAlertDialog', () => {
     expect(page.getByText(/Standard Adult Waiver/)).toBeInTheDocument();
   });
 
-  it('does not render when isOpen is false', () => {
-    render(
+  it('does not render when isOpen is false', async () => {
+    await render(
       <I18nWrapper>
         <DeleteWaiverAlertDialog {...defaultProps} isOpen={false} />
       </I18nWrapper>,
@@ -39,7 +39,7 @@ describe('DeleteWaiverAlertDialog', () => {
 
   it('calls onCloseAction when cancel is clicked', async () => {
     const onCloseAction = vi.fn();
-    render(
+    await render(
       <I18nWrapper>
         <DeleteWaiverAlertDialog {...defaultProps} onCloseAction={onCloseAction} />
       </I18nWrapper>,
@@ -52,7 +52,7 @@ describe('DeleteWaiverAlertDialog', () => {
 
   it('calls onConfirmAction when delete is clicked', async () => {
     const onConfirmAction = vi.fn();
-    render(
+    await render(
       <I18nWrapper>
         <DeleteWaiverAlertDialog {...defaultProps} onConfirmAction={onConfirmAction} />
       </I18nWrapper>,
@@ -63,8 +63,8 @@ describe('DeleteWaiverAlertDialog', () => {
     expect(onConfirmAction).toHaveBeenCalled();
   });
 
-  it('exposes the alertdialog role', () => {
-    render(
+  it('exposes the alertdialog role', async () => {
+    await render(
       <I18nWrapper>
         <DeleteWaiverAlertDialog {...defaultProps} />
       </I18nWrapper>,

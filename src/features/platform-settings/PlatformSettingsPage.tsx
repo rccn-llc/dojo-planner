@@ -26,7 +26,9 @@ export function PlatformSettingsPage() {
   }, []);
 
   useEffect(() => {
-    load();
+    void (async () => {
+      await load();
+    })();
   }, [load]);
 
   const handleSave = async (data: IQProConfigFormData) => {

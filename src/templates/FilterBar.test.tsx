@@ -31,22 +31,22 @@ describe('FilterBar', () => {
     vi.clearAllMocks();
   });
 
-  it('renders with search, dropdown, and action button', () => {
-    render(<FilterBar {...defaultProps} />);
+  it('renders with search, dropdown, and action button', async () => {
+    await render(<FilterBar {...defaultProps} />);
 
     expect(page.getByText('Status')).toBeTruthy();
     expect(page.getByText('Add New')).toBeTruthy();
   });
 
-  it('renders search input field', () => {
-    render(<FilterBar {...defaultProps} />);
+  it('renders search input field', async () => {
+    await render(<FilterBar {...defaultProps} />);
 
     const searchInput = page.getByRole('textbox');
 
     expect(searchInput).toBeTruthy();
   });
 
-  it('renders dropdown with current value', () => {
+  it('renders dropdown with current value', async () => {
     const props = {
       ...defaultProps,
       dropdowns: [
@@ -65,12 +65,12 @@ describe('FilterBar', () => {
       ],
     };
 
-    render(<FilterBar {...props} />);
+    await render(<FilterBar {...props} />);
 
     expect(page.getByText('Status')).toBeTruthy();
   });
 
-  it('renders multiple dropdowns', () => {
+  it('renders multiple dropdowns', async () => {
     const props = {
       ...defaultProps,
       dropdowns: [
@@ -99,13 +99,13 @@ describe('FilterBar', () => {
       ],
     };
 
-    render(<FilterBar {...props} />);
+    await render(<FilterBar {...props} />);
 
     expect(page.getByText('Status')).toBeTruthy();
     expect(page.getByText('Program')).toBeTruthy();
   });
 
-  it('renders multiple action buttons', () => {
+  it('renders multiple action buttons', async () => {
     const props = {
       ...defaultProps,
       filterActions: (
@@ -116,13 +116,13 @@ describe('FilterBar', () => {
       ),
     };
 
-    render(<FilterBar {...props} />);
+    await render(<FilterBar {...props} />);
 
     expect(page.getByText('Add New')).toBeTruthy();
     expect(page.getByText('Export')).toBeTruthy();
   });
 
-  it('renders with search input even when minimal config', () => {
+  it('renders with search input even when minimal config', async () => {
     const props = {
       searchConfig: {
         placeholder: 'Search...',
@@ -133,35 +133,35 @@ describe('FilterBar', () => {
       filterActions: defaultProps.filterActions,
     };
 
-    render(<FilterBar {...props} />);
+    await render(<FilterBar {...props} />);
 
     expect(page.getByText('Status')).toBeTruthy(); // Dropdown should still be there
     expect(page.getByText('Add New')).toBeTruthy(); // Action should still be there
   });
 
-  it('renders without dropdowns when not provided', () => {
+  it('renders without dropdowns when not provided', async () => {
     const props = {
       ...defaultProps,
       dropdowns: undefined,
     };
 
-    render(<FilterBar {...props} />);
+    await render(<FilterBar {...props} />);
 
     expect(page.getByText('Add New')).toBeTruthy(); // Action should still be there
   });
 
-  it('renders without actions when not provided', () => {
+  it('renders without actions when not provided', async () => {
     const props = {
       ...defaultProps,
       filterActions: undefined,
     };
 
-    render(<FilterBar {...props} />);
+    await render(<FilterBar {...props} />);
 
     expect(page.getByText('Status')).toBeTruthy(); // Dropdown should still be there
   });
 
-  it('handles minimal configuration', () => {
+  it('handles minimal configuration', async () => {
     const minimalProps = {
       searchConfig: {
         placeholder: 'Search...',
@@ -170,13 +170,13 @@ describe('FilterBar', () => {
       },
     };
 
-    render(<FilterBar {...minimalProps} />);
+    await render(<FilterBar {...minimalProps} />);
 
     // Should render without crashing when no props provided
     expect(page.getByRole('generic')).toBeTruthy();
   });
 
-  it('handles empty arrays', () => {
+  it('handles empty arrays', async () => {
     const props = {
       searchConfig: {
         placeholder: 'Search...',
@@ -187,13 +187,13 @@ describe('FilterBar', () => {
       filterActions: null,
     };
 
-    render(<FilterBar {...props} />);
+    await render(<FilterBar {...props} />);
 
     // Should render container even with empty arrays
     expect(page.getByRole('generic')).toBeTruthy();
   });
 
-  it('renders action button with handler', () => {
+  it('renders action button with handler', async () => {
     const onClick = vi.fn();
     const props = {
       ...defaultProps,
@@ -204,7 +204,7 @@ describe('FilterBar', () => {
       ),
     };
 
-    render(<FilterBar {...props} />);
+    await render(<FilterBar {...props} />);
 
     expect(page.getByText('Test Action')).toBeTruthy();
   });

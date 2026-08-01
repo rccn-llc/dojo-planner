@@ -5,8 +5,8 @@ import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from './popove
 
 describe('Popover', () => {
   describe('Rendering', () => {
-    it('should render the trigger element', () => {
-      render(
+    it('should render the trigger element', async () => {
+      await render(
         <Popover>
           <PopoverTrigger>Open Popover</PopoverTrigger>
           <PopoverContent>Popover Content</PopoverContent>
@@ -16,8 +16,8 @@ describe('Popover', () => {
       expect(page.getByText('Open Popover')).toBeInTheDocument();
     });
 
-    it('should not render content when closed', () => {
-      render(
+    it('should not render content when closed', async () => {
+      await render(
         <Popover>
           <PopoverTrigger>Open Popover</PopoverTrigger>
           <PopoverContent>Popover Content</PopoverContent>
@@ -30,7 +30,7 @@ describe('Popover', () => {
 
   describe('Interaction', () => {
     it('should show content when trigger is clicked', async () => {
-      render(
+      await render(
         <Popover>
           <PopoverTrigger>Open Popover</PopoverTrigger>
           <PopoverContent>Popover Content</PopoverContent>
@@ -44,7 +44,7 @@ describe('Popover', () => {
     });
 
     it('should hide content when trigger is clicked again', async () => {
-      render(
+      await render(
         <Popover>
           <PopoverTrigger>Open Popover</PopoverTrigger>
           <PopoverContent>Popover Content</PopoverContent>
@@ -58,8 +58,8 @@ describe('Popover', () => {
       expect(page.getByText('Popover Content').elements()).toHaveLength(0);
     });
 
-    it('should be controllable via open prop', () => {
-      render(
+    it('should be controllable via open prop', async () => {
+      await render(
         <Popover open>
           <PopoverTrigger>Open Popover</PopoverTrigger>
           <PopoverContent>Popover Content</PopoverContent>
@@ -72,7 +72,7 @@ describe('Popover', () => {
 
   describe('Props', () => {
     it('should apply custom className to content', async () => {
-      render(
+      await render(
         <Popover defaultOpen>
           <PopoverTrigger>Open Popover</PopoverTrigger>
           <PopoverContent className="w-96">Content</PopoverContent>
@@ -86,8 +86,8 @@ describe('Popover', () => {
   });
 
   describe('PopoverAnchor', () => {
-    it('should render the anchor element', () => {
-      render(
+    it('should render the anchor element', async () => {
+      await render(
         <Popover>
           <PopoverAnchor>Anchor Element</PopoverAnchor>
           <PopoverTrigger>Open Popover</PopoverTrigger>

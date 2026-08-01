@@ -115,7 +115,7 @@ export function RoleCard({
                 aria-label={t('edit_button_aria_label')}
                 title={t('edit_button_aria_label')}
               >
-                <Edit className="h-4 w-4" />
+                <Edit className="size-4" />
               </Button>
             )}
             {onDelete && (
@@ -126,7 +126,7 @@ export function RoleCard({
                 aria-label={t('delete_button_aria_label')}
                 title={t('delete_button_aria_label')}
               >
-                <Trash2 className="h-4 w-4" />
+                <Trash2 className="size-4" />
               </Button>
             )}
           </div>

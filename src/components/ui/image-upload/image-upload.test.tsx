@@ -46,7 +46,7 @@ describe('ImageUploadField', () => {
 
   describe('Rendering without value', () => {
     it('should render upload area when no value is provided', async () => {
-      render(
+      await render(
         <ImageUploadField
           value={null}
           onChange={mockOnChange}
@@ -59,7 +59,7 @@ describe('ImageUploadField', () => {
     });
 
     it('should render label when provided', async () => {
-      render(
+      await render(
         <ImageUploadField
           value={null}
           onChange={mockOnChange}
@@ -71,7 +71,7 @@ describe('ImageUploadField', () => {
     });
 
     it('should render help text when provided', async () => {
-      render(
+      await render(
         <ImageUploadField
           value={null}
           onChange={mockOnChange}
@@ -83,7 +83,7 @@ describe('ImageUploadField', () => {
     });
 
     it('should render file input with correct accept attribute', async () => {
-      render(
+      await render(
         <ImageUploadField
           value={null}
           onChange={mockOnChange}
@@ -103,7 +103,7 @@ describe('ImageUploadField', () => {
 
   describe('Custom className', () => {
     it('should apply custom className', async () => {
-      render(
+      await render(
         <ImageUploadField
           value={null}
           onChange={mockOnChange}

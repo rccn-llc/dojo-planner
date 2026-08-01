@@ -53,64 +53,64 @@ describe('SignatureCanvas', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the component container', () => {
-    render(<SignatureCanvas {...defaultProps} />);
+  it('should render the component container', async () => {
+    await render(<SignatureCanvas {...defaultProps} />);
 
     expect(page.getByText('Clear')).toBeTruthy();
   });
 
-  it('should render the canvas element', () => {
-    render(<SignatureCanvas {...defaultProps} />);
+  it('should render the canvas element', async () => {
+    await render(<SignatureCanvas {...defaultProps} />);
 
     const canvas = document.querySelector('canvas');
 
     expect(canvas).toBeTruthy();
   });
 
-  it('should render placeholder text when empty and not disabled', () => {
-    render(<SignatureCanvas {...defaultProps} />);
+  it('should render placeholder text when empty and not disabled', async () => {
+    await render(<SignatureCanvas {...defaultProps} />);
 
     expect(page.getByText('Sign here')).toBeTruthy();
   });
 
-  it('should render clear button', () => {
-    render(<SignatureCanvas {...defaultProps} />);
+  it('should render clear button', async () => {
+    await render(<SignatureCanvas {...defaultProps} />);
 
     const clearButton = page.getByRole('button', { name: 'Clear' });
 
     expect(clearButton).toBeTruthy();
   });
 
-  it('should render with a label when label prop is provided', () => {
-    render(<SignatureCanvas {...defaultProps} label="Your Signature" />);
+  it('should render with a label when label prop is provided', async () => {
+    await render(<SignatureCanvas {...defaultProps} label="Your Signature" />);
 
     expect(page.getByText('Your Signature')).toBeTruthy();
   });
 
-  it('should not render a label when label prop is not provided', () => {
-    render(<SignatureCanvas {...defaultProps} />);
+  it('should not render a label when label prop is not provided', async () => {
+    await render(<SignatureCanvas {...defaultProps} />);
 
     const labels = page.getByText('Your Signature');
 
     expect(labels.elements()).toHaveLength(0);
   });
 
-  it('should render error message when error prop is provided', () => {
-    render(<SignatureCanvas {...defaultProps} error="Signature is required" />);
+  it('should render error message when error prop is provided', async () => {
+    await render(<SignatureCanvas {...defaultProps} error="Signature is required" />);
 
     expect(page.getByText('Signature is required')).toBeTruthy();
   });
 
-  it('should not render error message when error prop is not provided', () => {
-    render(<SignatureCanvas {...defaultProps} />);
+  it('should not render error message when error prop is not provided', async () => {
+    await render(<SignatureCanvas {...defaultProps} />);
 
     const errors = page.getByText('Signature is required');
 
     expect(errors.elements()).toHaveLength(0);
   });
 
-  it('should disable clear button when disabled prop is true', () => {
-    render(<SignatureCanvas {...defaultProps} disabled={true} />);
+  it('should disable clear button when disabled prop is true', async () => {
+    await render(<SignatureCanvas {...defaultProps} disabled={true} />);
 
     const buttons = Array.from(document.querySelectorAll('button'));
     const clearButton = buttons.find(btn => btn.textContent?.includes('Clear'));
@@ -119,8 +119,8 @@ describe('SignatureCanvas', () => {
     expect(clearButton?.disabled).toBe(true);
   });
 
-  it('should disable clear button when canvas is empty (initial state)', () => {
-    render(<SignatureCanvas {...defaultProps} />);
+  it('should disable clear button when canvas is empty (initial state)', async () => {
+    await render(<SignatureCanvas {...defaultProps} />);
 
     const clearButton = page.getByRole('button', { name: 'Clear' });
     const buttonEl = clearButton.element() as HTMLButtonElement;
@@ -128,36 +128,36 @@ describe('SignatureCanvas', () => {
     expect(buttonEl.disabled).toBe(true);
   });
 
-  it('should not show placeholder when disabled', () => {
-    render(<SignatureCanvas {...defaultProps} disabled={true} />);
+  it('should not show placeholder when disabled', async () => {
+    await render(<SignatureCanvas {...defaultProps} disabled={true} />);
 
     const placeholders = page.getByText('Sign here');
 
     expect(placeholders.elements()).toHaveLength(0);
   });
 
-  it('should render with default dimensions', () => {
-    render(<SignatureCanvas {...defaultProps} />);
+  it('should render with default dimensions', async () => {
+    await render(<SignatureCanvas {...defaultProps} />);
 
     expect(page.getByText('Clear')).toBeTruthy();
   });
 
-  it('should render with custom dimensions', () => {
-    render(<SignatureCanvas {...defaultProps} width={600} height={300} />);
+  it('should render with custom dimensions', async () => {
+    await render(<SignatureCanvas {...defaultProps} width={600} height={300} />);
 
     expect(page.getByText('Clear')).toBeTruthy();
   });
 
-  it('should apply custom className to the container', () => {
-    render(<SignatureCanvas {...defaultProps} className="mt-4" />);
+  it('should apply custom className to the container', async () => {
+    await render(<SignatureCanvas {...defaultProps} className="mt-4" />);
 
     const container = document.querySelector('.mt-4');
 
     expect(container).toBeTruthy();
   });
 
-  it('should show disabled overlay when disabled is true', () => {
-    render(<SignatureCanvas {...defaultProps} disabled={true} />);
+  it('should show disabled overlay when disabled is true', async () => {
+    await render(<SignatureCanvas {...defaultProps} disabled={true} />);
 
     // When disabled, the component renders a div with class cursor-not-allowed
     const disabledContainer = document.querySelector('[class*="cursor-not-allowed"]');
@@ -165,8 +165,8 @@ describe('SignatureCanvas', () => {
     expect(disabledContainer).toBeTruthy();
   });
 
-  it('should show crosshair cursor when not disabled', () => {
-    render(<SignatureCanvas {...defaultProps} disabled={false} />);
+  it('should show crosshair cursor when not disabled', async () => {
+    await render(<SignatureCanvas {...defaultProps} disabled={false} />);
 
     const crosshairContainer = document.querySelector('[class*="cursor-crosshair"]');
 

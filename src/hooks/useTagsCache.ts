@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { client } from '@/libs/Orpc';
+import { clearInFlight, dedupeRequest } from './dedupeRequest';
 
 // =============================================================================
 // TYPES
@@ -114,14 +115,22 @@ export const useTagsCache = (organizationId?: string | undefined) => {
 
       console.info('[Tags Cache] Fetching fresh tags data for organization:', organizationId);
 
-      // Fetch both tag types in parallel
-      const [classTagsData, membershipTagsData] = await Promise.all([
-        client.tags.listClassTags(),
-        client.tags.listMembershipTags(),
-      ]);
+      // Fetch both tag types in parallel, de-duped as one unit so a second
+      // instance mounting against the cold cache doesn't double both calls.
+      const { classTags, membershipTags } = await dedupeRequest(
+        `tags:${organizationId || ''}`,
+        async () => {
+          const [classTagsData, membershipTagsData] = await Promise.all([
+            client.tags.listClassTags(),
+            client.tags.listMembershipTags(),
+          ]);
 
-      const classTags = (classTagsData.tags || []) as Tag[];
-      const membershipTags = (membershipTagsData.tags || []) as Tag[];
+          return {
+            classTags: (classTagsData.tags || []) as Tag[],
+            membershipTags: (membershipTagsData.tags || []) as Tag[],
+          };
+        },
+      );
 
       cacheStore = {
         classTags,
@@ -168,6 +177,7 @@ export const useTagsCache = (organizationId?: string | undefined) => {
   const revalidate = useCallback(async () => {
     console.info('[Tags Cache] Manual revalidation triggered');
     cacheStore = null;
+    clearInFlight();
     await fetchTags();
   }, [fetchTags]);
 
@@ -212,5 +222,6 @@ export const useTagsCache = (organizationId?: string | undefined) => {
 export const invalidateTagsCache = async () => {
   console.info('[Tags Cache] Global cache invalidation triggered');
   cacheStore = null;
+  clearInFlight();
   await Promise.all(revalidateCallbacks.map(callback => callback()));
 };

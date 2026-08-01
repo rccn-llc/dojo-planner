@@ -95,7 +95,7 @@ export function CatalogFilterBar({
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
       {/* Search Input */}
       <div className="relative min-w-0 flex-1 sm:max-w-72">
-        <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder={t('search_placeholder')}
           value={filters.search}
@@ -128,7 +128,7 @@ export function CatalogFilterBar({
         value={filters.category || '_all'}
         onValueChange={value => updateFilters({ category: value === '_all' ? '' : value })}
       >
-        <SelectTrigger className="w-[180px]">
+        <SelectTrigger className="w-45">
           <SelectValue placeholder={t('category_filter')} />
         </SelectTrigger>
         <SelectContent>

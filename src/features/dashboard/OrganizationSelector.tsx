@@ -4,7 +4,7 @@ import { useClerk, useOrganization } from '@clerk/nextjs';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 
 type OrgData = {
   id: string;
@@ -82,20 +82,25 @@ export const OrganizationSelector = () => {
   return (
     <Select value={organization.id} onValueChange={handleOrganizationChange} disabled={isChanging}>
       <SelectTrigger className="w-64 md:w-60" aria-label="Open organization switcher">
-        <SelectValue asChild>
-          <div className="flex items-center gap-2">
-            {organization.imageUrl && (
-              <Image
-                src={organization.imageUrl}
-                alt={organization.name || 'Organization'}
-                width={20}
-                height={20}
-                className="rounded-sm object-cover"
-              />
-            )}
-            <span className="truncate">{organization.name}</span>
-          </div>
-        </SelectValue>
+        {/*
+          Rendered directly rather than through `<SelectValue asChild>`: Radix
+          wraps SelectValue's children in a Fragment before handing them to the
+          asChild Slot, so the Slot merges `style`/`data-slot` onto that
+          Fragment and React warns. The trigger always shows the active
+          organization, so it does not need SelectValue's placeholder handling.
+        */}
+        <div data-slot="select-value" className="flex items-center gap-2">
+          {organization.imageUrl && (
+            <Image
+              src={organization.imageUrl}
+              alt={organization.name || 'Organization'}
+              width={20}
+              height={20}
+              className="rounded-sm object-cover"
+            />
+          )}
+          <span className="truncate">{organization.name}</span>
+        </div>
       </SelectTrigger>
       <SelectContent>
         {organizations.map(org => (

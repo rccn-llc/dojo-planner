@@ -46,8 +46,8 @@ describe('WaiverCard', () => {
     vi.clearAllMocks();
   });
 
-  it('should render all props correctly', () => {
-    render(<WaiverCard {...defaultProps} />);
+  it('should render all props correctly', async () => {
+    await render(<WaiverCard {...defaultProps} />);
 
     expect(page.getByText('Standard Liability Waiver')).toBeTruthy();
     expect(page.getByText('A standard waiver for all members participating in martial arts training.')).toBeTruthy();
@@ -57,101 +57,101 @@ describe('WaiverCard', () => {
     expect(page.getByText('2025-12-01')).toBeTruthy();
   });
 
-  it('should render Active status badge', () => {
-    render(<WaiverCard {...defaultProps} status="Active" />);
+  it('should render Active status badge', async () => {
+    await render(<WaiverCard {...defaultProps} status="Active" />);
 
     expect(page.getByText('Active')).toBeTruthy();
   });
 
-  it('should render Inactive status badge', () => {
-    render(<WaiverCard {...defaultProps} status="Inactive" />);
+  it('should render Inactive status badge', async () => {
+    await render(<WaiverCard {...defaultProps} status="Inactive" />);
 
     expect(page.getByText('Inactive')).toBeTruthy();
   });
 
-  it('should render Draft status badge', () => {
-    render(<WaiverCard {...defaultProps} status="Draft" />);
+  it('should render Draft status badge', async () => {
+    await render(<WaiverCard {...defaultProps} status="Draft" />);
 
     expect(page.getByText('Draft')).toBeTruthy();
   });
 
-  it('should render Default badge when isDefault is true', () => {
-    render(<WaiverCard {...defaultProps} isDefault={true} />);
+  it('should render Default badge when isDefault is true', async () => {
+    await render(<WaiverCard {...defaultProps} isDefault={true} />);
 
     expect(page.getByText('Default')).toBeTruthy();
   });
 
-  it('should not render Default badge when isDefault is false', () => {
-    render(<WaiverCard {...defaultProps} isDefault={false} />);
+  it('should not render Default badge when isDefault is false', async () => {
+    await render(<WaiverCard {...defaultProps} isDefault={false} />);
 
     const defaultBadges = page.getByText('Default');
 
     expect(defaultBadges.elements()).toHaveLength(0);
   });
 
-  it('should render Guardian required badge when requiresGuardian is true', () => {
-    render(<WaiverCard {...defaultProps} requiresGuardian={true} guardianAgeThreshold={18} />);
+  it('should render Guardian required badge when requiresGuardian is true', async () => {
+    await render(<WaiverCard {...defaultProps} requiresGuardian={true} guardianAgeThreshold={18} />);
 
     expect(page.getByText('Guardian required (under 18)')).toBeTruthy();
   });
 
-  it('should not render Guardian required badge when requiresGuardian is false', () => {
-    render(<WaiverCard {...defaultProps} requiresGuardian={false} />);
+  it('should not render Guardian required badge when requiresGuardian is false', async () => {
+    await render(<WaiverCard {...defaultProps} requiresGuardian={false} />);
 
     const guardianBadges = page.getByText('Guardian required (under 18)');
 
     expect(guardianBadges.elements()).toHaveLength(0);
   });
 
-  it('should render guardian badge with the correct age threshold', () => {
-    render(<WaiverCard {...defaultProps} requiresGuardian={true} guardianAgeThreshold={16} />);
+  it('should render guardian badge with the correct age threshold', async () => {
+    await render(<WaiverCard {...defaultProps} requiresGuardian={true} guardianAgeThreshold={16} />);
 
     expect(page.getByText('Guardian required (under 16)')).toBeTruthy();
   });
 
-  it('should display version number with v prefix', () => {
-    render(<WaiverCard {...defaultProps} version={7} />);
+  it('should display version number with v prefix', async () => {
+    await render(<WaiverCard {...defaultProps} version={7} />);
 
     expect(page.getByText('v7')).toBeTruthy();
   });
 
-  it('should display version label', () => {
-    render(<WaiverCard {...defaultProps} />);
+  it('should display version label', async () => {
+    await render(<WaiverCard {...defaultProps} />);
 
     expect(page.getByText('Version')).toBeTruthy();
   });
 
-  it('should display signed count', () => {
-    render(<WaiverCard {...defaultProps} signedCount={100} />);
+  it('should display signed count', async () => {
+    await render(<WaiverCard {...defaultProps} signedCount={100} />);
 
     expect(page.getByText('100')).toBeTruthy();
     expect(page.getByText('Signed')).toBeTruthy();
   });
 
-  it('should display membership count', () => {
-    render(<WaiverCard {...defaultProps} membershipCount={12} />);
+  it('should display membership count', async () => {
+    await render(<WaiverCard {...defaultProps} membershipCount={12} />);
 
     expect(page.getByText('12')).toBeTruthy();
     expect(page.getByText('Memberships')).toBeTruthy();
   });
 
-  it('should display last updated date', () => {
-    render(<WaiverCard {...defaultProps} lastUpdated="2026-01-15" />);
+  it('should display last updated date', async () => {
+    await render(<WaiverCard {...defaultProps} lastUpdated="2026-01-15" />);
 
     expect(page.getByText('Last Updated')).toBeTruthy();
     expect(page.getByText('2026-01-15')).toBeTruthy();
   });
 
-  it('should render edit button when onEdit is provided', () => {
-    render(<WaiverCard {...defaultProps} onEdit={vi.fn()} />);
+  it('should render edit button when onEdit is provided', async () => {
+    await render(<WaiverCard {...defaultProps} onEdit={vi.fn()} />);
 
     const editButton = page.getByRole('button', { name: 'Edit waiver' });
 
     expect(editButton).toBeTruthy();
   });
 
-  it('should not render edit button when onEdit is not provided', () => {
-    render(<WaiverCard {...defaultProps} onEdit={undefined} />);
+  it('should not render edit button when onEdit is not provided', async () => {
+    await render(<WaiverCard {...defaultProps} onEdit={undefined} />);
 
     const editButtons = page.getByRole('button', { name: 'Edit waiver' });
 
@@ -160,7 +160,7 @@ describe('WaiverCard', () => {
 
   it('should call onEdit with the waiver id when edit button is clicked', async () => {
     const mockOnEdit = vi.fn();
-    render(<WaiverCard {...defaultProps} id="waiver-42" onEdit={mockOnEdit} />);
+    await render(<WaiverCard {...defaultProps} id="waiver-42" onEdit={mockOnEdit} />);
 
     const editButton = page.getByRole('button', { name: 'Edit waiver' });
     await userEvent.click(editButton);
@@ -168,8 +168,8 @@ describe('WaiverCard', () => {
     expect(mockOnEdit).toHaveBeenCalledWith('waiver-42');
   });
 
-  it('should not render description when it is null', () => {
-    render(<WaiverCard {...defaultProps} description={null} />);
+  it('should not render description when it is null', async () => {
+    await render(<WaiverCard {...defaultProps} description={null} />);
 
     // Name should still render
     expect(page.getByText('Standard Liability Waiver')).toBeTruthy();
@@ -180,22 +180,22 @@ describe('WaiverCard', () => {
     expect(descriptionElements.elements()).toHaveLength(0);
   });
 
-  it('should render with zero signed count', () => {
-    render(<WaiverCard {...defaultProps} signedCount={0} />);
+  it('should render with zero signed count', async () => {
+    await render(<WaiverCard {...defaultProps} signedCount={0} />);
 
     expect(page.getByText('0')).toBeTruthy();
   });
 
-  it('should render with zero membership count', () => {
-    render(<WaiverCard {...defaultProps} membershipCount={0} signedCount={42} />);
+  it('should render with zero membership count', async () => {
+    await render(<WaiverCard {...defaultProps} membershipCount={0} signedCount={42} />);
 
     // Both 0 and 42 should appear
     expect(page.getByText('0')).toBeTruthy();
     expect(page.getByText('42')).toBeTruthy();
   });
 
-  it('should render with version 1', () => {
-    render(<WaiverCard {...defaultProps} version={1} />);
+  it('should render with version 1', async () => {
+    await render(<WaiverCard {...defaultProps} version={1} />);
 
     expect(page.getByText('v1')).toBeTruthy();
   });

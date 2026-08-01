@@ -53,8 +53,8 @@ describe('EventBasicsStep', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the step with title and subtitle', () => {
-    render(
+  it('should render the step with title and subtitle', async () => {
+    await render(
       <EventBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -69,8 +69,8 @@ describe('EventBasicsStep', () => {
     expect(heading).toBeTruthy();
   });
 
-  it('should render event name input', () => {
-    render(
+  it('should render event name input', async () => {
+    await render(
       <EventBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -86,7 +86,7 @@ describe('EventBasicsStep', () => {
   });
 
   it('should call onUpdate when event name changes', async () => {
-    render(
+    await render(
       <EventBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -102,8 +102,8 @@ describe('EventBasicsStep', () => {
     expect(mockHandlers.onUpdate).toHaveBeenCalled();
   });
 
-  it('should have Next button disabled when form is incomplete', () => {
-    render(
+  it('should have Next button disabled when form is incomplete', async () => {
+    await render(
       <EventBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -119,7 +119,7 @@ describe('EventBasicsStep', () => {
     expect(nextButton?.disabled).toBe(true);
   });
 
-  it('should enable Next button when form is complete', () => {
+  it('should enable Next button when form is complete', async () => {
     const completeData: AddClassWizardData = {
       ...mockData,
       eventName: 'BJJ Seminar',
@@ -127,7 +127,7 @@ describe('EventBasicsStep', () => {
       eventDescription: 'A great seminar',
     };
 
-    render(
+    await render(
       <EventBasicsStep
         data={completeData}
         onUpdate={mockHandlers.onUpdate}
@@ -144,7 +144,7 @@ describe('EventBasicsStep', () => {
   });
 
   it('should call onCancel when Cancel button is clicked', async () => {
-    render(
+    await render(
       <EventBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -165,7 +165,7 @@ describe('EventBasicsStep', () => {
   });
 
   it('should call onBack when Back button is clicked', async () => {
-    render(
+    await render(
       <EventBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -193,7 +193,7 @@ describe('EventBasicsStep', () => {
       eventDescription: 'A great seminar',
     };
 
-    render(
+    await render(
       <EventBasicsStep
         data={completeData}
         onUpdate={mockHandlers.onUpdate}
@@ -213,8 +213,8 @@ describe('EventBasicsStep', () => {
     }
   });
 
-  it('should display error message when provided', () => {
-    render(
+  it('should display error message when provided', async () => {
+    await render(
       <EventBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -230,13 +230,13 @@ describe('EventBasicsStep', () => {
     expect(errorMessage).toBeTruthy();
   });
 
-  it('should show character count for description', () => {
+  it('should show character count for description', async () => {
     const dataWithDescription: AddClassWizardData = {
       ...mockData,
       eventDescription: 'Test description',
     };
 
-    render(
+    await render(
       <EventBasicsStep
         data={dataWithDescription}
         onUpdate={mockHandlers.onUpdate}
@@ -251,8 +251,8 @@ describe('EventBasicsStep', () => {
     expect(characterCount).toBeTruthy();
   });
 
-  it('should render event type select', () => {
-    render(
+  it('should render event type select', async () => {
+    await render(
       <EventBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -267,8 +267,8 @@ describe('EventBasicsStep', () => {
     expect(eventTypeLabel).toBeTruthy();
   });
 
-  it('should render max capacity input', () => {
-    render(
+  it('should render max capacity input', async () => {
+    await render(
       <EventBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -284,7 +284,7 @@ describe('EventBasicsStep', () => {
   });
 
   it('should update max capacity when changed', async () => {
-    render(
+    await render(
       <EventBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -301,7 +301,7 @@ describe('EventBasicsStep', () => {
   });
 
   it('should show validation error when event name is touched but empty', async () => {
-    render(
+    await render(
       <EventBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}

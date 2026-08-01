@@ -51,8 +51,8 @@ describe('MemberTypeStep', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the member type step', () => {
-    render(
+  it('should render the member type step', async () => {
+    await render(
       <MemberTypeStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -64,8 +64,8 @@ describe('MemberTypeStep', () => {
     expect(page.getByRole('heading', { level: 2 })).toBeTruthy();
   });
 
-  it('should have buttons for interaction', () => {
-    render(
+  it('should have buttons for interaction', async () => {
+    await render(
       <MemberTypeStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -78,7 +78,7 @@ describe('MemberTypeStep', () => {
   });
 
   it('should call onUpdate when a member type option is clicked', async () => {
-    render(
+    await render(
       <MemberTypeStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -97,8 +97,8 @@ describe('MemberTypeStep', () => {
     }
   });
 
-  it('should disable Next button when no member type is selected', () => {
-    render(
+  it('should disable Next button when no member type is selected', async () => {
+    await render(
       <MemberTypeStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -117,13 +117,13 @@ describe('MemberTypeStep', () => {
     }
   });
 
-  it('should enable Next button when member type is selected', () => {
+  it('should enable Next button when member type is selected', async () => {
     const dataWithSelection: AddMemberWizardData = {
       ...mockData,
       memberType: 'individual',
     };
 
-    render(
+    await render(
       <MemberTypeStep
         data={dataWithSelection}
         onUpdate={mockHandlers.onUpdate}
@@ -143,7 +143,7 @@ describe('MemberTypeStep', () => {
   });
 
   it('should call onCancel when Cancel button is clicked', async () => {
-    render(
+    await render(
       <MemberTypeStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -161,13 +161,13 @@ describe('MemberTypeStep', () => {
     }
   });
 
-  it('should highlight selected member type with primary styling', () => {
+  it('should highlight selected member type with primary styling', async () => {
     const dataWithSelection: AddMemberWizardData = {
       ...mockData,
       memberType: 'individual',
     };
 
-    render(
+    await render(
       <MemberTypeStep
         data={dataWithSelection}
         onUpdate={mockHandlers.onUpdate}
@@ -194,7 +194,7 @@ describe('MemberTypeStep', () => {
       memberType: 'family-member',
     };
 
-    render(
+    await render(
       <MemberTypeStep
         data={dataWithSelection}
         onUpdate={mockHandlers.onUpdate}

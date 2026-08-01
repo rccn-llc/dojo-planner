@@ -20,7 +20,7 @@ function Alert({ children, variant = 'error', className }: AlertProps) {
         className,
       )}
     >
-      <AlertTriangle className="h-5 w-5 shrink-0" />
+      <AlertTriangle className="size-5 shrink-0" />
       <span>{children}</span>
     </div>
   );

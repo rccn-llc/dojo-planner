@@ -339,8 +339,8 @@ export const FamilyPaymentStep = ({
                   <span className="text-muted-foreground">{t('payment_method_label')}</span>
                   <span className="flex items-center gap-1 font-medium">
                     {data.hohPaymentMethodType === 'ach'
-                      ? <Landmark className="h-3 w-3" />
-                      : <CreditCard className="h-3 w-3" />}
+                      ? <Landmark className="size-3" />
+                      : <CreditCard className="size-3" />}
                     {t('payment_method_value', {
                       hohName: data.hohMemberName || '',
                       type: data.hohPaymentMethodType === 'ach' ? 'ACH' : 'Card',
@@ -373,7 +373,7 @@ export const FamilyPaymentStep = ({
               {validCoupons.map(coupon => (
                 <SelectItem key={coupon.id} value={coupon.id}>
                   <span className="flex items-center gap-2">
-                    <Tag className="h-3 w-3" />
+                    <Tag className="size-3" />
                     {coupon.code}
                     {' - '}
                     {coupon.type === 'Percentage' && coupon.amount}
@@ -392,7 +392,7 @@ export const FamilyPaymentStep = ({
       {/* Savings Alert */}
       {hasCouponApplied && (
         <div className="flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950/30">
-          <Tag className="mt-0.5 h-5 w-5 shrink-0 text-green-600 dark:text-green-400" />
+          <Tag className="mt-0.5 size-5 shrink-0 text-green-600 dark:text-green-400" />
           <div>
             <p className="font-medium text-green-800 dark:text-green-200">
               {tPayment('coupon_applied_title', { code: data.appliedCoupon?.code ?? '' })}
@@ -439,7 +439,7 @@ export const FamilyPaymentStep = ({
                   : 'border-border bg-background hover:border-primary/50 hover:bg-accent/50'
               } ${isLoading ? 'cursor-not-allowed opacity-50' : ''}`}
             >
-              <CreditCard className="h-5 w-5" />
+              <CreditCard className="size-5" />
               <span className="font-medium">{tPayment('card_tab_label')}</span>
             </button>
             <button
@@ -452,7 +452,7 @@ export const FamilyPaymentStep = ({
                   : 'border-border bg-background hover:border-primary/50 hover:bg-accent/50'
               } ${isLoading ? 'cursor-not-allowed opacity-50' : ''}`}
             >
-              <Landmark className="h-5 w-5" />
+              <Landmark className="size-5" />
               <span className="font-medium">{tPayment('ach_tab_label')}</span>
             </button>
           </div>
@@ -488,7 +488,7 @@ export const FamilyPaymentStep = ({
                       <div>
                         {!iframeLoaded && !iframeError && (
                           <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <Loader2 className="size-4 animate-spin" />
                             {tPayment('card_number_iframe_loading')}
                           </div>
                         )}
@@ -659,7 +659,7 @@ export const FamilyPaymentStep = ({
       {/* Payment Status Alert */}
       {paymentStatus === 'declined' && (
         <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/30">
-          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <AlertCircle className="mt-0.5 size-5 shrink-0 text-amber-600 dark:text-amber-400" />
           <div>
             <p className="font-medium text-amber-800 dark:text-amber-200">
               {tPayment('payment_declined_title')}
@@ -676,7 +676,7 @@ export const FamilyPaymentStep = ({
 
       {paymentStatus === 'processing' && (
         <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/30">
-          <Loader2 className="h-5 w-5 shrink-0 animate-spin text-blue-600 dark:text-blue-400" />
+          <Loader2 className="size-5 shrink-0 animate-spin text-blue-600 dark:text-blue-400" />
           <p className="text-sm text-blue-700 dark:text-blue-300">
             {tPayment('payment_processing_message')}
           </p>
@@ -712,7 +712,7 @@ export const FamilyPaymentStep = ({
             {(isLoading || tokenizing)
               ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="mr-2 size-4 animate-spin" />
                     {t('processing_button')}
                   </>
                 )

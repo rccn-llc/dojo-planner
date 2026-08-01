@@ -17,14 +17,14 @@ describe('EditPaymentSettingsModal', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the modal title', () => {
-    render(<EditPaymentSettingsModal {...defaultProps} />);
+  it('should render the modal title', async () => {
+    await render(<EditPaymentSettingsModal {...defaultProps} />);
 
     expect(page.getByText('Edit IQPro Credentials')).toBeDefined();
   });
 
-  it('should display initial values in form fields', () => {
-    render(<EditPaymentSettingsModal {...defaultProps} />);
+  it('should display initial values in form fields', async () => {
+    await render(<EditPaymentSettingsModal {...defaultProps} />);
 
     const clientIdInput = page.getByPlaceholder('e.g. abc123-...');
     const gatewayIdInput = page.getByPlaceholder('IQPro merchant gateway identifier');
@@ -33,15 +33,15 @@ describe('EditPaymentSettingsModal', () => {
     expect(gatewayIdInput.element()).toHaveProperty('value', 'gateway-xyz-789');
   });
 
-  it('should not render when isOpen is false', () => {
-    render(<EditPaymentSettingsModal {...defaultProps} isOpen={false} />);
+  it('should not render when isOpen is false', async () => {
+    await render(<EditPaymentSettingsModal {...defaultProps} isOpen={false} />);
 
     expect(page.getByText('Edit IQPro Credentials').elements()).toHaveLength(0);
   });
 
   it('should call onClose when cancel button is clicked', async () => {
     const onClose = vi.fn();
-    render(<EditPaymentSettingsModal {...defaultProps} onClose={onClose} />);
+    await render(<EditPaymentSettingsModal {...defaultProps} onClose={onClose} />);
 
     await userEvent.click(page.getByRole('button', { name: /cancel/i }).element());
 
@@ -50,7 +50,7 @@ describe('EditPaymentSettingsModal', () => {
 
   it('should keep save enabled and omit clientSecret when secret already exists', async () => {
     const onSave = vi.fn();
-    render(<EditPaymentSettingsModal {...defaultProps} onSave={onSave} />);
+    await render(<EditPaymentSettingsModal {...defaultProps} onSave={onSave} />);
 
     const saveButton = page.getByRole('button', { name: /^save$/i });
 
@@ -68,7 +68,7 @@ describe('EditPaymentSettingsModal', () => {
 
   it('should include clientSecret when one is entered', async () => {
     const onSave = vi.fn();
-    render(<EditPaymentSettingsModal {...defaultProps} onSave={onSave} />);
+    await render(<EditPaymentSettingsModal {...defaultProps} onSave={onSave} />);
 
     const secretInput = page.getByPlaceholder('••••••••  Leave blank to keep current secret');
     await userEvent.type(secretInput.element(), 'new-secret-value');
@@ -84,8 +84,8 @@ describe('EditPaymentSettingsModal', () => {
     });
   });
 
-  it('should require a secret when none has ever been saved', () => {
-    render(<EditPaymentSettingsModal {...defaultProps} hasSecret={false} />);
+  it('should require a secret when none has ever been saved', async () => {
+    await render(<EditPaymentSettingsModal {...defaultProps} hasSecret={false} />);
 
     // No saved secret and none entered → form invalid, save disabled.
     expect(page.getByRole('button', { name: /^save$/i }).element()).toBeDisabled();

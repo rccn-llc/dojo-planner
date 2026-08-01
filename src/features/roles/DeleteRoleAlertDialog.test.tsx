@@ -16,8 +16,8 @@ vi.mock('next-intl', () => ({
 }));
 
 describe('DeleteRoleAlertDialog', () => {
-  it('renders the role name in the description', () => {
-    render(
+  it('renders the role name in the description', async () => {
+    await render(
       <DeleteRoleAlertDialog
         isOpen
         roleName="Front Desk"
@@ -31,7 +31,7 @@ describe('DeleteRoleAlertDialog', () => {
 
   it('calls onConfirmAction when delete is clicked', async () => {
     const onConfirm = vi.fn();
-    render(
+    await render(
       <DeleteRoleAlertDialog
         isOpen
         roleName="Coach"
@@ -47,7 +47,7 @@ describe('DeleteRoleAlertDialog', () => {
 
   it('calls onCloseAction when cancel is clicked', async () => {
     const onClose = vi.fn();
-    render(
+    await render(
       <DeleteRoleAlertDialog
         isOpen
         roleName="Coach"
@@ -61,8 +61,8 @@ describe('DeleteRoleAlertDialog', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('renders the error banner when errorMessage is provided', () => {
-    render(
+  it('renders the error banner when errorMessage is provided', async () => {
+    await render(
       <DeleteRoleAlertDialog
         isOpen
         roleName="Coach"
@@ -78,8 +78,8 @@ describe('DeleteRoleAlertDialog', () => {
     expect(page.getByText('Role still has members')).toBeDefined();
   });
 
-  it('does not render when isOpen is false', () => {
-    render(
+  it('does not render when isOpen is false', async () => {
+    await render(
       <DeleteRoleAlertDialog
         isOpen={false}
         roleName="Coach"

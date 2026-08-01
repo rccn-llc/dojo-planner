@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { client } from '@/libs/Orpc';
+import { clearInFlight, dedupeRequest } from './dedupeRequest';
 
 // =============================================================================
 // TYPES
@@ -102,14 +103,21 @@ export const useMembershipPlansCache = (organizationId?: string | undefined) => 
         return;
       }
 
-      const result = await client.member.listAllMembershipPlans();
-      const plans = (result.plans || []) as MembershipPlanData[];
+      const orgKey = organizationId || '';
+      // Several components on a page use this hook; without de-duping, each one
+      // mounting against a cold cache fires its own request.
+      const plans = await dedupeRequest(`membershipPlans:${orgKey}`, async () => {
+        const result = await client.member.listAllMembershipPlans();
+        const fetched = (result.plans || []) as MembershipPlanData[];
 
-      cacheStore = {
-        data: plans,
-        timestamp: Date.now(),
-        organizationId: organizationId || '',
-      };
+        cacheStore = {
+          data: fetched,
+          timestamp: Date.now(),
+          organizationId: orgKey,
+        };
+
+        return fetched;
+      });
 
       dispatch({ type: 'SET_PLANS', payload: plans });
     } catch (err) {
@@ -130,6 +138,9 @@ export const useMembershipPlansCache = (organizationId?: string | undefined) => 
 
   const revalidate = useCallback(async () => {
     cacheStore = null;
+    // Drop any pending request too, so a refetch cannot attach to the call it
+    // is meant to supersede and resolve with stale data.
+    clearInFlight();
     await fetchPlans();
   }, [fetchPlans]);
 
@@ -172,5 +183,6 @@ export const useMembershipPlansCache = (organizationId?: string | undefined) => 
  */
 export const invalidateMembershipPlansCache = async () => {
   cacheStore = null;
+  clearInFlight();
   await Promise.all(revalidateCallbacks.map(callback => callback()));
 };

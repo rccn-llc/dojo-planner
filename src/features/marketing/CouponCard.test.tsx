@@ -32,7 +32,7 @@ describe('CouponCard', () => {
 
   describe('Rendering', () => {
     it('should render coupon code and description', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={mockCoupon}
           onEdit={mockOnEdit}
@@ -45,7 +45,7 @@ describe('CouponCard', () => {
     });
 
     it('should render coupon type as abbreviation (PCT for Percentage)', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={mockCoupon}
           onEdit={mockOnEdit}
@@ -57,7 +57,7 @@ describe('CouponCard', () => {
     });
 
     it('should render coupon amount', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={mockCoupon}
           onEdit={mockOnEdit}
@@ -69,7 +69,7 @@ describe('CouponCard', () => {
     });
 
     it('should render apply to field', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={mockCoupon}
           onEdit={mockOnEdit}
@@ -81,7 +81,7 @@ describe('CouponCard', () => {
     });
 
     it('should render usage information', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={mockCoupon}
           onEdit={mockOnEdit}
@@ -93,7 +93,7 @@ describe('CouponCard', () => {
     });
 
     it('should render start date above end date in YYYY-MM-DD hh:mm:ss format', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={mockCoupon}
           onEdit={mockOnEdit}
@@ -108,7 +108,7 @@ describe('CouponCard', () => {
     });
 
     it('should render status badge', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={mockCoupon}
           onEdit={mockOnEdit}
@@ -120,7 +120,7 @@ describe('CouponCard', () => {
     });
 
     it('should render edit button', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={mockCoupon}
           onEdit={mockOnEdit}
@@ -133,7 +133,7 @@ describe('CouponCard', () => {
 
     it('should hide delete button for coupons with active usage', async () => {
       // mockCoupon has 23/100 usage, so delete should be hidden
-      render(
+      await render(
         <CouponCard
           coupon={mockCoupon}
           onEdit={mockOnEdit}
@@ -152,7 +152,7 @@ describe('CouponCard', () => {
     });
 
     it('should show delete button for coupons with 0 usage', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={{ ...mockCoupon, usage: '0/100' }}
           onEdit={mockOnEdit}
@@ -164,7 +164,7 @@ describe('CouponCard', () => {
     });
 
     it('should show delete button for coupons at 100% usage', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={{ ...mockCoupon, usage: '100/100' }}
           onEdit={mockOnEdit}
@@ -178,7 +178,7 @@ describe('CouponCard', () => {
 
   describe('Status badge variants', () => {
     it('should render Active status with default variant', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={{ ...mockCoupon, status: 'Active' }}
           onEdit={mockOnEdit}
@@ -190,7 +190,7 @@ describe('CouponCard', () => {
     });
 
     it('should render Expired status', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={{ ...mockCoupon, status: 'Expired' }}
           onEdit={mockOnEdit}
@@ -202,7 +202,7 @@ describe('CouponCard', () => {
     });
 
     it('should render Inactive status', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={{ ...mockCoupon, status: 'Inactive' }}
           onEdit={mockOnEdit}
@@ -216,7 +216,7 @@ describe('CouponCard', () => {
 
   describe('Edit functionality', () => {
     it('should call onEdit with coupon when edit button is clicked', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={mockCoupon}
           onEdit={mockOnEdit}
@@ -235,7 +235,7 @@ describe('CouponCard', () => {
   describe('Delete functionality', () => {
     it('should call onDelete with coupon id when delete button is clicked', async () => {
       // Use a coupon with 0 usage so delete button is visible
-      render(
+      await render(
         <CouponCard
           coupon={{ ...mockCoupon, usage: '0/100' }}
           onEdit={mockOnEdit}
@@ -253,7 +253,7 @@ describe('CouponCard', () => {
 
   describe('Usage percentage display', () => {
     it('should handle infinity symbol in usage', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={{ ...mockCoupon, usage: '45/\u221E' }}
           onEdit={mockOnEdit}
@@ -265,7 +265,7 @@ describe('CouponCard', () => {
     });
 
     it('should handle zero usage', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={{ ...mockCoupon, usage: '0/100' }}
           onEdit={mockOnEdit}
@@ -277,7 +277,7 @@ describe('CouponCard', () => {
     });
 
     it('should handle full usage', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={{ ...mockCoupon, usage: '100/100' }}
           onEdit={mockOnEdit}
@@ -291,7 +291,7 @@ describe('CouponCard', () => {
 
   describe('Different coupon types', () => {
     it('should render Fixed Amount type as FXD abbreviation', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={{ ...mockCoupon, type: 'Fixed Amount', amount: '$50' }}
           onEdit={mockOnEdit}
@@ -304,7 +304,7 @@ describe('CouponCard', () => {
     });
 
     it('should render Free Trial type as TRY abbreviation', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={{ ...mockCoupon, type: 'Free Trial', amount: '7 Days' }}
           onEdit={mockOnEdit}
@@ -319,7 +319,7 @@ describe('CouponCard', () => {
 
   describe('Different applyTo values', () => {
     it('should render Products applyTo', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={{ ...mockCoupon, applyTo: 'Products' }}
           onEdit={mockOnEdit}
@@ -331,7 +331,7 @@ describe('CouponCard', () => {
     });
 
     it('should render Both applyTo', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={{ ...mockCoupon, applyTo: 'Both' }}
           onEdit={mockOnEdit}
@@ -345,7 +345,7 @@ describe('CouponCard', () => {
 
   describe('Date formatting edge cases', () => {
     it('should display No Expiry for empty start date', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={{ ...mockCoupon, startDateTime: '' }}
           onEdit={mockOnEdit}
@@ -357,7 +357,7 @@ describe('CouponCard', () => {
     });
 
     it('should display No Expiry for empty end date', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={{ ...mockCoupon, endDateTime: '' }}
           onEdit={mockOnEdit}
@@ -372,7 +372,7 @@ describe('CouponCard', () => {
     });
 
     it('should handle invalid date gracefully', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={{ ...mockCoupon, endDateTime: 'invalid-date' }}
           onEdit={mockOnEdit}
@@ -387,7 +387,7 @@ describe('CouponCard', () => {
 
   describe('Type abbreviation coverage', () => {
     it('should render Percentage type as PCT', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={{ ...mockCoupon, type: 'Percentage' }}
           onEdit={mockOnEdit}
@@ -401,7 +401,7 @@ describe('CouponCard', () => {
 
   describe('Usage percentage edge cases', () => {
     it('should handle invalid usage format', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={{ ...mockCoupon, usage: 'invalid' }}
           onEdit={mockOnEdit}
@@ -413,7 +413,7 @@ describe('CouponCard', () => {
     });
 
     it('should handle usage with zero limit', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={{ ...mockCoupon, usage: '5/0' }}
           onEdit={mockOnEdit}
@@ -425,7 +425,7 @@ describe('CouponCard', () => {
     });
 
     it('should cap usage percentage at 100%', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={{ ...mockCoupon, usage: '150/100' }}
           onEdit={mockOnEdit}
@@ -439,7 +439,7 @@ describe('CouponCard', () => {
 
   describe('Delete button visibility edge cases', () => {
     it('should show delete button for invalid usage format', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={{ ...mockCoupon, usage: 'invalid' }}
           onEdit={mockOnEdit}
@@ -451,7 +451,7 @@ describe('CouponCard', () => {
     });
 
     it('should hide delete button for unlimited usage with active count', async () => {
-      render(
+      await render(
         <CouponCard
           coupon={{ ...mockCoupon, usage: '45/∞' }}
           onEdit={mockOnEdit}

@@ -108,16 +108,16 @@ export const SideSheet: Story = {
             <SheetTitle>Navigation</SheetTitle>
           </SheetHeader>
           <nav className="space-y-2 py-4">
-            <button type="button" className="block w-full rounded px-2 py-2 text-left hover:bg-gray-100">
+            <button type="button" className="block w-full rounded p-2 text-left hover:bg-gray-100">
               Home
             </button>
-            <button type="button" className="block w-full rounded px-2 py-2 text-left hover:bg-gray-100">
+            <button type="button" className="block w-full rounded p-2 text-left hover:bg-gray-100">
               About
             </button>
-            <button type="button" className="block w-full rounded px-2 py-2 text-left hover:bg-gray-100">
+            <button type="button" className="block w-full rounded p-2 text-left hover:bg-gray-100">
               Services
             </button>
-            <button type="button" className="block w-full rounded px-2 py-2 text-left hover:bg-gray-100">
+            <button type="button" className="block w-full rounded p-2 text-left hover:bg-gray-100">
               Contact
             </button>
           </nav>

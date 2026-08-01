@@ -8,37 +8,37 @@ describe('PageHeader', () => {
     title: 'Test Page Title',
   };
 
-  it('renders page title', () => {
-    render(<PageHeader {...defaultProps} />);
+  it('renders page title', async () => {
+    await render(<PageHeader {...defaultProps} />);
 
     expect(page.getByText('Test Page Title')).toBeTruthy();
   });
 
-  it('renders header actions when provided', () => {
+  it('renders header actions when provided', async () => {
     const headerActions = (
       <button type="button" data-testid="manage-tags-button">Manage Tags</button>
     );
 
-    render(<PageHeader {...defaultProps} headerActions={headerActions} />);
+    await render(<PageHeader {...defaultProps} headerActions={headerActions} />);
 
     expect(page.getByText('Manage Tags')).toBeTruthy();
   });
 
-  it('renders children content', () => {
+  it('renders children content', async () => {
     const children = <div data-testid="filter-content">Filter Content</div>;
 
-    render(<PageHeader {...defaultProps}>{children}</PageHeader>);
+    await render(<PageHeader {...defaultProps}>{children}</PageHeader>);
 
     expect(page.getByText('Filter Content')).toBeTruthy();
   });
 
-  it('renders with header actions and children together', () => {
+  it('renders with header actions and children together', async () => {
     const headerActions = (
       <button type="button" data-testid="action-button">Action</button>
     );
     const children = <div data-testid="filter-bar">Filter Bar</div>;
 
-    render(
+    await render(
       <PageHeader
         {...defaultProps}
         headerActions={headerActions}
@@ -52,8 +52,8 @@ describe('PageHeader', () => {
     expect(page.getByText('Filter Bar')).toBeTruthy();
   });
 
-  it('handles empty title gracefully', () => {
-    render(<PageHeader title="" />);
+  it('handles empty title gracefully', async () => {
+    await render(<PageHeader title="" />);
 
     // Should render h1 element even with empty title
     expect(page.getByRole('heading')).toBeTruthy();
@@ -70,7 +70,7 @@ describe('PageHeader', () => {
       </div>
     );
 
-    render(<PageHeader {...defaultProps} headerActions={headerActions} />);
+    await render(<PageHeader {...defaultProps} headerActions={headerActions} />);
 
     const manageButton = page.getByText('Manage Tags');
     const exportButton = page.getByText('Export');

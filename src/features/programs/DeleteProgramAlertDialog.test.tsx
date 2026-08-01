@@ -17,8 +17,8 @@ describe('DeleteProgramAlertDialog', () => {
   });
 
   describe('Dialog Content', () => {
-    it('renders the dialog title', () => {
-      render(
+    it('renders the dialog title', async () => {
+      await render(
         <I18nWrapper>
           <DeleteProgramAlertDialog {...defaultProps} />
         </I18nWrapper>,
@@ -29,8 +29,8 @@ describe('DeleteProgramAlertDialog', () => {
       expect(title).toBeInTheDocument();
     });
 
-    it('renders the dialog description', () => {
-      render(
+    it('renders the dialog description', async () => {
+      await render(
         <I18nWrapper>
           <DeleteProgramAlertDialog {...defaultProps} />
         </I18nWrapper>,
@@ -41,8 +41,8 @@ describe('DeleteProgramAlertDialog', () => {
       expect(description).toBeInTheDocument();
     });
 
-    it('renders the full warning message', () => {
-      render(
+    it('renders the full warning message', async () => {
+      await render(
         <I18nWrapper>
           <DeleteProgramAlertDialog {...defaultProps} />
         </I18nWrapper>,
@@ -55,8 +55,8 @@ describe('DeleteProgramAlertDialog', () => {
       expect(description).toBeInTheDocument();
     });
 
-    it('renders the cancel button', () => {
-      render(
+    it('renders the cancel button', async () => {
+      await render(
         <I18nWrapper>
           <DeleteProgramAlertDialog {...defaultProps} />
         </I18nWrapper>,
@@ -67,8 +67,8 @@ describe('DeleteProgramAlertDialog', () => {
       expect(cancelButton).toBeInTheDocument();
     });
 
-    it('renders the delete button', () => {
-      render(
+    it('renders the delete button', async () => {
+      await render(
         <I18nWrapper>
           <DeleteProgramAlertDialog {...defaultProps} />
         </I18nWrapper>,
@@ -81,8 +81,8 @@ describe('DeleteProgramAlertDialog', () => {
   });
 
   describe('Dialog Visibility', () => {
-    it('does not render content when isOpen is false', () => {
-      render(
+    it('does not render content when isOpen is false', async () => {
+      await render(
         <I18nWrapper>
           <DeleteProgramAlertDialog {...defaultProps} isOpen={false} />
         </I18nWrapper>,
@@ -93,8 +93,8 @@ describe('DeleteProgramAlertDialog', () => {
       expect(titles.length).toBe(0);
     });
 
-    it('renders content when isOpen is true', () => {
-      render(
+    it('renders content when isOpen is true', async () => {
+      await render(
         <I18nWrapper>
           <DeleteProgramAlertDialog {...defaultProps} isOpen />
         </I18nWrapper>,
@@ -110,7 +110,7 @@ describe('DeleteProgramAlertDialog', () => {
     it('calls onCloseAction when cancel button is clicked', async () => {
       const onCloseAction = vi.fn();
 
-      render(
+      await render(
         <I18nWrapper>
           <DeleteProgramAlertDialog {...defaultProps} onCloseAction={onCloseAction} />
         </I18nWrapper>,
@@ -127,7 +127,7 @@ describe('DeleteProgramAlertDialog', () => {
     it('calls onConfirmAction when delete button is clicked', async () => {
       const onConfirmAction = vi.fn();
 
-      render(
+      await render(
         <I18nWrapper>
           <DeleteProgramAlertDialog {...defaultProps} onConfirmAction={onConfirmAction} />
         </I18nWrapper>,
@@ -143,7 +143,7 @@ describe('DeleteProgramAlertDialog', () => {
       const onCloseAction = vi.fn();
       const onConfirmAction = vi.fn();
 
-      render(
+      await render(
         <I18nWrapper>
           <DeleteProgramAlertDialog
             {...defaultProps}
@@ -164,8 +164,8 @@ describe('DeleteProgramAlertDialog', () => {
   });
 
   describe('Button Styles', () => {
-    it('delete button has destructive styling', () => {
-      render(
+    it('delete button has destructive styling', async () => {
+      await render(
         <I18nWrapper>
           <DeleteProgramAlertDialog {...defaultProps} />
         </I18nWrapper>,
@@ -176,8 +176,8 @@ describe('DeleteProgramAlertDialog', () => {
       expect(deleteButton).toHaveClass('bg-destructive');
     });
 
-    it('cancel button has outline styling', () => {
-      render(
+    it('cancel button has outline styling', async () => {
+      await render(
         <I18nWrapper>
           <DeleteProgramAlertDialog {...defaultProps} />
         </I18nWrapper>,
@@ -190,8 +190,8 @@ describe('DeleteProgramAlertDialog', () => {
   });
 
   describe('Accessibility', () => {
-    it('has accessible dialog title', () => {
-      render(
+    it('has accessible dialog title', async () => {
+      await render(
         <I18nWrapper>
           <DeleteProgramAlertDialog {...defaultProps} />
         </I18nWrapper>,
@@ -202,8 +202,8 @@ describe('DeleteProgramAlertDialog', () => {
       expect(alertDialog).toBeInTheDocument();
     });
 
-    it('has accessible dialog description', () => {
-      render(
+    it('has accessible dialog description', async () => {
+      await render(
         <I18nWrapper>
           <DeleteProgramAlertDialog {...defaultProps} />
         </I18nWrapper>,

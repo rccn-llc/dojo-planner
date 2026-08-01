@@ -7,6 +7,7 @@ import { useOrganization, useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { dedupeRequest } from '@/hooks/dedupeRequest';
 import { useAddMemberWizard } from '@/hooks/useAddMemberWizard';
 import { client } from '@/libs/Orpc';
 import { FamilyPaymentStep } from './FamilyPaymentStep';
@@ -66,7 +67,7 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
     if (!isOpen) {
       return;
     }
-    client.payment.getTokenizationConfig({ origin: window.location.origin })
+    dedupeRequest(`payment.getTokenizationConfig:${JSON.stringify({ origin: window.location.origin })}`, async () => client.payment.getTokenizationConfig({ origin: window.location.origin }))
       .then((config) => {
         setTokenizationConfig(config ?? null);
       })

@@ -89,7 +89,7 @@ export function MemberDetailOverview({
     <div className="space-y-6">
       {/* Member Header */}
       <div className="flex items-center gap-4">
-        <Avatar className="h-16 w-16">
+        <Avatar className="size-16">
           {photoUrl && <AvatarImage src={photoUrl} alt={memberName} />}
           <AvatarFallback>{getInitials(memberName)}</AvatarFallback>
         </Avatar>
@@ -184,7 +184,7 @@ export function MemberDetailOverview({
                   <Card key={member.id} className="p-6">
                     <div className="mb-4 flex flex-col gap-3">
                       <div className="flex min-w-0 items-center gap-3">
-                        <Avatar className="h-10 w-10 shrink-0">
+                        <Avatar className="size-10 shrink-0">
                           {member.photoUrl && <AvatarImage src={member.photoUrl} alt={member.name} />}
                           <AvatarFallback>{getInitials(member.name)}</AvatarFallback>
                         </Avatar>
@@ -216,7 +216,7 @@ export function MemberDetailOverview({
         <Card className="border-2 border-dashed p-6">
           <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
             <div className="rounded-lg bg-secondary p-3">
-              <Plus className="h-6 w-6 text-muted-foreground" />
+              <Plus className="size-6 text-muted-foreground" />
             </div>
             <h3 className="font-semibold text-foreground">{t('add_family_member')}</h3>
             <p className="text-sm text-muted-foreground">{t('create_new_family_membership')}</p>

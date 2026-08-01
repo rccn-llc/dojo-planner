@@ -70,88 +70,88 @@ describe('EditClassBasicsModal', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the modal with title when open', () => {
-    render(<EditClassBasicsModal {...defaultProps} />);
+  it('should render the modal with title when open', async () => {
+    await render(<EditClassBasicsModal {...defaultProps} />);
 
     const heading = page.getByText('Edit Class Basics');
 
     expect(heading).toBeTruthy();
   });
 
-  it('should not render when isOpen is false', () => {
-    render(<EditClassBasicsModal {...defaultProps} isOpen={false} />);
+  it('should not render when isOpen is false', async () => {
+    await render(<EditClassBasicsModal {...defaultProps} isOpen={false} />);
 
     const heading = document.body.textContent?.includes('Edit Class Basics');
 
     expect(heading).toBe(false);
   });
 
-  it('should render class name input with initial value', () => {
-    render(<EditClassBasicsModal {...defaultProps} />);
+  it('should render class name input with initial value', async () => {
+    await render(<EditClassBasicsModal {...defaultProps} />);
 
     const input = page.getByPlaceholder('e.g., BJJ Fundamentals I');
 
     expect(input).toBeTruthy();
   });
 
-  it('should render Cancel button', () => {
-    render(<EditClassBasicsModal {...defaultProps} />);
+  it('should render Cancel button', async () => {
+    await render(<EditClassBasicsModal {...defaultProps} />);
 
     const cancelButton = page.getByText('Cancel');
 
     expect(cancelButton).toBeTruthy();
   });
 
-  it('should render Save Changes button', () => {
-    render(<EditClassBasicsModal {...defaultProps} />);
+  it('should render Save Changes button', async () => {
+    await render(<EditClassBasicsModal {...defaultProps} />);
 
     const saveButton = page.getByText('Save Changes');
 
     expect(saveButton).toBeTruthy();
   });
 
-  it('should render program select', () => {
-    render(<EditClassBasicsModal {...defaultProps} />);
+  it('should render program select', async () => {
+    await render(<EditClassBasicsModal {...defaultProps} />);
 
     const programLabel = page.getByText('Program');
 
     expect(programLabel).toBeTruthy();
   });
 
-  it('should render level select', () => {
-    render(<EditClassBasicsModal {...defaultProps} />);
+  it('should render level select', async () => {
+    await render(<EditClassBasicsModal {...defaultProps} />);
 
     const levelLabel = page.getByText('Level');
 
     expect(levelLabel).toBeTruthy();
   });
 
-  it('should render type select', () => {
-    render(<EditClassBasicsModal {...defaultProps} />);
+  it('should render type select', async () => {
+    await render(<EditClassBasicsModal {...defaultProps} />);
 
     const typeLabel = page.getByText('Type');
 
     expect(typeLabel).toBeTruthy();
   });
 
-  it('should render style select', () => {
-    render(<EditClassBasicsModal {...defaultProps} />);
+  it('should render style select', async () => {
+    await render(<EditClassBasicsModal {...defaultProps} />);
 
     const styleLabel = page.getByText('Style');
 
     expect(styleLabel).toBeTruthy();
   });
 
-  it('should render description textarea', () => {
-    render(<EditClassBasicsModal {...defaultProps} />);
+  it('should render description textarea', async () => {
+    await render(<EditClassBasicsModal {...defaultProps} />);
 
     const descriptionLabel = page.getByText('Description');
 
     expect(descriptionLabel).toBeTruthy();
   });
 
-  it('should show character count for description', () => {
-    render(<EditClassBasicsModal {...defaultProps} />);
+  it('should show character count for description', async () => {
+    await render(<EditClassBasicsModal {...defaultProps} />);
 
     const characterCount = page.getByText(/of 2000 characters used/);
 
@@ -159,7 +159,7 @@ describe('EditClassBasicsModal', () => {
   });
 
   it('should call onClose when Cancel button is clicked', async () => {
-    render(<EditClassBasicsModal {...defaultProps} />);
+    await render(<EditClassBasicsModal {...defaultProps} />);
 
     const cancelButton = page.getByText('Cancel');
     await userEvent.click(cancelButton);
@@ -167,8 +167,8 @@ describe('EditClassBasicsModal', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it('should have Save button enabled when form is valid', () => {
-    render(<EditClassBasicsModal {...defaultProps} />);
+  it('should have Save button enabled when form is valid', async () => {
+    await render(<EditClassBasicsModal {...defaultProps} />);
 
     const buttons = Array.from(document.querySelectorAll('button'));
     const saveButton = buttons.find(btn => btn.textContent?.includes('Save Changes'));
@@ -177,7 +177,7 @@ describe('EditClassBasicsModal', () => {
   });
 
   it('should call onSave with updated values when Save button is clicked', async () => {
-    render(<EditClassBasicsModal {...defaultProps} />);
+    await render(<EditClassBasicsModal {...defaultProps} />);
 
     const saveButton = page.getByText('Save Changes');
     await userEvent.click(saveButton);
@@ -196,7 +196,7 @@ describe('EditClassBasicsModal', () => {
   });
 
   it('should show saving state when submitting', async () => {
-    render(<EditClassBasicsModal {...defaultProps} />);
+    await render(<EditClassBasicsModal {...defaultProps} />);
 
     const saveButton = page.getByText('Save Changes');
     await userEvent.click(saveButton);
@@ -208,7 +208,7 @@ describe('EditClassBasicsModal', () => {
   });
 
   it('should update class name when input changes', async () => {
-    render(<EditClassBasicsModal {...defaultProps} />);
+    await render(<EditClassBasicsModal {...defaultProps} />);
 
     const nameInput = page.getByPlaceholder('e.g., BJJ Fundamentals I');
     await userEvent.clear(nameInput);
@@ -225,7 +225,7 @@ describe('EditClassBasicsModal', () => {
   });
 
   it('should show error when class name is empty on blur', async () => {
-    render(<EditClassBasicsModal {...defaultProps} />);
+    await render(<EditClassBasicsModal {...defaultProps} />);
 
     const nameInput = page.getByPlaceholder('e.g., BJJ Fundamentals I');
     await userEvent.clear(nameInput);
@@ -237,7 +237,7 @@ describe('EditClassBasicsModal', () => {
   });
 
   it('should disable Save button when class name is empty', async () => {
-    render(<EditClassBasicsModal {...defaultProps} className="" />);
+    await render(<EditClassBasicsModal {...defaultProps} className="" />);
 
     const nameInput = page.getByPlaceholder('e.g., BJJ Fundamentals I');
     await userEvent.click(nameInput);
@@ -250,7 +250,7 @@ describe('EditClassBasicsModal', () => {
   });
 
   it('should update description when textarea changes', async () => {
-    render(<EditClassBasicsModal {...defaultProps} />);
+    await render(<EditClassBasicsModal {...defaultProps} />);
 
     const descriptionTextarea = page.getByPlaceholder('Describe what students will learn in this class...');
     await userEvent.clear(descriptionTextarea);

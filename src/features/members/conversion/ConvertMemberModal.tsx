@@ -8,6 +8,7 @@ import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { dedupeRequest } from '@/hooks/dedupeRequest';
 import { useConvertMemberWizard } from '@/hooks/useConvertMemberWizard';
 import { client } from '@/libs/Orpc';
 import { MembershipStep } from '../wizard/MembershipStep';
@@ -93,7 +94,7 @@ export const ConvertMemberModal = ({
     if (!needsPayment) {
       return;
     }
-    client.payment.getTokenizationConfig({ origin: window.location.origin })
+    dedupeRequest(`payment.getTokenizationConfig:${JSON.stringify({ origin: window.location.origin })}`, async () => client.payment.getTokenizationConfig({ origin: window.location.origin }))
       .then(config => setTokenizationConfig(config ?? null))
       .catch(() => setTokenizationConfig(null));
   }, [isOpen, conversionType, hasPaymentMethod]);

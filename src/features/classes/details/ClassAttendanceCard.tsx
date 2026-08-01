@@ -42,7 +42,7 @@ export function ClassAttendanceCard({ records }: ClassAttendanceCardProps) {
             <div className="space-y-3">
               {records.map(r => (
                 <div key={r.id} className="flex items-center gap-3 rounded-lg border border-border p-3">
-                  <Avatar className="h-9 w-9 shrink-0">
+                  <Avatar className="size-9 shrink-0">
                     {r.memberPhotoUrl && <AvatarImage src={r.memberPhotoUrl} alt={`${r.memberFirstName} ${r.memberLastName}`} />}
                     <AvatarFallback>{initials(r.memberFirstName, r.memberLastName)}</AvatarFallback>
                   </Avatar>

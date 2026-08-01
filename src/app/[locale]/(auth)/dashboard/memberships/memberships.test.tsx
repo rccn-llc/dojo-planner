@@ -174,16 +174,16 @@ vi.mock('@/hooks/useTagsCache', () => ({
 }));
 
 describe('Memberships Page', () => {
-  it('renders memberships header', () => {
-    render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+  it('renders memberships header', async () => {
+    await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
     const heading = page.getByRole('heading', { name: /Memberships/i });
 
     expect(heading).toBeInTheDocument();
   });
 
-  it('renders statistics cards', () => {
-    render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+  it('renders statistics cards', async () => {
+    await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
     const totalMemberships = page.getByText(/Total memberships/);
     const trialOptions = page.getByText(/Trial Options/);
@@ -194,8 +194,8 @@ describe('Memberships Page', () => {
     expect(totalMembers).toBeInTheDocument();
   });
 
-  it('renders statistics values', () => {
-    render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+  it('renders statistics values', async () => {
+    await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
     // Total memberships count of 8
     const statValues = page.getByText('8', { exact: true }).elements();
@@ -203,24 +203,24 @@ describe('Memberships Page', () => {
     expect(statValues.length).toBeGreaterThan(0);
   });
 
-  it('renders add new membership button', () => {
-    render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+  it('renders add new membership button', async () => {
+    await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
     const button = page.getByRole('button', { name: /Add New Membership/i });
 
     expect(button).toBeInTheDocument();
   });
 
-  it('renders search input', () => {
-    render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+  it('renders search input', async () => {
+    await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
     const searchInput = page.getByPlaceholder(/Search memberships/i);
 
     expect(searchInput).toBeInTheDocument();
   });
 
-  it('renders tags filter dropdown', () => {
-    render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+  it('renders tags filter dropdown', async () => {
+    await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
     // Select trigger should show "All Tags" as default
     const tagsSelect = page.getByRole('combobox').elements();
@@ -228,8 +228,8 @@ describe('Memberships Page', () => {
     expect(tagsSelect.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('renders programs filter dropdown', () => {
-    render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+  it('renders programs filter dropdown', async () => {
+    await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
     // Both tag and program selects should be rendered
     const selectTriggers = page.getByRole('combobox').elements();
@@ -237,8 +237,8 @@ describe('Memberships Page', () => {
     expect(selectTriggers.length).toBe(2);
   });
 
-  it('renders membership cards with names', () => {
-    render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+  it('renders membership cards with names', async () => {
+    await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
     const monthlyCard = page.getByText(/12 Month Commitment/);
     const kidsCard = page.getByText(/Kids Monthly/);
@@ -247,16 +247,16 @@ describe('Memberships Page', () => {
     expect(kidsCard).toBeInTheDocument();
   });
 
-  it('renders membership card pricing', () => {
-    render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+  it('renders membership card pricing', async () => {
+    await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
     const price = page.getByText(/\$150.00\/mo/);
 
     expect(price).toBeInTheDocument();
   });
 
-  it('renders membership card details labels', () => {
-    render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+  it('renders membership card details labels', async () => {
+    await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
     const frequencyLabels = page.getByText('Frequency').elements();
     const contractLabels = page.getByText('Contract').elements();
@@ -267,16 +267,16 @@ describe('Memberships Page', () => {
     expect(accessLabels.length).toBeGreaterThan(0);
   });
 
-  it('renders edit buttons on membership cards', () => {
-    render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+  it('renders edit buttons on membership cards', async () => {
+    await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
     const editButtons = page.getByRole('button', { name: /Edit membership/i }).elements();
 
     expect(editButtons.length).toBe(8);
   });
 
-  it('renders active trials label for trial memberships', () => {
-    render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+  it('renders active trials label for trial memberships', async () => {
+    await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
     const activeTrials = page.getByText(/Active Trials/).elements();
 
@@ -284,7 +284,7 @@ describe('Memberships Page', () => {
   });
 
   it('renders Monthly badges on non-trial membership cards', async () => {
-    render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+    await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
     // Filter by Monthly tag to show only monthly memberships
     const tagDropdown = page.getByRole('combobox').first();
@@ -312,8 +312,8 @@ describe('Memberships Page', () => {
   });
 
   describe('Manage Tags Button', () => {
-    it('renders manage tags button next to header', () => {
-      render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+    it('renders manage tags button next to header', async () => {
+      await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
       const manageTagsButton = page.getByRole('button', { name: /Manage Tags/i });
 
@@ -321,7 +321,7 @@ describe('Memberships Page', () => {
     });
 
     it('opens membership tags management sheet when clicked', async () => {
-      render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+      await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
       const manageTagsButton = page.getByRole('button', { name: /Manage Tags/i });
       await userEvent.click(manageTagsButton);
@@ -332,7 +332,7 @@ describe('Memberships Page', () => {
     });
 
     it('closes membership tags management sheet when close button is clicked', async () => {
-      render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+      await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
       const manageTagsButton = page.getByRole('button', { name: /Manage Tags/i });
       await userEvent.click(manageTagsButton);
@@ -348,7 +348,7 @@ describe('Memberships Page', () => {
 
   describe('Filter Functionality', () => {
     it('filters memberships when searching by name', async () => {
-      render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+      await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
       const searchInput = page.getByPlaceholder(/Search memberships/i);
       await userEvent.type(searchInput, 'Kids Monthly');
@@ -364,7 +364,7 @@ describe('Memberships Page', () => {
     });
 
     it('filters memberships by tag - Trial', async () => {
-      render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+      await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
       // Click on tags dropdown (first combobox)
       const tagDropdown = page.getByRole('combobox').first();
@@ -381,7 +381,7 @@ describe('Memberships Page', () => {
     });
 
     it('filters memberships by tag - Active', async () => {
-      render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+      await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
       // Click on tags dropdown (first combobox)
       const tagDropdown = page.getByRole('combobox').first();
@@ -398,7 +398,7 @@ describe('Memberships Page', () => {
     });
 
     it('filters memberships by tag - Inactive', async () => {
-      render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+      await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
       // Click on tags dropdown (first combobox)
       const tagDropdown = page.getByRole('combobox').first();
@@ -415,7 +415,7 @@ describe('Memberships Page', () => {
     });
 
     it('filters memberships by tag - Monthly', async () => {
-      render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+      await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
       // Click on tags dropdown (first combobox)
       const tagDropdown = page.getByRole('combobox').first();
@@ -439,7 +439,7 @@ describe('Memberships Page', () => {
     });
 
     it('filters memberships by program', async () => {
-      render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+      await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
       // Click on programs dropdown (second combobox)
       const programDropdown = page.getByRole('combobox').nth(1);
@@ -461,7 +461,7 @@ describe('Memberships Page', () => {
     });
 
     it('shows no memberships found message when search has no results', async () => {
-      render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+      await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
       const searchInput = page.getByPlaceholder(/Search memberships/i);
       await userEvent.type(searchInput, 'NonexistentMembership12345');
@@ -474,7 +474,7 @@ describe('Memberships Page', () => {
 
   describe('Dynamic Filter Options', () => {
     it('hides Inactive tag option when filtering by Kids program (no inactive kids memberships)', async () => {
-      render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+      await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
       // Click on programs dropdown and select Kids
       const programDropdown = page.getByRole('combobox').nth(1);
@@ -500,7 +500,7 @@ describe('Memberships Page', () => {
     });
 
     it('hides Trial tag option when filtering by Inactive tag (no inactive trials)', async () => {
-      render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+      await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
       // Click on tags dropdown and select Inactive
       const tagDropdown = page.getByRole('combobox').first();
@@ -526,7 +526,7 @@ describe('Memberships Page', () => {
     });
 
     it('shows only Competition program when filtering by Competition in search', async () => {
-      render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+      await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
       // Search for "Competition"
       const searchInput = page.getByPlaceholder(/Search memberships/i);
@@ -548,7 +548,7 @@ describe('Memberships Page', () => {
     });
 
     it('shows only Active and Monthly tags when filtering by Competition program', async () => {
-      render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+      await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
       // Click on programs dropdown and select Competition
       const programDropdown = page.getByRole('combobox').nth(1);
@@ -576,7 +576,7 @@ describe('Memberships Page', () => {
     });
 
     it('hides Monthly tag option when searching for Trial memberships', async () => {
-      render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+      await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
       // Search for "Trial" which only matches trial memberships
       const searchInput = page.getByPlaceholder(/Search memberships/i);
@@ -598,7 +598,7 @@ describe('Memberships Page', () => {
     });
 
     it('shows Monthly tag option when filtering by Kids program', async () => {
-      render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+      await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
       // Click on programs dropdown and select Kids
       const programDropdown = page.getByRole('combobox').nth(1);
@@ -617,7 +617,7 @@ describe('Memberships Page', () => {
     });
 
     it('filters memberships by tag - Punchcard', async () => {
-      render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+      await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
       // Click on tags dropdown
       const tagDropdown = page.getByRole('combobox').first();
@@ -638,16 +638,16 @@ describe('Memberships Page', () => {
       expect(goldCardElements.elements()).toHaveLength(0);
     });
 
-    it('renders Punchcard badges on punchcard membership cards', () => {
-      render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+    it('renders Punchcard badges on punchcard membership cards', async () => {
+      await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
       const punchcardBadges = page.getByText('Punchcard').elements();
 
       expect(punchcardBadges.length).toBeGreaterThan(0);
     });
 
-    it('renders punchcard membership card with one-time pricing', () => {
-      render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
+    it('renders punchcard membership card with one-time pricing', async () => {
+      await render(<I18nWrapper><MembershipsPage /></I18nWrapper>);
 
       // Use exact match to specifically find the punchcard price without /mo suffix
       const punchcardPrice = page.getByText('$200.00', { exact: true });

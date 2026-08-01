@@ -48,24 +48,24 @@ describe('EditWaiverContentModal', () => {
     vi.clearAllMocks();
   });
 
-  it('should render dialog with title when open', () => {
-    render(<EditWaiverContentModal {...defaultProps} />);
+  it('should render dialog with title when open', async () => {
+    await render(<EditWaiverContentModal {...defaultProps} />);
 
     const heading = page.getByText('Edit Waiver Content');
 
     expect(heading).toBeTruthy();
   });
 
-  it('should display version warning banner', () => {
-    render(<EditWaiverContentModal {...defaultProps} />);
+  it('should display version warning banner', async () => {
+    await render(<EditWaiverContentModal {...defaultProps} />);
 
     const warning = page.getByText('Editing content will create a new version. Existing signatures remain linked to their original version.');
 
     expect(warning).toBeTruthy();
   });
 
-  it('should show textarea with initial content', () => {
-    render(<EditWaiverContentModal {...defaultProps} />);
+  it('should show textarea with initial content', async () => {
+    await render(<EditWaiverContentModal {...defaultProps} />);
 
     const textarea = document.querySelector('textarea');
 
@@ -73,17 +73,17 @@ describe('EditWaiverContentModal', () => {
     expect(textarea?.value).toBe(validContent);
   });
 
-  it('should show character count', () => {
-    render(<EditWaiverContentModal {...defaultProps} />);
+  it('should show character count', async () => {
+    await render(<EditWaiverContentModal {...defaultProps} />);
 
     const charCount = page.getByText('150 / 50000');
 
     expect(charCount).toBeTruthy();
   });
 
-  it('should disable save button when content is too short', () => {
+  it('should disable save button when content is too short', async () => {
     const shortContent = 'A'.repeat(50);
-    render(<EditWaiverContentModal {...defaultProps} content={shortContent} />);
+    await render(<EditWaiverContentModal {...defaultProps} content={shortContent} />);
 
     const buttons = Array.from(document.querySelectorAll('button'));
     const saveButton = buttons.find(btn => btn.textContent?.includes('Save Changes'));
@@ -91,8 +91,8 @@ describe('EditWaiverContentModal', () => {
     expect(saveButton?.disabled).toBe(true);
   });
 
-  it('should enable save button when content is valid', () => {
-    render(<EditWaiverContentModal {...defaultProps} />);
+  it('should enable save button when content is valid', async () => {
+    await render(<EditWaiverContentModal {...defaultProps} />);
 
     const buttons = Array.from(document.querySelectorAll('button'));
     const saveButton = buttons.find(btn => btn.textContent?.includes('Save Changes'));
@@ -102,7 +102,7 @@ describe('EditWaiverContentModal', () => {
 
   it('should show validation error after blur when content is too short', async () => {
     const shortContent = 'A'.repeat(50);
-    render(<EditWaiverContentModal {...defaultProps} content={shortContent} />);
+    await render(<EditWaiverContentModal {...defaultProps} content={shortContent} />);
 
     const textarea = document.querySelector('textarea')!;
     await userEvent.click(textarea);
@@ -113,8 +113,8 @@ describe('EditWaiverContentModal', () => {
     expect(error).toBeTruthy();
   });
 
-  it('should show name input with initial value', () => {
-    render(<EditWaiverContentModal {...defaultProps} />);
+  it('should show name input with initial value', async () => {
+    await render(<EditWaiverContentModal {...defaultProps} />);
 
     const nameInput = document.querySelector('input');
 
@@ -123,7 +123,7 @@ describe('EditWaiverContentModal', () => {
   });
 
   it('should disable save button when name is empty', async () => {
-    render(<EditWaiverContentModal {...defaultProps} />);
+    await render(<EditWaiverContentModal {...defaultProps} />);
 
     const nameInput = document.querySelector('input')!;
     await userEvent.clear(nameInput);
@@ -135,7 +135,7 @@ describe('EditWaiverContentModal', () => {
   });
 
   it('should show name validation error after blur when name is empty', async () => {
-    render(<EditWaiverContentModal {...defaultProps} />);
+    await render(<EditWaiverContentModal {...defaultProps} />);
 
     const nameInput = document.querySelector('input')!;
     await userEvent.clear(nameInput);
@@ -147,7 +147,7 @@ describe('EditWaiverContentModal', () => {
   });
 
   it('should call onSave with name and content data when save is clicked', async () => {
-    render(<EditWaiverContentModal {...defaultProps} />);
+    await render(<EditWaiverContentModal {...defaultProps} />);
 
     const saveButton = page.getByRole('button', { name: 'Save Changes' });
     await userEvent.click(saveButton);
@@ -158,7 +158,7 @@ describe('EditWaiverContentModal', () => {
   });
 
   it('should call onClose when cancel is clicked', async () => {
-    render(<EditWaiverContentModal {...defaultProps} />);
+    await render(<EditWaiverContentModal {...defaultProps} />);
 
     const cancelButton = page.getByRole('button', { name: 'Cancel' });
     await userEvent.click(cancelButton);

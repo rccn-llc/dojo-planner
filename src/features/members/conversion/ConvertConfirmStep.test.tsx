@@ -24,7 +24,7 @@ const baseData: ConvertMemberWizardData = {
 
 describe('ConvertConfirmStep', () => {
   it('should render title and member name', async () => {
-    render(
+    await render(
       <I18nWrapper>
         <ConvertConfirmStep data={baseData} onNext={vi.fn()} onCancel={vi.fn()} />
       </I18nWrapper>,
@@ -35,7 +35,7 @@ describe('ConvertConfirmStep', () => {
   });
 
   it('should show current and target type badges', async () => {
-    render(
+    await render(
       <I18nWrapper>
         <ConvertConfirmStep data={baseData} onNext={vi.fn()} onCancel={vi.fn()} />
       </I18nWrapper>,
@@ -46,7 +46,7 @@ describe('ConvertConfirmStep', () => {
   });
 
   it('should show hoh-to-individual description', async () => {
-    render(
+    await render(
       <I18nWrapper>
         <ConvertConfirmStep data={baseData} onNext={vi.fn()} onCancel={vi.fn()} />
       </I18nWrapper>,
@@ -60,7 +60,7 @@ describe('ConvertConfirmStep', () => {
   it('should show needs membership notice when hasMembership is false', async () => {
     const data = { ...baseData, hasMembership: false };
 
-    render(
+    await render(
       <I18nWrapper>
         <ConvertConfirmStep data={data} onNext={vi.fn()} onCancel={vi.fn()} />
       </I18nWrapper>,
@@ -74,7 +74,7 @@ describe('ConvertConfirmStep', () => {
   it('should show needs payment notice when hasPaymentMethod is false', async () => {
     const data = { ...baseData, hasPaymentMethod: false };
 
-    render(
+    await render(
       <I18nWrapper>
         <ConvertConfirmStep data={data} onNext={vi.fn()} onCancel={vi.fn()} />
       </I18nWrapper>,
@@ -94,7 +94,7 @@ describe('ConvertConfirmStep', () => {
       currentHOHName: 'Jane Doe',
     };
 
-    render(
+    await render(
       <I18nWrapper>
         <ConvertConfirmStep data={data} onNext={vi.fn()} onCancel={vi.fn()} />
       </I18nWrapper>,
@@ -111,7 +111,7 @@ describe('ConvertConfirmStep', () => {
       targetMemberType: 'individual',
     };
 
-    render(
+    await render(
       <I18nWrapper>
         <ConvertConfirmStep data={data} onNext={vi.fn()} onCancel={vi.fn()} />
       </I18nWrapper>,
@@ -130,7 +130,7 @@ describe('ConvertConfirmStep', () => {
       targetMemberType: 'head-of-household',
     };
 
-    render(
+    await render(
       <I18nWrapper>
         <ConvertConfirmStep data={data} onNext={vi.fn()} onCancel={vi.fn()} />
       </I18nWrapper>,
@@ -144,7 +144,7 @@ describe('ConvertConfirmStep', () => {
   it('should call onNext when continue button is clicked', async () => {
     const onNext = vi.fn();
 
-    render(
+    await render(
       <I18nWrapper>
         <ConvertConfirmStep data={baseData} onNext={onNext} onCancel={vi.fn()} />
       </I18nWrapper>,
@@ -158,7 +158,7 @@ describe('ConvertConfirmStep', () => {
   it('should call onCancel when cancel button is clicked', async () => {
     const onCancel = vi.fn();
 
-    render(
+    await render(
       <I18nWrapper>
         <ConvertConfirmStep data={baseData} onNext={vi.fn()} onCancel={onCancel} />
       </I18nWrapper>,

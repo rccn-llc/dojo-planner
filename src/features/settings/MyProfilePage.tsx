@@ -21,7 +21,7 @@ export function MyProfilePage() {
         </div>
         <Card className="p-6">
           <div className="flex gap-6">
-            <Skeleton className="h-16 w-16 rounded-full" />
+            <Skeleton className="size-16 rounded-full" />
             <div className="flex flex-col gap-2">
               <Skeleton className="h-8 w-40" />
               <Skeleton className="h-5 w-24" />
@@ -60,7 +60,7 @@ export function MyProfilePage() {
       <Card className="p-6">
         {/* User Info */}
         <div className="flex gap-6">
-          <Avatar className="h-16 w-16 shrink-0">
+          <Avatar className="size-16 shrink-0">
             <AvatarImage src={photoUrl} alt={`${firstName} ${lastName}`} />
             <AvatarFallback>{userInitials}</AvatarFallback>
           </Avatar>
@@ -99,7 +99,7 @@ export function MyProfilePage() {
         {/* Edit Button - Bottom Right */}
         <div className="mt-6 flex justify-end">
           <Button variant="outline">
-            <Pencil className="mr-2 h-4 w-4" />
+            <Pencil className="mr-2 size-4" />
             {t('edit_button')}
           </Button>
         </div>

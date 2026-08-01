@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { client } from '@/libs/Orpc';
+import { clearInFlight, dedupeRequest } from './dedupeRequest';
 
 // =============================================================================
 // TYPES
@@ -104,7 +105,9 @@ export const useCouponsCache = (organizationId?: string | undefined) => {
 
       console.info('[Coupons Cache] Fetching fresh coupons data for organization:', organizationId);
 
-      const couponsData = await client.coupons.list();
+      // Several components can mount this hook in the same tick; without
+      // de-duping, each one fires its own request against the cold cache.
+      const couponsData = await dedupeRequest(`coupons:${organizationId || ''}`, async () => client.coupons.list());
       const coupons = (couponsData.coupons || []) as Coupon[];
 
       cacheStore = {
@@ -144,6 +147,7 @@ export const useCouponsCache = (organizationId?: string | undefined) => {
   const revalidate = useCallback(async () => {
     console.info('[Coupons Cache] Manual revalidation triggered');
     cacheStore = null;
+    clearInFlight();
     await fetchCoupons();
   }, [fetchCoupons]);
 
@@ -187,5 +191,6 @@ export const useCouponsCache = (organizationId?: string | undefined) => {
 export const invalidateCouponsCache = async () => {
   console.info('[Coupons Cache] Global cache invalidation triggered');
   cacheStore = null;
+  clearInFlight();
   await Promise.all(revalidateCallbacks.map(callback => callback()));
 };

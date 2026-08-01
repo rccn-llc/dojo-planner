@@ -46,27 +46,27 @@ describe('Disable2FADialog', () => {
     mockDisableTOTP.mockResolvedValue({ object: 'totp', deleted: true });
   });
 
-  it('should render the dialog title', () => {
-    render(<Disable2FADialog {...defaultProps} />);
+  it('should render the dialog title', async () => {
+    await render(<Disable2FADialog {...defaultProps} />);
 
     expect(page.getByText('Remove Two-Factor Authentication')).toBeDefined();
   });
 
-  it('should render the confirmation message', () => {
-    render(<Disable2FADialog {...defaultProps} />);
+  it('should render the confirmation message', async () => {
+    await render(<Disable2FADialog {...defaultProps} />);
 
     expect(page.getByText('Are you sure you want to remove two-factor authentication?')).toBeDefined();
   });
 
-  it('should render Cancel and Remove buttons', () => {
-    render(<Disable2FADialog {...defaultProps} />);
+  it('should render Cancel and Remove buttons', async () => {
+    await render(<Disable2FADialog {...defaultProps} />);
 
     expect(page.getByRole('button', { name: /cancel/i })).toBeDefined();
     expect(page.getByRole('button', { name: /remove 2fa/i })).toBeDefined();
   });
 
   it('should call disableTOTP and onSuccess when confirmed', async () => {
-    render(<Disable2FADialog {...defaultProps} />);
+    await render(<Disable2FADialog {...defaultProps} />);
 
     const removeButton = page.getByRole('button', { name: /remove 2fa/i });
     await userEvent.click(removeButton.element());
@@ -81,7 +81,7 @@ describe('Disable2FADialog', () => {
 
   it('should show error when disableTOTP fails', async () => {
     mockDisableTOTP.mockRejectedValueOnce(new Error('Failed'));
-    render(<Disable2FADialog {...defaultProps} />);
+    await render(<Disable2FADialog {...defaultProps} />);
 
     const removeButton = page.getByRole('button', { name: /remove 2fa/i });
     await userEvent.click(removeButton.element());
@@ -91,8 +91,8 @@ describe('Disable2FADialog', () => {
     });
   });
 
-  it('should not render when closed', () => {
-    render(<Disable2FADialog {...defaultProps} open={false} />);
+  it('should not render when closed', async () => {
+    await render(<Disable2FADialog {...defaultProps} open={false} />);
 
     expect(page.getByText('Remove Two-Factor Authentication').elements().length).toBe(0);
   });

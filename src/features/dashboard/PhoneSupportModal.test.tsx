@@ -28,46 +28,46 @@ describe('PhoneSupportModal', () => {
   });
 
   describe('Rendering', () => {
-    it('should render the modal title', () => {
-      render(<PhoneSupportModal {...defaultProps} />);
+    it('should render the modal title', async () => {
+      await render(<PhoneSupportModal {...defaultProps} />);
 
       expect(page.getByText('Call Support')).toBeInTheDocument();
     });
 
-    it('should render the modal description', () => {
-      render(<PhoneSupportModal {...defaultProps} />);
+    it('should render the modal description', async () => {
+      await render(<PhoneSupportModal {...defaultProps} />);
 
       expect(page.getByText('Speak with a support representative.')).toBeInTheDocument();
     });
 
-    it('should render the phone number label', () => {
-      render(<PhoneSupportModal {...defaultProps} />);
+    it('should render the phone number label', async () => {
+      await render(<PhoneSupportModal {...defaultProps} />);
 
       expect(page.getByText('Support Phone Number')).toBeInTheDocument();
     });
 
-    it('should render the support phone number', () => {
-      render(<PhoneSupportModal {...defaultProps} />);
+    it('should render the support phone number', async () => {
+      await render(<PhoneSupportModal {...defaultProps} />);
 
       expect(page.getByText('+1 (555) 123-4567')).toBeInTheDocument();
     });
 
-    it('should render availability message', () => {
-      render(<PhoneSupportModal {...defaultProps} />);
+    it('should render availability message', async () => {
+      await render(<PhoneSupportModal {...defaultProps} />);
 
       expect(page.getByText('Available Monday - Friday, 9am - 5pm EST')).toBeInTheDocument();
     });
 
-    it('should render call and close buttons', () => {
-      render(<PhoneSupportModal {...defaultProps} />);
+    it('should render call and close buttons', async () => {
+      await render(<PhoneSupportModal {...defaultProps} />);
 
       expect(page.getByRole('button', { name: /call now/i })).toBeInTheDocument();
       // Get the text-based Close button (first one), not the icon X button
       expect(page.getByRole('button', { name: 'Close', exact: true }).first()).toBeInTheDocument();
     });
 
-    it('should not render when isOpen is false', () => {
-      render(<PhoneSupportModal {...defaultProps} isOpen={false} />);
+    it('should not render when isOpen is false', async () => {
+      await render(<PhoneSupportModal {...defaultProps} isOpen={false} />);
 
       expect(page.getByText('Call Support').elements()).toHaveLength(0);
     });
@@ -76,7 +76,7 @@ describe('PhoneSupportModal', () => {
   describe('Interaction', () => {
     it('should call onClose when close button is clicked', async () => {
       const onClose = vi.fn();
-      render(<PhoneSupportModal {...defaultProps} onClose={onClose} />);
+      await render(<PhoneSupportModal {...defaultProps} onClose={onClose} />);
 
       // Select our Close button (first one), not the dialog's X button
       const closeButton = page.getByRole('button', { name: 'Close', exact: true }).first();
@@ -85,8 +85,8 @@ describe('PhoneSupportModal', () => {
       expect(onClose).toHaveBeenCalled();
     });
 
-    it('should have call button that links to phone number', () => {
-      render(<PhoneSupportModal {...defaultProps} />);
+    it('should have call button that links to phone number', async () => {
+      await render(<PhoneSupportModal {...defaultProps} />);
 
       const callButton = page.getByRole('button', { name: /call now/i });
 
@@ -96,8 +96,8 @@ describe('PhoneSupportModal', () => {
   });
 
   describe('Accessibility', () => {
-    it('should have phone icon visible', () => {
-      render(<PhoneSupportModal {...defaultProps} />);
+    it('should have phone icon visible', async () => {
+      await render(<PhoneSupportModal {...defaultProps} />);
 
       // The modal should contain SVG icons for phone
       const phoneIcons = page.getByRole('dialog').element().querySelectorAll('svg');

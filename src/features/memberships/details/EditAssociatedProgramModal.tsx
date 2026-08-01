@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { dedupeRequest } from '@/hooks/dedupeRequest';
 import { client } from '@/libs/Orpc';
 
 type WaiverOption = {
@@ -69,7 +70,7 @@ export function EditAssociatedProgramModal({
     const fetchWaivers = async () => {
       try {
         setWaiversLoading(true);
-        const result = await client.waivers.listActiveTemplates();
+        const result = await dedupeRequest('waivers.listActiveTemplates', async () => client.waivers.listActiveTemplates());
         const options: WaiverOption[] = (result.templates || []).map((template: { id: string; name: string; version: number }) => ({
           id: template.id,
           name: template.name,
@@ -86,7 +87,7 @@ export function EditAssociatedProgramModal({
     const fetchPrograms = async () => {
       try {
         setProgramsLoading(true);
-        const result = await client.programs.list();
+        const result = await dedupeRequest('programs.list', async () => client.programs.list());
         const options: ProgramOption[] = (result.programs || [])
           .filter(program => program.isActive)
           .map(program => ({ id: program.id, name: program.name }));

@@ -67,9 +67,12 @@ export function Setup2FADialog({ open, onOpenChange, onSuccess }: Setup2FADialog
   }, [createTOTP, t]);
 
   useEffect(() => {
-    if (open && !totp) {
-      void initTotp();
+    if (!open || totp) {
+      return;
     }
+    void (async () => {
+      await initTotp();
+    })();
   }, [open, totp, initTotp]);
 
   const handleVerify = async () => {

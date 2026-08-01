@@ -199,7 +199,7 @@ export default function ProgramsPage() {
 
         {canEdit && (
           <Button onClick={handleAddProgram}>
-            <Plus className="h-4 w-4" />
+            <Plus className="size-4" />
             <span className="ml-1 hidden sm:inline">{t('add_new_program_button')}</span>
           </Button>
         )}

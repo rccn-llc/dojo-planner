@@ -14,11 +14,14 @@ vi.mock('next/navigation', () => ({
 }));
 
 const listTemplatesMock = vi.fn();
+const getDashboardStatsMock = vi.fn(() =>
+  Promise.resolve({ signedThisMonth: 0, membershipsUsing: 0 }));
 
 vi.mock('@/libs/Orpc', () => ({
   client: {
     waivers: {
       listTemplates: () => listTemplatesMock(),
+      getDashboardStats: () => getDashboardStatsMock(),
       // The page also calls listMergeFields when opening the merge fields sheet —
       // not exercised in these tests but the import must exist.
       listMergeFields: () => Promise.resolve({ mergeFields: [] }),
@@ -65,7 +68,7 @@ describe('WaiversPage status filter', () => {
   });
 
   it('renders all waivers by default', async () => {
-    render(<I18nWrapper><WaiversPage /></I18nWrapper>);
+    await render(<I18nWrapper><WaiversPage /></I18nWrapper>);
 
     await expect.poll(() => page.getByText('Standard Adult Waiver').elements().length).toBeGreaterThan(0);
     expect(page.getByText('Kids Program Waiver').first()).toBeInTheDocument();
@@ -73,7 +76,7 @@ describe('WaiversPage status filter', () => {
   });
 
   it('renders the status filter Select with all three options', async () => {
-    render(<I18nWrapper><WaiversPage /></I18nWrapper>);
+    await render(<I18nWrapper><WaiversPage /></I18nWrapper>);
 
     await expect.poll(() => page.getByText('Standard Adult Waiver').elements().length).toBeGreaterThan(0);
 
@@ -83,7 +86,7 @@ describe('WaiversPage status filter', () => {
   });
 
   it('filters to only active waivers when status=active', async () => {
-    render(<I18nWrapper><WaiversPage /></I18nWrapper>);
+    await render(<I18nWrapper><WaiversPage /></I18nWrapper>);
 
     await expect.poll(() => page.getByText('Standard Adult Waiver').elements().length).toBeGreaterThan(0);
 
@@ -96,7 +99,7 @@ describe('WaiversPage status filter', () => {
   });
 
   it('filters to only inactive waivers when status=inactive', async () => {
-    render(<I18nWrapper><WaiversPage /></I18nWrapper>);
+    await render(<I18nWrapper><WaiversPage /></I18nWrapper>);
 
     await expect.poll(() => page.getByText('Standard Adult Waiver').elements().length).toBeGreaterThan(0);
 
@@ -109,7 +112,7 @@ describe('WaiversPage status filter', () => {
   });
 
   it('combines search and status filters with AND logic', async () => {
-    render(<I18nWrapper><WaiversPage /></I18nWrapper>);
+    await render(<I18nWrapper><WaiversPage /></I18nWrapper>);
 
     await expect.poll(() => page.getByText('Standard Adult Waiver').elements().length).toBeGreaterThan(0);
 
@@ -127,7 +130,7 @@ describe('WaiversPage status filter', () => {
   });
 
   it('shows the no-results message when filters exclude everything', async () => {
-    render(<I18nWrapper><WaiversPage /></I18nWrapper>);
+    await render(<I18nWrapper><WaiversPage /></I18nWrapper>);
 
     await expect.poll(() => page.getByText('Standard Adult Waiver').elements().length).toBeGreaterThan(0);
 
@@ -154,7 +157,7 @@ describe('WaiversPage status filter visibility', () => {
       ],
     });
 
-    render(<I18nWrapper><WaiversPage /></I18nWrapper>);
+    await render(<I18nWrapper><WaiversPage /></I18nWrapper>);
 
     await expect.poll(() => page.getByText('Standard Adult Waiver').elements().length).toBeGreaterThan(0);
 
@@ -168,7 +171,7 @@ describe('WaiversPage status filter visibility', () => {
       ],
     });
 
-    render(<I18nWrapper><WaiversPage /></I18nWrapper>);
+    await render(<I18nWrapper><WaiversPage /></I18nWrapper>);
 
     await expect.poll(() => page.getByText('Legacy Waiver').elements().length).toBeGreaterThan(0);
 
@@ -178,7 +181,7 @@ describe('WaiversPage status filter visibility', () => {
   it('hides the status filter when there are no waivers at all', async () => {
     listTemplatesMock.mockResolvedValue({ templates: [] });
 
-    render(<I18nWrapper><WaiversPage /></I18nWrapper>);
+    await render(<I18nWrapper><WaiversPage /></I18nWrapper>);
 
     await expect.poll(() => page.getByText('No waivers found').elements().length).toBeGreaterThan(0);
 
@@ -193,10 +196,53 @@ describe('WaiversPage status filter visibility', () => {
       ],
     });
 
-    render(<I18nWrapper><WaiversPage /></I18nWrapper>);
+    await render(<I18nWrapper><WaiversPage /></I18nWrapper>);
 
     await expect.poll(() => page.getByText('Active Waiver').elements().length).toBeGreaterThan(0);
 
     expect(page.getByLabelText('Status')).toBeInTheDocument();
+  });
+});
+
+// React double-invokes effects in development (StrictMode), which showed up as
+// two `listTemplates` and two `getDashboardStats` requests on every page load.
+// Both fetches are de-duped so simultaneous mounts share one request.
+describe('WaiversPage request de-duplication', () => {
+  beforeEach(() => {
+    listTemplatesMock.mockReset();
+    getDashboardStatsMock.mockReset();
+    getDashboardStatsMock.mockResolvedValue({ signedThisMonth: 0, membershipsUsing: 0 });
+  });
+
+  it('issues one request per endpoint when mounted twice concurrently', async () => {
+    // Hold both endpoints pending so the second mount lands while the first
+    // request is still in flight — the situation StrictMode's double-invoke
+    // creates. A settled request releases its slot, which is why both must
+    // stay open for this assertion to be meaningful.
+    let releaseTemplates: ((value: { templates: WaiverTemplateWithStats[] }) => void) | undefined;
+    let releaseStats: ((value: { signedThisMonth: number; membershipsUsing: number }) => void) | undefined;
+
+    listTemplatesMock.mockReturnValue(new Promise((resolve) => {
+      releaseTemplates = resolve;
+    }));
+    getDashboardStatsMock.mockReturnValue(new Promise((resolve) => {
+      releaseStats = resolve;
+    }));
+
+    const first = await render(<I18nWrapper><WaiversPage /></I18nWrapper>);
+    const second = await render(<I18nWrapper><WaiversPage /></I18nWrapper>);
+
+    expect(listTemplatesMock).toHaveBeenCalledTimes(1);
+    expect(getDashboardStatsMock).toHaveBeenCalledTimes(1);
+
+    releaseTemplates?.({ templates: [makeWaiver({ name: 'Shared Waiver' })] });
+    releaseStats?.({ signedThisMonth: 0, membershipsUsing: 0 });
+
+    await expect
+      .poll(() => page.getByText('Shared Waiver').elements().length)
+      .toBeGreaterThan(0);
+
+    await first.unmount();
+    await second.unmount();
   });
 });

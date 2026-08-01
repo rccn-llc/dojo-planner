@@ -40,21 +40,21 @@ describe('MyProfilePage', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the page title', () => {
-    render(<MyProfilePage />);
+  it('should render the page title', async () => {
+    await render(<MyProfilePage />);
 
     expect(page.getByText('My Profile')).toBeDefined();
   });
 
-  it('should display the user information from Clerk', () => {
-    render(<MyProfilePage />);
+  it('should display the user information from Clerk', async () => {
+    await render(<MyProfilePage />);
 
     expect(page.getByText('John Doe')).toBeDefined();
     expect(page.getByText('Account Owner')).toBeDefined();
   });
 
-  it('should display user details in the grid', () => {
-    render(<MyProfilePage />);
+  it('should display user details in the grid', async () => {
+    await render(<MyProfilePage />);
 
     expect(page.getByText('John')).toBeDefined();
     expect(page.getByText('Doe')).toBeDefined();
@@ -62,15 +62,15 @@ describe('MyProfilePage', () => {
     expect(page.getByText('john.doe@example.com')).toBeDefined();
   });
 
-  it('should render the edit button', () => {
-    render(<MyProfilePage />);
+  it('should render the edit button', async () => {
+    await render(<MyProfilePage />);
     const editButton = page.getByRole('button', { name: /^edit$/i });
 
     expect(editButton).toBeDefined();
   });
 
-  it('should render all label fields', () => {
-    render(<MyProfilePage />);
+  it('should render all label fields', async () => {
+    await render(<MyProfilePage />);
 
     expect(page.getByText('First Name')).toBeDefined();
     expect(page.getByText('Last Name')).toBeDefined();
@@ -78,8 +78,8 @@ describe('MyProfilePage', () => {
     expect(page.getByText('Email')).toBeDefined();
   });
 
-  it('should render avatar with user initials as fallback', () => {
-    render(<MyProfilePage />);
+  it('should render avatar with user initials as fallback', async () => {
+    await render(<MyProfilePage />);
 
     // The avatar fallback should contain initials JD
     expect(page.getByText('JD')).toBeDefined();

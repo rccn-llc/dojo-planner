@@ -109,7 +109,7 @@ export function StaffPageClient({ staffMembers, currentUserRole, currentUserId }
         onRemoveStaff={handleRemoveStaff}
         headerActions={(
           <Button data-testid="invite-staff-button" onClick={handleOpenInviteModal}>
-            <Plus className="mr-0.5 h-4 w-4" />
+            <Plus className="mr-0.5 size-4" />
             {t('invite_staff_button')}
           </Button>
         )}

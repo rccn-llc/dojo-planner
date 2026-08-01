@@ -43,30 +43,30 @@ describe('EditContactInfoModal', () => {
   };
 
   describe('Render method', () => {
-    it('should render the modal with title', () => {
-      render(<I18nWrapper><EditContactInfoModal {...mockProps} /></I18nWrapper>);
+    it('should render the modal with title', async () => {
+      await render(<I18nWrapper><EditContactInfoModal {...mockProps} /></I18nWrapper>);
 
       expect(page.getByRole('heading', { name: 'Edit Contact Information' })).toBeInTheDocument();
     });
 
-    it('should render email input with initial value', () => {
-      render(<I18nWrapper><EditContactInfoModal {...mockProps} /></I18nWrapper>);
+    it('should render email input with initial value', async () => {
+      await render(<I18nWrapper><EditContactInfoModal {...mockProps} /></I18nWrapper>);
 
       const emailInput = page.getByPlaceholder('you@example.com');
 
       expect(emailInput).toBeInTheDocument();
     });
 
-    it('should render phone input with initial value', () => {
-      render(<I18nWrapper><EditContactInfoModal {...mockProps} /></I18nWrapper>);
+    it('should render phone input with initial value', async () => {
+      await render(<I18nWrapper><EditContactInfoModal {...mockProps} /></I18nWrapper>);
 
       const phoneInput = page.getByPlaceholder('(555) 123-4567');
 
       expect(phoneInput).toBeInTheDocument();
     });
 
-    it('should render address fields', () => {
-      render(<I18nWrapper><EditContactInfoModal {...mockProps} /></I18nWrapper>);
+    it('should render address fields', async () => {
+      await render(<I18nWrapper><EditContactInfoModal {...mockProps} /></I18nWrapper>);
 
       expect(page.getByRole('heading', { name: 'Address' })).toBeInTheDocument();
       expect(page.getByPlaceholder('123 Main St')).toBeInTheDocument();
@@ -74,8 +74,8 @@ describe('EditContactInfoModal', () => {
       expect(page.getByPlaceholder('San Francisco')).toBeInTheDocument();
     });
 
-    it('should render action buttons', () => {
-      render(<I18nWrapper><EditContactInfoModal {...mockProps} /></I18nWrapper>);
+    it('should render action buttons', async () => {
+      await render(<I18nWrapper><EditContactInfoModal {...mockProps} /></I18nWrapper>);
 
       expect(page.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
       expect(page.getByRole('button', { name: 'Save Changes' })).toBeInTheDocument();
@@ -84,7 +84,7 @@ describe('EditContactInfoModal', () => {
 
   describe('Validation', () => {
     it('should show error for invalid email', async () => {
-      render(<I18nWrapper><EditContactInfoModal {...mockProps} /></I18nWrapper>);
+      await render(<I18nWrapper><EditContactInfoModal {...mockProps} /></I18nWrapper>);
 
       const emailInput = page.getByPlaceholder('you@example.com');
       await emailInput.fill('invalid-email');
@@ -95,7 +95,7 @@ describe('EditContactInfoModal', () => {
     });
 
     it('should show error for empty phone', async () => {
-      render(<I18nWrapper><EditContactInfoModal {...mockProps} /></I18nWrapper>);
+      await render(<I18nWrapper><EditContactInfoModal {...mockProps} /></I18nWrapper>);
 
       const phoneInput = page.getByPlaceholder('(555) 123-4567');
       await phoneInput.fill('');
@@ -108,7 +108,7 @@ describe('EditContactInfoModal', () => {
 
   describe('Actions', () => {
     it('should call onClose when cancel button clicked', async () => {
-      render(<I18nWrapper><EditContactInfoModal {...mockProps} /></I18nWrapper>);
+      await render(<I18nWrapper><EditContactInfoModal {...mockProps} /></I18nWrapper>);
 
       const cancelButton = page.getByRole('button', { name: 'Cancel' });
       await cancelButton.click();
@@ -117,7 +117,7 @@ describe('EditContactInfoModal', () => {
     });
 
     it('should disable submit button when form is invalid', async () => {
-      render(<I18nWrapper><EditContactInfoModal {...mockProps} /></I18nWrapper>);
+      await render(<I18nWrapper><EditContactInfoModal {...mockProps} /></I18nWrapper>);
 
       const emailInput = page.getByPlaceholder('you@example.com');
       await emailInput.fill('');
@@ -129,24 +129,24 @@ describe('EditContactInfoModal', () => {
   });
 
   describe('Empty state', () => {
-    it('should render without initial address', () => {
+    it('should render without initial address', async () => {
       const propsWithoutAddress = {
         ...mockProps,
         initialAddress: undefined,
       };
-      render(<I18nWrapper><EditContactInfoModal {...propsWithoutAddress} /></I18nWrapper>);
+      await render(<I18nWrapper><EditContactInfoModal {...propsWithoutAddress} /></I18nWrapper>);
 
       expect(page.getByRole('heading', { name: 'Edit Contact Information' })).toBeInTheDocument();
     });
   });
 
   describe('Date of Birth', () => {
-    it('renders the DOB input prefilled with the initial value (MM/DD/YYYY)', () => {
+    it('renders the DOB input prefilled with the initial value (MM/DD/YYYY)', async () => {
       const props = {
         ...mockProps,
         initialDateOfBirth: new Date(1990, 0, 15),
       };
-      render(<I18nWrapper><EditContactInfoModal {...props} /></I18nWrapper>);
+      await render(<I18nWrapper><EditContactInfoModal {...props} /></I18nWrapper>);
 
       const dobInput = document.querySelector('#edit-contact-dob') as HTMLInputElement;
 
@@ -154,12 +154,12 @@ describe('EditContactInfoModal', () => {
       expect(dobInput.value).toBe('01/15/1990');
     });
 
-    it('renders the DOB input empty when no initial value is provided', () => {
+    it('renders the DOB input empty when no initial value is provided', async () => {
       const props = {
         ...mockProps,
         initialDateOfBirth: undefined,
       };
-      render(<I18nWrapper><EditContactInfoModal {...props} /></I18nWrapper>);
+      await render(<I18nWrapper><EditContactInfoModal {...props} /></I18nWrapper>);
 
       const dobInput = document.querySelector('#edit-contact-dob') as HTMLInputElement;
 
@@ -177,7 +177,7 @@ describe('EditContactInfoModal', () => {
         ...mockProps,
         initialDateOfBirth: new Date(1990, 0, 15),
       };
-      render(<I18nWrapper><EditContactInfoModal {...props} /></I18nWrapper>);
+      await render(<I18nWrapper><EditContactInfoModal {...props} /></I18nWrapper>);
 
       const submitButton = page.getByRole('button', { name: 'Save Changes' });
       await userEvent.click(submitButton);
@@ -197,7 +197,7 @@ describe('EditContactInfoModal', () => {
         ...mockProps,
         initialDateOfBirth: undefined,
       };
-      render(<I18nWrapper><EditContactInfoModal {...props} /></I18nWrapper>);
+      await render(<I18nWrapper><EditContactInfoModal {...props} /></I18nWrapper>);
 
       const submitButton = page.getByRole('button', { name: 'Save Changes' });
       await userEvent.click(submitButton);
@@ -210,12 +210,12 @@ describe('EditContactInfoModal', () => {
   });
 
   describe('Modal visibility', () => {
-    it('should not render when isOpen is false', () => {
+    it('should not render when isOpen is false', async () => {
       const closedProps = {
         ...mockProps,
         isOpen: false,
       };
-      render(<I18nWrapper><EditContactInfoModal {...closedProps} /></I18nWrapper>);
+      await render(<I18nWrapper><EditContactInfoModal {...closedProps} /></I18nWrapper>);
 
       expect(page.getByRole('heading', { name: 'Edit Contact Information' })).not.toBeInTheDocument();
     });

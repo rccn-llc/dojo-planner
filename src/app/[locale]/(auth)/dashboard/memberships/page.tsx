@@ -295,7 +295,7 @@ export default function MembershipsPage() {
           {/* Add New Membership Button */}
           {canEdit && (
             <Button onClick={() => setIsAddMembershipModalOpen(true)}>
-              <Plus className="h-4 w-4" />
+              <Plus className="size-4" />
               <span className="ml-1 hidden sm:inline">{t('add_new_membership_button')}</span>
             </Button>
           )}

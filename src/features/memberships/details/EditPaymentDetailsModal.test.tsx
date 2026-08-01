@@ -77,96 +77,96 @@ describe('EditPaymentDetailsModal', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the modal with title when open', () => {
-    render(<EditPaymentDetailsModal {...defaultProps} />);
+  it('should render the modal with title when open', async () => {
+    await render(<EditPaymentDetailsModal {...defaultProps} />);
 
     const heading = page.getByText('Edit Payments and Fees');
 
     expect(heading).toBeTruthy();
   });
 
-  it('should not render when isOpen is false', () => {
-    render(<EditPaymentDetailsModal {...defaultProps} isOpen={false} />);
+  it('should not render when isOpen is false', async () => {
+    await render(<EditPaymentDetailsModal {...defaultProps} isOpen={false} />);
 
     const heading = document.body.textContent?.includes('Edit Payments and Fees');
 
     expect(heading).toBe(false);
   });
 
-  it('should render sign-up fee for standard membership', () => {
-    render(<EditPaymentDetailsModal {...defaultProps} />);
+  it('should render sign-up fee for standard membership', async () => {
+    await render(<EditPaymentDetailsModal {...defaultProps} />);
 
     const signUpFeeLabel = page.getByText('Sign-up Fee');
 
     expect(signUpFeeLabel).toBeTruthy();
   });
 
-  it('should not render sign-up fee for trial membership', () => {
-    render(<EditPaymentDetailsModal {...defaultProps} isTrial={true} />);
+  it('should not render sign-up fee for trial membership', async () => {
+    await render(<EditPaymentDetailsModal {...defaultProps} isTrial={true} />);
 
     const signUpFeeLabel = document.body.textContent?.includes('Sign-up Fee');
 
     expect(signUpFeeLabel).toBe(false);
   });
 
-  it('should render monthly fee label by default', () => {
-    render(<EditPaymentDetailsModal {...defaultProps} />);
+  it('should render monthly fee label by default', async () => {
+    await render(<EditPaymentDetailsModal {...defaultProps} />);
 
     const monthlyFeeLabel = page.getByText('Monthly Fee');
 
     expect(monthlyFeeLabel).toBeTruthy();
   });
 
-  it('should render weekly fee label when frequency is weekly', () => {
-    render(<EditPaymentDetailsModal {...defaultProps} paymentFrequency="weekly" />);
+  it('should render weekly fee label when frequency is weekly', async () => {
+    await render(<EditPaymentDetailsModal {...defaultProps} paymentFrequency="weekly" />);
 
     const weeklyFeeLabel = page.getByText('Weekly Fee');
 
     expect(weeklyFeeLabel).toBeTruthy();
   });
 
-  it('should render annual fee label when frequency is annually', () => {
-    render(<EditPaymentDetailsModal {...defaultProps} paymentFrequency="annually" />);
+  it('should render annual fee label when frequency is annually', async () => {
+    await render(<EditPaymentDetailsModal {...defaultProps} paymentFrequency="annually" />);
 
     const annualFeeLabel = page.getByText('Annual Fee');
 
     expect(annualFeeLabel).toBeTruthy();
   });
 
-  it('should render payment frequency label', () => {
-    render(<EditPaymentDetailsModal {...defaultProps} />);
+  it('should render payment frequency label', async () => {
+    await render(<EditPaymentDetailsModal {...defaultProps} />);
 
     const frequencyLabel = page.getByText('Payment Frequency');
 
     expect(frequencyLabel).toBeTruthy();
   });
 
-  it('should render pro-rate toggle for standard membership', () => {
-    render(<EditPaymentDetailsModal {...defaultProps} />);
+  it('should render pro-rate toggle for standard membership', async () => {
+    await render(<EditPaymentDetailsModal {...defaultProps} />);
 
     const prorateLabel = page.getByText('Pro-rate First Payment');
 
     expect(prorateLabel).toBeTruthy();
   });
 
-  it('should not render pro-rate toggle for trial membership', () => {
-    render(<EditPaymentDetailsModal {...defaultProps} isTrial={true} />);
+  it('should not render pro-rate toggle for trial membership', async () => {
+    await render(<EditPaymentDetailsModal {...defaultProps} isTrial={true} />);
 
     const prorateLabel = document.body.textContent?.includes('Pro-rate First Payment');
 
     expect(prorateLabel).toBe(false);
   });
 
-  it('should render Cancel button', () => {
-    render(<EditPaymentDetailsModal {...defaultProps} />);
+  it('should render Cancel button', async () => {
+    await render(<EditPaymentDetailsModal {...defaultProps} />);
 
     const cancelButton = page.getByRole('button', { name: 'Cancel' });
 
     expect(cancelButton).toBeTruthy();
   });
 
-  it('should render Save Changes button', () => {
-    render(<EditPaymentDetailsModal {...defaultProps} />);
+  it('should render Save Changes button', async () => {
+    await render(<EditPaymentDetailsModal {...defaultProps} />);
 
     const saveButton = page.getByText('Save Changes');
 
@@ -174,7 +174,7 @@ describe('EditPaymentDetailsModal', () => {
   });
 
   it('should call onClose when Cancel button is clicked', async () => {
-    render(<EditPaymentDetailsModal {...defaultProps} />);
+    await render(<EditPaymentDetailsModal {...defaultProps} />);
 
     // Scope to button role — 'Cancel' string also appears in 'Cancellation Fee' label.
     const cancelButton = page.getByRole('button', { name: 'Cancel' });
@@ -183,8 +183,8 @@ describe('EditPaymentDetailsModal', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it('should have Save button enabled for valid form', () => {
-    render(<EditPaymentDetailsModal {...defaultProps} />);
+  it('should have Save button enabled for valid form', async () => {
+    await render(<EditPaymentDetailsModal {...defaultProps} />);
 
     const buttons = Array.from(document.querySelectorAll('button'));
     const saveButton = buttons.find(btn => btn.textContent?.includes('Save Changes'));
@@ -192,8 +192,8 @@ describe('EditPaymentDetailsModal', () => {
     expect(saveButton?.disabled).toBe(false);
   });
 
-  it('should have Save button enabled for trial membership even without fee', () => {
-    render(
+  it('should have Save button enabled for trial membership even without fee', async () => {
+    await render(
       <EditPaymentDetailsModal
         {...defaultProps}
         isTrial={true}
@@ -207,24 +207,24 @@ describe('EditPaymentDetailsModal', () => {
     expect(saveButton?.disabled).toBe(false);
   });
 
-  it('should render charge sign-up fee dropdown for standard membership', () => {
-    render(<EditPaymentDetailsModal {...defaultProps} />);
+  it('should render charge sign-up fee dropdown for standard membership', async () => {
+    await render(<EditPaymentDetailsModal {...defaultProps} />);
 
     const chargeLabel = page.getByText('Charge Sign-up Fee');
 
     expect(chargeLabel).toBeTruthy();
   });
 
-  it('should render prorate description', () => {
-    render(<EditPaymentDetailsModal {...defaultProps} />);
+  it('should render prorate description', async () => {
+    await render(<EditPaymentDetailsModal {...defaultProps} />);
 
     const prorateDescription = page.getByText('Enable proration for partial months');
 
     expect(prorateDescription).toBeTruthy();
   });
 
-  it('should render dollar sign prefix for fee inputs', () => {
-    render(<EditPaymentDetailsModal {...defaultProps} />);
+  it('should render dollar sign prefix for fee inputs', async () => {
+    await render(<EditPaymentDetailsModal {...defaultProps} />);
 
     const dollarSigns = Array.from(document.querySelectorAll('span')).filter(s => s.textContent === '$');
 

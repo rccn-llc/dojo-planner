@@ -24,7 +24,7 @@ export const FamilyMemberSuccessStep = ({
     <div className="space-y-6 text-center">
       <div className="flex justify-center">
         <div className="rounded-full bg-green-100 p-4 dark:bg-green-950">
-          <svg className="h-12 w-12 text-green-600 dark:text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="size-12 text-green-600 dark:text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
         </div>
@@ -54,7 +54,7 @@ export const FamilyMemberSuccessStep = ({
 
       <div className="flex gap-3 pt-6">
         <Button variant="outline" onClick={onAddAnother} className="flex-1">
-          <UserPlus className="mr-2 h-4 w-4" />
+          <UserPlus className="mr-2 size-4" />
           {t('add_another_button')}
         </Button>
         <Button onClick={onDone} className="flex-1">

@@ -115,7 +115,7 @@ export function ImageUploadField({
                       alt={t('preview_alt')}
                       width={width}
                       height={height}
-                      className="h-full w-full object-cover"
+                      className="size-full object-cover"
                       unoptimized
                     />
                   </div>
@@ -126,7 +126,7 @@ export function ImageUploadField({
                       size="sm"
                       onClick={handleRemove}
                     >
-                      <Trash2 className="mr-1 h-4 w-4" />
+                      <Trash2 className="mr-1 size-4" />
                       {t('remove_button')}
                     </Button>
                     {compressionInfo && (
@@ -151,7 +151,7 @@ export function ImageUploadField({
                 onDragOver={e => e.preventDefault()}
                 className="flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-border bg-muted/50 p-6 transition-colors hover:border-primary/50 hover:bg-muted"
               >
-                <ImageIcon className="h-8 w-8 text-muted-foreground" />
+                <ImageIcon className="size-8 text-muted-foreground" />
                 <div className="text-center">
                   <p className="text-sm font-medium text-foreground">{t('drop_text')}</p>
                   <p className="text-xs text-muted-foreground">{t('file_types')}</p>
@@ -166,7 +166,7 @@ export function ImageUploadField({
                 />
                 <Button type="button" variant="outline" size="sm" asChild>
                   <label htmlFor={inputId} className="cursor-pointer">
-                    <Upload className="mr-1 h-4 w-4" />
+                    <Upload className="mr-1 size-4" />
                     {t('choose_file_button')}
                   </label>
                 </Button>

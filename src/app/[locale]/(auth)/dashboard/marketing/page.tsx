@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Pagination } from '@/components/ui/pagination/Pagination';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AddEditCouponModal, CouponCard, CouponFilterBar, DeleteCouponAlertDialog, transformCouponsToUi, transformUiCouponFormToDb } from '@/features/marketing';
+import { dedupeRequest } from '@/hooks/dedupeRequest';
 import { invalidateCouponsCache, useCouponsCache } from '@/hooks/useCouponsCache';
 import { client } from '@/libs/Orpc';
 import { StatsCards } from '@/templates/StatsCards';
@@ -123,7 +124,7 @@ export default function MarketingPage() {
       return;
     }
     let cancelled = false;
-    client.coupons.getTotalSavings()
+    dedupeRequest('coupons.getTotalSavings', async () => client.coupons.getTotalSavings())
       .then((result) => {
         if (!cancelled) {
           setTotalSavings(result.totalSavings);
@@ -378,7 +379,7 @@ export default function MarketingPage() {
             />
           </div>
           <Button onClick={handleOpenAddModal}>
-            <Plus className="mr-2 h-4 w-4" />
+            <Plus className="mr-2 size-4" />
             {t('add_new_coupon_button')}
           </Button>
         </div>
@@ -398,8 +399,8 @@ export default function MarketingPage() {
                       {t('table_code')}
                       {sortField === 'code' && (
                         sortDirection === 'asc'
-                          ? <ArrowDownAZ className="h-4 w-4" />
-                          : <ArrowUpZA className="h-4 w-4" />
+                          ? <ArrowDownAZ className="size-4" />
+                          : <ArrowUpZA className="size-4" />
                       )}
                     </button>
                   </th>
@@ -412,8 +413,8 @@ export default function MarketingPage() {
                       {t('table_type')}
                       {sortField === 'type' && (
                         sortDirection === 'asc'
-                          ? <ArrowDownAZ className="h-4 w-4" />
-                          : <ArrowUpZA className="h-4 w-4" />
+                          ? <ArrowDownAZ className="size-4" />
+                          : <ArrowUpZA className="size-4" />
                       )}
                     </button>
                   </th>
@@ -426,8 +427,8 @@ export default function MarketingPage() {
                       {t('table_amount')}
                       {sortField === 'amount' && (
                         sortDirection === 'asc'
-                          ? <ArrowDownAZ className="h-4 w-4" />
-                          : <ArrowUpZA className="h-4 w-4" />
+                          ? <ArrowDownAZ className="size-4" />
+                          : <ArrowUpZA className="size-4" />
                       )}
                     </button>
                   </th>
@@ -440,8 +441,8 @@ export default function MarketingPage() {
                       {t('table_apply_to')}
                       {sortField === 'applyTo' && (
                         sortDirection === 'asc'
-                          ? <ArrowDownAZ className="h-4 w-4" />
-                          : <ArrowUpZA className="h-4 w-4" />
+                          ? <ArrowDownAZ className="size-4" />
+                          : <ArrowUpZA className="size-4" />
                       )}
                     </button>
                   </th>
@@ -454,8 +455,8 @@ export default function MarketingPage() {
                       {t('table_usage_limit')}
                       {sortField === 'usage' && (
                         sortDirection === 'asc'
-                          ? <ArrowDownAZ className="h-4 w-4" />
-                          : <ArrowUpZA className="h-4 w-4" />
+                          ? <ArrowDownAZ className="size-4" />
+                          : <ArrowUpZA className="size-4" />
                       )}
                     </button>
                   </th>
@@ -468,8 +469,8 @@ export default function MarketingPage() {
                       {t('table_effective')}
                       {sortField === 'endDateTime' && (
                         sortDirection === 'asc'
-                          ? <ArrowDownAZ className="h-4 w-4" />
-                          : <ArrowUpZA className="h-4 w-4" />
+                          ? <ArrowDownAZ className="size-4" />
+                          : <ArrowUpZA className="size-4" />
                       )}
                     </button>
                   </th>
@@ -482,8 +483,8 @@ export default function MarketingPage() {
                       {t('table_status')}
                       {sortField === 'status' && (
                         sortDirection === 'asc'
-                          ? <ArrowDownAZ className="h-4 w-4" />
-                          : <ArrowUpZA className="h-4 w-4" />
+                          ? <ArrowDownAZ className="size-4" />
+                          : <ArrowUpZA className="size-4" />
                       )}
                     </button>
                   </th>
@@ -540,7 +541,7 @@ export default function MarketingPage() {
                           aria-label={`Edit ${coupon.code}`}
                           title={`Edit ${coupon.code}`}
                         >
-                          <Edit className="h-4 w-4" />
+                          <Edit className="size-4" />
                         </Button>
                         {canDeleteCoupon(coupon.usage) && (
                           <Button
@@ -550,7 +551,7 @@ export default function MarketingPage() {
                             aria-label={`Delete ${coupon.code}`}
                             title={`Delete ${coupon.code}`}
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="size-4" />
                           </Button>
                         )}
                       </div>

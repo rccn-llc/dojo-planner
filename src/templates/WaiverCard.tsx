@@ -152,7 +152,7 @@ export function WaiverCard({
               aria-label={t('edit_button_aria_label')}
               title={t('edit_button_aria_label')}
             >
-              <Edit className="h-4 w-4" />
+              <Edit className="size-4" />
             </Button>
           )}
         </div>

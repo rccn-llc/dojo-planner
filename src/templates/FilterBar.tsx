@@ -105,7 +105,7 @@ export function FilterBar({
       <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
         {/* Search Input */}
         <div className="relative flex-1 sm:max-w-xs sm:flex-initial">
-          <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="text"
             placeholder={searchConfig.placeholder}

@@ -57,48 +57,48 @@ describe('AddWaiverModal', () => {
     vi.clearAllMocks();
   });
 
-  it('should render dialog with correct title when open', () => {
-    render(<AddWaiverModal {...defaultProps} />);
+  it('should render dialog with correct title when open', async () => {
+    await render(<AddWaiverModal {...defaultProps} />);
 
     const heading = page.getByText('Add Waiver');
 
     expect(heading).toBeTruthy();
   });
 
-  it('should show name input with placeholder', () => {
-    render(<AddWaiverModal {...defaultProps} />);
+  it('should show name input with placeholder', async () => {
+    await render(<AddWaiverModal {...defaultProps} />);
 
     const nameInput = page.getByPlaceholder('Enter waiver name...');
 
     expect(nameInput).toBeTruthy();
   });
 
-  it('should show content textarea with placeholder', () => {
-    render(<AddWaiverModal {...defaultProps} />);
+  it('should show content textarea with placeholder', async () => {
+    await render(<AddWaiverModal {...defaultProps} />);
 
     const contentTextarea = page.getByPlaceholder('Enter waiver content...');
 
     expect(contentTextarea).toBeTruthy();
   });
 
-  it('should show description textarea', () => {
-    render(<AddWaiverModal {...defaultProps} />);
+  it('should show description textarea', async () => {
+    await render(<AddWaiverModal {...defaultProps} />);
 
     const descriptionTextarea = page.getByPlaceholder('Enter a short description...');
 
     expect(descriptionTextarea).toBeTruthy();
   });
 
-  it('should show status, default, and guardian toggle switches', () => {
-    render(<AddWaiverModal {...defaultProps} />);
+  it('should show status, default, and guardian toggle switches', async () => {
+    await render(<AddWaiverModal {...defaultProps} />);
 
     const switches = document.querySelectorAll('[role="switch"]');
 
     expect(switches).toHaveLength(3);
   });
 
-  it('should show guardian age threshold input when requiresGuardian is checked by default', () => {
-    render(<AddWaiverModal {...defaultProps} />);
+  it('should show guardian age threshold input when requiresGuardian is checked by default', async () => {
+    await render(<AddWaiverModal {...defaultProps} />);
 
     const ageLabel = page.getByText('Guardian Age Threshold');
     const ageInput = document.querySelector('input[type="number"]');
@@ -109,7 +109,7 @@ describe('AddWaiverModal', () => {
   });
 
   it('should show name validation error when name is empty and blurred', async () => {
-    render(<AddWaiverModal {...defaultProps} />);
+    await render(<AddWaiverModal {...defaultProps} />);
 
     const nameInput = page.getByPlaceholder('Enter waiver name...');
     await userEvent.click(nameInput);
@@ -121,7 +121,7 @@ describe('AddWaiverModal', () => {
   });
 
   it('should show content validation error when content is too short and blurred', async () => {
-    render(<AddWaiverModal {...defaultProps} />);
+    await render(<AddWaiverModal {...defaultProps} />);
 
     const contentTextarea = page.getByPlaceholder('Enter waiver content...');
     await userEvent.click(contentTextarea);
@@ -133,8 +133,8 @@ describe('AddWaiverModal', () => {
     expect(error).toBeTruthy();
   });
 
-  it('should disable save button when form is invalid', () => {
-    render(<AddWaiverModal {...defaultProps} />);
+  it('should disable save button when form is invalid', async () => {
+    await render(<AddWaiverModal {...defaultProps} />);
 
     const buttons = Array.from(document.querySelectorAll('button'));
     const saveButton = buttons.find(btn => btn.textContent?.includes('Save'));
@@ -143,7 +143,7 @@ describe('AddWaiverModal', () => {
   });
 
   it('should enable save button when form is valid', async () => {
-    render(<AddWaiverModal {...defaultProps} />);
+    await render(<AddWaiverModal {...defaultProps} />);
 
     const nameInput = page.getByPlaceholder('Enter waiver name...');
     await userEvent.type(nameInput, 'Test Waiver');
@@ -159,7 +159,7 @@ describe('AddWaiverModal', () => {
   });
 
   it('should call onSave with correct form data when submitted', async () => {
-    render(<AddWaiverModal {...defaultProps} />);
+    await render(<AddWaiverModal {...defaultProps} />);
 
     const nameInput = page.getByPlaceholder('Enter waiver name...');
     await userEvent.type(nameInput, 'Test Waiver');
@@ -185,7 +185,7 @@ describe('AddWaiverModal', () => {
   });
 
   it('should call onClose when Cancel is clicked', async () => {
-    render(<AddWaiverModal {...defaultProps} />);
+    await render(<AddWaiverModal {...defaultProps} />);
 
     // Fill name first to ensure no layout shift from validation on blur
     const nameInput = page.getByPlaceholder('Enter waiver name...');

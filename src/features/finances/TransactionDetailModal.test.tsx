@@ -103,7 +103,7 @@ describe('TransactionDetailModal', () => {
       mockGetTransaction.mockResolvedValue({ transaction: mockMembershipDetails });
       const mockTransaction = createMockTransaction();
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -114,10 +114,10 @@ describe('TransactionDetailModal', () => {
       await expect.element(page.getByRole('dialog')).toBeInTheDocument();
     });
 
-    it('should not render dialog when isOpen is false', () => {
+    it('should not render dialog when isOpen is false', async () => {
       const mockTransaction = createMockTransaction();
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={false}
           onCloseAction={() => {}}
@@ -128,8 +128,8 @@ describe('TransactionDetailModal', () => {
       expect(page.getByRole('dialog').elements()).toHaveLength(0);
     });
 
-    it('should not render anything when transaction is null', () => {
-      render(
+    it('should not render anything when transaction is null', async () => {
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -146,7 +146,7 @@ describe('TransactionDetailModal', () => {
       mockGetTransaction.mockResolvedValue({ transaction: mockMembershipDetails });
       const mockTransaction = createMockTransaction();
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -161,7 +161,7 @@ describe('TransactionDetailModal', () => {
       mockGetTransaction.mockResolvedValue({ transaction: mockMembershipDetails });
       const mockTransaction = createMockTransaction({ transactionId: 'TXN123456' });
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -176,7 +176,7 @@ describe('TransactionDetailModal', () => {
       mockGetTransaction.mockResolvedValue({ transaction: mockMembershipDetails });
       const mockTransaction = createMockTransaction({ amount: '$250.00' });
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -191,7 +191,7 @@ describe('TransactionDetailModal', () => {
       mockGetTransaction.mockResolvedValue({ transaction: mockMembershipDetails });
       const mockTransaction = createMockTransaction({ date: 'May 20, 2025' });
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -206,7 +206,7 @@ describe('TransactionDetailModal', () => {
       mockGetTransaction.mockResolvedValue({ transaction: mockMembershipDetails });
       const mockTransaction = createMockTransaction({ method: 'ACH Transfer' });
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -221,7 +221,7 @@ describe('TransactionDetailModal', () => {
       mockGetTransaction.mockResolvedValue({ transaction: mockMembershipDetails });
       const mockTransaction = createMockTransaction({ purpose: 'Merchandise' });
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -238,7 +238,7 @@ describe('TransactionDetailModal', () => {
       mockGetTransaction.mockResolvedValue({ transaction: mockMembershipDetails });
       const mockTransaction = createMockTransaction({ status: 'paid' });
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -253,7 +253,7 @@ describe('TransactionDetailModal', () => {
       mockGetTransaction.mockResolvedValue({ transaction: mockMembershipDetails });
       const mockTransaction = createMockTransaction({ status: 'pending' });
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -268,7 +268,7 @@ describe('TransactionDetailModal', () => {
       mockGetTransaction.mockResolvedValue({ transaction: mockMembershipDetails });
       const mockTransaction = createMockTransaction({ status: 'declined' });
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -283,7 +283,7 @@ describe('TransactionDetailModal', () => {
       mockGetTransaction.mockResolvedValue({ transaction: mockMembershipDetails });
       const mockTransaction = createMockTransaction({ status: 'refunded' });
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -298,7 +298,7 @@ describe('TransactionDetailModal', () => {
       mockGetTransaction.mockResolvedValue({ transaction: mockMembershipDetails });
       const mockTransaction = createMockTransaction({ status: 'processing' });
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -319,7 +319,7 @@ describe('TransactionDetailModal', () => {
 
       const mockTransaction = createMockTransaction();
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -337,7 +337,7 @@ describe('TransactionDetailModal', () => {
       mockGetTransaction.mockResolvedValue({ transaction: mockMembershipDetails });
       const mockTransaction = createMockTransaction();
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -356,7 +356,7 @@ describe('TransactionDetailModal', () => {
       mockGetTransaction.mockResolvedValue({ transaction: mockMembershipDetails });
       const mockTransaction = createMockTransaction({ transactionType: 'membership_payment' });
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -373,7 +373,7 @@ describe('TransactionDetailModal', () => {
       mockGetTransaction.mockResolvedValue({ transaction: mockMembershipDetails });
       const mockTransaction = createMockTransaction({ transactionType: 'membership_payment' });
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -392,7 +392,7 @@ describe('TransactionDetailModal', () => {
       mockGetTransaction.mockResolvedValue({ transaction: signupFeeDetails });
       const mockTransaction = createMockTransaction({ transactionType: 'signup_fee' });
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -414,7 +414,7 @@ describe('TransactionDetailModal', () => {
       mockGetTransaction.mockResolvedValue({ transaction: oneTimeDetails });
       const mockTransaction = createMockTransaction({ transactionType: 'membership_payment' });
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -437,7 +437,7 @@ describe('TransactionDetailModal', () => {
         memberName: 'Jane Doe',
       });
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -458,7 +458,7 @@ describe('TransactionDetailModal', () => {
         transactionType: 'event_registration',
       });
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -476,7 +476,7 @@ describe('TransactionDetailModal', () => {
       mockGetTransaction.mockResolvedValue({ transaction: mockMembershipDetails });
       const mockTransaction = createMockTransaction({ transactionType: 'membership_payment' });
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -494,7 +494,7 @@ describe('TransactionDetailModal', () => {
         transactionType: 'event_registration',
       });
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -510,7 +510,7 @@ describe('TransactionDetailModal', () => {
       mockGetTransaction.mockResolvedValue({ transaction: refundDetails });
       const mockTransaction = createMockTransaction({ transactionType: 'refund' });
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -539,7 +539,7 @@ describe('TransactionDetailModal', () => {
       mockGetTransaction.mockResolvedValue({ transaction: refundDetails });
       const mockTransaction = createMockTransaction({ transactionType: 'refund' });
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -569,7 +569,7 @@ describe('TransactionDetailModal', () => {
       mockGetTransaction.mockResolvedValue({ transaction: adjustmentDetails });
       const mockTransaction = createMockTransaction({ transactionType: 'adjustment' });
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -588,7 +588,7 @@ describe('TransactionDetailModal', () => {
       mockGetTransaction.mockResolvedValue({ transaction: mockMembershipDetails });
       const mockTransaction = createMockTransaction({ id: 'txn-uuid-fetch' });
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -604,7 +604,7 @@ describe('TransactionDetailModal', () => {
       mockGetTransaction.mockRejectedValue(new Error('Network error'));
       const mockTransaction = createMockTransaction();
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -629,7 +629,7 @@ describe('TransactionDetailModal', () => {
       mockGetTransaction.mockResolvedValue({ transaction: mockMembershipDetails });
       const mockTransaction = createMockTransaction();
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -645,7 +645,7 @@ describe('TransactionDetailModal', () => {
       const mockTransaction = createMockTransaction();
       const mockOnClose = vi.fn();
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={mockOnClose}
@@ -665,7 +665,7 @@ describe('TransactionDetailModal', () => {
       mockGetTransaction.mockResolvedValue({ transaction: mockMembershipDetails });
       const mockTransaction = createMockTransaction();
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -673,14 +673,15 @@ describe('TransactionDetailModal', () => {
         />,
       );
 
-      await expect.element(page.getByText('date_label')).toBeInTheDocument();
+      // `exact` is required: a substring match also hits `start_date_label`.
+      await expect.element(page.getByText('date_label', { exact: true })).toBeInTheDocument();
     });
 
     it('should display method label', async () => {
       mockGetTransaction.mockResolvedValue({ transaction: mockMembershipDetails });
       const mockTransaction = createMockTransaction();
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -695,7 +696,7 @@ describe('TransactionDetailModal', () => {
       mockGetTransaction.mockResolvedValue({ transaction: mockMembershipDetails });
       const mockTransaction = createMockTransaction();
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -710,7 +711,7 @@ describe('TransactionDetailModal', () => {
       mockGetTransaction.mockResolvedValue({ transaction: mockMembershipDetails });
       const mockTransaction = createMockTransaction();
 
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -731,7 +732,7 @@ describe('TransactionDetailModal', () => {
     });
 
     it('shows a Refund button for an admin on a paid, refundable transaction', async () => {
-      render(
+      await render(
         <TransactionDetailModal isOpen={true} onCloseAction={() => {}} transaction={createMockTransaction()} />,
       );
 
@@ -740,7 +741,7 @@ describe('TransactionDetailModal', () => {
 
     it('hides the Refund button for non-admins', async () => {
       mockUseHasRole.mockReturnValue(false);
-      render(
+      await render(
         <TransactionDetailModal isOpen={true} onCloseAction={() => {}} transaction={createMockTransaction()} />,
       );
 
@@ -749,7 +750,7 @@ describe('TransactionDetailModal', () => {
     });
 
     it('hides the Refund button for an already-refunded transaction', async () => {
-      render(
+      await render(
         <TransactionDetailModal
           isOpen={true}
           onCloseAction={() => {}}
@@ -763,7 +764,7 @@ describe('TransactionDetailModal', () => {
 
     it('calls the refund endpoint and invalidates the cache when clicked', async () => {
       mockRefundTransaction.mockResolvedValue({ refundTransactionId: 'r1' });
-      render(
+      await render(
         <TransactionDetailModal isOpen={true} onCloseAction={() => {}} transaction={createMockTransaction()} />,
       );
 

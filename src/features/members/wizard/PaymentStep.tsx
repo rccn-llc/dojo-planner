@@ -418,7 +418,7 @@ export const PaymentStep = ({
       {/* Capture-only info notice */}
       {captureOnly && (
         <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/30">
-          <Info className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
+          <Info className="mt-0.5 size-5 shrink-0 text-blue-600 dark:text-blue-400" />
           <p className="text-sm text-blue-700 dark:text-blue-300">
             {t('capture_only_notice')}
           </p>
@@ -428,7 +428,7 @@ export const PaymentStep = ({
       {/* HOH Billing Notice (only when processing a payment, not capture-only or free trial) */}
       {!captureOnly && !isFreeTrial && memberType === 'head-of-household' && (
         <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/30">
-          <Info className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
+          <Info className="mt-0.5 size-5 shrink-0 text-blue-600 dark:text-blue-400" />
           <p className="text-sm text-blue-700 dark:text-blue-300">
             {tHOH('notice')}
           </p>
@@ -454,7 +454,7 @@ export const PaymentStep = ({
               {validCoupons.map(coupon => (
                 <SelectItem key={coupon.id} value={coupon.id}>
                   <span className="flex items-center gap-2">
-                    <Tag className="h-3 w-3" />
+                    <Tag className="size-3" />
                     {coupon.code}
                     {' - '}
                     {coupon.type === 'Percentage' && coupon.amount}
@@ -473,7 +473,7 @@ export const PaymentStep = ({
       {/* Savings Alert (hidden in capture-only mode and on free trials) */}
       {!captureOnly && !isFreeTrial && hasCouponApplied && (
         <div className="flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950/30">
-          <Tag className="mt-0.5 h-5 w-5 shrink-0 text-green-600 dark:text-green-400" />
+          <Tag className="mt-0.5 size-5 shrink-0 text-green-600 dark:text-green-400" />
           <div>
             <p className="font-medium text-green-800 dark:text-green-200">
               {t('coupon_applied_title', { code: data.appliedCoupon?.code ?? '' })}
@@ -502,7 +502,7 @@ export const PaymentStep = ({
                   : 'border-border bg-background hover:border-primary/50 hover:bg-accent/50'
               } ${isLoading ? 'cursor-not-allowed opacity-50' : ''}`}
             >
-              <RefreshCw className="h-5 w-5" />
+              <RefreshCw className="size-5" />
               <div className="text-left">
                 <span className="block font-medium">{t('billing_type_autopay')}</span>
                 <span className="text-xs text-muted-foreground">{t('billing_type_autopay_description', { period: periodText })}</span>
@@ -519,7 +519,7 @@ export const PaymentStep = ({
                   : 'border-border bg-background hover:border-primary/50 hover:bg-accent/50'
               } ${isLoading ? 'cursor-not-allowed opacity-50' : ''}`}
             >
-              <CreditCard className="h-5 w-5" />
+              <CreditCard className="size-5" />
               <div className="text-left">
                 <span className="block font-medium">{t('billing_type_onetime')}</span>
                 <span className="text-xs text-muted-foreground">{t('billing_type_onetime_description')}</span>
@@ -537,7 +537,7 @@ export const PaymentStep = ({
       {/* Payment Status Alerts (hidden in capture-only mode) */}
       {!captureOnly && paymentStatus === 'approved' && (
         <div className="flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950/30">
-          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600 dark:text-green-400" />
+          <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-green-600 dark:text-green-400" />
           <div>
             <p className="font-medium text-green-800 dark:text-green-200">
               {t('payment_approved_title')}
@@ -551,7 +551,7 @@ export const PaymentStep = ({
 
       {!captureOnly && paymentStatus === 'declined' && (
         <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/30">
-          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <AlertCircle className="mt-0.5 size-5 shrink-0 text-amber-600 dark:text-amber-400" />
           <div>
             <p className="font-medium text-amber-800 dark:text-amber-200">
               {t('payment_declined_title')}
@@ -568,7 +568,7 @@ export const PaymentStep = ({
 
       {!captureOnly && paymentStatus === 'processing' && (
         <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/30">
-          <Loader2 className="h-5 w-5 shrink-0 animate-spin text-blue-600 dark:text-blue-400" />
+          <Loader2 className="size-5 shrink-0 animate-spin text-blue-600 dark:text-blue-400" />
           <p className="text-sm text-blue-700 dark:text-blue-300">
             {t('payment_processing_message')}
           </p>
@@ -588,7 +588,7 @@ export const PaymentStep = ({
                 : 'border-border bg-background hover:border-primary/50 hover:bg-accent/50'
             } ${isLoading ? 'cursor-not-allowed opacity-50' : ''}`}
           >
-            <CreditCard className="h-5 w-5" />
+            <CreditCard className="size-5" />
             <span className="font-medium">{t('card_tab_label')}</span>
           </button>
 
@@ -602,7 +602,7 @@ export const PaymentStep = ({
                 : 'border-border bg-background hover:border-primary/50 hover:bg-accent/50'
             } ${isLoading ? 'cursor-not-allowed opacity-50' : ''}`}
           >
-            <Landmark className="h-5 w-5" />
+            <Landmark className="size-5" />
             <span className="font-medium">{t('ach_tab_label')}</span>
           </button>
         </div>
@@ -639,7 +639,7 @@ export const PaymentStep = ({
                   <div>
                     {!iframeLoaded && !iframeError && (
                       <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <Loader2 className="size-4 animate-spin" />
                         {t('card_number_iframe_loading')}
                       </div>
                     )}
@@ -838,7 +838,7 @@ export const PaymentStep = ({
             {(isLoading || tokenizing)
               ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="mr-2 size-4 animate-spin" />
                     {t('processing_button')}
                   </>
                 )

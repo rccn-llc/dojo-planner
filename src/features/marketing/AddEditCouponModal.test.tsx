@@ -38,8 +38,8 @@ describe('AddEditCouponModal', () => {
   });
 
   describe('Modal rendering', () => {
-    it('should not render dialog when isOpen is false', () => {
-      render(
+    it('should not render dialog when isOpen is false', async () => {
+      await render(
         <AddEditCouponModal
           isOpen={false}
           onCloseAction={mockHandlers.onCloseAction}
@@ -57,7 +57,7 @@ describe('AddEditCouponModal', () => {
     });
 
     it('should render dialog when isOpen is true', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -71,7 +71,7 @@ describe('AddEditCouponModal', () => {
     });
 
     it('should display add title when no coupon is provided', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -83,7 +83,7 @@ describe('AddEditCouponModal', () => {
     });
 
     it('should display edit title when coupon is provided', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -98,7 +98,7 @@ describe('AddEditCouponModal', () => {
 
   describe('Form fields', () => {
     it('should render all form fields', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -120,7 +120,7 @@ describe('AddEditCouponModal', () => {
     });
 
     it('should update form fields when user types', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -139,7 +139,7 @@ describe('AddEditCouponModal', () => {
     });
 
     it('should pre-fill form fields when editing a coupon', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -156,7 +156,7 @@ describe('AddEditCouponModal', () => {
     });
 
     it('should allow editing code input when editing', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -171,7 +171,7 @@ describe('AddEditCouponModal', () => {
     });
 
     it('should allow editing code input when adding', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -187,7 +187,7 @@ describe('AddEditCouponModal', () => {
 
   describe('Modal close behavior', () => {
     it('should call onCloseAction when X button is clicked', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -202,7 +202,7 @@ describe('AddEditCouponModal', () => {
     });
 
     it('should call onCloseAction when Cancel button is clicked', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -219,7 +219,7 @@ describe('AddEditCouponModal', () => {
 
   describe('Form validation', () => {
     it('should show validation error when code is empty', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -241,7 +241,7 @@ describe('AddEditCouponModal', () => {
     });
 
     it('should show validation error when description is empty', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -263,7 +263,7 @@ describe('AddEditCouponModal', () => {
     });
 
     it('should show validation error when amount is empty', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -285,7 +285,7 @@ describe('AddEditCouponModal', () => {
     });
 
     it('should show validation error when end date is empty', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -308,7 +308,7 @@ describe('AddEditCouponModal', () => {
 
   describe('Form submission', () => {
     it('should call onSaveAction when form is valid and submitted for add', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -341,7 +341,7 @@ describe('AddEditCouponModal', () => {
     });
 
     it('should call onSaveAction with isEdit=true when editing', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -363,7 +363,7 @@ describe('AddEditCouponModal', () => {
     });
 
     it('should display success message after successful add', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -390,7 +390,7 @@ describe('AddEditCouponModal', () => {
     });
 
     it('should display success message after successful edit', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -413,7 +413,7 @@ describe('AddEditCouponModal', () => {
 
   describe('Select dropdowns', () => {
     it('should allow selecting coupon type', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -448,7 +448,7 @@ describe('AddEditCouponModal', () => {
     });
 
     it('should allow selecting apply to', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -483,7 +483,7 @@ describe('AddEditCouponModal', () => {
     });
 
     it('should allow selecting status', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -520,7 +520,7 @@ describe('AddEditCouponModal', () => {
 
   describe('Never expires checkbox', () => {
     it('should render the never expires checkbox', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -532,7 +532,7 @@ describe('AddEditCouponModal', () => {
     });
 
     it('should hide end date fields when never expires is checked', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -559,7 +559,7 @@ describe('AddEditCouponModal', () => {
     });
 
     it('should allow form submission when never expires is checked without end date', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -594,7 +594,7 @@ describe('AddEditCouponModal', () => {
 
   describe('Usage limit field', () => {
     it('should allow entering usage limit', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -609,7 +609,7 @@ describe('AddEditCouponModal', () => {
     });
 
     it('should show help text for usage limit', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -623,7 +623,7 @@ describe('AddEditCouponModal', () => {
 
   describe('Per-user limit field', () => {
     it('should default the per-user limit to 1', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -637,7 +637,7 @@ describe('AddEditCouponModal', () => {
     });
 
     it('should allow entering an integer per-user limit', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -652,7 +652,7 @@ describe('AddEditCouponModal', () => {
     });
 
     it('should show help text for per-user limit', async () => {
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -667,7 +667,7 @@ describe('AddEditCouponModal', () => {
   describe('Server error surfacing', () => {
     it('renders the submit error when onSaveAction rejects', async () => {
       const failingSave = vi.fn().mockRejectedValue(new Error('A coupon with code TEST20 already exists.'));
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}
@@ -694,7 +694,7 @@ describe('AddEditCouponModal', () => {
 
     it('shows the success message when onSaveAction resolves', async () => {
       const succeedingSave = vi.fn().mockResolvedValue(undefined);
-      render(
+      await render(
         <AddEditCouponModal
           isOpen={true}
           onCloseAction={mockHandlers.onCloseAction}

@@ -96,7 +96,7 @@ describe('LocationSettingsPage', () => {
 
   describe('IQPro card role gating', () => {
     it('hides the IQPro card entirely for non-management roles (e.g. front_desk)', async () => {
-      render(<LocationSettingsPage userRole="org:front_desk" />);
+      await render(<LocationSettingsPage userRole="org:front_desk" />);
 
       expect(page.getByText('IQPro Payment Gateway').elements()).toHaveLength(0);
       // Front-desk shouldn't even fetch the config.
@@ -104,64 +104,64 @@ describe('LocationSettingsPage', () => {
     });
 
     it('shows the IQPro card for academy_owner but HIDES the edit button', async () => {
-      render(<LocationSettingsPage userRole="org:academy_owner" />);
+      await render(<LocationSettingsPage userRole="org:academy_owner" />);
 
       expect(page.getByText('IQPro Payment Gateway')).toBeDefined();
       expect(page.getByRole('button', { name: /edit iqpro/i }).elements()).toHaveLength(0);
     });
 
     it('shows the IQPro card AND the edit button for admin', async () => {
-      render(<LocationSettingsPage userRole="org:admin" />);
+      await render(<LocationSettingsPage userRole="org:admin" />);
 
       expect(page.getByText('IQPro Payment Gateway')).toBeDefined();
       expect(page.getByRole('button', { name: /edit iqpro/i })).toBeDefined();
     });
 
-    it('hides the card when no role is provided (defensive default)', () => {
-      render(<LocationSettingsPage />);
+    it('hides the card when no role is provided (defensive default)', async () => {
+      await render(<LocationSettingsPage />);
 
       expect(page.getByText('IQPro Payment Gateway').elements()).toHaveLength(0);
     });
   });
 
-  it('renders the page title', () => {
-    render(<LocationSettingsPage />);
+  it('renders the page title', async () => {
+    await render(<LocationSettingsPage />);
 
     expect(page.getByText('Location Settings')).toBeDefined();
   });
 
-  it('renders location section header', () => {
-    render(<LocationSettingsPage />);
+  it('renders location section header', async () => {
+    await render(<LocationSettingsPage />);
 
     expect(page.getByText('Location')).toBeDefined();
   });
 
-  it('renders the location address from the hook', () => {
-    render(<LocationSettingsPage />);
+  it('renders the location address from the hook', async () => {
+    await render(<LocationSettingsPage />);
 
     expect(page.getByText('500 Market St, San Francisco, CA')).toBeDefined();
   });
 
-  it('renders the location phone from the hook', () => {
-    render(<LocationSettingsPage />);
+  it('renders the location phone from the hook', async () => {
+    await render(<LocationSettingsPage />);
 
     expect(page.getByText('(415) 555-0100')).toBeDefined();
   });
 
-  it('renders the location email from the hook', () => {
-    render(<LocationSettingsPage />);
+  it('renders the location email from the hook', async () => {
+    await render(<LocationSettingsPage />);
 
     expect(page.getByText('hello@dojo.test')).toBeDefined();
   });
 
-  it('renders active status badge', () => {
-    render(<LocationSettingsPage />);
+  it('renders active status badge', async () => {
+    await render(<LocationSettingsPage />);
 
     expect(page.getByText('Active')).toBeDefined();
   });
 
-  it('renders the edit button', () => {
-    render(<LocationSettingsPage />);
+  it('renders the edit button', async () => {
+    await render(<LocationSettingsPage />);
 
     const editButton = page.getByRole('button', { name: /edit location/i });
 
@@ -169,7 +169,7 @@ describe('LocationSettingsPage', () => {
   });
 
   it('opens the edit modal when edit button is clicked', async () => {
-    render(<LocationSettingsPage />);
+    await render(<LocationSettingsPage />);
 
     const editButton = page.getByRole('button', { name: /edit location information/i });
     await userEvent.click(editButton.element());
@@ -177,8 +177,8 @@ describe('LocationSettingsPage', () => {
     expect(page.getByText('Edit Location Information')).toBeDefined();
   });
 
-  it('displays all field labels', () => {
-    render(<LocationSettingsPage />);
+  it('displays all field labels', async () => {
+    await render(<LocationSettingsPage />);
 
     expect(page.getByText('Address:')).toBeDefined();
     expect(page.getByText('Phone:')).toBeDefined();
@@ -187,7 +187,7 @@ describe('LocationSettingsPage', () => {
   });
 
   it('closes the modal when cancel is clicked', async () => {
-    render(<LocationSettingsPage />);
+    await render(<LocationSettingsPage />);
 
     const editButton = page.getByRole('button', { name: /edit location information/i });
     await userEvent.click(editButton.element());
@@ -201,7 +201,7 @@ describe('LocationSettingsPage', () => {
   });
 
   it('calls updateLocation and refetches when saving in the modal', async () => {
-    render(<LocationSettingsPage />);
+    await render(<LocationSettingsPage />);
 
     const editButton = page.getByRole('button', { name: /edit location information/i });
     await userEvent.click(editButton.element());
@@ -222,42 +222,97 @@ describe('LocationSettingsPage', () => {
     expect(refetchMock).toHaveBeenCalled();
   });
 
-  it('shows a dash when the address has not been set yet', () => {
+  it('shows a dash when the address has not been set yet', async () => {
     hookState = {
       location: { address: null, phone: null, email: null, taxRate: 0 },
       loading: false,
     };
 
-    render(<LocationSettingsPage />);
+    await render(<LocationSettingsPage />);
 
     expect(page.getByText('Address:')).toBeDefined();
     // Three dashes show up — one each for address, phone, email. We just check that at least one exists.
     expect(page.getByText('-').elements().length).toBeGreaterThan(0);
   });
 
-  it('renders the tax rate from the hook formatted as a percentage', () => {
-    render(<LocationSettingsPage />);
+  it('renders the tax rate from the hook formatted as a percentage', async () => {
+    await render(<LocationSettingsPage />);
 
     expect(page.getByText('Tax Rate:')).toBeDefined();
     expect(page.getByText('3.75%')).toBeDefined();
   });
 
-  it('renders 0.00% when no tax rate has been set', () => {
+  it('renders 0.00% when no tax rate has been set', async () => {
     hookState = {
       location: { address: null, phone: null, email: null, taxRate: 0 },
       loading: false,
     };
 
-    render(<LocationSettingsPage />);
+    await render(<LocationSettingsPage />);
 
     expect(page.getByText('0.00%')).toBeDefined();
   });
 
-  it('has proper accessibility on the edit button', () => {
-    render(<LocationSettingsPage />);
+  it('has proper accessibility on the edit button', async () => {
+    await render(<LocationSettingsPage />);
 
     const editButton = page.getByRole('button', { name: /edit location information/i });
 
     expect(editButton).toBeDefined();
+  });
+});
+
+// React double-invokes effects in development (StrictMode), which showed up as
+// two `paymentSettings.getConfig` requests on every page load.
+describe('LocationSettingsPage payment config de-duplication', () => {
+  beforeEach(() => {
+    getPaymentConfigMock.mockReset();
+    updatePaymentConfigMock.mockReset();
+    updatePaymentConfigMock.mockResolvedValue({ success: true });
+  });
+
+  it('issues one getConfig request when mounted twice concurrently', async () => {
+    let release: ((value: unknown) => void) | undefined;
+    getPaymentConfigMock.mockReturnValue(new Promise((resolve) => {
+      release = resolve;
+    }));
+
+    const first = await render(<LocationSettingsPage userRole="org:admin" />);
+    const second = await render(<LocationSettingsPage userRole="org:admin" />);
+
+    expect(getPaymentConfigMock).toHaveBeenCalledTimes(1);
+
+    release?.({ clientId: 'c', gatewayId: 'g', hasSecret: true, source: 'org' });
+
+    await first.unmount();
+    await second.unmount();
+  });
+
+  // Only the in-flight request is shared — nothing is cached — so a second
+  // mount after the first request settles issues a fresh request. This is what
+  // keeps the post-save reload correct.
+  it('does not cache across mounts once a request has settled', async () => {
+    getPaymentConfigMock.mockResolvedValue({
+      clientId: 'c',
+      gatewayId: 'g',
+      hasSecret: true,
+      source: 'org',
+    });
+
+    const first = await render(<LocationSettingsPage userRole="org:admin" />);
+
+    await vi.waitFor(() => {
+      expect(getPaymentConfigMock).toHaveBeenCalledTimes(1);
+    });
+
+    await first.unmount();
+
+    const second = await render(<LocationSettingsPage userRole="org:admin" />);
+
+    await vi.waitFor(() => {
+      expect(getPaymentConfigMock).toHaveBeenCalledTimes(2);
+    });
+
+    await second.unmount();
   });
 });

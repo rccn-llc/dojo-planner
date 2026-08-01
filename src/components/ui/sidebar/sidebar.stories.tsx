@@ -33,7 +33,7 @@ export const Default: Story = {
       <Sidebar>
         <SidebarHeader>
           <div className="flex items-center gap-2 px-4">
-            <div className="h-8 w-8 rounded-lg bg-blue-600" />
+            <div className="size-8 rounded-lg bg-blue-600" />
             <span className="font-semibold">App</span>
           </div>
         </SidebarHeader>
@@ -77,7 +77,7 @@ export const WithGroups: Story = {
       <Sidebar>
         <SidebarHeader>
           <div className="flex items-center gap-2 px-4">
-            <div className="h-8 w-8 rounded-lg bg-purple-600" />
+            <div className="size-8 rounded-lg bg-purple-600" />
             <span className="font-semibold">Workspace</span>
           </div>
         </SidebarHeader>

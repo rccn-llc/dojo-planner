@@ -71,8 +71,8 @@ describe('MemberDetailsStep', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the member details step', () => {
-    render(
+  it('should render the member details step', async () => {
+    await render(
       <MemberDetailsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -85,8 +85,8 @@ describe('MemberDetailsStep', () => {
     expect(page.getByRole('heading', { level: 2 })).toBeTruthy();
   });
 
-  it('should have form inputs for member details', () => {
-    render(
+  it('should have form inputs for member details', async () => {
+    await render(
       <MemberDetailsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -107,8 +107,8 @@ describe('MemberDetailsStep', () => {
     }
   });
 
-  it('should disable Next button when required fields are empty', () => {
-    render(
+  it('should disable Next button when required fields are empty', async () => {
+    await render(
       <MemberDetailsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -128,8 +128,8 @@ describe('MemberDetailsStep', () => {
     }
   });
 
-  it('should render the date of birth input field', () => {
-    render(
+  it('should render the date of birth input field', async () => {
+    await render(
       <MemberDetailsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -142,7 +142,7 @@ describe('MemberDetailsStep', () => {
     expect(page.getByText('Date of Birth')).toBeTruthy();
   });
 
-  it('should disable Next button when dateOfBirth is missing', () => {
+  it('should disable Next button when dateOfBirth is missing', async () => {
     const dataWithoutDob: AddMemberWizardData = {
       memberType: 'individual',
       firstName: 'John',
@@ -160,7 +160,7 @@ describe('MemberDetailsStep', () => {
       },
     };
 
-    render(
+    await render(
       <MemberDetailsStep
         data={dataWithoutDob}
         onUpdate={mockHandlers.onUpdate}
@@ -193,7 +193,7 @@ describe('MemberDetailsStep', () => {
       waiverTemplateId: null,
     };
 
-    render(
+    await render(
       <MemberDetailsStep
         data={filledData}
         onUpdate={mockHandlers.onUpdate}
@@ -208,10 +208,10 @@ describe('MemberDetailsStep', () => {
     await expect.element(nextButton).not.toBeDisabled();
   });
 
-  it('should display error message when provided', () => {
+  it('should display error message when provided', async () => {
     const errorMessage = 'Test error message';
 
-    render(
+    await render(
       <MemberDetailsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -226,7 +226,7 @@ describe('MemberDetailsStep', () => {
   });
 
   it('should call onBack when Back button is clicked', async () => {
-    render(
+    await render(
       <MemberDetailsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -243,7 +243,7 @@ describe('MemberDetailsStep', () => {
   });
 
   it('should call onCancel when Cancel button is clicked', async () => {
-    render(
+    await render(
       <MemberDetailsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -259,7 +259,7 @@ describe('MemberDetailsStep', () => {
     expect(mockHandlers.onCancel).toHaveBeenCalled();
   });
 
-  it('should populate form fields with existing data', () => {
+  it('should populate form fields with existing data', async () => {
     const filledData: AddMemberWizardData = {
       memberType: 'individual',
       firstName: 'John',
@@ -270,7 +270,7 @@ describe('MemberDetailsStep', () => {
       waiverTemplateId: null,
     };
 
-    render(
+    await render(
       <MemberDetailsStep
         data={filledData}
         onUpdate={mockHandlers.onUpdate}
@@ -309,7 +309,7 @@ describe('MemberDetailsStep', () => {
       },
     };
 
-    render(
+    await render(
       <MemberDetailsStep
         data={filledData}
         onUpdate={mockHandlers.onUpdate}
@@ -330,8 +330,8 @@ describe('MemberDetailsStep', () => {
   // trigger renders with the placeholder when no DOB is set, and shows the
   // formatted date when one is set.
   describe('Date of Birth picker (#128)', () => {
-    it('renders the picker trigger with the placeholder when no DOB is set', () => {
-      render(
+    it('renders the picker trigger with the placeholder when no DOB is set', async () => {
+      await render(
         <MemberDetailsStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
@@ -347,13 +347,13 @@ describe('MemberDetailsStep', () => {
       expect(document.querySelector('input[type="date"]')).toBeNull();
     });
 
-    it('shows the date as MM/DD/YYYY in the typed input when DOB is set', () => {
+    it('shows the date as MM/DD/YYYY in the typed input when DOB is set', async () => {
       const dataWithDob: AddMemberWizardData = {
         ...mockData,
         dateOfBirth: new Date('1990-06-15T00:00:00'),
       };
 
-      render(
+      await render(
         <MemberDetailsStep
           data={dataWithDob}
           onUpdate={mockHandlers.onUpdate}

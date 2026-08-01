@@ -333,7 +333,7 @@ export function EditEventModal({
                     disabled={form.billing.length <= 1}
                     aria-label={t('remove_tier_aria')}
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="size-4" />
                   </Button>
                 </div>
               ))}
@@ -341,7 +341,7 @@ export function EditEventModal({
                 variant="outline"
                 onClick={() => updateForm('billing', [...form.billing, emptyBilling()])}
               >
-                <Plus className="mr-2 h-4 w-4" />
+                <Plus className="mr-2 size-4" />
                 {t('add_tier_button')}
               </Button>
             </div>
@@ -384,7 +384,7 @@ export function EditEventModal({
                       disabled={form.sessions.length <= 1}
                       aria-label={t('remove_session_aria')}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="size-4" />
                     </Button>
                   </div>
                   <div className="space-y-1.5">
@@ -413,7 +413,7 @@ export function EditEventModal({
                 variant="outline"
                 onClick={() => updateForm('sessions', [...form.sessions, emptySession()])}
               >
-                <Plus className="mr-2 h-4 w-4" />
+                <Plus className="mr-2 size-4" />
                 {t('add_session_button')}
               </Button>
             </div>

@@ -109,7 +109,7 @@ export function StaffCard({
       <div className="space-y-4">
         {/* Staff Name */}
         <div className="flex items-center gap-3 border-b border-border pb-4">
-          <Avatar className="h-10 w-10 shrink-0">
+          <Avatar className="size-10 shrink-0">
             {photoUrl && (
               <AvatarImage src={photoUrl} alt={`${firstName} ${lastName}`} />
             )}
@@ -163,7 +163,7 @@ export function StaffCard({
                 aria-label={`Edit ${firstName} ${lastName}`}
                 title={`Edit ${firstName} ${lastName}`}
               >
-                <Edit className="h-4 w-4" />
+                <Edit className="size-4" />
               </Button>
             )}
             {onRemove && (
@@ -174,7 +174,7 @@ export function StaffCard({
                 aria-label={`Remove ${firstName} ${lastName}`}
                 title={`Remove ${firstName} ${lastName}`}
               >
-                <Trash2 className="h-4 w-4" />
+                <Trash2 className="size-4" />
               </Button>
             )}
           </div>

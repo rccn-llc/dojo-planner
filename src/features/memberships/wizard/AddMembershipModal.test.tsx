@@ -63,8 +63,8 @@ describe('AddMembershipModal', () => {
     vi.clearAllMocks();
   });
 
-  it('should not render dialog when isOpen is false', () => {
-    render(
+  it('should not render dialog when isOpen is false', async () => {
+    await render(
       <AddMembershipModal
         isOpen={false}
         onCloseAction={mockHandlers.onCloseAction}
@@ -81,8 +81,8 @@ describe('AddMembershipModal', () => {
     }
   });
 
-  it('should render dialog when isOpen is true', () => {
-    render(
+  it('should render dialog when isOpen is true', async () => {
+    await render(
       <AddMembershipModal
         isOpen={true}
         onCloseAction={mockHandlers.onCloseAction}
@@ -94,8 +94,8 @@ describe('AddMembershipModal', () => {
     expect(modal).toBeTruthy();
   });
 
-  it('should display dialog title', () => {
-    render(
+  it('should display dialog title', async () => {
+    await render(
       <AddMembershipModal
         isOpen={true}
         onCloseAction={mockHandlers.onCloseAction}
@@ -107,8 +107,8 @@ describe('AddMembershipModal', () => {
     expect(heading).toBeTruthy();
   });
 
-  it('should render cancel button for wizard navigation', () => {
-    render(
+  it('should render cancel button for wizard navigation', async () => {
+    await render(
       <AddMembershipModal
         isOpen={true}
         onCloseAction={mockHandlers.onCloseAction}
@@ -125,8 +125,8 @@ describe('AddMembershipModal', () => {
     }
   });
 
-  it('should have proper dialog structure', () => {
-    render(
+  it('should have proper dialog structure', async () => {
+    await render(
       <AddMembershipModal
         isOpen={true}
         onCloseAction={mockHandlers.onCloseAction}
@@ -147,7 +147,7 @@ describe('AddMembershipModal', () => {
   });
 
   it('should call onCloseAction when Cancel button is clicked', async () => {
-    render(
+    await render(
       <AddMembershipModal
         isOpen={true}
         onCloseAction={mockHandlers.onCloseAction}
@@ -171,8 +171,8 @@ describe('AddMembershipModal', () => {
     expect(true).toBe(true);
   });
 
-  it('should start with basics step', () => {
-    render(
+  it('should start with basics step', async () => {
+    await render(
       <AddMembershipModal
         isOpen={true}
         onCloseAction={mockHandlers.onCloseAction}
@@ -192,8 +192,8 @@ describe('AddMembershipModal', () => {
     }
   });
 
-  it('should display Next button on first step', () => {
-    render(
+  it('should display Next button on first step', async () => {
+    await render(
       <AddMembershipModal
         isOpen={true}
         onCloseAction={mockHandlers.onCloseAction}
@@ -209,8 +209,8 @@ describe('AddMembershipModal', () => {
     }
   });
 
-  it('should have Next button disabled when form is incomplete', () => {
-    render(
+  it('should have Next button disabled when form is incomplete', async () => {
+    await render(
       <AddMembershipModal
         isOpen={true}
         onCloseAction={mockHandlers.onCloseAction}
@@ -227,8 +227,8 @@ describe('AddMembershipModal', () => {
     }
   });
 
-  it('should render membership name input on first step', () => {
-    render(
+  it('should render membership name input on first step', async () => {
+    await render(
       <AddMembershipModal
         isOpen={true}
         onCloseAction={mockHandlers.onCloseAction}
@@ -240,8 +240,8 @@ describe('AddMembershipModal', () => {
     expect(nameInput).toBeTruthy();
   });
 
-  it('should render status toggle on first step', () => {
-    render(
+  it('should render status toggle on first step', async () => {
+    await render(
       <AddMembershipModal
         isOpen={true}
         onCloseAction={mockHandlers.onCloseAction}
@@ -253,8 +253,8 @@ describe('AddMembershipModal', () => {
     expect(statusLabel).toBeTruthy();
   });
 
-  it('should render membership type toggle on first step', () => {
-    render(
+  it('should render membership type toggle on first step', async () => {
+    await render(
       <AddMembershipModal
         isOpen={true}
         onCloseAction={mockHandlers.onCloseAction}
@@ -266,8 +266,8 @@ describe('AddMembershipModal', () => {
     expect(typeLabel).toBeTruthy();
   });
 
-  it('should render description textarea on first step', () => {
-    render(
+  it('should render description textarea on first step', async () => {
+    await render(
       <AddMembershipModal
         isOpen={true}
         onCloseAction={mockHandlers.onCloseAction}

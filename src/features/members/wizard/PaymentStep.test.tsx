@@ -194,16 +194,16 @@ beforeEach(() => {
 });
 
 describe('PaymentStep', () => {
-  it('renders payment amount for monthly plan', () => {
-    render(
+  it('renders payment amount for monthly plan', async () => {
+    await render(
       <PaymentStep {...defaultProps} />,
     );
 
     expect(page.getByText(/Pay \$160/)).toBeTruthy();
   });
 
-  it('renders payment description with correct plan type', () => {
-    render(
+  it('renders payment description with correct plan type', async () => {
+    await render(
       <PaymentStep {...defaultProps} />,
     );
 
@@ -212,7 +212,7 @@ describe('PaymentStep', () => {
     expect(description).toBeTruthy();
   });
 
-  it('displays correct amount for annual plan', () => {
+  it('displays correct amount for annual plan', async () => {
     const annualProps = {
       ...defaultProps,
       data: {
@@ -221,15 +221,15 @@ describe('PaymentStep', () => {
       },
     };
 
-    render(
+    await render(
       <PaymentStep {...annualProps} />,
     );
 
     expect(page.getByText(/Pay \$1600/)).toBeTruthy();
   });
 
-  it('shows credit card tab as selected by default', () => {
-    render(
+  it('shows credit card tab as selected by default', async () => {
+    await render(
       <PaymentStep {...defaultProps} />,
     );
 
@@ -240,7 +240,7 @@ describe('PaymentStep', () => {
 
   it('switches to ACH tab when clicked', async () => {
     const onUpdateAction = vi.fn();
-    render(
+    await render(
       <PaymentStep
         {...defaultProps}
         onUpdateAction={onUpdateAction}
@@ -259,8 +259,8 @@ describe('PaymentStep', () => {
     });
   });
 
-  it('renders card form fields when card tab is selected', () => {
-    render(
+  it('renders card form fields when card tab is selected', async () => {
+    await render(
       <PaymentStep {...defaultProps} />,
     );
 
@@ -270,7 +270,7 @@ describe('PaymentStep', () => {
     expect(page.getByLabelText(/CVC\/CVV/)).toBeTruthy();
   });
 
-  it('renders ACH form fields when ACH tab is selected', () => {
+  it('renders ACH form fields when ACH tab is selected', async () => {
     const achProps = {
       ...defaultProps,
       data: {
@@ -279,7 +279,7 @@ describe('PaymentStep', () => {
       },
     };
 
-    render(
+    await render(
       <PaymentStep {...achProps} />,
     );
 
@@ -289,8 +289,8 @@ describe('PaymentStep', () => {
     expect(page.getByLabelText(/Account number/)).toBeTruthy();
   });
 
-  it('disables Next button when card form is incomplete', () => {
-    render(
+  it('disables Next button when card form is incomplete', async () => {
+    await render(
       <PaymentStep {...defaultProps} />,
     );
 
@@ -299,7 +299,7 @@ describe('PaymentStep', () => {
     expect(nextButton?.disabled).toBe(true);
   });
 
-  it('disables Next button when ACH form is incomplete', () => {
+  it('disables Next button when ACH form is incomplete', async () => {
     const achProps = {
       ...defaultProps,
       data: {
@@ -309,7 +309,7 @@ describe('PaymentStep', () => {
       },
     };
 
-    render(
+    await render(
       <PaymentStep {...achProps} />,
     );
 
@@ -318,7 +318,7 @@ describe('PaymentStep', () => {
     expect(nextButton?.disabled).toBe(true);
   });
 
-  it('enables Next button when all card fields are filled', () => {
+  it('enables Next button when all card fields are filled', async () => {
     const completedProps = {
       ...defaultProps,
       data: {
@@ -330,7 +330,7 @@ describe('PaymentStep', () => {
       },
     };
 
-    render(
+    await render(
       <PaymentStep {...completedProps} />,
     );
 
@@ -339,7 +339,7 @@ describe('PaymentStep', () => {
     expect(nextButton?.disabled).toBe(false);
   });
 
-  it('enables Next button when all ACH fields are filled', () => {
+  it('enables Next button when all ACH fields are filled', async () => {
     const completedProps = {
       ...defaultProps,
       data: {
@@ -351,7 +351,7 @@ describe('PaymentStep', () => {
       },
     };
 
-    render(
+    await render(
       <PaymentStep {...completedProps} />,
     );
 
@@ -362,7 +362,7 @@ describe('PaymentStep', () => {
 
   it('calls onUpdateAction when card field changes', async () => {
     const onUpdateAction = vi.fn();
-    render(
+    await render(
       <PaymentStep
         {...defaultProps}
         onUpdateAction={onUpdateAction}
@@ -388,7 +388,7 @@ describe('PaymentStep', () => {
       onUpdateAction,
     };
 
-    render(
+    await render(
       <PaymentStep {...achProps} />,
     );
 
@@ -414,7 +414,7 @@ describe('PaymentStep', () => {
       onNextAction,
     };
 
-    render(
+    await render(
       <PaymentStep {...completedProps} />,
     );
 
@@ -426,7 +426,7 @@ describe('PaymentStep', () => {
     }
   });
 
-  it('shows payment declined alert with continue message', () => {
+  it('shows payment declined alert with continue message', async () => {
     const declinedProps = {
       ...defaultProps,
       data: {
@@ -441,7 +441,7 @@ describe('PaymentStep', () => {
       },
     };
 
-    render(
+    await render(
       <PaymentStep {...declinedProps} />,
     );
 
@@ -450,7 +450,7 @@ describe('PaymentStep', () => {
     expect(page.getByText(/insufficient funds/)).toBeTruthy();
   });
 
-  it('shows "Add Member Anyway" button when payment is declined', () => {
+  it('shows "Add Member Anyway" button when payment is declined', async () => {
     const declinedProps = {
       ...defaultProps,
       data: {
@@ -465,7 +465,7 @@ describe('PaymentStep', () => {
       },
     };
 
-    render(
+    await render(
       <PaymentStep {...declinedProps} />,
     );
 
@@ -480,8 +480,8 @@ describe('PaymentStep', () => {
     expect(buttonTexts).not.toContain('Next');
   });
 
-  it('shows "Next" button when payment status is not declined', () => {
-    render(
+  it('shows "Next" button when payment status is not declined', async () => {
+    await render(
       <PaymentStep {...defaultProps} />,
     );
 
@@ -490,7 +490,7 @@ describe('PaymentStep', () => {
     expect(button).toBeTruthy();
   });
 
-  it('shows payment approved alert', () => {
+  it('shows payment approved alert', async () => {
     const approvedProps = {
       ...defaultProps,
       data: {
@@ -504,7 +504,7 @@ describe('PaymentStep', () => {
       },
     };
 
-    render(
+    await render(
       <PaymentStep {...approvedProps} />,
     );
 
@@ -514,7 +514,7 @@ describe('PaymentStep', () => {
 
   it('calls onBackAction when back button is clicked', async () => {
     const onBackAction = vi.fn();
-    render(
+    await render(
       <PaymentStep
         {...defaultProps}
         onBackAction={onBackAction}
@@ -531,7 +531,7 @@ describe('PaymentStep', () => {
 
   it('calls onCancelAction when cancel button is clicked', async () => {
     const onCancelAction = vi.fn();
-    render(
+    await render(
       <PaymentStep
         {...defaultProps}
         onCancelAction={onCancelAction}
@@ -546,7 +546,7 @@ describe('PaymentStep', () => {
     }
   });
 
-  it('shows loading state on Next button when isLoading is true', () => {
+  it('shows loading state on Next button when isLoading is true', async () => {
     const loadingProps = {
       ...defaultProps,
       data: {
@@ -559,7 +559,7 @@ describe('PaymentStep', () => {
       isLoading: true,
     };
 
-    render(
+    await render(
       <PaymentStep {...loadingProps} />,
     );
 
@@ -569,7 +569,7 @@ describe('PaymentStep', () => {
     expect(nextButton?.disabled).toBe(true);
   });
 
-  it('populates card fields with provided data', () => {
+  it('populates card fields with provided data', async () => {
     const populatedProps = {
       ...defaultProps,
       data: {
@@ -581,7 +581,7 @@ describe('PaymentStep', () => {
       },
     };
 
-    render(
+    await render(
       <PaymentStep {...populatedProps} />,
     );
 
@@ -596,7 +596,7 @@ describe('PaymentStep', () => {
     expect(cvcInput?.value).toBe('123');
   });
 
-  it('populates ACH fields with provided data', () => {
+  it('populates ACH fields with provided data', async () => {
     const populatedProps = {
       ...defaultProps,
       data: {
@@ -608,7 +608,7 @@ describe('PaymentStep', () => {
       },
     };
 
-    render(
+    await render(
       <PaymentStep {...populatedProps} />,
     );
 
@@ -621,7 +621,7 @@ describe('PaymentStep', () => {
     expect(accountInput?.value).toBe('123456789');
   });
 
-  it('shows invalid CVC decline reason', () => {
+  it('shows invalid CVC decline reason', async () => {
     const invalidCvcProps = {
       ...defaultProps,
       data: {
@@ -632,14 +632,14 @@ describe('PaymentStep', () => {
       },
     };
 
-    render(
+    await render(
       <PaymentStep {...invalidCvcProps} />,
     );
 
     expect(page.getByText(/CVC\/CVV code is incorrect/)).toBeTruthy();
   });
 
-  it('shows expired card decline reason', () => {
+  it('shows expired card decline reason', async () => {
     const expiredProps = {
       ...defaultProps,
       data: {
@@ -650,14 +650,14 @@ describe('PaymentStep', () => {
       },
     };
 
-    render(
+    await render(
       <PaymentStep {...expiredProps} />,
     );
 
     expect(page.getByText(/card has expired/)).toBeTruthy();
   });
 
-  it('shows card declined decline reason', () => {
+  it('shows card declined decline reason', async () => {
     const declinedProps = {
       ...defaultProps,
       data: {
@@ -668,14 +668,14 @@ describe('PaymentStep', () => {
       },
     };
 
-    render(
+    await render(
       <PaymentStep {...declinedProps} />,
     );
 
     expect(page.getByText(/card was declined/)).toBeTruthy();
   });
 
-  it('shows ACH failed decline reason', () => {
+  it('shows ACH failed decline reason', async () => {
     const achFailedProps = {
       ...defaultProps,
       data: {
@@ -687,14 +687,14 @@ describe('PaymentStep', () => {
       },
     };
 
-    render(
+    await render(
       <PaymentStep {...achFailedProps} />,
     );
 
     expect(page.getByText(/ACH transaction failed/)).toBeTruthy();
   });
 
-  it('shows generic decline reason when no specific reason provided', () => {
+  it('shows generic decline reason when no specific reason provided', async () => {
     const genericDeclineProps = {
       ...defaultProps,
       data: {
@@ -705,14 +705,14 @@ describe('PaymentStep', () => {
       },
     };
 
-    render(
+    await render(
       <PaymentStep {...genericDeclineProps} />,
     );
 
     expect(page.getByText(/payment could not be processed/)).toBeTruthy();
   });
 
-  it('shows $0 amount for free trial plan', () => {
+  it('shows $0 amount for free trial plan', async () => {
     const freeTrialProps = {
       ...defaultProps,
       data: {
@@ -721,14 +721,14 @@ describe('PaymentStep', () => {
       },
     };
 
-    render(
+    await render(
       <PaymentStep {...freeTrialProps} />,
     );
 
     expect(page.getByText(/Pay \$0/)).toBeTruthy();
   });
 
-  it('shows $0 amount when no subscription plan selected', () => {
+  it('shows $0 amount when no subscription plan selected', async () => {
     const noSubProps = {
       ...defaultProps,
       data: {
@@ -737,14 +737,14 @@ describe('PaymentStep', () => {
       },
     };
 
-    render(
+    await render(
       <PaymentStep {...noSubProps} />,
     );
 
     expect(page.getByText(/Pay \$0/)).toBeTruthy();
   });
 
-  it('shows processing status message', () => {
+  it('shows processing status message', async () => {
     const processingProps = {
       ...defaultProps,
       data: {
@@ -753,7 +753,7 @@ describe('PaymentStep', () => {
       },
     };
 
-    render(
+    await render(
       <PaymentStep {...processingProps} />,
     );
 
@@ -761,7 +761,7 @@ describe('PaymentStep', () => {
   });
 
   it('shows validation error for cardholder name after blur', async () => {
-    render(
+    await render(
       <PaymentStep {...defaultProps} />,
     );
 
@@ -790,7 +790,7 @@ describe('PaymentStep', () => {
       onUpdateAction,
     };
 
-    render(
+    await render(
       <PaymentStep {...achProps} />,
     );
 
@@ -807,7 +807,7 @@ describe('PaymentStep', () => {
 
   it('updates card number field', async () => {
     const onUpdateAction = vi.fn();
-    render(
+    await render(
       <PaymentStep
         {...defaultProps}
         onUpdateAction={onUpdateAction}
@@ -824,7 +824,7 @@ describe('PaymentStep', () => {
 
   it('updates card expiry field', async () => {
     const onUpdateAction = vi.fn();
-    render(
+    await render(
       <PaymentStep
         {...defaultProps}
         onUpdateAction={onUpdateAction}
@@ -841,7 +841,7 @@ describe('PaymentStep', () => {
 
   it('updates card CVC field', async () => {
     const onUpdateAction = vi.fn();
-    render(
+    await render(
       <PaymentStep
         {...defaultProps}
         onUpdateAction={onUpdateAction}
@@ -867,7 +867,7 @@ describe('PaymentStep', () => {
       onUpdateAction,
     };
 
-    render(
+    await render(
       <PaymentStep {...achProps} />,
     );
 
@@ -890,7 +890,7 @@ describe('PaymentStep', () => {
       onUpdateAction,
     };
 
-    render(
+    await render(
       <PaymentStep {...achProps} />,
     );
 
@@ -902,7 +902,7 @@ describe('PaymentStep', () => {
     expect(onUpdateAction).toHaveBeenCalledWith({ achAccountNumber: '123456789' });
   });
 
-  it('shows annual plan description correctly', () => {
+  it('shows annual plan description correctly', async () => {
     const annualProps = {
       ...defaultProps,
       data: {
@@ -911,14 +911,14 @@ describe('PaymentStep', () => {
       },
     };
 
-    render(
+    await render(
       <PaymentStep {...annualProps} />,
     );
 
     expect(page.getByText(/annual recurring membership/)).toBeTruthy();
   });
 
-  it('disables inputs when isLoading is true', () => {
+  it('disables inputs when isLoading is true', async () => {
     const loadingProps = {
       ...defaultProps,
       data: {
@@ -931,7 +931,7 @@ describe('PaymentStep', () => {
       isLoading: true,
     };
 
-    render(
+    await render(
       <PaymentStep {...loadingProps} />,
     );
 
@@ -940,13 +940,13 @@ describe('PaymentStep', () => {
     expect(nameInput?.disabled).toBe(true);
   });
 
-  it('disables payment method tabs when isLoading is true', () => {
+  it('disables payment method tabs when isLoading is true', async () => {
     const loadingProps = {
       ...defaultProps,
       isLoading: true,
     };
 
-    render(
+    await render(
       <PaymentStep {...loadingProps} />,
     );
 
@@ -964,7 +964,7 @@ describe('PaymentStep', () => {
       },
     };
 
-    render(
+    await render(
       <PaymentStep {...achProps} />,
     );
 
@@ -986,7 +986,7 @@ describe('PaymentStep', () => {
       },
     };
 
-    render(
+    await render(
       <PaymentStep {...achProps} />,
     );
 
@@ -1008,7 +1008,7 @@ describe('PaymentStep', () => {
       },
     };
 
-    render(
+    await render(
       <PaymentStep {...achProps} />,
     );
 
@@ -1021,7 +1021,7 @@ describe('PaymentStep', () => {
     expect(page.getByLabelText(/Account number/)).toBeTruthy();
   });
 
-  it('shows payment amount with decimal formatting', () => {
+  it('shows payment amount with decimal formatting', async () => {
     const priceProps = {
       ...defaultProps,
       data: {
@@ -1032,14 +1032,14 @@ describe('PaymentStep', () => {
       },
     };
 
-    render(
+    await render(
       <PaymentStep {...priceProps} />,
     );
 
     expect(page.getByText(/Pay \$149\.99/)).toBeTruthy();
   });
 
-  it('shows yearly frequency label for annual plan', () => {
+  it('shows yearly frequency label for annual plan', async () => {
     const annualPriceProps = {
       ...defaultProps,
       data: {
@@ -1050,14 +1050,14 @@ describe('PaymentStep', () => {
       },
     };
 
-    render(
+    await render(
       <PaymentStep {...annualPriceProps} />,
     );
 
     expect(page.getByText(/year/)).toBeTruthy();
   });
 
-  it('shows yearly frequency label for yearly plan', () => {
+  it('shows yearly frequency label for yearly plan', async () => {
     const yearlyPriceProps = {
       ...defaultProps,
       data: {
@@ -1068,14 +1068,14 @@ describe('PaymentStep', () => {
       },
     };
 
-    render(
+    await render(
       <PaymentStep {...yearlyPriceProps} />,
     );
 
     expect(page.getByText(/year/)).toBeTruthy();
   });
 
-  it('handles None frequency as empty label', () => {
+  it('handles None frequency as empty label', async () => {
     const noneFrequencyProps = {
       ...defaultProps,
       data: {
@@ -1086,7 +1086,7 @@ describe('PaymentStep', () => {
       },
     };
 
-    render(
+    await render(
       <PaymentStep {...noneFrequencyProps} />,
     );
 
@@ -1111,7 +1111,7 @@ describe('PaymentStep', () => {
       onUpdateAction,
     };
 
-    render(
+    await render(
       <PaymentStep {...declinedProps} />,
     );
 
@@ -1132,7 +1132,7 @@ describe('PaymentStep', () => {
 
   // Coupon functionality tests
   describe('Coupon functionality', () => {
-    it('renders coupon selector when coupons are available and price > 0', () => {
+    it('renders coupon selector when coupons are available and price > 0', async () => {
       const propsWithCoupons = {
         ...defaultProps,
         data: {
@@ -1143,14 +1143,14 @@ describe('PaymentStep', () => {
         availableCoupons: mockCouponsForTest,
       };
 
-      render(
+      await render(
         <PaymentStep {...propsWithCoupons} />,
       );
 
       expect(page.getByText(/Apply Coupon/)).toBeTruthy();
     });
 
-    it('does not render coupon selector when no coupons are available', () => {
+    it('does not render coupon selector when no coupons are available', async () => {
       const propsWithoutCoupons = {
         ...defaultProps,
         data: {
@@ -1161,7 +1161,7 @@ describe('PaymentStep', () => {
         availableCoupons: [],
       };
 
-      render(
+      await render(
         <PaymentStep {...propsWithoutCoupons} />,
       );
 
@@ -1171,7 +1171,7 @@ describe('PaymentStep', () => {
       expect(couponLabel).toBeFalsy();
     });
 
-    it('does not render coupon selector when price is 0', () => {
+    it('does not render coupon selector when price is 0', async () => {
       const propsWithZeroPrice = {
         ...defaultProps,
         data: {
@@ -1182,7 +1182,7 @@ describe('PaymentStep', () => {
         availableCoupons: mockCouponsForTest,
       };
 
-      render(
+      await render(
         <PaymentStep {...propsWithZeroPrice} />,
       );
 
@@ -1192,7 +1192,7 @@ describe('PaymentStep', () => {
       expect(couponLabel).toBeFalsy();
     });
 
-    it('filters out expired and products-only coupons', () => {
+    it('filters out expired and products-only coupons', async () => {
       const propsWithCoupons = {
         ...defaultProps,
         data: {
@@ -1203,7 +1203,7 @@ describe('PaymentStep', () => {
         availableCoupons: mockCouponsForTest,
       };
 
-      render(
+      await render(
         <PaymentStep {...propsWithCoupons} />,
       );
 
@@ -1212,7 +1212,7 @@ describe('PaymentStep', () => {
       expect(select).toBeTruthy();
     });
 
-    it('shows savings alert when coupon is applied', () => {
+    it('shows savings alert when coupon is applied', async () => {
       const propsWithAppliedCoupon = {
         ...defaultProps,
         data: {
@@ -1230,7 +1230,7 @@ describe('PaymentStep', () => {
         availableCoupons: mockCouponsForTest,
       };
 
-      render(
+      await render(
         <PaymentStep {...propsWithAppliedCoupon} />,
       );
 
@@ -1239,7 +1239,7 @@ describe('PaymentStep', () => {
       expect(page.getByText(/You are saving/)).toBeTruthy();
     });
 
-    it('shows crossed-out original price when coupon is applied', () => {
+    it('shows crossed-out original price when coupon is applied', async () => {
       const propsWithAppliedCoupon = {
         ...defaultProps,
         data: {
@@ -1257,7 +1257,7 @@ describe('PaymentStep', () => {
         availableCoupons: mockCouponsForTest,
       };
 
-      render(
+      await render(
         <PaymentStep {...propsWithAppliedCoupon} />,
       );
 
@@ -1268,7 +1268,7 @@ describe('PaymentStep', () => {
       expect(strikethroughElement?.textContent).toContain('$160');
     });
 
-    it('calculates percentage discount correctly', () => {
+    it('calculates percentage discount correctly', async () => {
       const propsWithPercentageCoupon = {
         ...defaultProps,
         data: {
@@ -1286,7 +1286,7 @@ describe('PaymentStep', () => {
         availableCoupons: mockCouponsForTest,
       };
 
-      render(
+      await render(
         <PaymentStep {...propsWithPercentageCoupon} />,
       );
 
@@ -1296,7 +1296,7 @@ describe('PaymentStep', () => {
       expect(page.getByText(/saving \$30/)).toBeTruthy();
     });
 
-    it('calculates fixed amount discount correctly', () => {
+    it('calculates fixed amount discount correctly', async () => {
       const propsWithFixedCoupon = {
         ...defaultProps,
         data: {
@@ -1314,7 +1314,7 @@ describe('PaymentStep', () => {
         availableCoupons: mockCouponsForTest,
       };
 
-      render(
+      await render(
         <PaymentStep {...propsWithFixedCoupon} />,
       );
 
@@ -1324,7 +1324,7 @@ describe('PaymentStep', () => {
       expect(page.getByText(/saving \$50/)).toBeTruthy();
     });
 
-    it('calculates free trial discount correctly (makes payment $0)', () => {
+    it('calculates free trial discount correctly (makes payment $0)', async () => {
       const propsWithFreeTrialCoupon = {
         ...defaultProps,
         data: {
@@ -1342,7 +1342,7 @@ describe('PaymentStep', () => {
         availableCoupons: mockCouponsForTest,
       };
 
-      render(
+      await render(
         <PaymentStep {...propsWithFreeTrialCoupon} />,
       );
 
@@ -1365,7 +1365,7 @@ describe('PaymentStep', () => {
         onUpdateAction,
       };
 
-      render(
+      await render(
         <PaymentStep {...propsWithCoupons} />,
       );
 
@@ -1378,7 +1378,7 @@ describe('PaymentStep', () => {
       }
     });
 
-    it('does not show savings alert when no coupon is applied', () => {
+    it('does not show savings alert when no coupon is applied', async () => {
       const propsWithoutCoupon = {
         ...defaultProps,
         data: {
@@ -1390,7 +1390,7 @@ describe('PaymentStep', () => {
         availableCoupons: mockCouponsForTest,
       };
 
-      render(
+      await render(
         <PaymentStep {...propsWithoutCoupon} />,
       );
 
@@ -1399,7 +1399,7 @@ describe('PaymentStep', () => {
       expect(couponAppliedText).toBeFalsy();
     });
 
-    it('disables coupon selector when isLoading is true', () => {
+    it('disables coupon selector when isLoading is true', async () => {
       const propsWithCoupons = {
         ...defaultProps,
         data: {
@@ -1411,7 +1411,7 @@ describe('PaymentStep', () => {
         isLoading: true,
       };
 
-      render(
+      await render(
         <PaymentStep {...propsWithCoupons} />,
       );
 
@@ -1420,7 +1420,7 @@ describe('PaymentStep', () => {
       expect(selectTrigger?.getAttribute('data-disabled')).toBe('');
     });
 
-    it('preserves coupon selection during form interactions', () => {
+    it('preserves coupon selection during form interactions', async () => {
       const propsWithAppliedCoupon = {
         ...defaultProps,
         data: {
@@ -1439,7 +1439,7 @@ describe('PaymentStep', () => {
         availableCoupons: mockCouponsForTest,
       };
 
-      render(
+      await render(
         <PaymentStep {...propsWithAppliedCoupon} />,
       );
 
@@ -1450,7 +1450,7 @@ describe('PaymentStep', () => {
       expect(page.getByText(/Pay \$136/)).toBeTruthy();
     });
 
-    it('handles fixed amount larger than price correctly (caps at full price)', () => {
+    it('handles fixed amount larger than price correctly (caps at full price)', async () => {
       const propsWithLargeCoupon = {
         ...defaultProps,
         data: {
@@ -1468,7 +1468,7 @@ describe('PaymentStep', () => {
         availableCoupons: mockCouponsForTest,
       };
 
-      render(
+      await render(
         <PaymentStep {...propsWithLargeCoupon} />,
       );
 
@@ -1481,7 +1481,7 @@ describe('PaymentStep', () => {
 
   // Billing type functionality tests
   describe('Billing type functionality', () => {
-    it('renders billing type selector for recurring monthly membership', () => {
+    it('renders billing type selector for recurring monthly membership', async () => {
       const propsWithMonthlyMembership = {
         ...defaultProps,
         data: {
@@ -1493,7 +1493,7 @@ describe('PaymentStep', () => {
         },
       };
 
-      render(
+      await render(
         <PaymentStep {...propsWithMonthlyMembership} />,
       );
 
@@ -1502,7 +1502,7 @@ describe('PaymentStep', () => {
       expect(page.getByText('One-Time')).toBeTruthy();
     });
 
-    it('renders billing type selector for recurring annual membership', () => {
+    it('renders billing type selector for recurring annual membership', async () => {
       const propsWithAnnualMembership = {
         ...defaultProps,
         data: {
@@ -1514,7 +1514,7 @@ describe('PaymentStep', () => {
         },
       };
 
-      render(
+      await render(
         <PaymentStep {...propsWithAnnualMembership} />,
       );
 
@@ -1523,7 +1523,7 @@ describe('PaymentStep', () => {
       expect(page.getByText('One-Time')).toBeTruthy();
     });
 
-    it('does not render billing type selector for trial membership', () => {
+    it('does not render billing type selector for trial membership', async () => {
       const propsWithTrialMembership = {
         ...defaultProps,
         data: {
@@ -1535,7 +1535,7 @@ describe('PaymentStep', () => {
         },
       };
 
-      render(
+      await render(
         <PaymentStep {...propsWithTrialMembership} />,
       );
 
@@ -1545,7 +1545,7 @@ describe('PaymentStep', () => {
       expect(billingTypeLabel).toBeFalsy();
     });
 
-    it('does not render billing type selector for one-time membership (frequency None)', () => {
+    it('does not render billing type selector for one-time membership (frequency None)', async () => {
       const propsWithOneTimeMembership = {
         ...defaultProps,
         data: {
@@ -1557,7 +1557,7 @@ describe('PaymentStep', () => {
         },
       };
 
-      render(
+      await render(
         <PaymentStep {...propsWithOneTimeMembership} />,
       );
 
@@ -1567,7 +1567,7 @@ describe('PaymentStep', () => {
       expect(billingTypeLabel).toBeFalsy();
     });
 
-    it('does not render billing type selector when price is 0', () => {
+    it('does not render billing type selector when price is 0', async () => {
       const propsWithZeroPrice = {
         ...defaultProps,
         data: {
@@ -1579,7 +1579,7 @@ describe('PaymentStep', () => {
         },
       };
 
-      render(
+      await render(
         <PaymentStep {...propsWithZeroPrice} />,
       );
 
@@ -1589,7 +1589,7 @@ describe('PaymentStep', () => {
       expect(billingTypeLabel).toBeFalsy();
     });
 
-    it('defaults to autopay for recurring memberships', () => {
+    it('defaults to autopay for recurring memberships', async () => {
       const propsWithMonthlyMembership = {
         ...defaultProps,
         data: {
@@ -1602,7 +1602,7 @@ describe('PaymentStep', () => {
         },
       };
 
-      render(
+      await render(
         <PaymentStep {...propsWithMonthlyMembership} />,
       );
 
@@ -1626,7 +1626,7 @@ describe('PaymentStep', () => {
         onUpdateAction,
       };
 
-      render(
+      await render(
         <PaymentStep {...propsWithMonthlyMembership} />,
       );
 
@@ -1658,7 +1658,7 @@ describe('PaymentStep', () => {
         onUpdateAction,
       };
 
-      render(
+      await render(
         <PaymentStep {...propsWithOneTimeBilling} />,
       );
 
@@ -1675,7 +1675,7 @@ describe('PaymentStep', () => {
       }
     });
 
-    it('shows autopay note when autopay is selected', () => {
+    it('shows autopay note when autopay is selected', async () => {
       const propsWithAutopay = {
         ...defaultProps,
         data: {
@@ -1688,14 +1688,14 @@ describe('PaymentStep', () => {
         },
       };
 
-      render(
+      await render(
         <PaymentStep {...propsWithAutopay} />,
       );
 
       expect(page.getByText(/automatically every month/i)).toBeTruthy();
     });
 
-    it('does not show autopay note when one-time is selected', () => {
+    it('does not show autopay note when one-time is selected', async () => {
       const propsWithOneTime = {
         ...defaultProps,
         data: {
@@ -1708,7 +1708,7 @@ describe('PaymentStep', () => {
         },
       };
 
-      render(
+      await render(
         <PaymentStep {...propsWithOneTime} />,
       );
 
@@ -1718,7 +1718,7 @@ describe('PaymentStep', () => {
       expect(autopayNote).toBeFalsy();
     });
 
-    it('preserves billing type selection across renders', () => {
+    it('preserves billing type selection across renders', async () => {
       const propsWithOneTime = {
         ...defaultProps,
         data: {
@@ -1735,7 +1735,7 @@ describe('PaymentStep', () => {
         },
       };
 
-      render(
+      await render(
         <PaymentStep {...propsWithOneTime} />,
       );
 
@@ -1745,7 +1745,7 @@ describe('PaymentStep', () => {
       expect(oneTimeButton?.classList.contains('border-primary')).toBeTruthy();
     });
 
-    it('disables billing type buttons when isLoading is true', () => {
+    it('disables billing type buttons when isLoading is true', async () => {
       const loadingProps = {
         ...defaultProps,
         data: {
@@ -1758,7 +1758,7 @@ describe('PaymentStep', () => {
         isLoading: true,
       };
 
-      render(
+      await render(
         <PaymentStep {...loadingProps} />,
       );
 
@@ -1767,7 +1767,7 @@ describe('PaymentStep', () => {
       expect(oneTimeButton?.disabled).toBe(true);
     });
 
-    it('shows correct frequency label in autopay description for monthly', () => {
+    it('shows correct frequency label in autopay description for monthly', async () => {
       const propsWithMonthlyMembership = {
         ...defaultProps,
         data: {
@@ -1779,14 +1779,14 @@ describe('PaymentStep', () => {
         },
       };
 
-      render(
+      await render(
         <PaymentStep {...propsWithMonthlyMembership} />,
       );
 
       expect(page.getByText(/every month/)).toBeTruthy();
     });
 
-    it('shows correct frequency label in autopay description for annual', () => {
+    it('shows correct frequency label in autopay description for annual', async () => {
       const propsWithAnnualMembership = {
         ...defaultProps,
         data: {
@@ -1798,7 +1798,7 @@ describe('PaymentStep', () => {
         },
       };
 
-      render(
+      await render(
         <PaymentStep {...propsWithAnnualMembership} />,
       );
 
@@ -1817,12 +1817,12 @@ describe('PaymentStep', () => {
       iframeScriptUrl: 'https://sandbox.api.basyspro.com/Iframe/iframe/iframe-v3.js',
     };
 
-    it('renders card number iframe container when tokenization config is provided', () => {
+    it('renders card number iframe container when tokenization config is provided', async () => {
       mockIframeReturn.isLoaded = true;
       mockIframeReturn.isValid = false;
       mockIframeReturn.isCvvValid = false;
 
-      render(
+      await render(
         <PaymentStep
           {...defaultProps}
           tokenizationConfig={tokenizationConfig}
@@ -1836,12 +1836,12 @@ describe('PaymentStep', () => {
       mockIframeReturn.isLoaded = false;
     });
 
-    it('renders CVV iframe container when tokenization config is provided', () => {
+    it('renders CVV iframe container when tokenization config is provided', async () => {
       mockIframeReturn.isLoaded = true;
       mockIframeReturn.isValid = false;
       mockIframeReturn.isCvvValid = false;
 
-      render(
+      await render(
         <PaymentStep
           {...defaultProps}
           tokenizationConfig={tokenizationConfig}
@@ -1855,10 +1855,10 @@ describe('PaymentStep', () => {
       mockIframeReturn.isLoaded = false;
     });
 
-    it('does not render card number input when iframe is active', () => {
+    it('does not render card number input when iframe is active', async () => {
       mockIframeReturn.isLoaded = true;
 
-      render(
+      await render(
         <PaymentStep
           {...defaultProps}
           tokenizationConfig={tokenizationConfig}
@@ -1872,10 +1872,10 @@ describe('PaymentStep', () => {
       mockIframeReturn.isLoaded = false;
     });
 
-    it('does not render CVC input when iframe is active', () => {
+    it('does not render CVC input when iframe is active', async () => {
       mockIframeReturn.isLoaded = true;
 
-      render(
+      await render(
         <PaymentStep
           {...defaultProps}
           tokenizationConfig={tokenizationConfig}
@@ -1889,11 +1889,11 @@ describe('PaymentStep', () => {
       mockIframeReturn.isLoaded = false;
     });
 
-    it('hides iframe containers while loading', () => {
+    it('hides iframe containers while loading', async () => {
       mockIframeReturn.isLoaded = false;
       mockIframeReturn.error = null;
 
-      render(
+      await render(
         <PaymentStep
           {...defaultProps}
           tokenizationConfig={tokenizationConfig}
@@ -1909,11 +1909,11 @@ describe('PaymentStep', () => {
       expect(cvvContainer?.classList.contains('hidden')).toBe(true);
     });
 
-    it('shows iframe containers after loading', () => {
+    it('shows iframe containers after loading', async () => {
       mockIframeReturn.isLoaded = true;
       mockIframeReturn.error = null;
 
-      render(
+      await render(
         <PaymentStep
           {...defaultProps}
           tokenizationConfig={tokenizationConfig}
@@ -1931,7 +1931,7 @@ describe('PaymentStep', () => {
       mockIframeReturn.isLoaded = false;
     });
 
-    it('enables Next button when iframe card and CVV are valid with other fields filled', () => {
+    it('enables Next button when iframe card and CVV are valid with other fields filled', async () => {
       mockIframeReturn.isLoaded = true;
       mockIframeReturn.isValid = true;
       mockIframeReturn.isCvvValid = true;
@@ -1946,7 +1946,7 @@ describe('PaymentStep', () => {
         tokenizationConfig,
       };
 
-      render(
+      await render(
         <PaymentStep {...completedProps} />,
       );
 
@@ -1959,7 +1959,7 @@ describe('PaymentStep', () => {
       mockIframeReturn.isCvvValid = false;
     });
 
-    it('disables Next button when iframe card is valid but CVV is not valid', () => {
+    it('disables Next button when iframe card is valid but CVV is not valid', async () => {
       mockIframeReturn.isLoaded = true;
       mockIframeReturn.isValid = true;
       mockIframeReturn.isCvvValid = false;
@@ -1974,7 +1974,7 @@ describe('PaymentStep', () => {
         tokenizationConfig,
       };
 
-      render(
+      await render(
         <PaymentStep {...completedProps} />,
       );
 
@@ -1986,7 +1986,7 @@ describe('PaymentStep', () => {
       mockIframeReturn.isValid = false;
     });
 
-    it('disables Next button when iframe CVV is valid but card is not valid', () => {
+    it('disables Next button when iframe CVV is valid but card is not valid', async () => {
       mockIframeReturn.isLoaded = true;
       mockIframeReturn.isValid = false;
       mockIframeReturn.isCvvValid = true;
@@ -2001,7 +2001,7 @@ describe('PaymentStep', () => {
         tokenizationConfig,
       };
 
-      render(
+      await render(
         <PaymentStep {...completedProps} />,
       );
 
@@ -2013,10 +2013,10 @@ describe('PaymentStep', () => {
       mockIframeReturn.isCvvValid = false;
     });
 
-    it('still shows expiry input when iframe is active', () => {
+    it('still shows expiry input when iframe is active', async () => {
       mockIframeReturn.isLoaded = true;
 
-      render(
+      await render(
         <PaymentStep
           {...defaultProps}
           tokenizationConfig={tokenizationConfig}
@@ -2030,7 +2030,7 @@ describe('PaymentStep', () => {
       mockIframeReturn.isLoaded = false;
     });
 
-    it('does not use iframe for ACH payment method', () => {
+    it('does not use iframe for ACH payment method', async () => {
       mockIframeReturn.isLoaded = true;
 
       const achProps = {
@@ -2042,7 +2042,7 @@ describe('PaymentStep', () => {
         tokenizationConfig,
       };
 
-      render(
+      await render(
         <PaymentStep {...achProps} />,
       );
 
@@ -2056,11 +2056,11 @@ describe('PaymentStep', () => {
       mockIframeReturn.isLoaded = false;
     });
 
-    it('shows loading spinner when iframe is not yet loaded', () => {
+    it('shows loading spinner when iframe is not yet loaded', async () => {
       mockIframeReturn.isLoaded = false;
       mockIframeReturn.error = null;
 
-      render(
+      await render(
         <PaymentStep
           {...defaultProps}
           tokenizationConfig={tokenizationConfig}
@@ -2070,11 +2070,11 @@ describe('PaymentStep', () => {
       expect(page.getByText(/Loading secure payment field/)).toBeTruthy();
     });
 
-    it('shows error message when iframe fails to load', () => {
+    it('shows error message when iframe fails to load', async () => {
       mockIframeReturn.isLoaded = false;
       mockIframeReturn.error = 'Script failed to load';
 
-      render(
+      await render(
         <PaymentStep
           {...defaultProps}
           tokenizationConfig={tokenizationConfig}
@@ -2106,7 +2106,7 @@ describe('PaymentStep', () => {
         onUpdateAction,
       };
 
-      render(
+      await render(
         <PaymentStep {...completedProps} />,
       );
 
@@ -2148,7 +2148,7 @@ describe('PaymentStep', () => {
         onUpdateAction,
       };
 
-      render(
+      await render(
         <PaymentStep {...completedProps} />,
       );
 
@@ -2191,20 +2191,20 @@ describe('PaymentStep', () => {
     }
 
     it('does not render when paymentStatus is undefined', async () => {
-      render(<PaymentStep {...defaultProps} />);
+      await render(<PaymentStep {...defaultProps} />);
 
       await expect.element(page.getByTestId('payment-try-again-button')).not.toBeInTheDocument();
     });
 
     it('does not render when captureOnly mode is on', async () => {
       const props = declinedProps({ captureOnly: true });
-      render(<PaymentStep {...props} />);
+      await render(<PaymentStep {...props} />);
 
       await expect.element(page.getByTestId('payment-try-again-button')).not.toBeInTheDocument();
     });
 
     it('renders when paymentStatus is declined and not captureOnly', async () => {
-      render(<PaymentStep {...declinedProps()} />);
+      await render(<PaymentStep {...declinedProps()} />);
 
       await expect.element(page.getByTestId('payment-try-again-button')).toBeInTheDocument();
     });
@@ -2212,7 +2212,7 @@ describe('PaymentStep', () => {
     it('clicking it clears decline state without calling onNextAction', async () => {
       const onUpdateAction = vi.fn();
       const onNextAction = vi.fn();
-      render(<PaymentStep {...declinedProps({ onUpdateAction, onNextAction })} />);
+      await render(<PaymentStep {...declinedProps({ onUpdateAction, onNextAction })} />);
 
       await userEvent.click(page.getByTestId('payment-try-again-button'));
 
@@ -2242,22 +2242,22 @@ describe('PaymentStep', () => {
       } as AddMemberWizardData,
     };
 
-    it('renders the trial disclaimer with the contract duration', () => {
-      render(<PaymentStep {...trialProps} />);
+    it('renders the trial disclaimer with the contract duration', async () => {
+      await render(<PaymentStep {...trialProps} />);
 
       expect(page.getByText('Free Trial — No Payment Today')).toBeTruthy();
       expect(page.getByText(/Your trial period is 7 Days/)).toBeTruthy();
     });
 
-    it('does not render the card form fields on a trial', () => {
-      render(<PaymentStep {...trialProps} />);
+    it('does not render the card form fields on a trial', async () => {
+      await render(<PaymentStep {...trialProps} />);
 
       expect(document.querySelector('input[id="cardholderName"]')).toBeNull();
       expect(document.querySelector('input[id="cardNumber"]')).toBeNull();
     });
 
-    it('does not render the payment method tabs on a trial', () => {
-      render(<PaymentStep {...trialProps} />);
+    it('does not render the payment method tabs on a trial', async () => {
+      await render(<PaymentStep {...trialProps} />);
 
       const cardTab = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent === 'Debit / Credit Card');
       const achTab = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent === 'ACH Bank Account');
@@ -2266,8 +2266,8 @@ describe('PaymentStep', () => {
       expect(achTab).toBeUndefined();
     });
 
-    it('enables the Continue button with no card data filled in', () => {
-      render(<PaymentStep {...trialProps} />);
+    it('enables the Continue button with no card data filled in', async () => {
+      await render(<PaymentStep {...trialProps} />);
 
       const continueButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent === 'Continue') as HTMLButtonElement;
 
@@ -2277,7 +2277,7 @@ describe('PaymentStep', () => {
 
     it('clicking Continue calls onNextAction without tokenization', async () => {
       const onNextAction = vi.fn();
-      render(<PaymentStep {...trialProps} onNextAction={onNextAction} />);
+      await render(<PaymentStep {...trialProps} onNextAction={onNextAction} />);
 
       const continueButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent === 'Continue') as HTMLButtonElement;
       await userEvent.click(continueButton!);
@@ -2286,7 +2286,7 @@ describe('PaymentStep', () => {
       expect(mockTokenize).not.toHaveBeenCalled();
     });
 
-    it('still renders the card form when membershipPlanIsTrial is false', () => {
+    it('still renders the card form when membershipPlanIsTrial is false', async () => {
       const paidProps = {
         ...trialProps,
         data: {
@@ -2296,12 +2296,12 @@ describe('PaymentStep', () => {
         } as AddMemberWizardData,
       };
 
-      render(<PaymentStep {...paidProps} />);
+      await render(<PaymentStep {...paidProps} />);
 
       expect(page.getByLabelText(/Name on card/)).toBeTruthy();
     });
 
-    it('treats a non-zero finalPrice as paid even when membershipPlanIsTrial is true', () => {
+    it('treats a non-zero finalPrice as paid even when membershipPlanIsTrial is true', async () => {
       // Edge case: a trial flag with a non-zero price (e.g. coupon-driven) is
       // not a real trial — the card form must remain visible.
       const oddProps = {
@@ -2313,7 +2313,7 @@ describe('PaymentStep', () => {
         } as AddMemberWizardData,
       };
 
-      render(<PaymentStep {...oddProps} />);
+      await render(<PaymentStep {...oddProps} />);
 
       expect(page.getByLabelText(/Name on card/)).toBeTruthy();
     });
@@ -2337,14 +2337,14 @@ describe('PaymentStep', () => {
       } as AddMemberWizardData,
     };
 
-    it('shows "Pay $248 today" heading when signup fee is present', () => {
-      render(<PaymentStep {...signupFeeProps} />);
+    it('shows "Pay $248 today" heading when signup fee is present', async () => {
+      await render(<PaymentStep {...signupFeeProps} />);
 
       expect(page.getByText(/Pay \$248\.00 today/)).toBeTruthy();
     });
 
-    it('description names recurring and signup fee separately, not the bundled total', () => {
-      render(<PaymentStep {...signupFeeProps} />);
+    it('description names recurring and signup fee separately, not the bundled total', async () => {
+      await render(<PaymentStep {...signupFeeProps} />);
 
       // Description should mention $149/month recurring AND $99 one-time fee
       const descriptionMatch = document.body.textContent ?? '';
@@ -2354,15 +2354,15 @@ describe('PaymentStep', () => {
       expect(descriptionMatch).toContain('sign-up fee');
     });
 
-    it('renders three-row breakdown panel (Membership / Sign-up fee / Total)', () => {
-      render(<PaymentStep {...signupFeeProps} />);
+    it('renders three-row breakdown panel (Membership / Sign-up fee / Total)', async () => {
+      await render(<PaymentStep {...signupFeeProps} />);
 
       expect(page.getByText('Membership').first()).toBeTruthy();
       expect(page.getByText('Sign-up fee').first()).toBeTruthy();
       expect(page.getByText('Total due today')).toBeTruthy();
     });
 
-    it('falls back to original heading + description when signupFee is 0', () => {
+    it('falls back to original heading + description when signupFee is 0', async () => {
       const noFeeProps = {
         ...defaultProps,
         data: {
@@ -2374,7 +2374,7 @@ describe('PaymentStep', () => {
         } as AddMemberWizardData,
       };
 
-      render(<PaymentStep {...noFeeProps} />);
+      await render(<PaymentStep {...noFeeProps} />);
 
       // No "today" suffix in the heading, no breakdown panel
       expect(page.getByText(/Pay \$149\.00$/).first()).toBeTruthy();

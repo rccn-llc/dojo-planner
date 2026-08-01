@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { client } from '@/libs/Orpc';
+import { clearInFlight, dedupeRequest } from './dedupeRequest';
 
 // =============================================================================
 // TYPES
@@ -95,7 +96,9 @@ export const useProgramsCache = (organizationId?: string | undefined) => {
         return;
       }
 
-      const result = await client.programs.list();
+      // Several components can mount this hook in the same tick; without
+      // de-duping, each one fires its own request against the cold cache.
+      const result = await dedupeRequest(`programs:${organizationId || ''}`, async () => client.programs.list());
       const programs = (result.programs || []) as Program[];
 
       cacheStore = {
@@ -128,6 +131,7 @@ export const useProgramsCache = (organizationId?: string | undefined) => {
 
   const revalidate = useCallback(async () => {
     cacheStore = null;
+    clearInFlight();
     await fetchPrograms();
   }, [fetchPrograms]);
 
@@ -170,5 +174,6 @@ export const useProgramsCache = (organizationId?: string | undefined) => {
  */
 export const invalidateProgramsCache = async () => {
   cacheStore = null;
+  clearInFlight();
   await Promise.all(revalidateCallbacks.map(callback => callback()));
 };

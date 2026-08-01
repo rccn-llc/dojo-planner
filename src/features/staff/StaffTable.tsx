@@ -235,8 +235,8 @@ export function StaffTable({
                               Staff member name
                               {sortField === 'firstName' && (
                                 sortDirection === 'asc'
-                                  ? <ArrowDownAZ className="h-4 w-4" />
-                                  : <ArrowUpZA className="h-4 w-4" />
+                                  ? <ArrowDownAZ className="size-4" />
+                                  : <ArrowUpZA className="size-4" />
                               )}
                             </button>
                           </th>
@@ -249,8 +249,8 @@ export function StaffTable({
                               Role
                               {sortField === 'role' && (
                                 sortDirection === 'asc'
-                                  ? <ArrowDownAZ className="h-4 w-4" />
-                                  : <ArrowUpZA className="h-4 w-4" />
+                                  ? <ArrowDownAZ className="size-4" />
+                                  : <ArrowUpZA className="size-4" />
                               )}
                             </button>
                           </th>
@@ -267,7 +267,7 @@ export function StaffTable({
                           <tr key={staff.id} className="border-b border-border hover:bg-secondary/30">
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-3">
-                                <Avatar className="h-8 w-8 shrink-0">
+                                <Avatar className="size-8 shrink-0">
                                   {staff.photoUrl && (
                                     <AvatarImage src={staff.photoUrl} alt={`${staff.firstName} ${staff.lastName}`} />
                                   )}
@@ -306,7 +306,7 @@ export function StaffTable({
                                       aria-label={t('edit_photo_aria', { name: `${staff.firstName} ${staff.lastName}` })}
                                       title={t('edit_photo_aria', { name: `${staff.firstName} ${staff.lastName}` })}
                                     >
-                                      <ImageIcon className="h-4 w-4" />
+                                      <ImageIcon className="size-4" />
                                     </Button>
                                   )}
                                   <Button
@@ -316,7 +316,7 @@ export function StaffTable({
                                     aria-label={`Edit ${staff.firstName} ${staff.lastName}`}
                                     title={`Edit ${staff.firstName} ${staff.lastName}`}
                                   >
-                                    <Edit className="h-4 w-4" />
+                                    <Edit className="size-4" />
                                   </Button>
                                   <Button
                                     variant="destructive"
@@ -325,7 +325,7 @@ export function StaffTable({
                                     aria-label={`Remove ${staff.firstName} ${staff.lastName}`}
                                     title={`Remove ${staff.firstName} ${staff.lastName}`}
                                   >
-                                    <Trash2 className="h-4 w-4" />
+                                    <Trash2 className="size-4" />
                                   </Button>
                                 </div>
                               )}

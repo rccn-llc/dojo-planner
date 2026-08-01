@@ -58,7 +58,7 @@ export const TypeSelectionStep = ({ data, onUpdate, onNext, onCancel, error }: T
                 data.itemType === 'class' ? 'bg-primary text-primary-foreground' : 'bg-muted',
               )}
               >
-                <BookOpen className="h-8 w-8" />
+                <BookOpen className="size-8" />
               </div>
               <h3 className="mb-2 text-lg font-semibold">{t('class_option')}</h3>
               <p className="text-sm text-muted-foreground">
@@ -82,7 +82,7 @@ export const TypeSelectionStep = ({ data, onUpdate, onNext, onCancel, error }: T
                 data.itemType === 'event' ? 'bg-primary text-primary-foreground' : 'bg-muted',
               )}
               >
-                <Calendar className="h-8 w-8" />
+                <Calendar className="size-8" />
               </div>
               <h3 className="mb-2 text-lg font-semibold">{t('event_option')}</h3>
               <p className="text-sm text-muted-foreground">

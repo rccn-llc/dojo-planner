@@ -20,7 +20,7 @@ export const Default: Story = {
 };
 
 export const Avatar: Story = {
-  render: () => <Skeleton className="h-12 w-12 rounded-full" />,
+  render: () => <Skeleton className="size-12 rounded-full" />,
 };
 
 export const TextLine: Story = {
@@ -29,11 +29,11 @@ export const TextLine: Story = {
 
 export const CardSkeleton: Story = {
   render: () => (
-    <div className="w-[300px] space-y-3 rounded-lg border p-4">
-      <Skeleton className="h-12 w-12 rounded-full" />
+    <div className="w-75 space-y-3 rounded-lg border p-4">
+      <Skeleton className="size-12 rounded-full" />
       <div className="space-y-2">
         <Skeleton className="h-4 w-[250px]" />
-        <Skeleton className="h-4 w-[200px]" />
+        <Skeleton className="h-4 w-50" />
       </div>
     </div>
   ),
@@ -41,7 +41,7 @@ export const CardSkeleton: Story = {
 
 export const ArticleListSkeleton: Story = {
   render: () => (
-    <div className="w-[400px] space-y-4">
+    <div className="w-100 space-y-4">
       {[1, 2, 3].map(i => (
         <div key={i} className="space-y-2">
           <Skeleton className="h-12 w-full" />
@@ -58,7 +58,7 @@ export const TableSkeleton: Story = {
     <div className="w-full space-y-2">
       {[1, 2, 3, 4, 5].map(i => (
         <div key={i} className="flex gap-2">
-          <Skeleton className="h-10 w-10 rounded" />
+          <Skeleton className="size-10 rounded" />
           <Skeleton className="h-10 flex-1" />
           <Skeleton className="h-10 w-24" />
           <Skeleton className="h-10 w-20" />
@@ -71,7 +71,7 @@ export const TableSkeleton: Story = {
 export const DetailPageSkeleton: Story = {
   render: () => (
     <div className="w-full max-w-2xl space-y-4">
-      <Skeleton className="h-8 w-[300px]" />
+      <Skeleton className="h-8 w-75" />
       <Skeleton className="h-64 w-full" />
       <div className="space-y-2">
         <Skeleton className="h-4 w-full" />

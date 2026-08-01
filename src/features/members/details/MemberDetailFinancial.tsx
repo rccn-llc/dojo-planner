@@ -126,7 +126,7 @@ export function MemberDetailFinancial({
         <>
           {/* Member Header */}
           <div className="flex items-center gap-4">
-            <Avatar className="h-16 w-16">
+            <Avatar className="size-16">
               {photoUrl && <AvatarImage src={photoUrl} alt={memberName} />}
               <AvatarFallback>{getInitials(memberName)}</AvatarFallback>
             </Avatar>
@@ -188,7 +188,7 @@ export function MemberDetailFinancial({
                   <p className="text-sm text-muted-foreground">{t('billing_type_label')}</p>
                   <div className="flex items-center gap-2">
                     {membershipDetails.billingType === 'autopay' && (
-                      <RefreshCw className="h-3 w-3 text-primary" />
+                      <RefreshCw className="size-3 text-primary" />
                     )}
                     <Badge variant={membershipDetails.billingType === 'autopay' ? 'default' : 'secondary'}>
                       {membershipDetails.billingType === 'autopay' ? t('billing_type_autopay') : t('billing_type_onetime')}
@@ -287,7 +287,7 @@ export function MemberDetailFinancial({
                 onClick={onDownloadAgreement}
                 className="w-fit gap-2 bg-foreground text-background hover:bg-foreground/90"
               >
-                <Download className="h-4 w-4" />
+                <Download className="size-4" />
                 {t('download_button')}
               </Button>
             </div>
@@ -323,18 +323,18 @@ export function MemberDetailFinancial({
                         return [
                           // Parent Family Membership Row
                           <tr key={item.id} className="border-b border-border hover:bg-secondary/30">
-                            <td className="px-4 py-4">
+                            <td className="p-4">
                               <div className="flex items-center gap-2">
                                 <span className="text-sm font-semibold text-foreground">{item.member}</span>
                               </div>
                             </td>
-                            <td className="px-4 py-4 text-sm text-muted-foreground">{item.date}</td>
-                            <td className="px-4 py-4 text-sm font-semibold text-primary">
+                            <td className="p-4 text-sm text-muted-foreground">{item.date}</td>
+                            <td className="p-4 text-sm font-semibold text-primary">
                               {formatCurrency(item.amount)}
                             </td>
-                            <td className="px-4 py-4 text-sm text-muted-foreground">{item.purpose}</td>
-                            <td className="px-4 py-4 text-sm text-muted-foreground">{item.method}</td>
-                            <td className="px-4 py-4">
+                            <td className="p-4 text-sm text-muted-foreground">{item.purpose}</td>
+                            <td className="p-4 text-sm text-muted-foreground">{item.method}</td>
+                            <td className="p-4">
                               <Button
                                 size="sm"
                                 onClick={() => onRefund?.(item.id)}
@@ -347,16 +347,16 @@ export function MemberDetailFinancial({
                           // Child Membership Rows
                           ...item.children.map(child => (
                             <tr key={child.id} className="border-b border-border bg-secondary/20">
-                              <td className="px-4 py-4 pl-8 text-sm text-muted-foreground">
+                              <td className="p-4 pl-8 text-sm text-muted-foreground">
                                 {child.member}
                               </td>
-                              <td className="px-4 py-4 text-sm text-muted-foreground" />
-                              <td className="px-4 py-4 text-sm text-muted-foreground">
+                              <td className="p-4 text-sm text-muted-foreground" />
+                              <td className="p-4 text-sm text-muted-foreground">
                                 {formatCurrency(child.amount)}
                               </td>
-                              <td className="px-4 py-4 text-sm text-muted-foreground">{child.purpose}</td>
-                              <td className="px-4 py-4 text-sm text-muted-foreground" />
-                              <td className="px-4 py-4" />
+                              <td className="p-4 text-sm text-muted-foreground">{child.purpose}</td>
+                              <td className="p-4 text-sm text-muted-foreground" />
+                              <td className="p-4" />
                             </tr>
                           )),
                         ];
@@ -364,18 +364,18 @@ export function MemberDetailFinancial({
 
                       return [
                         <tr key={item.id} className="border-b border-border hover:bg-secondary/30">
-                          <td className="px-4 py-4">
+                          <td className="p-4">
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-semibold text-foreground">{item.member}</span>
                             </div>
                           </td>
-                          <td className="px-4 py-4 text-sm text-muted-foreground">{item.date}</td>
-                          <td className="px-4 py-4 text-sm font-semibold text-primary">
+                          <td className="p-4 text-sm text-muted-foreground">{item.date}</td>
+                          <td className="p-4 text-sm font-semibold text-primary">
                             {formatCurrency(item.amount)}
                           </td>
-                          <td className="px-4 py-4 text-sm text-muted-foreground">{item.purpose}</td>
-                          <td className="px-4 py-4 text-sm text-muted-foreground">{item.method}</td>
-                          <td className="px-4 py-4">
+                          <td className="p-4 text-sm text-muted-foreground">{item.purpose}</td>
+                          <td className="p-4 text-sm text-muted-foreground">{item.method}</td>
+                          <td className="p-4">
                             <Button
                               size="sm"
                               onClick={() => onRefund?.(item.id)}

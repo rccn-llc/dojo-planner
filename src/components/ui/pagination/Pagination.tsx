@@ -105,7 +105,7 @@ export function Pagination({
             disabled={currentPage === 0}
             className="h-10 gap-2 border border-neutral-400 bg-neutral-100 text-neutral-1000 shadow-none disabled:text-neutral-600"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="size-4" />
             Previous
           </Button>
 
@@ -132,7 +132,7 @@ export function Pagination({
                   size="sm"
                   onClick={() => onPageChangeAction(pageNum)}
                   className={cn(
-                    'min-w-10 h-10 border shadow-none',
+                    'h-10 min-w-10 border shadow-none',
                     isActive
                       ? 'border-neutral-1500 bg-neutral-1500 text-neutral-100 hover:bg-neutral-1500'
                       : 'border-neutral-400 bg-neutral-100 text-neutral-1000 hover:bg-neutral-200',
@@ -152,7 +152,7 @@ export function Pagination({
             className="h-10 gap-2 border border-neutral-400 bg-neutral-100 text-neutral-1000 shadow-none disabled:text-neutral-600"
           >
             Next
-            <ArrowRight className="h-4 w-4" />
+            <ArrowRight className="size-4" />
           </Button>
         </div>
       )}

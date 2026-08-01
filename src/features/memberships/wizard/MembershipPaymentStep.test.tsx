@@ -106,8 +106,8 @@ describe('MembershipPaymentStep', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the step with title and subtitle', () => {
-    render(
+  it('should render the step with title and subtitle', async () => {
+    await render(
       <MembershipPaymentStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -122,8 +122,8 @@ describe('MembershipPaymentStep', () => {
     expect(heading).toBeTruthy();
   });
 
-  it('should render signup fee input', () => {
-    render(
+  it('should render signup fee input', async () => {
+    await render(
       <MembershipPaymentStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -138,8 +138,8 @@ describe('MembershipPaymentStep', () => {
     expect(signupFeeLabel).toBeTruthy();
   });
 
-  it('should render monthly fee input', () => {
-    render(
+  it('should render monthly fee input', async () => {
+    await render(
       <MembershipPaymentStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -154,8 +154,8 @@ describe('MembershipPaymentStep', () => {
     expect(monthlyFeeLabel).toBeTruthy();
   });
 
-  it('should render payment frequency select', () => {
-    render(
+  it('should render payment frequency select', async () => {
+    await render(
       <MembershipPaymentStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -170,8 +170,8 @@ describe('MembershipPaymentStep', () => {
     expect(frequencyLabel).toBeTruthy();
   });
 
-  it('should render the Cancellation and Hold Fees section', () => {
-    render(
+  it('should render the Cancellation and Hold Fees section', async () => {
+    await render(
       <MembershipPaymentStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -194,8 +194,8 @@ describe('MembershipPaymentStep', () => {
     expect(holdLimitLabel).toBeTruthy();
   });
 
-  it('should NOT render Membership Start Date on this step (moved to Contract Terms)', () => {
-    render(
+  it('should NOT render Membership Start Date on this step (moved to Contract Terms)', async () => {
+    await render(
       <MembershipPaymentStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -212,8 +212,8 @@ describe('MembershipPaymentStep', () => {
     expect(startDateLabels.length).toBe(0);
   });
 
-  it('should render pro-rate toggle', () => {
-    render(
+  it('should render pro-rate toggle', async () => {
+    await render(
       <MembershipPaymentStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -228,8 +228,8 @@ describe('MembershipPaymentStep', () => {
     expect(prorateLabel).toBeTruthy();
   });
 
-  it('should have Next button disabled when monthly fee is not provided for standard membership', () => {
-    render(
+  it('should have Next button disabled when monthly fee is not provided for standard membership', async () => {
+    await render(
       <MembershipPaymentStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -245,13 +245,13 @@ describe('MembershipPaymentStep', () => {
     expect(nextButton?.disabled).toBe(true);
   });
 
-  it('should enable Next button when monthly fee is provided', () => {
+  it('should enable Next button when monthly fee is provided', async () => {
     const dataWithFee: AddMembershipWizardData = {
       ...mockData,
       monthlyFee: 150,
     };
 
-    render(
+    await render(
       <MembershipPaymentStep
         data={dataWithFee}
         onUpdate={mockHandlers.onUpdate}
@@ -267,13 +267,13 @@ describe('MembershipPaymentStep', () => {
     expect(nextButton?.disabled).toBe(false);
   });
 
-  it('should enable Next button for trial membership without monthly fee', () => {
+  it('should enable Next button for trial membership without monthly fee', async () => {
     const trialData: AddMembershipWizardData = {
       ...mockData,
       membershipType: 'trial',
     };
 
-    render(
+    await render(
       <MembershipPaymentStep
         data={trialData}
         onUpdate={mockHandlers.onUpdate}
@@ -290,7 +290,7 @@ describe('MembershipPaymentStep', () => {
   });
 
   it('should call onCancel when Cancel button is clicked', async () => {
-    render(
+    await render(
       <MembershipPaymentStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -311,7 +311,7 @@ describe('MembershipPaymentStep', () => {
   });
 
   it('should call onBack when Back button is clicked', async () => {
-    render(
+    await render(
       <MembershipPaymentStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -337,7 +337,7 @@ describe('MembershipPaymentStep', () => {
       monthlyFee: 150,
     };
 
-    render(
+    await render(
       <MembershipPaymentStep
         data={dataWithFee}
         onUpdate={mockHandlers.onUpdate}
@@ -357,8 +357,8 @@ describe('MembershipPaymentStep', () => {
     }
   });
 
-  it('should display error message when provided', () => {
-    render(
+  it('should display error message when provided', async () => {
+    await render(
       <MembershipPaymentStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -375,7 +375,7 @@ describe('MembershipPaymentStep', () => {
   });
 
   it('should call onUpdate when signup fee input changes', async () => {
-    render(
+    await render(
       <MembershipPaymentStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -395,7 +395,7 @@ describe('MembershipPaymentStep', () => {
   });
 
   it('should call onUpdate when prorate toggle is clicked', async () => {
-    render(
+    await render(
       <MembershipPaymentStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -414,8 +414,8 @@ describe('MembershipPaymentStep', () => {
     }
   });
 
-  it('should render dollar sign prefix for fee inputs', () => {
-    render(
+  it('should render dollar sign prefix for fee inputs', async () => {
+    await render(
       <MembershipPaymentStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -431,13 +431,13 @@ describe('MembershipPaymentStep', () => {
     expect(dollarSigns.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('should display Weekly Fee label when payment frequency is weekly', () => {
+  it('should display Weekly Fee label when payment frequency is weekly', async () => {
     const weeklyData: AddMembershipWizardData = {
       ...mockData,
       paymentFrequency: 'weekly',
     };
 
-    render(
+    await render(
       <MembershipPaymentStep
         data={weeklyData}
         onUpdate={mockHandlers.onUpdate}
@@ -452,13 +452,13 @@ describe('MembershipPaymentStep', () => {
     expect(weeklyFeeLabel).toBeTruthy();
   });
 
-  it('should display Annual Fee label when payment frequency is annually', () => {
+  it('should display Annual Fee label when payment frequency is annually', async () => {
     const annualData: AddMembershipWizardData = {
       ...mockData,
       paymentFrequency: 'annually',
     };
 
-    render(
+    await render(
       <MembershipPaymentStep
         data={annualData}
         onUpdate={mockHandlers.onUpdate}
@@ -473,13 +473,13 @@ describe('MembershipPaymentStep', () => {
     expect(annualFeeLabel).toBeTruthy();
   });
 
-  it('should render punchcard-specific fields for punchcard membership', () => {
+  it('should render punchcard-specific fields for punchcard membership', async () => {
     const punchcardData: AddMembershipWizardData = {
       ...mockData,
       membershipType: 'punchcard',
     };
 
-    render(
+    await render(
       <MembershipPaymentStep
         data={punchcardData}
         onUpdate={mockHandlers.onUpdate}
@@ -496,13 +496,13 @@ describe('MembershipPaymentStep', () => {
     expect(punchcardPriceLabel).toBeTruthy();
   });
 
-  it('should not render standard payment fields for punchcard membership', () => {
+  it('should not render standard payment fields for punchcard membership', async () => {
     const punchcardData: AddMembershipWizardData = {
       ...mockData,
       membershipType: 'punchcard',
     };
 
-    render(
+    await render(
       <MembershipPaymentStep
         data={punchcardData}
         onUpdate={mockHandlers.onUpdate}
@@ -521,13 +521,13 @@ describe('MembershipPaymentStep', () => {
     expect(monthlyFeeElements.length).toBe(0);
   });
 
-  it('should have Next button disabled for punchcard when classes and price are not provided', () => {
+  it('should have Next button disabled for punchcard when classes and price are not provided', async () => {
     const punchcardData: AddMembershipWizardData = {
       ...mockData,
       membershipType: 'punchcard',
     };
 
-    render(
+    await render(
       <MembershipPaymentStep
         data={punchcardData}
         onUpdate={mockHandlers.onUpdate}
@@ -543,7 +543,7 @@ describe('MembershipPaymentStep', () => {
     expect(nextButton?.disabled).toBe(true);
   });
 
-  it('should enable Next button for punchcard when classes and price are provided', () => {
+  it('should enable Next button for punchcard when classes and price are provided', async () => {
     const punchcardDataWithValues: AddMembershipWizardData = {
       ...mockData,
       membershipType: 'punchcard',
@@ -551,7 +551,7 @@ describe('MembershipPaymentStep', () => {
       punchcardPrice: 200,
     };
 
-    render(
+    await render(
       <MembershipPaymentStep
         data={punchcardDataWithValues}
         onUpdate={mockHandlers.onUpdate}
@@ -567,13 +567,13 @@ describe('MembershipPaymentStep', () => {
     expect(nextButton?.disabled).toBe(false);
   });
 
-  it('should render punchcard description text', () => {
+  it('should render punchcard description text', async () => {
     const punchcardData: AddMembershipWizardData = {
       ...mockData,
       membershipType: 'punchcard',
     };
 
-    render(
+    await render(
       <MembershipPaymentStep
         data={punchcardData}
         onUpdate={mockHandlers.onUpdate}
@@ -594,7 +594,7 @@ describe('MembershipPaymentStep', () => {
       membershipType: 'punchcard',
     };
 
-    render(
+    await render(
       <MembershipPaymentStep
         data={punchcardData}
         onUpdate={mockHandlers.onUpdate}

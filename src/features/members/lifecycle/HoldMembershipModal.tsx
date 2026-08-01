@@ -112,7 +112,7 @@ export function HoldMembershipModal({
           {hasFee && (
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-900 dark:bg-blue-950">
               <div className="flex items-start gap-3">
-                <Pause className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
+                <Pause className="mt-0.5 size-5 shrink-0 text-blue-600 dark:text-blue-400" />
                 <div className="flex-1">
                   <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
                     {isRecurringFee ? t('recurring_fee_title') : t('one_time_fee_title')}

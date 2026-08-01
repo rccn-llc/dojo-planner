@@ -9,6 +9,7 @@ import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { dedupeRequest } from '@/hooks/dedupeRequest';
 import { useFamilyMemberWizard } from '@/hooks/useFamilyMemberWizard';
 import { client } from '@/libs/Orpc';
 import { FamilyMemberSuccessStep } from './FamilyMemberSuccessStep';
@@ -64,9 +65,11 @@ export const AddFamilyMembersModal = ({
     }
     const fetchConfig = async () => {
       try {
-        const config = await client.payment.getTokenizationConfig({
+        const config = await dedupeRequest(`payment.getTokenizationConfig:${JSON.stringify({
           origin: window.location.origin,
-        });
+        })}`, async () => client.payment.getTokenizationConfig({
+          origin: window.location.origin,
+        }));
         setTokenizationConfig(config);
       } catch {
         setTokenizationConfig(null);

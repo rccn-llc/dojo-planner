@@ -140,13 +140,13 @@ describe('FamilyPaymentStep — Try Again button (#131)', () => {
   }
 
   it('does not render when paymentStatus is undefined', async () => {
-    render(<FamilyPaymentStep {...baseProps} />);
+    await render(<FamilyPaymentStep {...baseProps} />);
 
     await expect.element(page.getByTestId('family-payment-try-again-button')).not.toBeInTheDocument();
   });
 
   it('renders when paymentStatus is declined', async () => {
-    render(<FamilyPaymentStep {...declinedProps()} />);
+    await render(<FamilyPaymentStep {...declinedProps()} />);
 
     await expect.element(page.getByTestId('family-payment-try-again-button')).toBeInTheDocument();
   });
@@ -154,7 +154,7 @@ describe('FamilyPaymentStep — Try Again button (#131)', () => {
   it('clicking it clears decline state without calling onNextAction', async () => {
     const onUpdateAction = vi.fn();
     const onNextAction = vi.fn();
-    render(<FamilyPaymentStep {...declinedProps({ onUpdateAction, onNextAction })} />);
+    await render(<FamilyPaymentStep {...declinedProps({ onUpdateAction, onNextAction })} />);
 
     await userEvent.click(page.getByTestId('family-payment-try-again-button'));
 
@@ -180,16 +180,16 @@ describe('FamilyPaymentStep — Free trial mode (#129/#135/#139)', () => {
     hohHasPaymentMethod: false,
   };
 
-  it('renders the trial disclaimer in place of the billing summary', () => {
-    render(<FamilyPaymentStep {...baseProps} data={trialData} />);
+  it('renders the trial disclaimer in place of the billing summary', async () => {
+    await render(<FamilyPaymentStep {...baseProps} data={trialData} />);
 
     expect(page.getByText('Free Trial — No Payment Today')).toBeTruthy();
     expect(page.getByText(/Your trial period is 7 Days/)).toBeTruthy();
     expect(document.querySelector('label[for="familyCardholderName"]')).toBeNull();
   });
 
-  it('enables the Continue button with no card data and no HOH card', () => {
-    render(<FamilyPaymentStep {...baseProps} data={trialData} />);
+  it('enables the Continue button with no card data and no HOH card', async () => {
+    await render(<FamilyPaymentStep {...baseProps} data={trialData} />);
 
     const continueButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent === 'Continue') as HTMLButtonElement;
 
@@ -197,17 +197,17 @@ describe('FamilyPaymentStep — Free trial mode (#129/#135/#139)', () => {
     expect(continueButton?.disabled).toBe(false);
   });
 
-  it('renders disclaimer even when HOH has a card on file (no charge today)', () => {
+  it('renders disclaimer even when HOH has a card on file (no charge today)', async () => {
     const trialWithHohCard = { ...trialData, hohHasPaymentMethod: true };
-    render(<FamilyPaymentStep {...baseProps} data={trialWithHohCard} />);
+    await render(<FamilyPaymentStep {...baseProps} data={trialWithHohCard} />);
 
     expect(page.getByText('Free Trial — No Payment Today')).toBeTruthy();
     // No "HOH will be billed" notice on a trial.
     expect(document.body.textContent).not.toContain('HOH will be billed');
   });
 
-  it('still renders the billing summary when membershipPlanIsTrial is false', () => {
-    render(<FamilyPaymentStep {...baseProps} />);
+  it('still renders the billing summary when membershipPlanIsTrial is false', async () => {
+    await render(<FamilyPaymentStep {...baseProps} />);
 
     expect(page.getByText('Billing Summary')).toBeTruthy();
   });
@@ -220,14 +220,14 @@ describe('FamilyPaymentStep — Free trial mode (#129/#135/#139)', () => {
 // ─────────────────────────────────────────────────────────────────────────
 
 describe('FamilyPaymentStep — signup fee breakdown', () => {
-  it('itemizes membership and signup fee when signupFee > 0', () => {
+  it('itemizes membership and signup fee when signupFee > 0', async () => {
     const dataWithFee: AddMemberWizardData = {
       ...baseData,
       membershipPlanPrice: 149,
       membershipPlanSignupFee: 99,
       membershipPlanName: '12 Month Commitment (Gold)',
     };
-    render(<FamilyPaymentStep {...baseProps} data={dataWithFee} />);
+    await render(<FamilyPaymentStep {...baseProps} data={dataWithFee} />);
 
     // Three breakdown rows replace the single "Amount" row
     expect(page.getByText('Membership').first()).toBeTruthy();
@@ -241,13 +241,13 @@ describe('FamilyPaymentStep — signup fee breakdown', () => {
     expect(document.body.textContent).toContain('$248');
   });
 
-  it('falls back to the single "Amount" row when signupFee is 0', () => {
+  it('falls back to the single "Amount" row when signupFee is 0', async () => {
     const dataNoFee: AddMemberWizardData = {
       ...baseData,
       membershipPlanPrice: 149,
       membershipPlanSignupFee: 0,
     };
-    render(<FamilyPaymentStep {...baseProps} data={dataNoFee} />);
+    await render(<FamilyPaymentStep {...baseProps} data={dataNoFee} />);
 
     expect(page.getByText('Amount')).toBeTruthy();
     expect(document.body.textContent).not.toContain('Total due today');

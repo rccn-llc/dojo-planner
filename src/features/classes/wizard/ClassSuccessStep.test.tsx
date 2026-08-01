@@ -94,24 +94,24 @@ describe('ClassSuccessStep', () => {
     vi.clearAllMocks();
   });
 
-  it('should render success title', () => {
-    render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
+  it('should render success title', async () => {
+    await render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
 
     const title = page.getByRole('heading', { level: 2 });
 
     expect(title).toBeTruthy();
   });
 
-  it('should display class name in description', () => {
-    render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
+  it('should display class name in description', async () => {
+    await render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
 
     const description = page.getByText(/"Morning BJJ" has been added to your schedule./);
 
     expect(description).toBeTruthy();
   });
 
-  it('should display success checkmark icon', () => {
-    render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
+  it('should display success checkmark icon', async () => {
+    await render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
 
     const svg = document.querySelector('svg');
 
@@ -119,47 +119,47 @@ describe('ClassSuccessStep', () => {
     expect(svg?.classList.contains('text-green-600')).toBe(true);
   });
 
-  it('should display class summary section', () => {
-    render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
+  it('should display class summary section', async () => {
+    await render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
 
     const summaryTitle = page.getByText('Class Summary');
 
     expect(summaryTitle).toBeTruthy();
   });
 
-  it('should display class name in summary', () => {
-    render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
+  it('should display class name in summary', async () => {
+    await render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
 
     const className = page.getByText('Morning BJJ');
 
     expect(className).toBeTruthy();
   });
 
-  it('should display program name in summary', () => {
-    render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
+  it('should display program name in summary', async () => {
+    await render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
 
     const program = page.getByText('Adult Brazilian Jiu-Jitsu');
 
     expect(program).toBeTruthy();
   });
 
-  it('should display schedule in summary', () => {
-    render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
+  it('should display schedule in summary', async () => {
+    await render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
 
     const schedule = page.getByText(/Monday, Wednesday, Friday \(3 time slots\)/);
 
     expect(schedule).toBeTruthy();
   });
 
-  it('should display duration with hours and minutes', () => {
-    render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
+  it('should display duration with hours and minutes', async () => {
+    await render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
 
     const duration = page.getByText('1h 30m');
 
     expect(duration).toBeTruthy();
   });
 
-  it('should display duration with only hours when no minutes', () => {
+  it('should display duration with only hours when no minutes', async () => {
     const dataWithOnlyHours: AddClassWizardData = {
       ...mockData,
       schedule: {
@@ -172,14 +172,14 @@ describe('ClassSuccessStep', () => {
       },
     };
 
-    render(<ClassSuccessStep data={dataWithOnlyHours} onDone={mockOnDone} classTags={mockClassTags} />);
+    await render(<ClassSuccessStep data={dataWithOnlyHours} onDone={mockOnDone} classTags={mockClassTags} />);
 
     const duration = page.getByText('2h');
 
     expect(duration).toBeTruthy();
   });
 
-  it('should display duration with only minutes when no hours', () => {
+  it('should display duration with only minutes when no hours', async () => {
     const dataWithOnlyMinutes: AddClassWizardData = {
       ...mockData,
       schedule: {
@@ -192,31 +192,31 @@ describe('ClassSuccessStep', () => {
       },
     };
 
-    render(<ClassSuccessStep data={dataWithOnlyMinutes} onDone={mockOnDone} classTags={mockClassTags} />);
+    await render(<ClassSuccessStep data={dataWithOnlyMinutes} onDone={mockOnDone} classTags={mockClassTags} />);
 
     const duration = page.getByText('45m');
 
     expect(duration).toBeTruthy();
   });
 
-  it('should display instructor name in summary', () => {
-    render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
+  it('should display instructor name in summary', async () => {
+    await render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
 
     const instructor = page.getByText('Coach Alex');
 
     expect(instructor).toBeTruthy();
   });
 
-  it('should display calendar color preview', () => {
-    render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
+  it('should display calendar color preview', async () => {
+    await render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
 
     const colorHex = page.getByText('#3b82f6');
 
     expect(colorHex).toBeTruthy();
   });
 
-  it('should not display tags section when no tags are selected', () => {
-    render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
+  it('should not display tags section when no tags are selected', async () => {
+    await render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
 
     const tagsLabel = document.body.textContent?.includes('Tags');
 
@@ -224,21 +224,21 @@ describe('ClassSuccessStep', () => {
     expect(tagsLabel).toBe(false);
   });
 
-  it('should display tags when selected', () => {
+  it('should display tags when selected', async () => {
     const dataWithTags: AddClassWizardData = {
       ...mockData,
       tags: ['tag-1'],
     };
 
-    render(<ClassSuccessStep data={dataWithTags} onDone={mockOnDone} classTags={mockClassTags} />);
+    await render(<ClassSuccessStep data={dataWithTags} onDone={mockOnDone} classTags={mockClassTags} />);
 
     const tagsLabel = page.getByText('Tags');
 
     expect(tagsLabel).toBeTruthy();
   });
 
-  it('should display Done button', () => {
-    render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
+  it('should display Done button', async () => {
+    await render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
 
     const doneButton = page.getByRole('button', { name: 'Done' });
 
@@ -246,7 +246,7 @@ describe('ClassSuccessStep', () => {
   });
 
   it('should call onDone when Done button is clicked', async () => {
-    render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
+    await render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
 
     const doneButton = page.getByRole('button', { name: 'Done' });
     await userEvent.click(doneButton.element());
@@ -254,21 +254,21 @@ describe('ClassSuccessStep', () => {
     expect(mockOnDone).toHaveBeenCalled();
   });
 
-  it('should fall back to the raw program value when no display name is set', () => {
+  it('should fall back to the raw program value when no display name is set', async () => {
     const dataWithUnknownProgram: AddClassWizardData = {
       ...mockData,
       program: 'unknown-program',
       programName: '',
     };
 
-    render(<ClassSuccessStep data={dataWithUnknownProgram} onDone={mockOnDone} classTags={mockClassTags} />);
+    await render(<ClassSuccessStep data={dataWithUnknownProgram} onDone={mockOnDone} classTags={mockClassTags} />);
 
     const program = page.getByText('unknown-program');
 
     expect(program).toBeTruthy();
   });
 
-  it('should handle unknown staff member gracefully', () => {
+  it('should handle unknown staff member gracefully', async () => {
     const dataWithUnknownStaff: AddClassWizardData = {
       ...mockData,
       schedule: {
@@ -280,15 +280,15 @@ describe('ClassSuccessStep', () => {
       },
     };
 
-    render(<ClassSuccessStep data={dataWithUnknownStaff} onDone={mockOnDone} classTags={mockClassTags} />);
+    await render(<ClassSuccessStep data={dataWithUnknownStaff} onDone={mockOnDone} classTags={mockClassTags} />);
 
     const instructor = page.getByText('unknown-coach');
 
     expect(instructor).toBeTruthy();
   });
 
-  it('should display schedule summary with days and time slots', () => {
-    render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
+  it('should display schedule summary with days and time slots', async () => {
+    await render(<ClassSuccessStep data={mockData} onDone={mockOnDone} classTags={mockClassTags} />);
 
     // Should show days and time slot count
     const schedule = page.getByText(/Monday, Wednesday, Friday \(3 time slots\)/);

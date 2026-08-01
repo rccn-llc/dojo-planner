@@ -19,8 +19,8 @@ describe('UserCard', () => {
     vi.clearAllMocks();
   });
 
-  it('should render user information correctly', () => {
-    render(<UserCard {...defaultProps} />);
+  it('should render user information correctly', async () => {
+    await render(<UserCard {...defaultProps} />);
 
     expect(page.getByText('Charlie Baptista')).toBeTruthy();
     expect(page.getByText('Account Owner')).toBeTruthy();
@@ -28,16 +28,16 @@ describe('UserCard', () => {
     expect(page.getByText('May 1, 2025')).toBeTruthy();
   });
 
-  it('should render user initials when no avatar is provided', () => {
-    render(<UserCard {...defaultProps} />);
+  it('should render user initials when no avatar is provided', async () => {
+    await render(<UserCard {...defaultProps} />);
 
     const avatar = page.getByText('CB');
 
     expect(avatar).toBeTruthy();
   });
 
-  it('should render avatar image when provided', () => {
-    render(<UserCard {...defaultProps} avatar="https://example.com/avatar.jpg" />);
+  it('should render avatar image when provided', async () => {
+    await render(<UserCard {...defaultProps} avatar="https://example.com/avatar.jpg" />);
 
     const avatarImage = page.getByRole('img');
 
@@ -49,22 +49,22 @@ describe('UserCard', () => {
 
     expect(page.getByText('Active')).toBeTruthy();
 
-    renderResult.unmount();
+    await renderResult.unmount();
 
     await render(<UserCard {...defaultProps} status="Inactive" />);
 
     expect(page.getByText('Inactive')).toBeTruthy();
   });
 
-  it('should display invitation sent status correctly', () => {
-    render(<UserCard {...defaultProps} status="Invitation sent" />);
+  it('should display invitation sent status correctly', async () => {
+    await render(<UserCard {...defaultProps} status="Invitation sent" />);
 
     expect(page.getByText('Invitation Sent')).toBeTruthy();
   });
 
   it('should handle onClick when provided', async () => {
     const mockOnClick = vi.fn();
-    render(<UserCard {...defaultProps} onClick={mockOnClick} />);
+    await render(<UserCard {...defaultProps} onClick={mockOnClick} />);
 
     const card = page.getByRole('button');
     await card.click();
@@ -72,8 +72,8 @@ describe('UserCard', () => {
     expect(mockOnClick).toHaveBeenCalledWith('1');
   });
 
-  it('should not be clickable when onClick is not provided', () => {
-    render(<UserCard {...defaultProps} />);
+  it('should not be clickable when onClick is not provided', async () => {
+    await render(<UserCard {...defaultProps} />);
 
     // Should not have button role when onClick is not provided
     const buttons = page.getByRole('button', { includeHidden: true });
@@ -81,20 +81,20 @@ describe('UserCard', () => {
     expect(buttons.elements()).toHaveLength(0);
   });
 
-  it('should format text by default', () => {
-    render(<UserCard {...defaultProps} status="Invitation sent" />);
+  it('should format text by default', async () => {
+    await render(<UserCard {...defaultProps} status="Invitation sent" />);
 
     expect(page.getByText('Invitation Sent')).toBeTruthy();
   });
 
-  it('should not format text when formatText is false', () => {
-    render(<UserCard {...defaultProps} status="Invitation sent" formatText={false} />);
+  it('should not format text when formatText is false', async () => {
+    await render(<UserCard {...defaultProps} status="Invitation sent" formatText={false} />);
 
     expect(page.getByText('Invitation sent')).toBeTruthy();
   });
 
-  it('should render all grid sections', () => {
-    render(<UserCard {...defaultProps} />);
+  it('should render all grid sections', async () => {
+    await render(<UserCard {...defaultProps} />);
 
     expect(page.getByText('Roles')).toBeTruthy();
     expect(page.getByText('Status')).toBeTruthy();
@@ -102,32 +102,32 @@ describe('UserCard', () => {
     expect(page.getByText('Last Logged In')).toBeTruthy();
   });
 
-  it('should handle single name correctly for initials', () => {
-    render(<UserCard {...defaultProps} name="Charlie" />);
+  it('should handle single name correctly for initials', async () => {
+    await render(<UserCard {...defaultProps} name="Charlie" />);
 
     const avatar = page.getByText('C');
 
     expect(avatar).toBeTruthy();
   });
 
-  it('should handle multiple names correctly for initials', () => {
-    render(<UserCard {...defaultProps} name="Charlie Baptista Silva" />);
+  it('should handle multiple names correctly for initials', async () => {
+    await render(<UserCard {...defaultProps} name="Charlie Baptista Silva" />);
 
     const avatar = page.getByText('CBS');
 
     expect(avatar).toBeTruthy();
   });
 
-  it('should render with proper hover styles when clickable', () => {
+  it('should render with proper hover styles when clickable', async () => {
     const mockOnClick = vi.fn();
-    render(<UserCard {...defaultProps} onClick={mockOnClick} />);
+    await render(<UserCard {...defaultProps} onClick={mockOnClick} />);
 
     const card = page.getByRole('button');
 
     expect(card).toBeTruthy();
   });
 
-  it('should render different status variants correctly', () => {
+  it('should render different status variants correctly', async () => {
     // Test each status
     const statuses: Array<'Active' | 'Inactive' | 'Invitation sent'> = [
       'Active',
@@ -144,7 +144,7 @@ describe('UserCard', () => {
         expect(page.getByText(status)).toBeTruthy();
       }
 
-      renderResult.unmount();
+      await renderResult.unmount();
     });
   });
 });

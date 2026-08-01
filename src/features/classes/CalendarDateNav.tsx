@@ -34,7 +34,7 @@ export function CalendarDateNav({ currentDate, onDateChangeAction, display }: Ca
           className="flex items-center gap-2 rounded-md px-2 py-1 text-lg font-semibold text-foreground hover:bg-muted"
           aria-label={t('open_picker_aria')}
         >
-          <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+          <CalendarIcon className="size-4 text-muted-foreground" />
           {display}
         </button>
       </PopoverTrigger>

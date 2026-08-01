@@ -6,8 +6,8 @@ import { DateOfBirthInput } from './date-of-birth-input';
 
 describe('DateOfBirthInput', () => {
   describe('Rendering', () => {
-    it('renders an empty input when no value provided', () => {
-      render(<DateOfBirthInput value={undefined} onChange={() => {}} />);
+    it('renders an empty input when no value provided', async () => {
+      await render(<DateOfBirthInput value={undefined} onChange={() => {}} />);
 
       const input = page.getByPlaceholder('MM/DD/YYYY');
 
@@ -15,16 +15,16 @@ describe('DateOfBirthInput', () => {
       expect((input.element() as HTMLInputElement).value).toBe('');
     });
 
-    it('renders the value formatted as MM/DD/YYYY', () => {
-      render(<DateOfBirthInput value={new Date(1990, 5, 15)} onChange={() => {}} />);
+    it('renders the value formatted as MM/DD/YYYY', async () => {
+      await render(<DateOfBirthInput value={new Date(1990, 5, 15)} onChange={() => {}} />);
 
       const input = page.getByPlaceholder('MM/DD/YYYY');
 
       expect((input.element() as HTMLInputElement).value).toBe('06/15/1990');
     });
 
-    it('renders a calendar icon button next to the input', () => {
-      render(<DateOfBirthInput value={undefined} onChange={() => {}} />);
+    it('renders a calendar icon button next to the input', async () => {
+      await render(<DateOfBirthInput value={undefined} onChange={() => {}} />);
 
       expect(page.getByRole('button', { name: 'Open calendar' })).toBeInTheDocument();
     });
@@ -33,7 +33,7 @@ describe('DateOfBirthInput', () => {
   describe('Typed input', () => {
     it('calls onChange with a parsed Date when a valid MM/DD/YYYY is typed', async () => {
       const onChange = vi.fn();
-      render(<DateOfBirthInput value={undefined} onChange={onChange} />);
+      await render(<DateOfBirthInput value={undefined} onChange={onChange} />);
 
       const input = page.getByPlaceholder('MM/DD/YYYY');
       await userEvent.type(input.element(), '03/14/1985');
@@ -49,7 +49,7 @@ describe('DateOfBirthInput', () => {
     });
 
     it('does not show an error while the user is mid-type', async () => {
-      render(<DateOfBirthInput value={undefined} onChange={() => {}} data-testid="dob" />);
+      await render(<DateOfBirthInput value={undefined} onChange={() => {}} data-testid="dob" />);
 
       const input = page.getByTestId('dob');
       await userEvent.type(input.element(), '03/');
@@ -60,7 +60,7 @@ describe('DateOfBirthInput', () => {
 
     it('shows a validation error on blur when the typed date is malformed', async () => {
       const onChange = vi.fn();
-      render(<DateOfBirthInput value={undefined} onChange={onChange} data-testid="dob" />);
+      await render(<DateOfBirthInput value={undefined} onChange={onChange} data-testid="dob" />);
 
       const input = page.getByTestId('dob');
       await userEvent.type(input.element(), '13/40/2020');
@@ -77,7 +77,7 @@ describe('DateOfBirthInput', () => {
 
     it('rejects rolled-over dates like 02/30/2020', async () => {
       const onChange = vi.fn();
-      render(<DateOfBirthInput value={undefined} onChange={onChange} data-testid="dob" />);
+      await render(<DateOfBirthInput value={undefined} onChange={onChange} data-testid="dob" />);
 
       const input = page.getByTestId('dob');
       await userEvent.type(input.element(), '02/30/2020');
@@ -94,7 +94,7 @@ describe('DateOfBirthInput', () => {
 
     it('clears the value when the input is emptied', async () => {
       const onChange = vi.fn();
-      render(<DateOfBirthInput value={new Date(1990, 5, 15)} onChange={onChange} />);
+      await render(<DateOfBirthInput value={new Date(1990, 5, 15)} onChange={onChange} />);
 
       const input = page.getByPlaceholder('MM/DD/YYYY');
       await userEvent.clear(input.element());
@@ -108,7 +108,7 @@ describe('DateOfBirthInput', () => {
 
     it('calls onBlur when the input is blurred', async () => {
       const onBlur = vi.fn();
-      render(
+      await render(
         <DateOfBirthInput value={undefined} onChange={() => {}} onBlur={onBlur} />,
       );
 
@@ -122,7 +122,7 @@ describe('DateOfBirthInput', () => {
 
   describe('Calendar popover', () => {
     it('opens the calendar when the icon button is clicked', async () => {
-      render(<DateOfBirthInput value={undefined} onChange={() => {}} />);
+      await render(<DateOfBirthInput value={undefined} onChange={() => {}} />);
 
       const calendarButton = page.getByRole('button', { name: 'Open calendar' });
       await userEvent.click(calendarButton.element());
@@ -133,7 +133,7 @@ describe('DateOfBirthInput', () => {
     it('updates the typed input when a date is selected from the calendar', async () => {
       const onChange = vi.fn();
       // Default month is 30 years ago — pick a known starting point.
-      render(
+      await render(
         <DateOfBirthInput value={new Date(1990, 5, 1)} onChange={onChange} />,
       );
 
@@ -160,7 +160,7 @@ describe('DateOfBirthInput', () => {
         const [value, setValue] = React.useState<Date | undefined>(() => new Date(1990, 5, 1));
         return <DateOfBirthInput value={value} onChange={setValue} />;
       }
-      render(<Harness />);
+      await render(<Harness />);
 
       const input = page.getByPlaceholder('MM/DD/YYYY');
 
@@ -177,8 +177,8 @@ describe('DateOfBirthInput', () => {
   });
 
   describe('Disabled state', () => {
-    it('disables both the input and the calendar trigger', () => {
-      render(<DateOfBirthInput value={undefined} onChange={() => {}} disabled />);
+    it('disables both the input and the calendar trigger', async () => {
+      await render(<DateOfBirthInput value={undefined} onChange={() => {}} disabled />);
 
       const input = page.getByPlaceholder('MM/DD/YYYY');
       const calendarButton = page.getByRole('button', { name: 'Open calendar' });

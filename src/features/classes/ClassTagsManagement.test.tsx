@@ -45,9 +45,9 @@ vi.mock('@/libs/Orpc', () => ({
 
 describe('ClassTagsManagement', () => {
   describe('Sheet Display', () => {
-    it('should render the sheet when open is true', () => {
+    it('should render the sheet when open is true', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -58,9 +58,9 @@ describe('ClassTagsManagement', () => {
       expect(title).toBeInTheDocument();
     });
 
-    it('should not render the sheet content when open is false', () => {
+    it('should not render the sheet content when open is false', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={false} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -71,9 +71,9 @@ describe('ClassTagsManagement', () => {
       expect(title.elements()).toHaveLength(0);
     });
 
-    it('should render the sheet title', () => {
+    it('should render the sheet title', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -86,9 +86,9 @@ describe('ClassTagsManagement', () => {
   });
 
   describe('Search Functionality', () => {
-    it('should render the search input', () => {
+    it('should render the search input', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -101,7 +101,7 @@ describe('ClassTagsManagement', () => {
 
     it('should filter tags when searching by tag name', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -122,7 +122,7 @@ describe('ClassTagsManagement', () => {
 
     it('should filter tags when searching by class name', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -139,7 +139,7 @@ describe('ClassTagsManagement', () => {
 
     it('should show no tags found message when search has no results', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -155,7 +155,7 @@ describe('ClassTagsManagement', () => {
 
     it('should be case-insensitive when searching', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -171,7 +171,7 @@ describe('ClassTagsManagement', () => {
 
     it('should clear filter and show all tags when search is cleared', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -191,9 +191,9 @@ describe('ClassTagsManagement', () => {
   });
 
   describe('Add New Tag Button', () => {
-    it('should render the Add New Tag button', () => {
+    it('should render the Add New Tag button', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -206,9 +206,9 @@ describe('ClassTagsManagement', () => {
   });
 
   describe('Table Headers', () => {
-    it('should render Tag Name column header', () => {
+    it('should render Tag Name column header', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -219,9 +219,9 @@ describe('ClassTagsManagement', () => {
       expect(tagNameHeader).toBeInTheDocument();
     });
 
-    it('should render Usage column header', () => {
+    it('should render Usage column header', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -232,9 +232,9 @@ describe('ClassTagsManagement', () => {
       expect(usageHeader).toBeInTheDocument();
     });
 
-    it('should render Actions column header', () => {
+    it('should render Actions column header', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -247,9 +247,9 @@ describe('ClassTagsManagement', () => {
   });
 
   describe('Tag List', () => {
-    it('should render all mock tags', () => {
+    it('should render all mock tags', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -262,9 +262,9 @@ describe('ClassTagsManagement', () => {
       }
     });
 
-    it('should display tag names', () => {
+    it('should display tag names', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -279,9 +279,9 @@ describe('ClassTagsManagement', () => {
       expect(adultsTag).toBeInTheDocument();
     });
 
-    it('should display tag usage counts', () => {
+    it('should display tag usage counts', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -298,9 +298,9 @@ describe('ClassTagsManagement', () => {
       expect(usageCount6).toBeInTheDocument();
     });
 
-    it('should display class names for each tag', () => {
+    it('should display class names for each tag', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -312,9 +312,9 @@ describe('ClassTagsManagement', () => {
       expect(fundamentalsText).toBeInTheDocument();
     });
 
-    it('should render color indicators for each tag', () => {
+    it('should render color indicators for each tag', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -328,9 +328,9 @@ describe('ClassTagsManagement', () => {
   });
 
   describe('Tag Actions', () => {
-    it('should render Edit buttons for each tag', () => {
+    it('should render Edit buttons for each tag', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -341,9 +341,9 @@ describe('ClassTagsManagement', () => {
       expect(editButtons.length).toBe(mockClassTags.length);
     });
 
-    it('should render Delete buttons for each tag', () => {
+    it('should render Delete buttons for each tag', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -358,7 +358,7 @@ describe('ClassTagsManagement', () => {
   describe('Sheet Close Functionality', () => {
     it('should call onOpenChange when close button is clicked', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -372,9 +372,9 @@ describe('ClassTagsManagement', () => {
   });
 
   describe('Tag Row Component', () => {
-    it('should render Beginner tag with correct color', () => {
+    it('should render Beginner tag with correct color', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -385,9 +385,9 @@ describe('ClassTagsManagement', () => {
       expect(beginnerTag).toBeInTheDocument();
     });
 
-    it('should render Kids tag row', () => {
+    it('should render Kids tag row', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -398,9 +398,9 @@ describe('ClassTagsManagement', () => {
       expect(kidsTag).toBeInTheDocument();
     });
 
-    it('should render Gi tag row', () => {
+    it('should render Gi tag row', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -411,9 +411,9 @@ describe('ClassTagsManagement', () => {
       expect(giTag).toBeInTheDocument();
     });
 
-    it('should render No-Gi tag row', () => {
+    it('should render No-Gi tag row', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -424,9 +424,9 @@ describe('ClassTagsManagement', () => {
       expect(noGiTag).toBeInTheDocument();
     });
 
-    it('should render Intermediate tag row', () => {
+    it('should render Intermediate tag row', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -437,9 +437,9 @@ describe('ClassTagsManagement', () => {
       expect(intermediateTag).toBeInTheDocument();
     });
 
-    it('should render Competition tag row', () => {
+    it('should render Competition tag row', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -452,9 +452,9 @@ describe('ClassTagsManagement', () => {
   });
 
   describe('Accessibility', () => {
-    it('should have accessible search input with aria-label', () => {
+    it('should have accessible search input with aria-label', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -465,9 +465,9 @@ describe('ClassTagsManagement', () => {
       expect(searchInput).toBeInTheDocument();
     });
 
-    it('should have proper table structure with rows', () => {
+    it('should have proper table structure with rows', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -483,7 +483,7 @@ describe('ClassTagsManagement', () => {
   describe('CRUD wiring', () => {
     it('opens the Add Tag modal when Add New Tag is clicked', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -497,7 +497,7 @@ describe('ClassTagsManagement', () => {
 
     it('opens the Edit Tag modal pre-filled when an Edit button is clicked', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -511,7 +511,7 @@ describe('ClassTagsManagement', () => {
 
     it('opens the delete confirm dialog when a Delete button is clicked', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <ClassTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,

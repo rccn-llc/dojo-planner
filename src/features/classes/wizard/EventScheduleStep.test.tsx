@@ -104,8 +104,8 @@ describe('EventScheduleStep', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the step with title and subtitle', () => {
-    render(
+  it('should render the step with title and subtitle', async () => {
+    await render(
       <EventScheduleStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -121,8 +121,8 @@ describe('EventScheduleStep', () => {
     expect(heading).toBeTruthy();
   });
 
-  it('should render single/multi day radio options', () => {
-    render(
+  it('should render single/multi day radio options', async () => {
+    await render(
       <EventScheduleStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -140,8 +140,8 @@ describe('EventScheduleStep', () => {
     expect(multiDayLabel).toBeTruthy();
   });
 
-  it('should render empty state when no sessions', () => {
-    render(
+  it('should render empty state when no sessions', async () => {
+    await render(
       <EventScheduleStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -157,8 +157,8 @@ describe('EventScheduleStep', () => {
     expect(emptyMessage).toBeTruthy();
   });
 
-  it('should have Next button disabled when form is incomplete (no sessions)', () => {
-    render(
+  it('should have Next button disabled when form is incomplete (no sessions)', async () => {
+    await render(
       <EventScheduleStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -175,7 +175,7 @@ describe('EventScheduleStep', () => {
     expect(nextButton?.disabled).toBe(true);
   });
 
-  it('should enable Next button when form has valid session', () => {
+  it('should enable Next button when form has valid session', async () => {
     const completeData: AddClassWizardData = {
       ...mockData,
       eventSchedule: {
@@ -187,7 +187,7 @@ describe('EventScheduleStep', () => {
       },
     };
 
-    render(
+    await render(
       <EventScheduleStep
         data={completeData}
         onUpdate={mockHandlers.onUpdate}
@@ -205,7 +205,7 @@ describe('EventScheduleStep', () => {
   });
 
   it('should call onCancel when Cancel button is clicked', async () => {
-    render(
+    await render(
       <EventScheduleStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -227,7 +227,7 @@ describe('EventScheduleStep', () => {
   });
 
   it('should call onBack when Back button is clicked', async () => {
-    render(
+    await render(
       <EventScheduleStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -248,8 +248,8 @@ describe('EventScheduleStep', () => {
     }
   });
 
-  it('should display error message when provided', () => {
-    render(
+  it('should display error message when provided', async () => {
+    await render(
       <EventScheduleStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -266,7 +266,7 @@ describe('EventScheduleStep', () => {
     expect(errorMessage).toBeTruthy();
   });
 
-  it('should render session rows when sessions exist', () => {
+  it('should render session rows when sessions exist', async () => {
     const dataWithSession: AddClassWizardData = {
       ...mockData,
       eventSchedule: {
@@ -278,7 +278,7 @@ describe('EventScheduleStep', () => {
       },
     };
 
-    render(
+    await render(
       <EventScheduleStep
         data={dataWithSession}
         onUpdate={mockHandlers.onUpdate}
@@ -306,7 +306,7 @@ describe('EventScheduleStep', () => {
       },
     };
 
-    render(
+    await render(
       <EventScheduleStep
         data={completeData}
         onUpdate={mockHandlers.onUpdate}
@@ -327,7 +327,7 @@ describe('EventScheduleStep', () => {
     }
   });
 
-  it('should render multiple sessions', () => {
+  it('should render multiple sessions', async () => {
     const multipleSessions: EventSession[] = [
       { ...mockSession, id: 'session-1' },
       { ...mockSession, id: 'session-2' },
@@ -345,7 +345,7 @@ describe('EventScheduleStep', () => {
       },
     };
 
-    render(
+    await render(
       <EventScheduleStep
         data={dataWithMultiple}
         onUpdate={mockHandlers.onUpdate}
@@ -361,7 +361,7 @@ describe('EventScheduleStep', () => {
     expect(rows.length).toBe(3);
   });
 
-  it('should have disabled Next button when session has no instructor', () => {
+  it('should have disabled Next button when session has no instructor', async () => {
     const invalidSession: EventSession = {
       ...mockSession,
       staffMember: '',
@@ -378,7 +378,7 @@ describe('EventScheduleStep', () => {
       },
     };
 
-    render(
+    await render(
       <EventScheduleStep
         data={dataWithInvalidSession}
         onUpdate={mockHandlers.onUpdate}
@@ -395,8 +395,8 @@ describe('EventScheduleStep', () => {
     expect(nextButton?.disabled).toBe(true);
   });
 
-  it('should render location input', () => {
-    render(
+  it('should render location input', async () => {
+    await render(
       <EventScheduleStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -412,8 +412,8 @@ describe('EventScheduleStep', () => {
     expect(locationLabel).toBeTruthy();
   });
 
-  it('should render start date input', () => {
-    render(
+  it('should render start date input', async () => {
+    await render(
       <EventScheduleStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -429,7 +429,7 @@ describe('EventScheduleStep', () => {
     expect(startDateLabel).toBeTruthy();
   });
 
-  it('should render end date input when multi-day is selected', () => {
+  it('should render end date input when multi-day is selected', async () => {
     const multiDayData: AddClassWizardData = {
       ...mockData,
       eventSchedule: {
@@ -438,7 +438,7 @@ describe('EventScheduleStep', () => {
       },
     };
 
-    render(
+    await render(
       <EventScheduleStep
         data={multiDayData}
         onUpdate={mockHandlers.onUpdate}
@@ -454,8 +454,8 @@ describe('EventScheduleStep', () => {
     expect(endDateLabel).toBeTruthy();
   });
 
-  it('should not render end date input when single-day is selected', () => {
-    render(
+  it('should not render end date input when single-day is selected', async () => {
+    await render(
       <EventScheduleStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -473,8 +473,8 @@ describe('EventScheduleStep', () => {
     expect(endDateLabels.length).toBe(0);
   });
 
-  it('should render sessions label', () => {
-    render(
+  it('should render sessions label', async () => {
+    await render(
       <EventScheduleStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -502,7 +502,7 @@ describe('EventScheduleStep', () => {
       },
     };
 
-    render(
+    await render(
       <EventScheduleStep
         data={dataWithSession}
         onUpdate={mockHandlers.onUpdate}

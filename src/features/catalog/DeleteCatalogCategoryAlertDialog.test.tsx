@@ -17,8 +17,8 @@ describe('DeleteCatalogCategoryAlertDialog', () => {
   });
 
   describe('Dialog Content', () => {
-    it('renders the dialog title', () => {
-      render(
+    it('renders the dialog title', async () => {
+      await render(
         <I18nWrapper>
           <DeleteCatalogCategoryAlertDialog {...defaultProps} />
         </I18nWrapper>,
@@ -29,8 +29,8 @@ describe('DeleteCatalogCategoryAlertDialog', () => {
       expect(title).toBeInTheDocument();
     });
 
-    it('renders the description with the category name interpolated', () => {
-      render(
+    it('renders the description with the category name interpolated', async () => {
+      await render(
         <I18nWrapper>
           <DeleteCatalogCategoryAlertDialog {...defaultProps} />
         </I18nWrapper>,
@@ -41,8 +41,8 @@ describe('DeleteCatalogCategoryAlertDialog', () => {
       expect(description).toBeInTheDocument();
     });
 
-    it('renders the cancel and delete buttons', () => {
-      render(
+    it('renders the cancel and delete buttons', async () => {
+      await render(
         <I18nWrapper>
           <DeleteCatalogCategoryAlertDialog {...defaultProps} />
         </I18nWrapper>,
@@ -54,8 +54,8 @@ describe('DeleteCatalogCategoryAlertDialog', () => {
   });
 
   describe('Visibility', () => {
-    it('does not render when isOpen is false', () => {
-      render(
+    it('does not render when isOpen is false', async () => {
+      await render(
         <I18nWrapper>
           <DeleteCatalogCategoryAlertDialog {...defaultProps} isOpen={false} />
         </I18nWrapper>,
@@ -69,7 +69,7 @@ describe('DeleteCatalogCategoryAlertDialog', () => {
     it('calls onCloseAction when cancel is clicked', async () => {
       const onCloseAction = vi.fn();
 
-      render(
+      await render(
         <I18nWrapper>
           <DeleteCatalogCategoryAlertDialog {...defaultProps} onCloseAction={onCloseAction} />
         </I18nWrapper>,
@@ -83,7 +83,7 @@ describe('DeleteCatalogCategoryAlertDialog', () => {
     it('calls onConfirmAction when delete is clicked', async () => {
       const onConfirmAction = vi.fn();
 
-      render(
+      await render(
         <I18nWrapper>
           <DeleteCatalogCategoryAlertDialog {...defaultProps} onConfirmAction={onConfirmAction} />
         </I18nWrapper>,
@@ -96,8 +96,8 @@ describe('DeleteCatalogCategoryAlertDialog', () => {
   });
 
   describe('Accessibility', () => {
-    it('has accessible dialog role', () => {
-      render(
+    it('has accessible dialog role', async () => {
+      await render(
         <I18nWrapper>
           <DeleteCatalogCategoryAlertDialog {...defaultProps} />
         </I18nWrapper>,

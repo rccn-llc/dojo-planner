@@ -146,7 +146,7 @@ export const ClassScheduleStep = ({
 
           {data.schedule.instances.length > 0
             ? (
-                <div className="max-h-[360px] min-h-0 flex-1 overflow-y-auto rounded-lg border border-border p-3">
+                <div className="max-h-90 min-h-0 flex-1 overflow-y-auto rounded-lg border border-border p-3">
                   <div className="space-y-3">
                     {data.schedule.instances.map((instance, index) => (
                       <div
@@ -167,7 +167,7 @@ export const ClassScheduleStep = ({
                             data-testid={`remove-instance-${instance.id}`}
                             className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <Trash2 className="size-3.5" />
                           </Button>
                         </div>
 
@@ -328,7 +328,7 @@ export const ClassScheduleStep = ({
                         data-testid="add-schedule-instance"
                         className="size-7"
                       >
-                        <Plus className="h-3.5 w-3.5" />
+                        <Plus className="size-3.5" />
                       </Button>
                     </div>
                   </div>
@@ -347,7 +347,7 @@ export const ClassScheduleStep = ({
                     onClick={handleAddInstance}
                     className="mt-4"
                   >
-                    <Plus className="mr-1 h-4 w-4" />
+                    <Plus className="mr-1 size-4" />
                     {t('add_first_instance_button')}
                   </Button>
                 </div>

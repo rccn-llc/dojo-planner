@@ -25,6 +25,7 @@ import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EditEventModal } from '@/features/events/details/EditEventModal';
 import { EnrollMemberModal } from '@/features/events/details/EnrollMemberModal';
+import { dedupeRequest } from '@/hooks/dedupeRequest';
 import { invalidateEventsCache, useEventsCache } from '@/hooks/useEventsCache';
 import { useInstructorsCache } from '@/hooks/useInstructorsCache';
 import { client } from '@/libs/Orpc';
@@ -147,7 +148,7 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
       return;
     }
     let cancelled = false;
-    client.events.registrations({ eventId })
+    dedupeRequest(`events.registrations:${JSON.stringify({ eventId })}`, async () => client.events.registrations({ eventId }))
       .then((result) => {
         if (!cancelled) {
           setRegistrants(result.registrants as Registrant[]);
@@ -230,7 +231,7 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
       <div className="flex items-center gap-4">
         <Link href={backToClassesUrl}>
           <Button variant="ghost" size="sm">
-            <ArrowLeft className="mr-2 h-4 w-4" />
+            <ArrowLeft className="mr-2 size-4" />
             {t('back_to_classes')}
           </Button>
         </Link>
@@ -240,7 +241,7 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
-            <Calendar className="h-5 w-5 text-primary" />
+            <Calendar className="size-5 text-primary" />
             <Badge variant="default" className="bg-primary text-primary-foreground">
               {t('event_badge')}
             </Badge>
@@ -250,7 +251,7 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
           <p className="text-lg text-muted-foreground">{eventData.description}</p>
         </div>
         <Button onClick={() => setIsEnrollOpen(true)} className="shrink-0">
-          <UserPlus className="mr-2 h-4 w-4" />
+          <UserPlus className="mr-2 size-4" />
           {t('enroll_member_button')}
         </Button>
       </div>
@@ -288,7 +289,7 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-foreground">{t('details_card_title')}</h2>
               <Button variant="outline" size="sm" onClick={() => setEditTab('details')} aria-label={t('edit_details_aria')}>
-                <Edit className="h-4 w-4" />
+                <Edit className="size-4" />
               </Button>
             </div>
             <div className="space-y-4">
@@ -300,7 +301,7 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
                 <div>
                   <p className="text-sm text-muted-foreground">{t('location_label')}</p>
                   <div className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                    <MapPin className="size-4 text-muted-foreground" />
                     <p className="font-medium text-foreground">{eventData.location}</p>
                   </div>
                 </div>
@@ -313,7 +314,7 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
                 <div>
                   <p className="text-sm text-muted-foreground">{t('max_capacity_label')}</p>
                   <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4 text-muted-foreground" />
+                    <Users className="size-4 text-muted-foreground" />
                     <p className="font-medium text-foreground">
                       {eventData.maxCapacity}
                       {' '}
@@ -330,7 +331,7 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-foreground">{t('pricing_card_title')}</h2>
               <Button variant="outline" size="sm" onClick={() => setEditTab('pricing')} aria-label={t('edit_pricing_aria')}>
-                <Edit className="h-4 w-4" />
+                <Edit className="size-4" />
               </Button>
             </div>
             <div className="space-y-4">
@@ -376,7 +377,7 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-foreground">{t('sessions_card_title')}</h2>
               <Button variant="outline" size="sm" onClick={() => setEditTab('sessions')} aria-label={t('edit_sessions_aria')}>
-                <Edit className="h-4 w-4" />
+                <Edit className="size-4" />
               </Button>
             </div>
             <div className="space-y-3">
@@ -404,7 +405,7 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-foreground">{t('instructors_card_title')}</h2>
               <Button variant="outline" size="sm" onClick={() => setEditTab('sessions')} aria-label={t('edit_instructors_aria')}>
-                <Edit className="h-4 w-4" />
+                <Edit className="size-4" />
               </Button>
             </div>
             {eventData.instructors.length > 0
@@ -412,7 +413,7 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
                   <div className="space-y-3">
                     {eventData.instructors.map(instructor => (
                       <div key={instructor.id} className="flex items-center gap-3">
-                        <Avatar className="h-10 w-10">
+                        <Avatar className="size-10">
                           <AvatarImage src={instructor.photoUrl} alt={instructor.name} />
                           <AvatarFallback>{getInitials(instructor.name)}</AvatarFallback>
                         </Avatar>
@@ -441,7 +442,7 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
             </span>
           </h2>
           <Button variant="outline" size="sm" onClick={() => setIsEnrollOpen(true)}>
-            <UserPlus className="mr-2 h-4 w-4" />
+            <UserPlus className="mr-2 size-4" />
             {t('enroll_member_button')}
           </Button>
         </div>
@@ -454,7 +455,7 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
                     key={reg.id}
                     className="flex items-center gap-3 rounded-lg border border-border p-3"
                   >
-                    <Avatar className="h-10 w-10">
+                    <Avatar className="size-10">
                       <AvatarImage src={reg.photoUrl ?? undefined} alt={`${reg.firstName} ${reg.lastName}`} />
                       <AvatarFallback>{getInitials(`${reg.firstName} ${reg.lastName}`)}</AvatarFallback>
                     </Avatar>
@@ -479,7 +480,7 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
                       onClick={() => handleCancelRegistration(reg.id)}
                       aria-label={t('cancel_registration_aria', { name: `${reg.firstName} ${reg.lastName}` })}
                     >
-                      <X className="h-4 w-4" />
+                      <X className="size-4" />
                     </Button>
                   </div>
                 ))}
@@ -493,7 +494,7 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
           variant="destructive"
           onClick={() => setIsDeleteDialogOpen(true)}
         >
-          <Trash2 className="mr-2 h-4 w-4" />
+          <Trash2 className="mr-2 size-4" />
           {t('delete_button')}
         </Button>
       </div>

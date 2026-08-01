@@ -18,8 +18,8 @@ describe('AddEditProgramModal', () => {
   });
 
   describe('Add Mode', () => {
-    it('renders add program title when program is null', () => {
-      render(
+    it('renders add program title when program is null', async () => {
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} />
         </I18nWrapper>,
@@ -30,8 +30,8 @@ describe('AddEditProgramModal', () => {
       expect(title).toBeInTheDocument();
     });
 
-    it('renders empty form fields in add mode', () => {
-      render(
+    it('renders empty form fields in add mode', async () => {
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} />
         </I18nWrapper>,
@@ -44,8 +44,8 @@ describe('AddEditProgramModal', () => {
       expect(descriptionInput).toHaveValue('');
     });
 
-    it('renders add program button in add mode', () => {
-      render(
+    it('renders add program button in add mode', async () => {
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} />
         </I18nWrapper>,
@@ -56,8 +56,8 @@ describe('AddEditProgramModal', () => {
       expect(addButton).toBeInTheDocument();
     });
 
-    it('renders status switch defaulting to Active', () => {
-      render(
+    it('renders status switch defaulting to Active', async () => {
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} />
         </I18nWrapper>,
@@ -77,8 +77,8 @@ describe('AddEditProgramModal', () => {
       status: 'Active' as const,
     };
 
-    it('renders edit program title when program is provided', () => {
-      render(
+    it('renders edit program title when program is provided', async () => {
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} program={editProgram} />
         </I18nWrapper>,
@@ -89,8 +89,8 @@ describe('AddEditProgramModal', () => {
       expect(title).toBeInTheDocument();
     });
 
-    it('populates form fields with program data', () => {
-      render(
+    it('populates form fields with program data', async () => {
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} program={editProgram} />
         </I18nWrapper>,
@@ -103,8 +103,8 @@ describe('AddEditProgramModal', () => {
       expect(descriptionInput).toHaveValue('Test description');
     });
 
-    it('renders save changes button in edit mode', () => {
-      render(
+    it('renders save changes button in edit mode', async () => {
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} program={editProgram} />
         </I18nWrapper>,
@@ -115,10 +115,10 @@ describe('AddEditProgramModal', () => {
       expect(saveButton).toBeInTheDocument();
     });
 
-    it('shows Inactive when program status is Inactive', () => {
+    it('shows Inactive when program status is Inactive', async () => {
       const inactiveProgram = { ...editProgram, status: 'Inactive' as const };
 
-      render(
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} program={inactiveProgram} />
         </I18nWrapper>,
@@ -132,7 +132,7 @@ describe('AddEditProgramModal', () => {
 
   describe('Form Interactions', () => {
     it('updates name field when user types', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} />
         </I18nWrapper>,
@@ -146,7 +146,7 @@ describe('AddEditProgramModal', () => {
     });
 
     it('updates description field when user types', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} />
         </I18nWrapper>,
@@ -159,7 +159,7 @@ describe('AddEditProgramModal', () => {
     });
 
     it('toggles status when switch is clicked', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} />
         </I18nWrapper>,
@@ -182,8 +182,8 @@ describe('AddEditProgramModal', () => {
   });
 
   describe('Form Validation', () => {
-    it('disables submit button when name is empty', () => {
-      render(
+    it('disables submit button when name is empty', async () => {
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} />
         </I18nWrapper>,
@@ -195,7 +195,7 @@ describe('AddEditProgramModal', () => {
     });
 
     it('disables submit button when description is empty', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} />
         </I18nWrapper>,
@@ -210,7 +210,7 @@ describe('AddEditProgramModal', () => {
     });
 
     it('disables submit button when name has only whitespace', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} />
         </I18nWrapper>,
@@ -228,7 +228,7 @@ describe('AddEditProgramModal', () => {
     });
 
     it('disables submit button when description has only whitespace', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} />
         </I18nWrapper>,
@@ -246,7 +246,7 @@ describe('AddEditProgramModal', () => {
     });
 
     it('enables submit button when both name and description have values', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} />
         </I18nWrapper>,
@@ -266,7 +266,7 @@ describe('AddEditProgramModal', () => {
     it('does not call onSaveAction when button is disabled', async () => {
       const onSaveAction = vi.fn();
 
-      render(
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} onSaveAction={onSaveAction} />
         </I18nWrapper>,
@@ -289,7 +289,7 @@ describe('AddEditProgramModal', () => {
     it('calls onSaveAction with trimmed data when form is valid', async () => {
       const onSaveAction = vi.fn();
 
-      render(
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} onSaveAction={onSaveAction} />
         </I18nWrapper>,
@@ -320,7 +320,7 @@ describe('AddEditProgramModal', () => {
         status: 'Active' as const,
       };
 
-      render(
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} program={editProgram} onSaveAction={onSaveAction} />
         </I18nWrapper>,
@@ -340,7 +340,7 @@ describe('AddEditProgramModal', () => {
     it('submits with Inactive status when switch is toggled off', async () => {
       const onSaveAction = vi.fn();
 
-      render(
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} onSaveAction={onSaveAction} />
         </I18nWrapper>,
@@ -370,7 +370,7 @@ describe('AddEditProgramModal', () => {
     it('calls onCloseAction when cancel button is clicked', async () => {
       const onCloseAction = vi.fn();
 
-      render(
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} onCloseAction={onCloseAction} />
         </I18nWrapper>,
@@ -389,7 +389,7 @@ describe('AddEditProgramModal', () => {
     it('calls onCloseAction when dialog close button is clicked', async () => {
       const onCloseAction = vi.fn();
 
-      render(
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} onCloseAction={onCloseAction} />
         </I18nWrapper>,
@@ -407,8 +407,8 @@ describe('AddEditProgramModal', () => {
   });
 
   describe('Loading State', () => {
-    it('shows saving button text when loading', () => {
-      render(
+    it('shows saving button text when loading', async () => {
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} isLoading />
         </I18nWrapper>,
@@ -419,8 +419,8 @@ describe('AddEditProgramModal', () => {
       expect(savingButton).toBeInTheDocument();
     });
 
-    it('disables inputs when loading', () => {
-      render(
+    it('disables inputs when loading', async () => {
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} isLoading />
         </I18nWrapper>,
@@ -435,8 +435,8 @@ describe('AddEditProgramModal', () => {
       expect(statusSwitch).toBeDisabled();
     });
 
-    it('disables buttons when loading', () => {
-      render(
+    it('disables buttons when loading', async () => {
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} isLoading />
         </I18nWrapper>,
@@ -451,8 +451,8 @@ describe('AddEditProgramModal', () => {
   });
 
   describe('Modal Visibility', () => {
-    it('does not render content when isOpen is false', () => {
-      render(
+    it('does not render content when isOpen is false', async () => {
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} isOpen={false} />
         </I18nWrapper>,
@@ -463,8 +463,8 @@ describe('AddEditProgramModal', () => {
       expect(titles.length).toBe(0);
     });
 
-    it('renders content when isOpen is true', () => {
-      render(
+    it('renders content when isOpen is true', async () => {
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} isOpen />
         </I18nWrapper>,
@@ -477,8 +477,8 @@ describe('AddEditProgramModal', () => {
   });
 
   describe('Form Labels', () => {
-    it('renders program name label without required indicator', () => {
-      render(
+    it('renders program name label without required indicator', async () => {
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} />
         </I18nWrapper>,
@@ -494,8 +494,8 @@ describe('AddEditProgramModal', () => {
       expect(asterisks.length).toBe(0);
     });
 
-    it('renders description label', () => {
-      render(
+    it('renders description label', async () => {
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} />
         </I18nWrapper>,
@@ -506,8 +506,8 @@ describe('AddEditProgramModal', () => {
       expect(descriptionLabel).toBeInTheDocument();
     });
 
-    it('renders cancel button', () => {
-      render(
+    it('renders cancel button', async () => {
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} />
         </I18nWrapper>,
@@ -520,8 +520,8 @@ describe('AddEditProgramModal', () => {
   });
 
   describe('Accessibility', () => {
-    it('has accessible name input with label', () => {
-      render(
+    it('has accessible name input with label', async () => {
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} />
         </I18nWrapper>,
@@ -532,8 +532,8 @@ describe('AddEditProgramModal', () => {
       expect(nameInput).toBeInTheDocument();
     });
 
-    it('has accessible switch with aria-label', () => {
-      render(
+    it('has accessible switch with aria-label', async () => {
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} />
         </I18nWrapper>,
@@ -547,7 +547,7 @@ describe('AddEditProgramModal', () => {
 
   describe('Input Error States', () => {
     it('does not show error state on name input before blur', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} />
         </I18nWrapper>,
@@ -559,7 +559,7 @@ describe('AddEditProgramModal', () => {
     });
 
     it('shows error state and message on name input after blur when empty', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} />
         </I18nWrapper>,
@@ -578,7 +578,7 @@ describe('AddEditProgramModal', () => {
     });
 
     it('shows error state on name input after blur when only whitespace', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} />
         </I18nWrapper>,
@@ -593,7 +593,7 @@ describe('AddEditProgramModal', () => {
     });
 
     it('does not show error state on name input after blur when valid', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} />
         </I18nWrapper>,
@@ -608,7 +608,7 @@ describe('AddEditProgramModal', () => {
     });
 
     it('does not show error state on description input before blur', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} />
         </I18nWrapper>,
@@ -620,7 +620,7 @@ describe('AddEditProgramModal', () => {
     });
 
     it('shows error state and message on description input after blur when empty', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} />
         </I18nWrapper>,
@@ -639,7 +639,7 @@ describe('AddEditProgramModal', () => {
     });
 
     it('shows error state on description input after blur when only whitespace', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} />
         </I18nWrapper>,
@@ -654,7 +654,7 @@ describe('AddEditProgramModal', () => {
     });
 
     it('does not show error state on description input after blur when valid', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} />
         </I18nWrapper>,
@@ -669,7 +669,7 @@ describe('AddEditProgramModal', () => {
     });
 
     it('clears error state when user enters valid content', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} />
         </I18nWrapper>,
@@ -692,7 +692,7 @@ describe('AddEditProgramModal', () => {
   });
 
   describe('Edit Mode Button State', () => {
-    it('enables save button when edit mode has valid data', () => {
+    it('enables save button when edit mode has valid data', async () => {
       const editProgram = {
         id: '1',
         name: 'Test Program',
@@ -700,7 +700,7 @@ describe('AddEditProgramModal', () => {
         status: 'Active' as const,
       };
 
-      render(
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} program={editProgram} />
         </I18nWrapper>,
@@ -719,7 +719,7 @@ describe('AddEditProgramModal', () => {
         status: 'Active' as const,
       };
 
-      render(
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} program={editProgram} />
         </I18nWrapper>,
@@ -741,7 +741,7 @@ describe('AddEditProgramModal', () => {
         status: 'Active' as const,
       };
 
-      render(
+      await render(
         <I18nWrapper>
           <AddEditProgramModal {...defaultProps} program={editProgram} />
         </I18nWrapper>,

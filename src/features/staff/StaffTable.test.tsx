@@ -62,7 +62,7 @@ describe('StaffTable', () => {
 
   describe('Rendering', () => {
     it('should render the filter bar and staff members', async () => {
-      render(
+      await render(
         <StaffTable
           staffMembers={mockStaffMembers}
           onEditStaff={mockOnEditStaff}
@@ -82,7 +82,7 @@ describe('StaffTable', () => {
     });
 
     it('should render header actions when provided', async () => {
-      render(
+      await render(
         <StaffTable
           staffMembers={mockStaffMembers}
           onEditStaff={mockOnEditStaff}
@@ -95,7 +95,7 @@ describe('StaffTable', () => {
     });
 
     it('should show empty state when no staff members', async () => {
-      render(
+      await render(
         <StaffTable
           staffMembers={[]}
           onEditStaff={mockOnEditStaff}
@@ -110,7 +110,7 @@ describe('StaffTable', () => {
 
   describe('Search filtering', () => {
     it('should filter staff by search input', async () => {
-      render(
+      await render(
         <StaffTable
           staffMembers={mockStaffMembers}
           onEditStaff={mockOnEditStaff}
@@ -129,7 +129,7 @@ describe('StaffTable', () => {
     });
 
     it('should show no results message when search matches nothing', async () => {
-      render(
+      await render(
         <StaffTable
           staffMembers={mockStaffMembers}
           onEditStaff={mockOnEditStaff}
@@ -147,7 +147,7 @@ describe('StaffTable', () => {
 
   describe('Edit action', () => {
     it('should call onEditStaff when edit button is clicked', async () => {
-      render(
+      await render(
         <StaffTable
           staffMembers={mockStaffMembers}
           currentUserRole="org:admin"
@@ -173,7 +173,7 @@ describe('StaffTable', () => {
 
   describe('Remove action', () => {
     it('should call onRemoveStaff when remove button is clicked', async () => {
-      render(
+      await render(
         <StaffTable
           staffMembers={mockStaffMembers}
           currentUserRole="org:admin"
@@ -193,7 +193,7 @@ describe('StaffTable', () => {
 
   describe('Instructor photo action', () => {
     it('shows the photo button for an instructor row and opens the photo modal on click', async () => {
-      render(
+      await render(
         <StaffTable
           staffMembers={mockStaffMembers}
           currentUserRole="org:admin"
@@ -217,7 +217,7 @@ describe('StaffTable', () => {
     });
 
     it('does not show the photo button for an admin row', async () => {
-      render(
+      await render(
         <StaffTable
           staffMembers={[mockStaffMembers[0]!]}
           currentUserRole="org:admin"
@@ -234,7 +234,7 @@ describe('StaffTable', () => {
 
   describe('Sorting', () => {
     it('should sort by name when name column header is clicked', async () => {
-      render(
+      await render(
         <StaffTable
           staffMembers={mockStaffMembers}
           onEditStaff={mockOnEditStaff}

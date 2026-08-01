@@ -188,7 +188,7 @@ export function CouponCard({
             aria-label={`Edit ${coupon.code}`}
             title={`Edit ${coupon.code}`}
           >
-            <Edit className="h-4 w-4" />
+            <Edit className="size-4" />
           </Button>
           {canDeleteCoupon(coupon.usage) && (
             <Button
@@ -198,7 +198,7 @@ export function CouponCard({
               aria-label={`Delete ${coupon.code}`}
               title={`Delete ${coupon.code}`}
             >
-              <Trash2 className="h-4 w-4" />
+              <Trash2 className="size-4" />
             </Button>
           )}
         </div>

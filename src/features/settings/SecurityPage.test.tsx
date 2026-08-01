@@ -77,63 +77,63 @@ describe('SecurityPage', () => {
     mockUser.totpEnabled = false;
   });
 
-  it('should render the page title', () => {
-    render(<SecurityPage />);
+  it('should render the page title', async () => {
+    await render(<SecurityPage />);
 
     expect(page.getByText('Security')).toBeDefined();
   });
 
-  it('should render change password section title for password-authenticated users', () => {
-    render(<SecurityPage />);
+  it('should render change password section title for password-authenticated users', async () => {
+    await render(<SecurityPage />);
 
     expect(page.getByText('Change Password')).toBeDefined();
   });
 
-  it('should render change password button', () => {
-    render(<SecurityPage />);
+  it('should render change password button', async () => {
+    await render(<SecurityPage />);
     const changePasswordButton = page.getByRole('button', { name: /change password/i });
 
     expect(changePasswordButton).toBeDefined();
   });
 
-  it('should render 2FA section title', () => {
-    render(<SecurityPage />);
+  it('should render 2FA section title', async () => {
+    await render(<SecurityPage />);
 
     expect(page.getByText('2-Factor Authentication (2FA)')).toBeDefined();
   });
 
-  it('should render 2FA description', () => {
-    render(<SecurityPage />);
+  it('should render 2FA description', async () => {
+    await render(<SecurityPage />);
 
     expect(
       page.getByText('Make your account more secure by adding a second form of authentication'),
     ).toBeDefined();
   });
 
-  it('should render Add 2FA button when TOTP is not enabled', () => {
-    render(<SecurityPage />);
+  it('should render Add 2FA button when TOTP is not enabled', async () => {
+    await render(<SecurityPage />);
     const add2faButton = page.getByRole('button', { name: /add 2fa/i });
 
     expect(add2faButton).toBeDefined();
     expect(add2faButton.element().hasAttribute('disabled')).toBe(false);
   });
 
-  it('should render Remove 2FA button and Enabled badge when TOTP is enabled', () => {
+  it('should render Remove 2FA button and Enabled badge when TOTP is enabled', async () => {
     mockUser.totpEnabled = true;
-    render(<SecurityPage />);
+    await render(<SecurityPage />);
 
     expect(page.getByText('Enabled')).toBeDefined();
     expect(page.getByRole('button', { name: /remove 2fa/i })).toBeDefined();
   });
 
-  it('should not show Enabled badge when TOTP is not enabled', () => {
-    render(<SecurityPage />);
+  it('should not show Enabled badge when TOTP is not enabled', async () => {
+    await render(<SecurityPage />);
 
     expect(page.getByText('Enabled').elements().length).toBe(0);
   });
 
   it('should show password form when change password button is clicked', async () => {
-    render(<SecurityPage />);
+    await render(<SecurityPage />);
     const changePasswordButton = page.getByRole('button', { name: /change password/i });
 
     await userEvent.click(changePasswordButton.element());
@@ -144,7 +144,7 @@ describe('SecurityPage', () => {
   });
 
   it('should hide password form when cancel button is clicked', async () => {
-    render(<SecurityPage />);
+    await render(<SecurityPage />);
     const changePasswordButton = page.getByRole('button', { name: /change password/i });
 
     await userEvent.click(changePasswordButton.element());
@@ -156,7 +156,7 @@ describe('SecurityPage', () => {
   });
 
   it('should render save button when password form is open', async () => {
-    render(<SecurityPage />);
+    await render(<SecurityPage />);
     const changePasswordButton = page.getByRole('button', { name: /change password/i });
 
     await userEvent.click(changePasswordButton.element());
@@ -167,7 +167,7 @@ describe('SecurityPage', () => {
   });
 
   it('should validate empty password fields', async () => {
-    render(<SecurityPage />);
+    await render(<SecurityPage />);
     const changePasswordButton = page.getByRole('button', { name: /change password/i });
 
     await userEvent.click(changePasswordButton.element());
@@ -181,7 +181,7 @@ describe('SecurityPage', () => {
   });
 
   it('should validate weak passwords', async () => {
-    render(<SecurityPage />);
+    await render(<SecurityPage />);
     const changePasswordButton = page.getByRole('button', { name: /change password/i });
 
     await userEvent.click(changePasswordButton.element());
@@ -203,7 +203,7 @@ describe('SecurityPage', () => {
   });
 
   it('should validate mismatched passwords', async () => {
-    render(<SecurityPage />);
+    await render(<SecurityPage />);
     const changePasswordButton = page.getByRole('button', { name: /change password/i });
 
     await userEvent.click(changePasswordButton.element());

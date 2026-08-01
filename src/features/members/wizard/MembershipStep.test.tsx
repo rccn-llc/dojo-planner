@@ -166,7 +166,7 @@ describe('MembershipStep', () => {
 
   describe('Rendering', () => {
     it('should render the membership step title and subtitle', async () => {
-      render(
+      await render(
         <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
@@ -180,10 +180,10 @@ describe('MembershipStep', () => {
       await expect.element(page.getByText('Select a membership plan for this member')).toBeInTheDocument();
     });
 
-    it('should show loading state initially', () => {
+    it('should show loading state initially', async () => {
       cacheState = { plans: [], loading: true, error: null };
 
-      render(
+      await render(
         <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
@@ -197,7 +197,7 @@ describe('MembershipStep', () => {
     });
 
     it('should display 6 membership plans after loading', async () => {
-      render(
+      await render(
         <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
@@ -216,7 +216,7 @@ describe('MembershipStep', () => {
     });
 
     it('should display prices correctly', async () => {
-      render(
+      await render(
         <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
@@ -233,7 +233,7 @@ describe('MembershipStep', () => {
     });
 
     it('should show Free for trial plans', async () => {
-      render(
+      await render(
         <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
@@ -250,7 +250,7 @@ describe('MembershipStep', () => {
     });
 
     it('should show Trial badge for trial plans', async () => {
-      render(
+      await render(
         <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
@@ -267,7 +267,7 @@ describe('MembershipStep', () => {
     });
 
     it('should render Back, Cancel, and Next buttons', async () => {
-      render(
+      await render(
         <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
@@ -287,7 +287,7 @@ describe('MembershipStep', () => {
 
   describe('Plan Selection', () => {
     it('should disable Next button when no plan is selected', async () => {
-      render(
+      await render(
         <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
@@ -310,7 +310,7 @@ describe('MembershipStep', () => {
         membershipPlanId: 'plan-1',
       };
 
-      render(
+      await render(
         <MembershipStep
           data={dataWithSelection}
           onUpdate={mockHandlers.onUpdate}
@@ -328,7 +328,7 @@ describe('MembershipStep', () => {
     });
 
     it('should call onUpdate when a plan is clicked', async () => {
-      render(
+      await render(
         <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
@@ -360,7 +360,7 @@ describe('MembershipStep', () => {
         membershipPlanId: 'plan-1',
       };
 
-      render(
+      await render(
         <MembershipStep
           data={dataWithSelection}
           onUpdate={mockHandlers.onUpdate}
@@ -381,7 +381,7 @@ describe('MembershipStep', () => {
 
   describe('Navigation', () => {
     it('should call onBack when Back button is clicked', async () => {
-      render(
+      await render(
         <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
@@ -400,7 +400,7 @@ describe('MembershipStep', () => {
     });
 
     it('should call onCancel when Cancel button is clicked', async () => {
-      render(
+      await render(
         <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
@@ -424,7 +424,7 @@ describe('MembershipStep', () => {
         membershipPlanId: 'plan-2',
       };
 
-      render(
+      await render(
         <MembershipStep
           data={dataWithSelection}
           onUpdate={mockHandlers.onUpdate}
@@ -447,7 +447,7 @@ describe('MembershipStep', () => {
     it('should show the empty state when no plans are available (no fabricated mock plans)', async () => {
       cacheState = { plans: [], loading: false, error: null };
 
-      render(
+      await render(
         <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
@@ -465,7 +465,7 @@ describe('MembershipStep', () => {
     it('should surface the fetch error (not fall back to mock plans)', async () => {
       cacheState = { plans: [], loading: false, error: 'Network error' };
 
-      render(
+      await render(
         <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
@@ -486,7 +486,7 @@ describe('MembershipStep', () => {
         membershipPlanId: 'plan-1',
       };
 
-      render(
+      await render(
         <MembershipStep
           data={dataWithSelection}
           onUpdate={mockHandlers.onUpdate}
@@ -509,7 +509,7 @@ describe('MembershipStep', () => {
         membershipPlanId: 'plan-1',
       };
 
-      render(
+      await render(
         <MembershipStep
           data={dataWithSelection}
           onUpdate={mockHandlers.onUpdate}
@@ -530,7 +530,7 @@ describe('MembershipStep', () => {
 
   describe('Plan Details Display', () => {
     it('should display plan categories', async () => {
-      render(
+      await render(
         <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
@@ -546,7 +546,7 @@ describe('MembershipStep', () => {
     });
 
     it('should display contract lengths', async () => {
-      render(
+      await render(
         <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
@@ -563,7 +563,7 @@ describe('MembershipStep', () => {
     });
 
     it('should display signup fees for paid plans', async () => {
-      render(
+      await render(
         <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
@@ -579,7 +579,7 @@ describe('MembershipStep', () => {
     });
 
     it('should display plan descriptions', async () => {
-      render(
+      await render(
         <MembershipStep
           data={mockData}
           onUpdate={mockHandlers.onUpdate}
@@ -597,7 +597,7 @@ describe('MembershipStep', () => {
   describe('Stale membershipSkipped clearing on mount (#133)', () => {
     it('clears membershipSkipped on mount when previously true', async () => {
       const onUpdate = vi.fn();
-      render(
+      await render(
         <MembershipStep
           data={{ ...mockData, membershipSkipped: true }}
           onUpdate={onUpdate}
@@ -622,7 +622,7 @@ describe('MembershipStep', () => {
 
     it('does not call onUpdate at mount when membershipSkipped is already false', async () => {
       const onUpdate = vi.fn();
-      render(
+      await render(
         <MembershipStep
           data={{ ...mockData, membershipSkipped: false }}
           onUpdate={onUpdate}
@@ -657,7 +657,7 @@ describe('MembershipStep', () => {
       };
       const onUpdate = vi.fn();
 
-      render(
+      await render(
         <MembershipStep
           data={dataWithCardData}
           onUpdate={onUpdate}
@@ -700,7 +700,7 @@ describe('MembershipStep', () => {
     it('does not include card-clear keys when a non-trial plan is selected', async () => {
       const onUpdate = vi.fn();
 
-      render(
+      await render(
         <MembershipStep
           data={mockData}
           onUpdate={onUpdate}

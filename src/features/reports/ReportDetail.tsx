@@ -1,5 +1,6 @@
 'use client';
 
+import type { DefaultTooltipContentProps, TooltipValueType } from 'recharts';
 import type { ReportType } from './reportHelpers';
 import { ArrowLeft } from 'lucide-react';
 import { useTranslations } from 'next-intl';
@@ -100,13 +101,17 @@ function renderChart(
     tick: { fill: 'currentColor', className: 'fill-muted-foreground', fontSize: 12 },
   };
 
-  const tooltipFormatter = (value: number | string | Array<number | string> | undefined, name?: string) => {
-    if (value === undefined) {
-      return ['N/A', name ?? 'Value'] as [string, string];
+  // Derived from the public Tooltip content props: recharts does not re-export
+  // its `Formatter` type from the package root.
+  type TooltipFormatter = NonNullable<DefaultTooltipContentProps<TooltipValueType, number | string>['formatter']>;
+
+  const tooltipFormatter: TooltipFormatter = (value, name) => {
+    if (value === undefined || Array.isArray(value)) {
+      return ['N/A', typeof name === 'string' ? name : 'Value'];
     }
     const numValue = typeof value === 'number' ? value : Number(value);
     const label = name === 'previousYear' ? 'Last Year' : 'This Year';
-    return [formatValue(numValue), label] as [string, string];
+    return [formatValue(numValue), label];
   };
 
   // Check if previous year data exists in the dataset
@@ -297,7 +302,7 @@ export default function ReportDetail({ reportId, onBack }: { reportId: ReportTyp
     <div className="space-y-6">
       <div className="flex items-center gap-4">
         <Button variant="ghost" onClick={onBack} data-testid="back-button">
-          <ArrowLeft className="mr-2 h-4 w-4" />
+          <ArrowLeft className="mr-2 size-4" />
           {t('back_to_reports')}
         </Button>
       </div>
@@ -360,7 +365,7 @@ export default function ReportDetail({ reportId, onBack }: { reportId: ReportTyp
           <ul className="space-y-3">
             {insights.map(insight => (
               <li key={insight} className="flex items-start gap-2 text-sm text-muted-foreground">
-                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary" />
                 {insight}
               </li>
             ))}

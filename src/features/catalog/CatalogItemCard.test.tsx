@@ -59,7 +59,7 @@ describe('CatalogItemCard', () => {
 
   describe('Rendering', () => {
     it('should render item name', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={mockItem}
           onEdit={mockOnEdit}
@@ -71,7 +71,7 @@ describe('CatalogItemCard', () => {
     });
 
     it('should render item SKU', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={mockItem}
           onEdit={mockOnEdit}
@@ -83,7 +83,7 @@ describe('CatalogItemCard', () => {
     });
 
     it('should render short description', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={mockItem}
           onEdit={mockOnEdit}
@@ -95,7 +95,7 @@ describe('CatalogItemCard', () => {
     });
 
     it('should render formatted base price', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={mockItem}
           onEdit={mockOnEdit}
@@ -107,7 +107,7 @@ describe('CatalogItemCard', () => {
     });
 
     it('should render compare at price when available and higher than base', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={mockItem}
           onEdit={mockOnEdit}
@@ -119,7 +119,7 @@ describe('CatalogItemCard', () => {
     });
 
     it('should not render compare at price when lower than base', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={{ ...mockItem, compareAtPrice: 100 }}
           onEdit={mockOnEdit}
@@ -134,7 +134,7 @@ describe('CatalogItemCard', () => {
     });
 
     it('should render item variants', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={mockItem}
           onEdit={mockOnEdit}
@@ -146,7 +146,7 @@ describe('CatalogItemCard', () => {
     });
 
     it('should render total stock for tracked inventory', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={mockItem}
           onEdit={mockOnEdit}
@@ -158,7 +158,7 @@ describe('CatalogItemCard', () => {
     });
 
     it('should render "In Stock" for non-tracked inventory', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={{ ...mockItem, trackInventory: false }}
           onEdit={mockOnEdit}
@@ -170,7 +170,7 @@ describe('CatalogItemCard', () => {
     });
 
     it('should render max per order when less than 10', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={mockItem}
           onEdit={mockOnEdit}
@@ -183,7 +183,7 @@ describe('CatalogItemCard', () => {
     });
 
     it('should not render max per order when 10 or more', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={{ ...mockItem, maxPerOrder: 10 }}
           onEdit={mockOnEdit}
@@ -197,7 +197,7 @@ describe('CatalogItemCard', () => {
 
   describe('Item types', () => {
     it('should display merchandise type', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={mockItem}
           onEdit={mockOnEdit}
@@ -209,7 +209,7 @@ describe('CatalogItemCard', () => {
     });
 
     it('should display event_access type', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={{ ...mockItem, type: 'event_access' }}
           onEdit={mockOnEdit}
@@ -223,7 +223,7 @@ describe('CatalogItemCard', () => {
 
   describe('Status badges', () => {
     it('should show Active status for active items with stock', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={mockItem}
           onEdit={mockOnEdit}
@@ -235,7 +235,7 @@ describe('CatalogItemCard', () => {
     });
 
     it('should show Inactive status for inactive items', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={{ ...mockItem, isActive: false }}
           onEdit={mockOnEdit}
@@ -247,7 +247,7 @@ describe('CatalogItemCard', () => {
     });
 
     it('should show Out of Stock status when totalStock is 0', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={{ ...mockItem, totalStock: 0 }}
           onEdit={mockOnEdit}
@@ -259,7 +259,7 @@ describe('CatalogItemCard', () => {
     });
 
     it('should show Low Stock status when at or below threshold', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={{ ...mockItem, totalStock: 5, lowStockThreshold: 5 }}
           onEdit={mockOnEdit}
@@ -274,7 +274,7 @@ describe('CatalogItemCard', () => {
 
   describe('Feature badges', () => {
     it('should show Featured badge when isFeatured is true', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={{ ...mockItem, isFeatured: true }}
           onEdit={mockOnEdit}
@@ -286,7 +286,7 @@ describe('CatalogItemCard', () => {
     });
 
     it('should not show Featured badge when isFeatured is false', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={{ ...mockItem, isFeatured: false }}
           onEdit={mockOnEdit}
@@ -298,7 +298,7 @@ describe('CatalogItemCard', () => {
     });
 
     it('should show Kiosk badge when showOnKiosk is true', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={mockItem}
           onEdit={mockOnEdit}
@@ -310,7 +310,7 @@ describe('CatalogItemCard', () => {
     });
 
     it('should not show Kiosk badge when showOnKiosk is false', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={{ ...mockItem, showOnKiosk: false }}
           onEdit={mockOnEdit}
@@ -324,7 +324,7 @@ describe('CatalogItemCard', () => {
 
   describe('Categories', () => {
     it('should render categories as badges', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={{
             ...mockItem,
@@ -344,7 +344,7 @@ describe('CatalogItemCard', () => {
     });
 
     it('should not render category section when no categories', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={{ ...mockItem, categories: [] }}
           onEdit={mockOnEdit}
@@ -365,7 +365,7 @@ describe('CatalogItemCard', () => {
     // The component's image functionality is tested via visual inspection and e2e tests.
 
     it('should show placeholder when no images', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={{ ...mockItem, images: [] }}
           onEdit={mockOnEdit}
@@ -381,7 +381,7 @@ describe('CatalogItemCard', () => {
 
   describe('Variants display', () => {
     it('should not show variants section when variants array is empty', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={{ ...mockItem, variants: [] }}
           onEdit={mockOnEdit}
@@ -393,7 +393,7 @@ describe('CatalogItemCard', () => {
     });
 
     it('should show variants label when variants exist', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={mockItem}
           onEdit={mockOnEdit}
@@ -407,7 +407,7 @@ describe('CatalogItemCard', () => {
 
   describe('Edit functionality', () => {
     it('should call onEdit with item when edit button is clicked', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={mockItem}
           onEdit={mockOnEdit}
@@ -425,7 +425,7 @@ describe('CatalogItemCard', () => {
 
   describe('Delete functionality', () => {
     it('should call onDelete with item id when delete button is clicked', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={mockItem}
           onEdit={mockOnEdit}
@@ -443,7 +443,7 @@ describe('CatalogItemCard', () => {
 
   describe('Without optional fields', () => {
     it('should render without SKU', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={{ ...mockItem, sku: null }}
           onEdit={mockOnEdit}
@@ -455,7 +455,7 @@ describe('CatalogItemCard', () => {
     });
 
     it('should render without short description', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={{ ...mockItem, shortDescription: null }}
           onEdit={mockOnEdit}
@@ -467,7 +467,7 @@ describe('CatalogItemCard', () => {
     });
 
     it('should render without compare at price', async () => {
-      render(
+      await render(
         <CatalogItemCard
           item={{ ...mockItem, compareAtPrice: null }}
           onEdit={mockOnEdit}

@@ -98,32 +98,32 @@ vi.mock('@/hooks/useTagsCache', () => ({
 }));
 
 describe('Classes Page', () => {
-  it('renders classes header', () => {
-    render(<I18nWrapper><ClassesPage /></I18nWrapper>);
+  it('renders classes header', async () => {
+    await render(<I18nWrapper><ClassesPage /></I18nWrapper>);
 
     const heading = page.getByRole('heading', { name: /Classes/i });
 
     expect(heading).toBeInTheDocument();
   });
 
-  it('renders add new class button', () => {
-    render(<I18nWrapper><ClassesPage /></I18nWrapper>);
+  it('renders add new class button', async () => {
+    await render(<I18nWrapper><ClassesPage /></I18nWrapper>);
 
     const addButton = page.getByRole('button', { name: /Add New Class/i });
 
     expect(addButton).toBeInTheDocument();
   });
 
-  it('displays class cards', () => {
-    render(<I18nWrapper><ClassesPage /></I18nWrapper>);
+  it('displays class cards', async () => {
+    await render(<I18nWrapper><ClassesPage /></I18nWrapper>);
 
     const fundamentalsClass = page.getByRole('heading', { name: 'BJJ Fundamentals I' }).first();
 
     expect(fundamentalsClass).toBeInTheDocument();
   });
 
-  it('displays class details', () => {
-    render(<I18nWrapper><ClassesPage /></I18nWrapper>);
+  it('displays class details', async () => {
+    await render(<I18nWrapper><ClassesPage /></I18nWrapper>);
 
     const schedule = page.getByText(/Monday • 6:00 AM - 7:00 AM/);
     const location = page.getByText(/Downtown HQ/).first();
@@ -132,16 +132,16 @@ describe('Classes Page', () => {
     expect(location).toBeInTheDocument();
   });
 
-  it('displays class level badges', () => {
-    render(<I18nWrapper><ClassesPage /></I18nWrapper>);
+  it('displays class level badges', async () => {
+    await render(<I18nWrapper><ClassesPage /></I18nWrapper>);
 
     const beginnerBadge = page.getByText(/Beginner/).first();
 
     expect(beginnerBadge).toBeInTheDocument();
   });
 
-  it('displays instructor names', () => {
-    render(<I18nWrapper><ClassesPage /></I18nWrapper>);
+  it('displays instructor names', async () => {
+    await render(<I18nWrapper><ClassesPage /></I18nWrapper>);
 
     // The transformer uses "Instructor" as placeholder when clerkId exists
     const instructorName = page.getByText('Instructor').first();
@@ -150,7 +150,7 @@ describe('Classes Page', () => {
   });
 
   it('opens add class modal when clicking add button', async () => {
-    render(<I18nWrapper><ClassesPage /></I18nWrapper>);
+    await render(<I18nWrapper><ClassesPage /></I18nWrapper>);
 
     const addButton = page.getByRole('button', { name: /Add New Class/i });
     await userEvent.click(addButton);
@@ -160,8 +160,8 @@ describe('Classes Page', () => {
     expect(dialog).toBeInTheDocument();
   });
 
-  it('displays summary cards with correct labels', () => {
-    render(<I18nWrapper><ClassesPage /></I18nWrapper>);
+  it('displays summary cards with correct labels', async () => {
+    await render(<I18nWrapper><ClassesPage /></I18nWrapper>);
 
     const totalClassesLabel = page.getByText(/Total Classes/i);
     const instructorsLabel = page.getByText(/Instructors/i).first();
@@ -170,8 +170,8 @@ describe('Classes Page', () => {
     expect(instructorsLabel).toBeInTheDocument();
   });
 
-  it('displays manage tags button', () => {
-    render(<I18nWrapper><ClassesPage /></I18nWrapper>);
+  it('displays manage tags button', async () => {
+    await render(<I18nWrapper><ClassesPage /></I18nWrapper>);
 
     const manageTagsButton = page.getByRole('button', { name: /Manage Tags/i });
 

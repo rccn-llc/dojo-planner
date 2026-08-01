@@ -101,10 +101,11 @@ export function WaiverStep({
       }
 
       setIsFetchingWaiver(true);
+      // Held in a local so the narrowing from the guard above survives into the
+      // closure below.
+      const membershipPlanId = data.membershipPlanId;
       try {
-        const result = await client.waivers.getWaiversForMembership({
-          membershipPlanId: data.membershipPlanId,
-        });
+        const result = await client.waivers.getWaiversForMembership({ membershipPlanId });
 
         const activeWaivers = result.waivers.filter(w => w.isActive);
         if (activeWaivers.length > 0) {

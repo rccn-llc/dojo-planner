@@ -83,26 +83,26 @@ describe('Setup2FADialog', () => {
     });
   });
 
-  it('should render the dialog title', () => {
-    render(<Setup2FADialog {...defaultProps} />);
+  it('should render the dialog title', async () => {
+    await render(<Setup2FADialog {...defaultProps} />);
 
     expect(page.getByText('Set Up Two-Factor Authentication')).toBeDefined();
   });
 
-  it('should show QR code scan instructions on initial step', () => {
-    render(<Setup2FADialog {...defaultProps} />);
+  it('should show QR code scan instructions on initial step', async () => {
+    await render(<Setup2FADialog {...defaultProps} />);
 
     expect(page.getByText('Scan this QR code with your authenticator app')).toBeDefined();
   });
 
-  it('should show Next button on scan step', () => {
-    render(<Setup2FADialog {...defaultProps} />);
+  it('should show Next button on scan step', async () => {
+    await render(<Setup2FADialog {...defaultProps} />);
 
     expect(page.getByRole('button', { name: /next/i })).toBeDefined();
   });
 
   it('should navigate to verify step when Next is clicked', async () => {
-    render(<Setup2FADialog {...defaultProps} />);
+    await render(<Setup2FADialog {...defaultProps} />);
 
     // Wait for createTOTP to resolve
     await vi.waitFor(() => {
@@ -116,7 +116,7 @@ describe('Setup2FADialog', () => {
   });
 
   it('should show Verify button disabled when code is empty', async () => {
-    render(<Setup2FADialog {...defaultProps} />);
+    await render(<Setup2FADialog {...defaultProps} />);
 
     await vi.waitFor(() => {
       expect(mockCreateTOTP).toHaveBeenCalled();
@@ -131,7 +131,7 @@ describe('Setup2FADialog', () => {
   });
 
   it('should call verifyTOTP and show backup codes on valid code', async () => {
-    render(<Setup2FADialog {...defaultProps} />);
+    await render(<Setup2FADialog {...defaultProps} />);
 
     await vi.waitFor(() => {
       expect(mockCreateTOTP).toHaveBeenCalled();
@@ -156,7 +156,7 @@ describe('Setup2FADialog', () => {
 
   it('should show error on invalid verification code', async () => {
     mockVerifyTOTP.mockRejectedValueOnce(new Error('Invalid code'));
-    render(<Setup2FADialog {...defaultProps} />);
+    await render(<Setup2FADialog {...defaultProps} />);
 
     await vi.waitFor(() => {
       expect(mockCreateTOTP).toHaveBeenCalled();
@@ -177,7 +177,7 @@ describe('Setup2FADialog', () => {
   });
 
   it('should call onSuccess and close on Done click', async () => {
-    render(<Setup2FADialog {...defaultProps} />);
+    await render(<Setup2FADialog {...defaultProps} />);
 
     await vi.waitFor(() => {
       expect(mockCreateTOTP).toHaveBeenCalled();
@@ -203,15 +203,15 @@ describe('Setup2FADialog', () => {
 
   it('should show setup error when createTOTP fails', async () => {
     mockCreateTOTP.mockRejectedValueOnce(new Error('Failed'));
-    render(<Setup2FADialog {...defaultProps} />);
+    await render(<Setup2FADialog {...defaultProps} />);
 
     await vi.waitFor(() => {
       expect(page.getByText('Failed to set up 2FA.')).toBeDefined();
     });
   });
 
-  it('should not render when closed', () => {
-    render(<Setup2FADialog {...defaultProps} open={false} />);
+  it('should not render when closed', async () => {
+    await render(<Setup2FADialog {...defaultProps} open={false} />);
 
     expect(page.getByText('Set Up Two-Factor Authentication').elements().length).toBe(0);
   });
@@ -222,7 +222,7 @@ describe('Setup2FADialog', () => {
   describe('Missing backup codes fallback (#165)', () => {
     it('shows the Generate button when verifyTOTP returns no backup codes', async () => {
       mockVerifyTOTP.mockResolvedValueOnce({ verified: true, backupCodes: undefined });
-      render(<Setup2FADialog {...defaultProps} />);
+      await render(<Setup2FADialog {...defaultProps} />);
 
       await vi.waitFor(() => {
         expect(mockCreateTOTP).toHaveBeenCalled();
@@ -241,7 +241,7 @@ describe('Setup2FADialog', () => {
 
     it('disables Copy All and Done while no codes are present', async () => {
       mockVerifyTOTP.mockResolvedValueOnce({ verified: true, backupCodes: [] });
-      render(<Setup2FADialog {...defaultProps} />);
+      await render(<Setup2FADialog {...defaultProps} />);
 
       await vi.waitFor(() => {
         expect(mockCreateTOTP).toHaveBeenCalled();
@@ -264,7 +264,7 @@ describe('Setup2FADialog', () => {
 
     it('clicking Generate calls createBackupCode and renders the codes', async () => {
       mockVerifyTOTP.mockResolvedValueOnce({ verified: true, backupCodes: undefined });
-      render(<Setup2FADialog {...defaultProps} />);
+      await render(<Setup2FADialog {...defaultProps} />);
 
       await vi.waitFor(() => {
         expect(mockCreateTOTP).toHaveBeenCalled();
@@ -291,7 +291,7 @@ describe('Setup2FADialog', () => {
     it('shows the missing-codes error when createBackupCode also returns nothing', async () => {
       mockVerifyTOTP.mockResolvedValueOnce({ verified: true, backupCodes: undefined });
       mockCreateBackupCode.mockResolvedValueOnce({ id: 'bc-2', codes: [], createdAt: null, updatedAt: null });
-      render(<Setup2FADialog {...defaultProps} />);
+      await render(<Setup2FADialog {...defaultProps} />);
 
       await vi.waitFor(() => {
         expect(mockCreateTOTP).toHaveBeenCalled();

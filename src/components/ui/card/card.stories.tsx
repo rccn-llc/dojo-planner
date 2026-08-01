@@ -47,7 +47,7 @@ export const WithFooter: Story = {
 
 export const Simple: Story = {
   render: () => (
-    <Card className="w-[300px]">
+    <Card className="w-75">
       <CardContent className="pt-6">
         <p>A simple card with just content.</p>
       </CardContent>
@@ -57,7 +57,7 @@ export const Simple: Story = {
 
 export const ProductCard: Story = {
   render: () => (
-    <Card className="w-[300px]">
+    <Card className="w-75">
       <CardHeader>
         <CardTitle>Product Name</CardTitle>
         <CardDescription>Premium Edition</CardDescription>

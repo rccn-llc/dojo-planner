@@ -5,15 +5,15 @@ import { DatePicker, DateTimePicker } from './date-picker';
 
 describe('DatePicker', () => {
   describe('Rendering', () => {
-    it('should render with placeholder when no value', () => {
-      render(<DatePicker placeholder="Pick a date" />);
+    it('should render with placeholder when no value', async () => {
+      await render(<DatePicker placeholder="Pick a date" />);
 
       expect(page.getByText('Pick a date')).toBeInTheDocument();
     });
 
-    it('should render formatted date when value is provided', () => {
+    it('should render formatted date when value is provided', async () => {
       // Use a date at noon UTC to avoid timezone issues
-      render(<DatePicker value={new Date(2024, 5, 15)} />);
+      await render(<DatePicker value={new Date(2024, 5, 15)} />);
 
       // The date should be formatted as yyyy-MM-dd
       const button = page.getByRole('button');
@@ -22,40 +22,40 @@ describe('DatePicker', () => {
       expect(button.element().textContent).toContain('2024-06-15');
     });
 
-    it('should render calendar icon', () => {
-      render(<DatePicker placeholder="Pick a date" />);
+    it('should render calendar icon', async () => {
+      await render(<DatePicker placeholder="Pick a date" />);
 
       const button = page.getByRole('button');
 
       expect(button).toBeInTheDocument();
     });
 
-    it('should apply custom className', () => {
-      render(<DatePicker className="w-64" placeholder="Pick a date" />);
+    it('should apply custom className', async () => {
+      await render(<DatePicker className="w-64" placeholder="Pick a date" />);
 
       const button = page.getByRole('button');
 
       expect(button).toHaveClass('w-64');
     });
 
-    it('should apply data-testid', () => {
-      render(<DatePicker data-testid="test-date-picker" placeholder="Pick a date" />);
+    it('should apply data-testid', async () => {
+      await render(<DatePicker data-testid="test-date-picker" placeholder="Pick a date" />);
 
       expect(page.getByTestId('test-date-picker')).toBeInTheDocument();
     });
   });
 
   describe('Disabled state', () => {
-    it('should render as disabled when disabled prop is true', () => {
-      render(<DatePicker disabled placeholder="Pick a date" />);
+    it('should render as disabled when disabled prop is true', async () => {
+      await render(<DatePicker disabled placeholder="Pick a date" />);
 
       const button = page.getByRole('button');
 
       expect(button).toBeDisabled();
     });
 
-    it('should not open popover when disabled', () => {
-      render(<DatePicker disabled placeholder="Pick a date" />);
+    it('should not open popover when disabled', async () => {
+      await render(<DatePicker disabled placeholder="Pick a date" />);
 
       const button = page.getByRole('button');
 
@@ -69,7 +69,7 @@ describe('DatePicker', () => {
 
   describe('Interaction', () => {
     it('should open calendar popover when clicked', async () => {
-      render(<DatePicker placeholder="Pick a date" />);
+      await render(<DatePicker placeholder="Pick a date" />);
 
       const button = page.getByRole('button');
       await userEvent.click(button.element());
@@ -80,7 +80,7 @@ describe('DatePicker', () => {
 
     it('should close calendar after selecting a date', async () => {
       const onChange = vi.fn();
-      render(<DatePicker onChange={onChange} placeholder="Pick a date" />);
+      await render(<DatePicker onChange={onChange} placeholder="Pick a date" />);
 
       const button = page.getByRole('button');
       await userEvent.click(button.element());
@@ -95,7 +95,7 @@ describe('DatePicker', () => {
 
     it('should call onChange when date is selected', async () => {
       const onChange = vi.fn();
-      render(<DatePicker onChange={onChange} placeholder="Pick a date" />);
+      await render(<DatePicker onChange={onChange} placeholder="Pick a date" />);
 
       const button = page.getByRole('button');
       await userEvent.click(button.element());
@@ -116,8 +116,8 @@ describe('DateTimePicker', () => {
   });
 
   describe('Rendering', () => {
-    it('should render date and time inputs', () => {
-      render(
+    it('should render date and time inputs', async () => {
+      await render(
         <DateTimePicker
           datePlaceholder="Pick a date"
         />,
@@ -127,8 +127,8 @@ describe('DateTimePicker', () => {
       expect(page.getByRole('textbox')).toBeInTheDocument();
     });
 
-    it('should render with date and time values', () => {
-      render(
+    it('should render with date and time values', async () => {
+      await render(
         <DateTimePicker
           date="2024-06-15"
           time="14:30:00"
@@ -142,8 +142,8 @@ describe('DateTimePicker', () => {
       expect(timeInput).toHaveValue('14:30:00');
     });
 
-    it('should render labels when provided', () => {
-      render(
+    it('should render labels when provided', async () => {
+      await render(
         <DateTimePicker
           dateLabel="Start Date"
           timeLabel="Start Time"
@@ -154,8 +154,8 @@ describe('DateTimePicker', () => {
       expect(page.getByText('Start Time')).toBeInTheDocument();
     });
 
-    it('should apply custom className', () => {
-      render(
+    it('should apply custom className', async () => {
+      await render(
         <DateTimePicker className="gap-8" data-testid-date="date-btn" />,
       );
 
@@ -166,8 +166,8 @@ describe('DateTimePicker', () => {
       expect(dateBtn).toBeInTheDocument();
     });
 
-    it('should apply data-testid attributes', () => {
-      render(
+    it('should apply data-testid attributes', async () => {
+      await render(
         <DateTimePicker
           data-testid-date="date-input"
           data-testid-time="time-input"
@@ -180,8 +180,8 @@ describe('DateTimePicker', () => {
   });
 
   describe('Disabled state', () => {
-    it('should disable both date and time inputs when disabled', () => {
-      render(
+    it('should disable both date and time inputs when disabled', async () => {
+      await render(
         <DateTimePicker
           disabled
           datePlaceholder="Pick a date"
@@ -198,7 +198,7 @@ describe('DateTimePicker', () => {
 
   describe('Interaction', () => {
     it('should open calendar when date button is clicked', async () => {
-      render(
+      await render(
         <DateTimePicker
           datePlaceholder="Pick a date"
         />,
@@ -212,7 +212,7 @@ describe('DateTimePicker', () => {
 
     it('should call onDateChange when date is selected', async () => {
       const onDateChange = vi.fn();
-      render(
+      await render(
         <DateTimePicker
           onDateChange={onDateChange}
           datePlaceholder="Pick a date"
@@ -231,7 +231,7 @@ describe('DateTimePicker', () => {
 
     it('should handle selecting a different date', async () => {
       const onDateChange = vi.fn();
-      render(
+      await render(
         <DateTimePicker
           date=""
           onDateChange={onDateChange}
@@ -251,7 +251,7 @@ describe('DateTimePicker', () => {
 
     it('should call onTimeChange when time is changed', async () => {
       const onTimeChange = vi.fn();
-      render(
+      await render(
         <DateTimePicker
           time="12:00:00"
           onTimeChange={onTimeChange}
@@ -267,8 +267,8 @@ describe('DateTimePicker', () => {
   });
 
   describe('Date parsing', () => {
-    it('should handle empty date string', () => {
-      render(
+    it('should handle empty date string', async () => {
+      await render(
         <DateTimePicker
           date=""
           datePlaceholder="Pick a date"
@@ -278,8 +278,8 @@ describe('DateTimePicker', () => {
       expect(page.getByText('Pick a date')).toBeInTheDocument();
     });
 
-    it('should handle invalid date string', () => {
-      render(
+    it('should handle invalid date string', async () => {
+      await render(
         <DateTimePicker
           date="invalid-date"
           datePlaceholder="Pick a date"
@@ -290,8 +290,8 @@ describe('DateTimePicker', () => {
       expect(page.getByText('Pick a date')).toBeInTheDocument();
     });
 
-    it('should handle valid date string', () => {
-      render(
+    it('should handle valid date string', async () => {
+      await render(
         <DateTimePicker
           date="2024-12-25"
         />,

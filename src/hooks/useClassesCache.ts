@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { client } from '@/libs/Orpc';
+import { clearInFlight, dedupeRequest } from './dedupeRequest';
 
 // =============================================================================
 // TYPES
@@ -139,7 +140,9 @@ export const useClassesCache = (organizationId?: string | undefined) => {
 
       console.info('[Classes Cache] Fetching fresh classes data for organization:', organizationId);
 
-      const classesData = await client.classes.list();
+      // Several components can mount this hook in the same tick; without
+      // de-duping, each one fires its own request against the cold cache.
+      const classesData = await dedupeRequest(`classes:${organizationId || ''}`, async () => client.classes.list());
       const classes = (classesData.classes || []) as ClassData[];
 
       // Update cache
@@ -182,6 +185,7 @@ export const useClassesCache = (organizationId?: string | undefined) => {
   const revalidate = useCallback(async () => {
     console.info('[Classes Cache] Manual revalidation triggered');
     cacheStore = null;
+    clearInFlight();
     await fetchClasses();
   }, [fetchClasses]);
 
@@ -228,5 +232,6 @@ export const useClassesCache = (organizationId?: string | undefined) => {
 export const invalidateClassesCache = async () => {
   console.info('[Classes Cache] Global cache invalidation triggered');
   cacheStore = null;
+  clearInFlight();
   await Promise.all(revalidateCallbacks.map(callback => callback()));
 };
