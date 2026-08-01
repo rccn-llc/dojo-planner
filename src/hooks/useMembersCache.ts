@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { client } from '@/libs/Orpc';
+import { clearInFlight, dedupeRequest } from './dedupeRequest';
 
 type MembershipPlan = {
   id: string;
@@ -211,7 +212,9 @@ export const useMembersCache = (organizationId?: string | undefined) => {
 
       console.info('[Members Cache] Fetching fresh members data for organization:', organizationId);
 
-      const membersData = await client.members.list();
+      // Several components can mount this hook in the same tick; without
+      // de-duping, each one fires its own request against the cold cache.
+      const membersData = await dedupeRequest(`members:${organizationId || ''}`, async () => client.members.list());
       const rawMembers = (membersData.members || []) as RawMemberRow[];
 
       const detailedMembers: Member[] = rawMembers.map(member => deriveMemberDisplayFields(member));
@@ -258,7 +261,8 @@ export const useMembersCache = (organizationId?: string | undefined) => {
   // Revalidate cache on demand
   const revalidate = useCallback(async () => {
     console.info('[Members Cache] Manual revalidation triggered');
-    cacheStore = null; // Clear cache to force fresh fetch
+    cacheStore = null;
+    clearInFlight(); // Clear cache to force fresh fetch
     await fetchMembers();
   }, [fetchMembers]);
 
@@ -307,6 +311,7 @@ export const useMembersCache = (organizationId?: string | undefined) => {
 export const invalidateMembersCache = async () => {
   console.info('[Members Cache] Global cache invalidation triggered');
   cacheStore = null;
+  clearInFlight();
   // Wait for all revalidation callbacks to complete
   await Promise.all(revalidateCallbacks.map(callback => callback()));
 };

@@ -40,9 +40,9 @@ vi.mock('@/libs/Orpc', () => ({
 
 describe('MembershipTagsManagement', () => {
   describe('Sheet Display', () => {
-    it('should render the sheet when open is true', () => {
+    it('should render the sheet when open is true', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -53,9 +53,9 @@ describe('MembershipTagsManagement', () => {
       expect(title).toBeInTheDocument();
     });
 
-    it('should not render the sheet content when open is false', () => {
+    it('should not render the sheet content when open is false', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={false} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -66,9 +66,9 @@ describe('MembershipTagsManagement', () => {
       expect(title.elements()).toHaveLength(0);
     });
 
-    it('should render the sheet title', () => {
+    it('should render the sheet title', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -81,9 +81,9 @@ describe('MembershipTagsManagement', () => {
   });
 
   describe('Search Functionality', () => {
-    it('should render the search input', () => {
+    it('should render the search input', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -96,7 +96,7 @@ describe('MembershipTagsManagement', () => {
 
     it('should filter tags when searching by tag name', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -118,7 +118,7 @@ describe('MembershipTagsManagement', () => {
 
     it('should filter tags when searching by membership name', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -135,7 +135,7 @@ describe('MembershipTagsManagement', () => {
 
     it('should show no tags found message when search has no results', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -151,7 +151,7 @@ describe('MembershipTagsManagement', () => {
 
     it('should be case-insensitive when searching', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -167,7 +167,7 @@ describe('MembershipTagsManagement', () => {
 
     it('should clear filter and show all tags when search is cleared', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -187,9 +187,9 @@ describe('MembershipTagsManagement', () => {
   });
 
   describe('Add New Tag Button', () => {
-    it('should render the Add New Tag button', () => {
+    it('should render the Add New Tag button', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -202,9 +202,9 @@ describe('MembershipTagsManagement', () => {
   });
 
   describe('Table Headers', () => {
-    it('should render Tag Name column header', () => {
+    it('should render Tag Name column header', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -215,9 +215,9 @@ describe('MembershipTagsManagement', () => {
       expect(tagNameHeader).toBeInTheDocument();
     });
 
-    it('should render Usage column header', () => {
+    it('should render Usage column header', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -228,9 +228,9 @@ describe('MembershipTagsManagement', () => {
       expect(usageHeader).toBeInTheDocument();
     });
 
-    it('should render Actions column header', () => {
+    it('should render Actions column header', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -243,9 +243,9 @@ describe('MembershipTagsManagement', () => {
   });
 
   describe('Tag List', () => {
-    it('should render all mock tags', () => {
+    it('should render all mock tags', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -258,9 +258,9 @@ describe('MembershipTagsManagement', () => {
       }
     });
 
-    it('should display tag names', () => {
+    it('should display tag names', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -275,9 +275,9 @@ describe('MembershipTagsManagement', () => {
       expect(inactiveTag).toBeInTheDocument();
     });
 
-    it('should display tag usage counts', () => {
+    it('should display tag usage counts', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -299,9 +299,9 @@ describe('MembershipTagsManagement', () => {
       expect(usageCount1).toBeInTheDocument();
     });
 
-    it('should display membership names for each tag', () => {
+    it('should display membership names for each tag', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -313,9 +313,9 @@ describe('MembershipTagsManagement', () => {
       expect(goldMembershipText).toBeInTheDocument();
     });
 
-    it('should render color indicators for each tag', () => {
+    it('should render color indicators for each tag', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -329,9 +329,9 @@ describe('MembershipTagsManagement', () => {
   });
 
   describe('Tag Actions', () => {
-    it('should render Edit buttons for each tag', () => {
+    it('should render Edit buttons for each tag', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -342,9 +342,9 @@ describe('MembershipTagsManagement', () => {
       expect(editButtons.length).toBe(mockMembershipTags.length);
     });
 
-    it('should render Delete buttons for each tag', () => {
+    it('should render Delete buttons for each tag', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -359,7 +359,7 @@ describe('MembershipTagsManagement', () => {
   describe('Sheet Close Functionality', () => {
     it('should call onOpenChange when close button is clicked', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -373,9 +373,9 @@ describe('MembershipTagsManagement', () => {
   });
 
   describe('Tag Row Component', () => {
-    it('should render Active tag row', () => {
+    it('should render Active tag row', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -386,9 +386,9 @@ describe('MembershipTagsManagement', () => {
       expect(activeTag).toBeInTheDocument();
     });
 
-    it('should render Trial tag row', () => {
+    it('should render Trial tag row', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -399,9 +399,9 @@ describe('MembershipTagsManagement', () => {
       expect(trialTag).toBeInTheDocument();
     });
 
-    it('should render Inactive tag row', () => {
+    it('should render Inactive tag row', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -414,9 +414,9 @@ describe('MembershipTagsManagement', () => {
   });
 
   describe('Accessibility', () => {
-    it('should have accessible search input with aria-label', () => {
+    it('should have accessible search input with aria-label', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -427,9 +427,9 @@ describe('MembershipTagsManagement', () => {
       expect(searchInput).toBeInTheDocument();
     });
 
-    it('should have proper table structure with rows', () => {
+    it('should have proper table structure with rows', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -445,7 +445,7 @@ describe('MembershipTagsManagement', () => {
   describe('CRUD wiring', () => {
     it('opens the Add Tag modal when Add New Tag is clicked', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -458,7 +458,7 @@ describe('MembershipTagsManagement', () => {
 
     it('opens the Edit Tag modal pre-filled when an Edit button is clicked', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,
@@ -472,7 +472,7 @@ describe('MembershipTagsManagement', () => {
 
     it('opens the delete confirm dialog when a Delete button is clicked', async () => {
       const onOpenChange = vi.fn();
-      render(
+      await render(
         <I18nWrapper>
           <MembershipTagsManagement open={true} onOpenChange={onOpenChange} />
         </I18nWrapper>,

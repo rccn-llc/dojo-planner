@@ -329,7 +329,7 @@ export function CatalogPage({ organizationId }: CatalogPageProps) {
 
           {/* Add Item Button */}
           <Button onClick={handleAddItem}>
-            <Plus className="h-4 w-4" />
+            <Plus className="size-4" />
             <span className="ml-1 hidden sm:inline">{t('add_item_button')}</span>
           </Button>
         </div>
@@ -339,7 +339,7 @@ export function CatalogPage({ organizationId }: CatalogPageProps) {
       {filteredItems.length === 0
         ? (
             <div className="py-12 text-center">
-              <Package className="mx-auto h-12 w-12 text-muted-foreground" />
+              <Package className="mx-auto size-12 text-muted-foreground" />
               <p className="mt-4 text-muted-foreground">
                 {items.length === 0 ? t('no_items_found') : t('no_results_found')}
               </p>

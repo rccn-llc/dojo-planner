@@ -21,8 +21,8 @@ describe('CalendarDateNav', () => {
     display: 'March 15 - 21',
   };
 
-  it('renders the display heading inside a popover trigger', () => {
-    render(
+  it('renders the display heading inside a popover trigger', async () => {
+    await render(
       <CalendarDateNav
         {...defaultProps}
         onDateChangeAction={vi.fn()}
@@ -36,7 +36,7 @@ describe('CalendarDateNav', () => {
   });
 
   it('opens the popover Calendar when the heading button is clicked', async () => {
-    render(
+    await render(
       <CalendarDateNav
         {...defaultProps}
         onDateChangeAction={vi.fn()}
@@ -54,7 +54,7 @@ describe('CalendarDateNav', () => {
 
   it('calls onDateChangeAction when a date is selected from the popover', async () => {
     const onChange = vi.fn();
-    render(
+    await render(
       <CalendarDateNav
         {...defaultProps}
         onDateChangeAction={onChange}
@@ -78,7 +78,7 @@ describe('CalendarDateNav', () => {
   });
 
   it('closes the popover after picking a date', async () => {
-    render(
+    await render(
       <CalendarDateNav
         {...defaultProps}
         onDateChangeAction={vi.fn()}

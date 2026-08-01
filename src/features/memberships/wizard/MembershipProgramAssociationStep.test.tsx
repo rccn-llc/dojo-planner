@@ -94,8 +94,8 @@ describe('MembershipProgramAssociationStep', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the step with title and subtitle', () => {
-    render(
+  it('should render the step with title and subtitle', async () => {
+    await render(
       <MembershipProgramAssociationStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -110,8 +110,8 @@ describe('MembershipProgramAssociationStep', () => {
     expect(heading).toBeTruthy();
   });
 
-  it('should render program select dropdown', () => {
-    render(
+  it('should render program select dropdown', async () => {
+    await render(
       <MembershipProgramAssociationStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -126,8 +126,8 @@ describe('MembershipProgramAssociationStep', () => {
     expect(programLabel).toBeTruthy();
   });
 
-  it('should have Next button disabled when no program is selected', () => {
-    render(
+  it('should have Next button disabled when no program is selected', async () => {
+    await render(
       <MembershipProgramAssociationStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -143,14 +143,14 @@ describe('MembershipProgramAssociationStep', () => {
     expect(nextButton?.disabled).toBe(true);
   });
 
-  it('should have Next button disabled when only program is selected but no waiver', () => {
+  it('should have Next button disabled when only program is selected but no waiver', async () => {
     const dataWithProgramOnly: AddMembershipWizardData = {
       ...mockData,
       associatedProgramId: '1',
       associatedProgramName: 'Adult Brazilian Jiu-jitsu',
     };
 
-    render(
+    await render(
       <MembershipProgramAssociationStep
         data={dataWithProgramOnly}
         onUpdate={mockHandlers.onUpdate}
@@ -166,7 +166,7 @@ describe('MembershipProgramAssociationStep', () => {
     expect(nextButton?.disabled).toBe(true);
   });
 
-  it('should enable Next button when both program and waiver are selected', () => {
+  it('should enable Next button when both program and waiver are selected', async () => {
     const dataWithProgramAndWaiver: AddMembershipWizardData = {
       ...mockData,
       associatedProgramId: '1',
@@ -175,7 +175,7 @@ describe('MembershipProgramAssociationStep', () => {
       associatedWaiverName: 'Standard Adult Waiver (v1)',
     };
 
-    render(
+    await render(
       <MembershipProgramAssociationStep
         data={dataWithProgramAndWaiver}
         onUpdate={mockHandlers.onUpdate}
@@ -192,7 +192,7 @@ describe('MembershipProgramAssociationStep', () => {
   });
 
   it('should call onCancel when Cancel button is clicked', async () => {
-    render(
+    await render(
       <MembershipProgramAssociationStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -213,7 +213,7 @@ describe('MembershipProgramAssociationStep', () => {
   });
 
   it('should call onBack when Back button is clicked', async () => {
-    render(
+    await render(
       <MembershipProgramAssociationStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -242,7 +242,7 @@ describe('MembershipProgramAssociationStep', () => {
       associatedWaiverName: 'Standard Adult Waiver (v1)',
     };
 
-    render(
+    await render(
       <MembershipProgramAssociationStep
         data={dataWithProgramAndWaiver}
         onUpdate={mockHandlers.onUpdate}
@@ -262,8 +262,8 @@ describe('MembershipProgramAssociationStep', () => {
     }
   });
 
-  it('should display error message when provided', () => {
-    render(
+  it('should display error message when provided', async () => {
+    await render(
       <MembershipProgramAssociationStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -280,7 +280,7 @@ describe('MembershipProgramAssociationStep', () => {
   });
 
   it('should call onUpdate with the real program id when a program is selected', async () => {
-    render(
+    await render(
       <MembershipProgramAssociationStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -306,8 +306,8 @@ describe('MembershipProgramAssociationStep', () => {
     });
   });
 
-  it('should display helper text', () => {
-    render(
+  it('should display helper text', async () => {
+    await render(
       <MembershipProgramAssociationStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -323,7 +323,7 @@ describe('MembershipProgramAssociationStep', () => {
   });
 
   it('should only show active programs from the API in the dropdown', async () => {
-    render(
+    await render(
       <MembershipProgramAssociationStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -351,7 +351,7 @@ describe('MembershipProgramAssociationStep', () => {
   });
 
   it('should show all active programs returned by the API', async () => {
-    render(
+    await render(
       <MembershipProgramAssociationStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -376,10 +376,10 @@ describe('MembershipProgramAssociationStep', () => {
     expect(allOptions.length).toBe(4);
   });
 
-  it('should not contain any hardcoded mock program ids', () => {
+  it('should not contain any hardcoded mock program ids', async () => {
     // Regression guard for the FK-violation 500 bug: the dropdown must be
     // sourced from the API, never from a hardcoded integer-id list.
-    render(
+    await render(
       <MembershipProgramAssociationStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -395,8 +395,8 @@ describe('MembershipProgramAssociationStep', () => {
     expect(legacyMockOption).toBeUndefined();
   });
 
-  it('should render waiver dropdown', () => {
-    render(
+  it('should render waiver dropdown', async () => {
+    await render(
       <MembershipProgramAssociationStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -412,7 +412,7 @@ describe('MembershipProgramAssociationStep', () => {
   });
 
   it('should call onUpdate when a waiver is selected', async () => {
-    render(
+    await render(
       <MembershipProgramAssociationStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}

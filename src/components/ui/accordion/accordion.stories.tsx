@@ -29,7 +29,7 @@ export const Single: Story = {
     type: 'single',
   },
   render: () => (
-    <Accordion type="single" collapsible className="w-[300px]">
+    <Accordion type="single" collapsible className="w-75">
       <AccordionItem value="item-1">
         <AccordionTrigger>Is it accessible?</AccordionTrigger>
         <AccordionContent>
@@ -57,7 +57,7 @@ export const Multiple: Story = {
     type: 'multiple',
   },
   render: () => (
-    <Accordion type="multiple" className="w-[300px]">
+    <Accordion type="multiple" className="w-75">
       <AccordionItem value="item-1">
         <AccordionTrigger>Feature 1</AccordionTrigger>
         <AccordionContent>
@@ -85,7 +85,7 @@ export const FAQ: Story = {
     type: 'single',
   },
   render: () => (
-    <Accordion type="single" collapsible className="w-[400px]">
+    <Accordion type="single" collapsible className="w-100">
       <AccordionItem value="faq-1">
         <AccordionTrigger>What is this product?</AccordionTrigger>
         <AccordionContent>

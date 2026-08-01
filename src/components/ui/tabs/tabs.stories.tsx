@@ -15,7 +15,7 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
   render: () => (
-    <Tabs defaultValue="tab1" className="w-[400px]">
+    <Tabs defaultValue="tab1" className="w-100">
       <TabsList>
         <TabsTrigger value="tab1">Tab 1</TabsTrigger>
         <TabsTrigger value="tab2">Tab 2</TabsTrigger>
@@ -36,7 +36,7 @@ export const Default: Story = {
 
 export const TwoTabs: Story = {
   render: () => (
-    <Tabs defaultValue="active" className="w-[300px]">
+    <Tabs defaultValue="active" className="w-75">
       <TabsList>
         <TabsTrigger value="active">Active</TabsTrigger>
         <TabsTrigger value="inactive">Inactive</TabsTrigger>
@@ -83,7 +83,7 @@ export const Calendar: Story = {
 
 export const DisabledTab: Story = {
   render: () => (
-    <Tabs defaultValue="tab1" className="w-[400px]">
+    <Tabs defaultValue="tab1" className="w-100">
       <TabsList>
         <TabsTrigger value="tab1">Enabled</TabsTrigger>
         <TabsTrigger value="tab2" disabled>

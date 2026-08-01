@@ -19,7 +19,7 @@ describe('CouponFilterBar', () => {
 
   describe('Rendering', () => {
     it('should render search input and filter dropdowns', async () => {
-      render(
+      await render(
         <CouponFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableStatuses={mockAvailableStatuses}
@@ -33,7 +33,7 @@ describe('CouponFilterBar', () => {
     });
 
     it('should show placeholder text in search input', async () => {
-      render(
+      await render(
         <CouponFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableStatuses={mockAvailableStatuses}
@@ -49,7 +49,7 @@ describe('CouponFilterBar', () => {
 
   describe('Search functionality', () => {
     it('should call onFiltersChangeAction when search input changes', async () => {
-      render(
+      await render(
         <CouponFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableStatuses={mockAvailableStatuses}
@@ -68,7 +68,7 @@ describe('CouponFilterBar', () => {
     });
 
     it('should update filter with each keystroke', async () => {
-      render(
+      await render(
         <CouponFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableStatuses={mockAvailableStatuses}
@@ -83,7 +83,7 @@ describe('CouponFilterBar', () => {
     });
 
     it('should include all filter values when search changes', async () => {
-      render(
+      await render(
         <CouponFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableStatuses={mockAvailableStatuses}
@@ -106,7 +106,7 @@ describe('CouponFilterBar', () => {
 
   describe('Status filter functionality', () => {
     it('should call onFiltersChangeAction when status is changed', async () => {
-      render(
+      await render(
         <CouponFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableStatuses={mockAvailableStatuses}
@@ -128,7 +128,7 @@ describe('CouponFilterBar', () => {
 
   describe('Type filter functionality', () => {
     it('should call onFiltersChangeAction when type is changed', async () => {
-      render(
+      await render(
         <CouponFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableStatuses={mockAvailableStatuses}
@@ -150,7 +150,7 @@ describe('CouponFilterBar', () => {
 
   describe('Filter combinations', () => {
     it('should preserve other filter values when one filter changes', async () => {
-      render(
+      await render(
         <CouponFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableStatuses={mockAvailableStatuses}
@@ -181,7 +181,7 @@ describe('CouponFilterBar', () => {
 
   describe('Empty available options', () => {
     it('should render filter dropdowns even with empty options', async () => {
-      render(
+      await render(
         <CouponFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableStatuses={[]}

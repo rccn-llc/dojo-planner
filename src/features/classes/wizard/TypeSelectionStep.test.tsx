@@ -45,8 +45,8 @@ describe('TypeSelectionStep', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the step with title and subtitle', () => {
-    render(
+  it('should render the step with title and subtitle', async () => {
+    await render(
       <TypeSelectionStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -60,8 +60,8 @@ describe('TypeSelectionStep', () => {
     expect(heading).toBeTruthy();
   });
 
-  it('should render class option card', () => {
-    render(
+  it('should render class option card', async () => {
+    await render(
       <TypeSelectionStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -77,8 +77,8 @@ describe('TypeSelectionStep', () => {
     expect(classDescription).toBeTruthy();
   });
 
-  it('should render event option card', () => {
-    render(
+  it('should render event option card', async () => {
+    await render(
       <TypeSelectionStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -95,7 +95,7 @@ describe('TypeSelectionStep', () => {
   });
 
   it('should call onUpdate when class option is clicked', async () => {
-    render(
+    await render(
       <TypeSelectionStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -114,7 +114,7 @@ describe('TypeSelectionStep', () => {
   });
 
   it('should call onUpdate when event option is clicked', async () => {
-    render(
+    await render(
       <TypeSelectionStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -132,8 +132,8 @@ describe('TypeSelectionStep', () => {
     }
   });
 
-  it('should have Next button disabled when no type is selected', () => {
-    render(
+  it('should have Next button disabled when no type is selected', async () => {
+    await render(
       <TypeSelectionStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -148,13 +148,13 @@ describe('TypeSelectionStep', () => {
     expect(nextButton?.disabled).toBe(true);
   });
 
-  it('should enable Next button when class type is selected', () => {
+  it('should enable Next button when class type is selected', async () => {
     const dataWithClass: AddClassWizardData = {
       ...mockData,
       itemType: 'class',
     };
 
-    render(
+    await render(
       <TypeSelectionStep
         data={dataWithClass}
         onUpdate={mockHandlers.onUpdate}
@@ -169,13 +169,13 @@ describe('TypeSelectionStep', () => {
     expect(nextButton?.disabled).toBe(false);
   });
 
-  it('should enable Next button when event type is selected', () => {
+  it('should enable Next button when event type is selected', async () => {
     const dataWithEvent: AddClassWizardData = {
       ...mockData,
       itemType: 'event',
     };
 
-    render(
+    await render(
       <TypeSelectionStep
         data={dataWithEvent}
         onUpdate={mockHandlers.onUpdate}
@@ -191,7 +191,7 @@ describe('TypeSelectionStep', () => {
   });
 
   it('should call onCancel when Cancel button is clicked', async () => {
-    render(
+    await render(
       <TypeSelectionStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -216,7 +216,7 @@ describe('TypeSelectionStep', () => {
       itemType: 'class',
     };
 
-    render(
+    await render(
       <TypeSelectionStep
         data={dataWithSelection}
         onUpdate={mockHandlers.onUpdate}
@@ -235,8 +235,8 @@ describe('TypeSelectionStep', () => {
     }
   });
 
-  it('should display error message when provided', () => {
-    render(
+  it('should display error message when provided', async () => {
+    await render(
       <TypeSelectionStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -251,13 +251,13 @@ describe('TypeSelectionStep', () => {
     expect(errorMessage).toBeTruthy();
   });
 
-  it('should highlight class card when class is selected', () => {
+  it('should highlight class card when class is selected', async () => {
     const dataWithClass: AddClassWizardData = {
       ...mockData,
       itemType: 'class',
     };
 
-    render(
+    await render(
       <TypeSelectionStep
         data={dataWithClass}
         onUpdate={mockHandlers.onUpdate}
@@ -272,13 +272,13 @@ describe('TypeSelectionStep', () => {
     expect(classCard?.classList.contains('border-primary')).toBe(true);
   });
 
-  it('should highlight event card when event is selected', () => {
+  it('should highlight event card when event is selected', async () => {
     const dataWithEvent: AddClassWizardData = {
       ...mockData,
       itemType: 'event',
     };
 
-    render(
+    await render(
       <TypeSelectionStep
         data={dataWithEvent}
         onUpdate={mockHandlers.onUpdate}

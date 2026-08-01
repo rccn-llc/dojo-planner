@@ -152,7 +152,7 @@ export function SignatureCanvas({
           onClick={handleClear}
           disabled={disabled || isEmpty}
         >
-          <Eraser className="mr-2 h-4 w-4" />
+          <Eraser className="mr-2 size-4" />
           {t('clear_button')}
         </Button>
       </div>

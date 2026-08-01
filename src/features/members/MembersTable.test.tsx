@@ -30,11 +30,11 @@ const createMockMember = (overrides = {}) => ({
 
 describe('MembersTable', () => {
   describe('Page Header', () => {
-    it('should render Members h1 header', () => {
+    it('should render Members h1 header', async () => {
       const mockMembers = [createMockMember()];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -46,11 +46,11 @@ describe('MembersTable', () => {
       expect(heading).toBeInTheDocument();
     });
 
-    it('should not render All Members header', () => {
+    it('should not render All Members header', async () => {
       const mockMembers = [createMockMember()];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -64,11 +64,11 @@ describe('MembersTable', () => {
   });
 
   describe('Render method', () => {
-    it('should render members table with members list', () => {
+    it('should render members table with members list', async () => {
       const mockMembers = [createMockMember()];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -80,10 +80,10 @@ describe('MembersTable', () => {
       expect(memberName).toBeInTheDocument();
     });
 
-    it('should render empty state when no members', () => {
+    it('should render empty state when no members', async () => {
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={[]}
           onRowClickAction={mockOnRowClick}
@@ -95,10 +95,10 @@ describe('MembersTable', () => {
       expect(emptyState).toBeInTheDocument();
     });
 
-    it('should render loading state when loading prop is true', () => {
+    it('should render loading state when loading prop is true', async () => {
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={[]}
           onRowClickAction={mockOnRowClick}
@@ -111,10 +111,10 @@ describe('MembersTable', () => {
       expect(loadingText).toBeInTheDocument();
     });
 
-    it('should render header actions when provided', () => {
+    it('should render header actions when provided', async () => {
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={[]}
           onRowClickAction={mockOnRowClick}
@@ -129,7 +129,7 @@ describe('MembersTable', () => {
   });
 
   describe('Statistics cards', () => {
-    it('should display correct member statistics', () => {
+    it('should display correct member statistics', async () => {
       const mockMembers = [
         createMockMember({ id: '1', status: 'active', membershipType: 'monthly' }),
         createMockMember({ id: '2', status: 'active', membershipType: 'annual' }),
@@ -139,7 +139,7 @@ describe('MembersTable', () => {
       ];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -155,11 +155,11 @@ describe('MembersTable', () => {
   });
 
   describe('Status display', () => {
-    it('should display Active status with correct label', () => {
+    it('should display Active status with correct label', async () => {
       const mockMembers = [createMockMember({ status: 'active' })];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -170,11 +170,11 @@ describe('MembersTable', () => {
       expect(page.getByText('Active').first()).toBeInTheDocument();
     });
 
-    it('should display Past Due status with correct label', () => {
+    it('should display Past Due status with correct label', async () => {
       const mockMembers = [createMockMember({ status: 'past_due' })];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -184,11 +184,11 @@ describe('MembersTable', () => {
       expect(page.getByText('Past Due').first()).toBeInTheDocument();
     });
 
-    it('should display Trial status with correct label', () => {
+    it('should display Trial status with correct label', async () => {
       const mockMembers = [createMockMember({ status: 'trial' })];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -198,11 +198,11 @@ describe('MembersTable', () => {
       expect(page.getByText('Trial').first()).toBeInTheDocument();
     });
 
-    it('should display Cancelled status with correct label', () => {
+    it('should display Cancelled status with correct label', async () => {
       const mockMembers = [createMockMember({ status: 'cancelled' })];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -212,11 +212,11 @@ describe('MembersTable', () => {
       expect(page.getByText('Cancelled').first()).toBeInTheDocument();
     });
 
-    it('should display Hold status with correct label', () => {
+    it('should display Hold status with correct label', async () => {
       const mockMembers = [createMockMember({ status: 'hold' })];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -228,11 +228,11 @@ describe('MembersTable', () => {
   });
 
   describe('Member type display', () => {
-    it('should display Individual for individual member type', () => {
+    it('should display Individual for individual member type', async () => {
       const mockMembers = [createMockMember({ memberType: 'individual' })];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -243,11 +243,11 @@ describe('MembersTable', () => {
       expect(page.getByText('Individual').first()).toBeInTheDocument();
     });
 
-    it('should display Head of Household for head-of-household member type', () => {
+    it('should display Head of Household for head-of-household member type', async () => {
       const mockMembers = [createMockMember({ memberType: 'head-of-household' })];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -257,11 +257,11 @@ describe('MembersTable', () => {
       expect(page.getByText('Head of Household').first()).toBeInTheDocument();
     });
 
-    it('should display Family Member for family-member member type', () => {
+    it('should display Family Member for family-member member type', async () => {
       const mockMembers = [createMockMember({ memberType: 'family-member' })];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -271,11 +271,11 @@ describe('MembersTable', () => {
       expect(page.getByText('Family Member').first()).toBeInTheDocument();
     });
 
-    it('should display dash for null member type', () => {
+    it('should display dash for null member type', async () => {
       const mockMembers = [createMockMember({ memberType: null })];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -297,7 +297,7 @@ describe('MembersTable', () => {
       ];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -322,7 +322,7 @@ describe('MembersTable', () => {
       ];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -347,7 +347,7 @@ describe('MembersTable', () => {
       ];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -371,7 +371,7 @@ describe('MembersTable', () => {
       const mockMembers = [createMockMember({ id: 'member-123' })];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -387,13 +387,13 @@ describe('MembersTable', () => {
   });
 
   describe('Filtering', () => {
-    it('should have a search input', () => {
+    it('should have a search input', async () => {
       const mockMembers = [
         createMockMember({ id: '1', firstName: 'John', lastName: 'Doe' }),
       ];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -411,7 +411,7 @@ describe('MembersTable', () => {
       ];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -435,7 +435,7 @@ describe('MembersTable', () => {
       ];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -458,7 +458,7 @@ describe('MembersTable', () => {
       ];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -476,11 +476,11 @@ describe('MembersTable', () => {
   });
 
   describe('Date and currency formatting', () => {
-    it('should format currency correctly', () => {
+    it('should format currency correctly', async () => {
       const mockMembers = [createMockMember({ amountDue: '1234.56' })];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -493,11 +493,11 @@ describe('MembersTable', () => {
       expect(table.getByText('$1,234.56')).toBeInTheDocument();
     });
 
-    it('should display dash for missing amount', () => {
+    it('should display dash for missing amount', async () => {
       const mockMembers = [createMockMember({ amountDue: undefined })];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -512,11 +512,11 @@ describe('MembersTable', () => {
   });
 
   describe('Avatar initials', () => {
-    it('should display initials for member with names', () => {
+    it('should display initials for member with names', async () => {
       const mockMembers = [createMockMember({ firstName: 'John', lastName: 'Doe' })];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -527,11 +527,11 @@ describe('MembersTable', () => {
       expect(page.getByText('JD').first()).toBeInTheDocument();
     });
 
-    it('should display question mark for missing names', () => {
+    it('should display question mark for missing names', async () => {
       const mockMembers = [createMockMember({ firstName: null, lastName: null })];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -551,7 +551,7 @@ describe('MembersTable', () => {
       ];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -577,7 +577,7 @@ describe('MembersTable', () => {
       ];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -605,7 +605,7 @@ describe('MembersTable', () => {
       ];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -630,7 +630,7 @@ describe('MembersTable', () => {
       ];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -655,7 +655,7 @@ describe('MembersTable', () => {
       ];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -680,7 +680,7 @@ describe('MembersTable', () => {
       ];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -709,7 +709,7 @@ describe('MembersTable', () => {
       ];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -731,7 +731,7 @@ describe('MembersTable', () => {
       ];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -755,7 +755,7 @@ describe('MembersTable', () => {
       ];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -779,7 +779,7 @@ describe('MembersTable', () => {
       ];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -803,7 +803,7 @@ describe('MembersTable', () => {
       ];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -826,7 +826,7 @@ describe('MembersTable', () => {
       ];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -848,7 +848,7 @@ describe('MembersTable', () => {
       ];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -877,7 +877,7 @@ describe('MembersTable', () => {
       ];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -901,11 +901,11 @@ describe('MembersTable', () => {
   });
 
   describe('Date formatting', () => {
-    it('should display formatted date for next payment', () => {
+    it('should display formatted date for next payment', async () => {
       const mockMembers = [createMockMember({ nextPayment: new Date('2025-06-15T14:30:00') })];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -919,11 +919,11 @@ describe('MembersTable', () => {
       expect(table.getByText(/06\/15\/2025/)).toBeInTheDocument();
     });
 
-    it('should display dash for null next payment', () => {
+    it('should display dash for null next payment', async () => {
       const mockMembers = [createMockMember({ nextPayment: undefined })];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -936,11 +936,11 @@ describe('MembersTable', () => {
       expect(table.getByText('-').first()).toBeInTheDocument();
     });
 
-    it('should display formatted date for last accessed', () => {
+    it('should display formatted date for last accessed', async () => {
       const mockMembers = [createMockMember({ lastAccessedAt: new Date('2024-11-20T09:15:00') })];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -952,11 +952,11 @@ describe('MembersTable', () => {
       expect(table.getByText(/11\/20\/2024/)).toBeInTheDocument();
     });
 
-    it('should display dash for null last accessed', () => {
+    it('should display dash for null last accessed', async () => {
       const mockMembers = [createMockMember({ lastAccessedAt: null })];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -970,7 +970,7 @@ describe('MembersTable', () => {
   });
 
   describe('Avatar with photo', () => {
-    it('should render member with photoUrl and fallback initials', () => {
+    it('should render member with photoUrl and fallback initials', async () => {
       const mockMembers = [createMockMember({
         photoUrl: 'https://example.com/photo.jpg',
         firstName: 'John',
@@ -978,7 +978,7 @@ describe('MembersTable', () => {
       })];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -991,12 +991,12 @@ describe('MembersTable', () => {
   });
 
   describe('Pagination', () => {
-    it('should show pagination when there are more than 10 members', () => {
+    it('should show pagination when there are more than 10 members', async () => {
       const mockMembers = Array.from({ length: 15 }, (_, i) =>
         createMockMember({ id: `${i}`, firstName: `Member${i}`, lastName: 'Test', status: 'active' }));
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -1008,13 +1008,13 @@ describe('MembersTable', () => {
       expect(page.getByRole('button', { name: 'Next', exact: true })).toBeInTheDocument();
     });
 
-    it('should only show first 10 members on first page', () => {
+    it('should only show first 10 members on first page', async () => {
       // Use padded numbers so alphabetical sort matches numeric order
       const mockMembers = Array.from({ length: 15 }, (_, i) =>
         createMockMember({ id: `${i}`, firstName: `Member${String(i).padStart(2, '0')}`, lastName: 'Test', status: 'active' }));
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -1036,7 +1036,7 @@ describe('MembersTable', () => {
         createMockMember({ id: `${i}`, firstName: `Member${String(i).padStart(2, '0')}`, lastName: 'Test', status: 'active' }));
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -1058,7 +1058,7 @@ describe('MembersTable', () => {
         createMockMember({ id: `${i}`, firstName: `Member${String(i).padStart(2, '0')}`, lastName: 'Test', status: 'active' }));
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -1079,11 +1079,11 @@ describe('MembersTable', () => {
       expect(table.getByText('Member01 Test')).toBeInTheDocument();
     });
 
-    it('should not show pagination when 10 or fewer members', () => {
+    it('should not show pagination when 10 or fewer members', async () => {
       const mockMembers = [createMockMember()];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -1098,11 +1098,11 @@ describe('MembersTable', () => {
   });
 
   describe('Free membership type', () => {
-    it('should display dash for free membership type (not free-trial)', () => {
+    it('should display dash for free membership type (not free-trial)', async () => {
       const mockMembers = [createMockMember({ membershipType: 'free' as const })];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -1117,11 +1117,11 @@ describe('MembersTable', () => {
   });
 
   describe('Unknown status handling', () => {
-    it('should handle unknown status with default styling', () => {
+    it('should handle unknown status with default styling', async () => {
       const mockMembers = [createMockMember({ status: 'pending' })];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -1134,11 +1134,11 @@ describe('MembersTable', () => {
   });
 
   describe('Members with missing data', () => {
-    it('should handle member with only first name', () => {
+    it('should handle member with only first name', async () => {
       const mockMembers = [createMockMember({ firstName: 'John', lastName: null })];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -1149,11 +1149,11 @@ describe('MembersTable', () => {
       expect(page.getByText('?').first()).toBeInTheDocument();
     });
 
-    it('should handle member with only last name', () => {
+    it('should handle member with only last name', async () => {
       const mockMembers = [createMockMember({ firstName: null, lastName: 'Doe' })];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -1170,7 +1170,7 @@ describe('MembersTable', () => {
       ];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -1194,7 +1194,7 @@ describe('MembersTable', () => {
       ];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -1226,7 +1226,7 @@ describe('MembersTable', () => {
       ];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -1251,7 +1251,7 @@ describe('MembersTable', () => {
   });
 
   describe('Statistics calculations', () => {
-    it('should count total on hold members correctly', () => {
+    it('should count total on hold members correctly', async () => {
       const mockMembers = [
         createMockMember({ id: '1', status: 'hold' }),
         createMockMember({ id: '2', status: 'hold' }),
@@ -1259,7 +1259,7 @@ describe('MembersTable', () => {
       ];
       const mockOnRowClick = vi.fn();
 
-      render(
+      await render(
         <MembersTable
           members={mockMembers}
           onRowClickAction={mockOnRowClick}
@@ -1275,14 +1275,14 @@ describe('MembersTable', () => {
     const manyMembers = Array.from({ length: 30 }, (_, i) =>
       createMockMember({ id: String(i), firstName: `Member${String(i).padStart(2, '0')}`, lastName: 'Test', email: `m${i}@x.com` }));
 
-    it('renders a rows-per-page selector', () => {
-      render(<MembersTable members={manyMembers} onRowClickAction={vi.fn()} />);
+    it('renders a rows-per-page selector', async () => {
+      await render(<MembersTable members={manyMembers} onRowClickAction={vi.fn()} />);
 
       expect(page.getByLabelText('Rows per page')).toBeInTheDocument();
     });
 
-    it('shows only 10 rows by default (30 members → first page)', () => {
-      render(<MembersTable members={manyMembers} onRowClickAction={vi.fn()} />);
+    it('shows only 10 rows by default (30 members → first page)', async () => {
+      await render(<MembersTable members={manyMembers} onRowClickAction={vi.fn()} />);
 
       const table = page.getByRole('table');
 
@@ -1292,7 +1292,7 @@ describe('MembersTable', () => {
     });
 
     it('shows more rows after choosing a larger page size', async () => {
-      render(<MembersTable members={manyMembers} onRowClickAction={vi.fn()} />);
+      await render(<MembersTable members={manyMembers} onRowClickAction={vi.fn()} />);
 
       await page.getByLabelText('Rows per page').click();
       await page.getByRole('option', { name: '25' }).click();
@@ -1311,7 +1311,7 @@ describe('MembersTable', () => {
         createMockMember({ id: '2', firstName: 'Jane', lastName: 'Doe', email: 'jd@x.com' }), // "jane" prefixes first name
       ];
 
-      render(<MembersTable members={members} onRowClickAction={vi.fn()} />);
+      await render(<MembersTable members={members} onRowClickAction={vi.fn()} />);
 
       const searchInput = page.getByPlaceholder('search_placeholder');
       await userEvent.fill(searchInput.element() as HTMLInputElement, 'jane');
@@ -1329,7 +1329,7 @@ describe('MembersTable', () => {
         createMockMember({ id: '2', firstName: 'Bob', lastName: 'Smith', email: 'bob@x.com' }),
       ];
 
-      render(<MembersTable members={members} onRowClickAction={vi.fn()} />);
+      await render(<MembersTable members={members} onRowClickAction={vi.fn()} />);
 
       const searchInput = page.getByPlaceholder('search_placeholder');
       await userEvent.fill(searchInput.element() as HTMLInputElement, 'jane');

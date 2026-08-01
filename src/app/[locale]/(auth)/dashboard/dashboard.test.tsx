@@ -77,40 +77,40 @@ vi.mock('@/hooks/useDashboardCache', () => ({
 }));
 
 describe('Dashboard Page', () => {
-  it('renders performance header', () => {
-    render(<DashboardPage />);
+  it('renders performance header', async () => {
+    await render(<DashboardPage />);
 
     const heading = page.getByRole('heading', { name: /Performance/i });
 
     expect(heading).toBeInTheDocument();
   });
 
-  it('renders memberships section', () => {
-    render(<DashboardPage />);
+  it('renders memberships section', async () => {
+    await render(<DashboardPage />);
 
     const membershipsHeading = page.getByRole('heading', { name: /Memberships/i });
 
     expect(membershipsHeading).toBeInTheDocument();
   });
 
-  it('renders financial metrics', () => {
-    render(<DashboardPage />);
+  it('renders financial metrics', async () => {
+    await render(<DashboardPage />);
 
     const financialsHeading = page.getByRole('heading', { name: /Financials/i });
 
     expect(financialsHeading).toBeInTheDocument();
   });
 
-  it('displays membership types and counts', () => {
-    render(<DashboardPage />);
+  it('displays membership types and counts', async () => {
+    await render(<DashboardPage />);
 
     const allPeople = page.getByText(/All people/);
 
     expect(allPeople).toBeInTheDocument();
   });
 
-  it('displays financial data in table', () => {
-    render(<DashboardPage />);
+  it('displays financial data in table', async () => {
+    await render(<DashboardPage />);
 
     const expireCards = page.getByText(/Expiring credit cards/);
 
@@ -118,7 +118,7 @@ describe('Dashboard Page', () => {
   });
 
   it('displays chart headings', async () => {
-    render(<DashboardPage />);
+    await render(<DashboardPage />);
 
     // DashboardCharts is loaded via next/dynamic, so poll until it resolves.
     await expect.element(page.getByRole('heading', { name: /Member average/i })).toBeInTheDocument();
@@ -127,8 +127,8 @@ describe('Dashboard Page', () => {
 });
 
 describe('Dashboard Page - Membership Card Links', () => {
-  it('renders All people link pointing to members page', () => {
-    render(<DashboardPage />);
+  it('renders All people link pointing to members page', async () => {
+    await render(<DashboardPage />);
 
     const allPeopleLink = page.getByRole('link', { name: /All people/i });
 
@@ -136,8 +136,8 @@ describe('Dashboard Page - Membership Card Links', () => {
     expect(allPeopleLink.element()).toHaveAttribute('href', '/dashboard/members');
   });
 
-  it('renders All students link pointing to members page', () => {
-    render(<DashboardPage />);
+  it('renders All students link pointing to members page', async () => {
+    await render(<DashboardPage />);
 
     const allStudentsLink = page.getByRole('link', { name: /All students/i });
 
@@ -145,8 +145,8 @@ describe('Dashboard Page - Membership Card Links', () => {
     expect(allStudentsLink.element()).toHaveAttribute('href', '/dashboard/members');
   });
 
-  it('renders All families with students link pointing to members page', () => {
-    render(<DashboardPage />);
+  it('renders All families with students link pointing to members page', async () => {
+    await render(<DashboardPage />);
 
     const familiesLink = page.getByRole('link', { name: /All families with students/i });
 
@@ -154,8 +154,8 @@ describe('Dashboard Page - Membership Card Links', () => {
     expect(familiesLink.element()).toHaveAttribute('href', '/dashboard/members');
   });
 
-  it('renders New students link pointing to members page', () => {
-    render(<DashboardPage />);
+  it('renders New students link pointing to members page', async () => {
+    await render(<DashboardPage />);
 
     const newStudentsLink = page.getByRole('link', { name: /New students \(last 30 days\)/i });
 
@@ -163,8 +163,8 @@ describe('Dashboard Page - Membership Card Links', () => {
     expect(newStudentsLink.element()).toHaveAttribute('href', '/dashboard/members');
   });
 
-  it('renders Memberships with autopay on link pointing to members page', () => {
-    render(<DashboardPage />);
+  it('renders Memberships with autopay on link pointing to members page', async () => {
+    await render(<DashboardPage />);
 
     const autopayOnLink = page.getByRole('link', { name: /Memberships with autopay on/i });
 
@@ -172,8 +172,8 @@ describe('Dashboard Page - Membership Card Links', () => {
     expect(autopayOnLink.element()).toHaveAttribute('href', '/dashboard/members');
   });
 
-  it('renders Memberships with autopay off link pointing to members page', () => {
-    render(<DashboardPage />);
+  it('renders Memberships with autopay off link pointing to members page', async () => {
+    await render(<DashboardPage />);
 
     const autopayOffLink = page.getByRole('link', { name: /Memberships with autopay off/i });
 
@@ -181,8 +181,8 @@ describe('Dashboard Page - Membership Card Links', () => {
     expect(autopayOffLink.element()).toHaveAttribute('href', '/dashboard/members');
   });
 
-  it('renders Memberships on hold link pointing to members page', () => {
-    render(<DashboardPage />);
+  it('renders Memberships on hold link pointing to members page', async () => {
+    await render(<DashboardPage />);
 
     const onHoldLink = page.getByRole('link', { name: /Memberships on hold/i });
 
@@ -190,8 +190,8 @@ describe('Dashboard Page - Membership Card Links', () => {
     expect(onHoldLink.element()).toHaveAttribute('href', '/dashboard/members');
   });
 
-  it('renders Canceled memberships link pointing to members page', () => {
-    render(<DashboardPage />);
+  it('renders Canceled memberships link pointing to members page', async () => {
+    await render(<DashboardPage />);
 
     const canceledLink = page.getByRole('link', { name: /Canceled memberships/i });
 
@@ -199,8 +199,8 @@ describe('Dashboard Page - Membership Card Links', () => {
     expect(canceledLink.element()).toHaveAttribute('href', '/dashboard/members');
   });
 
-  it('displays Membership net change as plain text without link', () => {
-    render(<DashboardPage />);
+  it('displays Membership net change as plain text without link', async () => {
+    await render(<DashboardPage />);
 
     const netChangeText = page.getByText(/Membership net change/i);
 
@@ -210,8 +210,8 @@ describe('Dashboard Page - Membership Card Links', () => {
 });
 
 describe('Dashboard Page - Financials Card Links', () => {
-  it('renders Accounts with autopay suspended link pointing to reports page', () => {
-    render(<DashboardPage />);
+  it('renders Accounts with autopay suspended link pointing to reports page', async () => {
+    await render(<DashboardPage />);
 
     const autopaySuspendedLink = page.getByRole('link', { name: /Accounts with autopay suspended/i });
 
@@ -219,8 +219,8 @@ describe('Dashboard Page - Financials Card Links', () => {
     expect(autopaySuspendedLink.element()).toHaveAttribute('href', '/dashboard/reports?report=accounts-autopay-suspended');
   });
 
-  it('renders Expiring credit cards link pointing to reports page', () => {
-    render(<DashboardPage />);
+  it('renders Expiring credit cards link pointing to reports page', async () => {
+    await render(<DashboardPage />);
 
     const expiringCardsLink = page.getByRole('link', { name: /Expiring credit cards/i });
 
@@ -228,8 +228,8 @@ describe('Dashboard Page - Financials Card Links', () => {
     expect(expiringCardsLink.element()).toHaveAttribute('href', '/dashboard/reports?report=expiring-credit-cards');
   });
 
-  it('renders Amount due link pointing to reports page', () => {
-    render(<DashboardPage />);
+  it('renders Amount due link pointing to reports page', async () => {
+    await render(<DashboardPage />);
 
     const amountDueLink = page.getByRole('link', { name: /Amount due/i });
 
@@ -237,8 +237,8 @@ describe('Dashboard Page - Financials Card Links', () => {
     expect(amountDueLink.element()).toHaveAttribute('href', '/dashboard/reports?report=amount-due');
   });
 
-  it('renders Past due link pointing to reports page', () => {
-    render(<DashboardPage />);
+  it('renders Past due link pointing to reports page', async () => {
+    await render(<DashboardPage />);
 
     const pastDueLink = page.getByRole('link', { name: /Past due/i });
 
@@ -246,8 +246,8 @@ describe('Dashboard Page - Financials Card Links', () => {
     expect(pastDueLink.element()).toHaveAttribute('href', '/dashboard/reports?report=past-due');
   });
 
-  it('renders Payments (last 30 days) link pointing to reports page', () => {
-    render(<DashboardPage />);
+  it('renders Payments (last 30 days) link pointing to reports page', async () => {
+    await render(<DashboardPage />);
 
     const paymentsLink = page.getByRole('link', { name: /^Payments \(last 30 days\)/i });
 
@@ -255,8 +255,8 @@ describe('Dashboard Page - Financials Card Links', () => {
     expect(paymentsLink.element()).toHaveAttribute('href', '/dashboard/reports?report=payments-last-30-days');
   });
 
-  it('renders Payments (pending status) link pointing to reports page', () => {
-    render(<DashboardPage />);
+  it('renders Payments (pending status) link pointing to reports page', async () => {
+    await render(<DashboardPage />);
 
     const pendingPaymentsLink = page.getByRole('link', { name: /Payments \(pending status\)/i });
 
@@ -264,8 +264,8 @@ describe('Dashboard Page - Financials Card Links', () => {
     expect(pendingPaymentsLink.element()).toHaveAttribute('href', '/dashboard/reports?report=payments-pending');
   });
 
-  it('renders Failed payments link pointing to reports page', () => {
-    render(<DashboardPage />);
+  it('renders Failed payments link pointing to reports page', async () => {
+    await render(<DashboardPage />);
 
     const failedPaymentsLink = page.getByRole('link', { name: /Failed payments/i });
 
@@ -273,8 +273,8 @@ describe('Dashboard Page - Financials Card Links', () => {
     expect(failedPaymentsLink.element()).toHaveAttribute('href', '/dashboard/reports?report=failed-payments');
   });
 
-  it('renders Income per student link pointing to reports page', () => {
-    render(<DashboardPage />);
+  it('renders Income per student link pointing to reports page', async () => {
+    await render(<DashboardPage />);
 
     const incomeLink = page.getByRole('link', { name: /Income per student/i });
 
@@ -284,8 +284,8 @@ describe('Dashboard Page - Financials Card Links', () => {
 });
 
 describe('Dashboard Page - Link Styling', () => {
-  it('membership links have proper styling classes', () => {
-    render(<DashboardPage />);
+  it('membership links have proper styling classes', async () => {
+    await render(<DashboardPage />);
 
     const allPeopleLink = page.getByRole('link', { name: /All people/i });
 
@@ -294,8 +294,8 @@ describe('Dashboard Page - Link Styling', () => {
     expect(allPeopleLink.element()).toHaveClass('hover:underline');
   });
 
-  it('financial links have proper styling classes', () => {
-    render(<DashboardPage />);
+  it('financial links have proper styling classes', async () => {
+    await render(<DashboardPage />);
 
     const autopaySuspendedLink = page.getByRole('link', { name: /Accounts with autopay suspended/i });
 
@@ -306,32 +306,32 @@ describe('Dashboard Page - Link Styling', () => {
 });
 
 describe('Dashboard Page - Data Display', () => {
-  it('displays membership quantities correctly', () => {
-    render(<DashboardPage />);
+  it('displays membership quantities correctly', async () => {
+    await render(<DashboardPage />);
 
     expect(page.getByText('462')).toBeInTheDocument();
     expect(page.getByText('111', { exact: true }).first()).toBeInTheDocument();
     expect(page.getByText('92')).toBeInTheDocument();
   });
 
-  it('displays financial amounts correctly', () => {
-    render(<DashboardPage />);
+  it('displays financial amounts correctly', async () => {
+    await render(<DashboardPage />);
 
     expect(page.getByText('$14,394.20')).toBeInTheDocument();
     expect(page.getByText('$450.62')).toBeInTheDocument();
     expect(page.getByText('$13,150.44', { exact: true }).first()).toBeInTheDocument();
   });
 
-  it('displays table headers for memberships', () => {
-    render(<DashboardPage />);
+  it('displays table headers for memberships', async () => {
+    await render(<DashboardPage />);
 
     const typeHeaders = page.getByText('Type');
 
     expect(typeHeaders.first()).toBeInTheDocument();
   });
 
-  it('displays table headers for financials', () => {
-    render(<DashboardPage />);
+  it('displays table headers for financials', async () => {
+    await render(<DashboardPage />);
 
     const quantityHeaders = page.getByText('Quantity');
 
@@ -340,8 +340,8 @@ describe('Dashboard Page - Data Display', () => {
 });
 
 describe('Dashboard Page - Layout Structure', () => {
-  it('renders main content grid', () => {
-    render(<DashboardPage />);
+  it('renders main content grid', async () => {
+    await render(<DashboardPage />);
 
     const heading = page.getByRole('heading', { name: /Performance/i });
 
@@ -349,8 +349,8 @@ describe('Dashboard Page - Layout Structure', () => {
     expect(heading.element().tagName.toLowerCase()).toBe('h1');
   });
 
-  it('renders two cards for memberships and financials', () => {
-    render(<DashboardPage />);
+  it('renders two cards for memberships and financials', async () => {
+    await render(<DashboardPage />);
 
     const membershipsHeading = page.getByRole('heading', { name: /Memberships/i });
     const financialsHeading = page.getByRole('heading', { name: /Financials/i });
@@ -360,7 +360,7 @@ describe('Dashboard Page - Layout Structure', () => {
   });
 
   it('renders charts section', async () => {
-    render(<DashboardPage />);
+    await render(<DashboardPage />);
 
     // DashboardCharts is loaded via next/dynamic, so poll until it resolves.
     await expect.element(page.getByRole('heading', { name: /Member average/i })).toBeInTheDocument();
@@ -369,24 +369,24 @@ describe('Dashboard Page - Layout Structure', () => {
 });
 
 describe('Dashboard Page - Accessibility', () => {
-  it('membership table has proper accessibility structure', () => {
-    render(<DashboardPage />);
+  it('membership table has proper accessibility structure', async () => {
+    await render(<DashboardPage />);
 
     const table = page.getByRole('table').first();
 
     expect(table).toBeInTheDocument();
   });
 
-  it('financials table has proper accessibility structure', () => {
-    render(<DashboardPage />);
+  it('financials table has proper accessibility structure', async () => {
+    await render(<DashboardPage />);
 
     const tables = page.getByRole('table');
 
     expect(tables.elements().length).toBeGreaterThanOrEqual(2);
   });
 
-  it('links are keyboard accessible', () => {
-    render(<DashboardPage />);
+  it('links are keyboard accessible', async () => {
+    await render(<DashboardPage />);
 
     const links = page.getByRole('link');
 

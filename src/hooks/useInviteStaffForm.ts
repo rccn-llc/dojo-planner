@@ -1,7 +1,7 @@
 'use client';
 
 import type { StaffRole } from '@/actions/staff';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchStaffRoles } from '@/actions/staff';
 
 export type StaffMemberData = {
@@ -51,8 +51,10 @@ const createFormDataFromStaffMember = (staffMember: StaffMemberData): InviteStaf
 });
 
 export const useInviteStaffForm = (initialData?: StaffMemberData | null) => {
-  // Track the previous initialData to detect changes
-  const prevInitialDataRef = useRef<StaffMemberData | null | undefined>(initialData);
+  // Track the previous initialData to detect changes. This is state rather than
+  // a ref because refs must not be read or written during render.
+  // See https://react.dev/reference/react/useState#storing-information-from-previous-renders
+  const [prevInitialData, setPrevInitialData] = useState<StaffMemberData | null | undefined>(initialData);
 
   // Initialize form data based on initial data (for edit mode)
   const initialFormData = useMemo((): InviteStaffFormData => {
@@ -93,13 +95,17 @@ export const useInviteStaffForm = (initialData?: StaffMemberData | null) => {
   }, []);
 
   useEffect(() => {
-    loadRoles();
+    void (async () => {
+      await loadRoles();
+    })();
   }, [loadRoles]);
 
-  // Re-initialize form data when initialData changes (for opening edit modal)
-  // Using ref comparison during render to avoid useEffect setState warnings
-  if (prevInitialDataRef.current !== initialData) {
-    prevInitialDataRef.current = initialData;
+  // Re-initialize form data when initialData changes (for opening edit modal).
+  // Adjusting state during render is the supported alternative to a
+  // synchronising effect; React re-runs this component immediately without
+  // committing the intermediate render.
+  if (prevInitialData !== initialData) {
+    setPrevInitialData(initialData);
     if (initialData) {
       setData(createFormDataFromStaffMember(initialData));
       // Don't reset touched in edit mode - we want to show validation after save attempt

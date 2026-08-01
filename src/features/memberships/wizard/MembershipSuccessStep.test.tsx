@@ -87,24 +87,24 @@ describe('MembershipSuccessStep', () => {
     vi.clearAllMocks();
   });
 
-  it('should render success title', () => {
-    render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
+  it('should render success title', async () => {
+    await render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
 
     const title = page.getByRole('heading', { level: 2 });
 
     expect(title).toBeTruthy();
   });
 
-  it('should display membership name in description', () => {
-    render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
+  it('should display membership name in description', async () => {
+    await render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
 
     const description = page.getByText(/"12 Month Commitment \(Gold\)" has been successfully created/);
 
     expect(description).toBeTruthy();
   });
 
-  it('should display success checkmark icon', () => {
-    render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
+  it('should display success checkmark icon', async () => {
+    await render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
 
     const svg = document.querySelector('svg');
 
@@ -112,79 +112,79 @@ describe('MembershipSuccessStep', () => {
     expect(svg?.classList.contains('text-green-600')).toBe(true);
   });
 
-  it('should display membership summary section', () => {
-    render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
+  it('should display membership summary section', async () => {
+    await render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
 
     const summaryTitle = page.getByText('Membership Summary');
 
     expect(summaryTitle).toBeTruthy();
   });
 
-  it('should display membership name in summary', () => {
-    render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
+  it('should display membership name in summary', async () => {
+    await render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
 
     const membershipName = page.getByText('12 Month Commitment (Gold)');
 
     expect(membershipName).toBeTruthy();
   });
 
-  it('should display status in summary', () => {
-    render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
+  it('should display status in summary', async () => {
+    await render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
 
     const status = page.getByText('Active');
 
     expect(status).toBeTruthy();
   });
 
-  it('should display type in summary', () => {
-    render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
+  it('should display type in summary', async () => {
+    await render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
 
     const type = page.getByText('Standard');
 
     expect(type).toBeTruthy();
   });
 
-  it('should display monthly fee in summary', () => {
-    render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
+  it('should display monthly fee in summary', async () => {
+    await render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
 
     const fee = page.getByText('$150.00');
 
     expect(fee).toBeTruthy();
   });
 
-  it('should display signup fee in summary', () => {
-    render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
+  it('should display signup fee in summary', async () => {
+    await render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
 
     const signupFee = page.getByText('$35.00');
 
     expect(signupFee).toBeTruthy();
   });
 
-  it('should display payment frequency in summary', () => {
-    render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
+  it('should display payment frequency in summary', async () => {
+    await render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
 
     const frequency = page.getByText('Monthly');
 
     expect(frequency).toBeTruthy();
   });
 
-  it('should display contract length in summary', () => {
-    render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
+  it('should display contract length in summary', async () => {
+    await render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
 
     const contract = page.getByText('12 Months');
 
     expect(contract).toBeTruthy();
   });
 
-  it('should display associated program in summary', () => {
-    render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
+  it('should display associated program in summary', async () => {
+    await render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
 
     const program = page.getByText('Adult Brazilian Jiu-jitsu');
 
     expect(program).toBeTruthy();
   });
 
-  it('should display no program message when no program is associated', () => {
+  it('should display no program message when no program is associated', async () => {
     const noProgramData: AddMembershipWizardData = {
       ...mockData,
       associatedProgramId: null,
@@ -193,31 +193,31 @@ describe('MembershipSuccessStep', () => {
       associatedWaiverName: null,
     };
 
-    render(<MembershipSuccessStep data={noProgramData} onDone={mockOnDone} />);
+    await render(<MembershipSuccessStep data={noProgramData} onDone={mockOnDone} />);
 
     const noProgram = page.getByText('No program assigned');
 
     expect(noProgram).toBeTruthy();
   });
 
-  it('should display cancellation fee in summary', () => {
-    render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
+  it('should display cancellation fee in summary', async () => {
+    await render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
 
     const cancellationFee = page.getByText('$300.00');
 
     expect(cancellationFee).toBeTruthy();
   });
 
-  it('should display hold limit in summary', () => {
-    render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
+  it('should display hold limit in summary', async () => {
+    await render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
 
     const holdLimit = page.getByText(/2/);
 
     expect(holdLimit).toBeTruthy();
   });
 
-  it('should display Done button', () => {
-    render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
+  it('should display Done button', async () => {
+    await render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
 
     const doneButton = page.getByRole('button', { name: 'Done' });
 
@@ -225,7 +225,7 @@ describe('MembershipSuccessStep', () => {
   });
 
   it('should call onDone when Done button is clicked', async () => {
-    render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
+    await render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
 
     const doneButton = page.getByRole('button', { name: 'Done' });
     await userEvent.click(doneButton.element());
@@ -233,37 +233,37 @@ describe('MembershipSuccessStep', () => {
     expect(mockOnDone).toHaveBeenCalled();
   });
 
-  it('should display waiver summary row', () => {
-    render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
+  it('should display waiver summary row', async () => {
+    await render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
 
     const waiverLabel = page.getByText('Associated Waiver');
 
     expect(waiverLabel).toBeTruthy();
   });
 
-  it('should display no waiver message when waiver is not assigned', () => {
-    render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
+  it('should display no waiver message when waiver is not assigned', async () => {
+    await render(<MembershipSuccessStep data={mockData} onDone={mockOnDone} />);
 
     const noWaiver = page.getByText('No waiver assigned');
 
     expect(noWaiver).toBeTruthy();
   });
 
-  it('should display waiver name when waiver is assigned', () => {
+  it('should display waiver name when waiver is assigned', async () => {
     const dataWithWaiver: AddMembershipWizardData = {
       ...mockData,
       associatedWaiverId: 'waiver-1',
       associatedWaiverName: 'Standard Adult Waiver (v1)',
     };
 
-    render(<MembershipSuccessStep data={dataWithWaiver} onDone={mockOnDone} />);
+    await render(<MembershipSuccessStep data={dataWithWaiver} onDone={mockOnDone} />);
 
     const waiverName = page.getByText('Standard Adult Waiver (v1)');
 
     expect(waiverName).toBeTruthy();
   });
 
-  it('should display Free when monthly fee is 0', () => {
+  it('should display Free when monthly fee is 0', async () => {
     const freeData: AddMembershipWizardData = {
       ...mockData,
       monthlyFee: 0,
@@ -272,14 +272,14 @@ describe('MembershipSuccessStep', () => {
       associatedWaiverName: null,
     };
 
-    render(<MembershipSuccessStep data={freeData} onDone={mockOnDone} />);
+    await render(<MembershipSuccessStep data={freeData} onDone={mockOnDone} />);
 
     const free = page.getByText('Free');
 
     expect(free).toBeTruthy();
   });
 
-  it('should display Free when monthly fee is null', () => {
+  it('should display Free when monthly fee is null', async () => {
     const nullFeeData: AddMembershipWizardData = {
       ...mockData,
       monthlyFee: null,
@@ -287,14 +287,14 @@ describe('MembershipSuccessStep', () => {
       associatedWaiverName: null,
     };
 
-    render(<MembershipSuccessStep data={nullFeeData} onDone={mockOnDone} />);
+    await render(<MembershipSuccessStep data={nullFeeData} onDone={mockOnDone} />);
 
     const free = page.getByText('Free');
 
     expect(free).toBeTruthy();
   });
 
-  it('should display Trial type for trial memberships', () => {
+  it('should display Trial type for trial memberships', async () => {
     const trialData: AddMembershipWizardData = {
       ...mockData,
       membershipType: 'trial',
@@ -302,14 +302,14 @@ describe('MembershipSuccessStep', () => {
       associatedWaiverName: null,
     };
 
-    render(<MembershipSuccessStep data={trialData} onDone={mockOnDone} />);
+    await render(<MembershipSuccessStep data={trialData} onDone={mockOnDone} />);
 
     const type = page.getByText('Trial');
 
     expect(type).toBeTruthy();
   });
 
-  it('should display Inactive status when inactive', () => {
+  it('should display Inactive status when inactive', async () => {
     const inactiveData: AddMembershipWizardData = {
       ...mockData,
       status: 'inactive',
@@ -317,14 +317,14 @@ describe('MembershipSuccessStep', () => {
       associatedWaiverName: null,
     };
 
-    render(<MembershipSuccessStep data={inactiveData} onDone={mockOnDone} />);
+    await render(<MembershipSuccessStep data={inactiveData} onDone={mockOnDone} />);
 
     const status = page.getByText('Inactive');
 
     expect(status).toBeTruthy();
   });
 
-  it('should not display signup fee when 0', () => {
+  it('should not display signup fee when 0', async () => {
     const noSignupFeeData: AddMembershipWizardData = {
       ...mockData,
       signUpFee: 0,
@@ -332,7 +332,7 @@ describe('MembershipSuccessStep', () => {
       associatedWaiverName: null,
     };
 
-    render(<MembershipSuccessStep data={noSignupFeeData} onDone={mockOnDone} />);
+    await render(<MembershipSuccessStep data={noSignupFeeData} onDone={mockOnDone} />);
 
     // Sign-up Fee label should not appear when fee is 0
     const signupFeeLabels = Array.from(document.querySelectorAll('span')).filter(
@@ -342,7 +342,7 @@ describe('MembershipSuccessStep', () => {
     expect(signupFeeLabels.length).toBe(0);
   });
 
-  it('should not display cancellation fee when 0', () => {
+  it('should not display cancellation fee when 0', async () => {
     const noCancellationFeeData: AddMembershipWizardData = {
       ...mockData,
       cancellationFee: 0,
@@ -350,7 +350,7 @@ describe('MembershipSuccessStep', () => {
       associatedWaiverName: null,
     };
 
-    render(<MembershipSuccessStep data={noCancellationFeeData} onDone={mockOnDone} />);
+    await render(<MembershipSuccessStep data={noCancellationFeeData} onDone={mockOnDone} />);
 
     // Cancellation Fee label should not appear when fee is 0
     const cancellationFeeLabels = Array.from(document.querySelectorAll('span')).filter(
@@ -360,7 +360,7 @@ describe('MembershipSuccessStep', () => {
     expect(cancellationFeeLabels.length).toBe(0);
   });
 
-  it('should not display hold limit when 0', () => {
+  it('should not display hold limit when 0', async () => {
     const noHoldLimitData: AddMembershipWizardData = {
       ...mockData,
       holdLimitPerYear: 0,
@@ -370,7 +370,7 @@ describe('MembershipSuccessStep', () => {
       associatedWaiverName: null,
     };
 
-    render(<MembershipSuccessStep data={noHoldLimitData} onDone={mockOnDone} />);
+    await render(<MembershipSuccessStep data={noHoldLimitData} onDone={mockOnDone} />);
 
     // Hold Limit label should not appear when limit is 0
     const holdLimitLabels = Array.from(document.querySelectorAll('span')).filter(
@@ -380,7 +380,7 @@ describe('MembershipSuccessStep', () => {
     expect(holdLimitLabels.length).toBe(0);
   });
 
-  it('should display weekly frequency', () => {
+  it('should display weekly frequency', async () => {
     const weeklyData: AddMembershipWizardData = {
       ...mockData,
       paymentFrequency: 'weekly',
@@ -388,14 +388,14 @@ describe('MembershipSuccessStep', () => {
       associatedWaiverName: null,
     };
 
-    render(<MembershipSuccessStep data={weeklyData} onDone={mockOnDone} />);
+    await render(<MembershipSuccessStep data={weeklyData} onDone={mockOnDone} />);
 
     const frequency = page.getByText('Weekly');
 
     expect(frequency).toBeTruthy();
   });
 
-  it('should display annually frequency', () => {
+  it('should display annually frequency', async () => {
     const annuallyData: AddMembershipWizardData = {
       ...mockData,
       paymentFrequency: 'annually',
@@ -403,14 +403,14 @@ describe('MembershipSuccessStep', () => {
       associatedWaiverName: null,
     };
 
-    render(<MembershipSuccessStep data={annuallyData} onDone={mockOnDone} />);
+    await render(<MembershipSuccessStep data={annuallyData} onDone={mockOnDone} />);
 
     const frequency = page.getByText('Annually');
 
     expect(frequency).toBeTruthy();
   });
 
-  it('should display Month-to-Month contract', () => {
+  it('should display Month-to-Month contract', async () => {
     const monthToMonthData: AddMembershipWizardData = {
       ...mockData,
       contractLength: 'month-to-month',
@@ -418,14 +418,14 @@ describe('MembershipSuccessStep', () => {
       associatedWaiverName: null,
     };
 
-    render(<MembershipSuccessStep data={monthToMonthData} onDone={mockOnDone} />);
+    await render(<MembershipSuccessStep data={monthToMonthData} onDone={mockOnDone} />);
 
     const contract = page.getByText('Month-to-Month');
 
     expect(contract).toBeTruthy();
   });
 
-  it('should display 3 Months contract', () => {
+  it('should display 3 Months contract', async () => {
     const threeMonthsData: AddMembershipWizardData = {
       ...mockData,
       contractLength: '3-months',
@@ -433,14 +433,14 @@ describe('MembershipSuccessStep', () => {
       associatedWaiverName: null,
     };
 
-    render(<MembershipSuccessStep data={threeMonthsData} onDone={mockOnDone} />);
+    await render(<MembershipSuccessStep data={threeMonthsData} onDone={mockOnDone} />);
 
     const contract = page.getByText('3 Months');
 
     expect(contract).toBeTruthy();
   });
 
-  it('should display 6 Months contract', () => {
+  it('should display 6 Months contract', async () => {
     const sixMonthsData: AddMembershipWizardData = {
       ...mockData,
       contractLength: '6-months',
@@ -448,14 +448,14 @@ describe('MembershipSuccessStep', () => {
       associatedWaiverName: null,
     };
 
-    render(<MembershipSuccessStep data={sixMonthsData} onDone={mockOnDone} />);
+    await render(<MembershipSuccessStep data={sixMonthsData} onDone={mockOnDone} />);
 
     const contract = page.getByText('6 Months');
 
     expect(contract).toBeTruthy();
   });
 
-  it('should display Punchcard type for punchcard memberships', () => {
+  it('should display Punchcard type for punchcard memberships', async () => {
     const punchcardData: AddMembershipWizardData = {
       ...mockData,
       membershipType: 'punchcard',
@@ -465,14 +465,14 @@ describe('MembershipSuccessStep', () => {
       associatedWaiverName: null,
     };
 
-    render(<MembershipSuccessStep data={punchcardData} onDone={mockOnDone} />);
+    await render(<MembershipSuccessStep data={punchcardData} onDone={mockOnDone} />);
 
     const type = page.getByText('Punchcard');
 
     expect(type).toBeTruthy();
   });
 
-  it('should display classes included for punchcard memberships', () => {
+  it('should display classes included for punchcard memberships', async () => {
     const punchcardData: AddMembershipWizardData = {
       ...mockData,
       membershipType: 'punchcard',
@@ -482,7 +482,7 @@ describe('MembershipSuccessStep', () => {
       associatedWaiverName: null,
     };
 
-    render(<MembershipSuccessStep data={punchcardData} onDone={mockOnDone} />);
+    await render(<MembershipSuccessStep data={punchcardData} onDone={mockOnDone} />);
 
     const classesLabel = page.getByText('Classes Included');
     const classesValue = page.getByText(/10/);
@@ -491,7 +491,7 @@ describe('MembershipSuccessStep', () => {
     expect(classesValue).toBeTruthy();
   });
 
-  it('should display punchcard price for punchcard memberships', () => {
+  it('should display punchcard price for punchcard memberships', async () => {
     const punchcardData: AddMembershipWizardData = {
       ...mockData,
       membershipType: 'punchcard',
@@ -501,7 +501,7 @@ describe('MembershipSuccessStep', () => {
       associatedWaiverName: null,
     };
 
-    render(<MembershipSuccessStep data={punchcardData} onDone={mockOnDone} />);
+    await render(<MembershipSuccessStep data={punchcardData} onDone={mockOnDone} />);
 
     const priceLabel = page.getByText('One-Time Price');
     const priceValue = page.getByText('$200.00');
@@ -510,7 +510,7 @@ describe('MembershipSuccessStep', () => {
     expect(priceValue).toBeTruthy();
   });
 
-  it('should not display standard payment fields for punchcard memberships', () => {
+  it('should not display standard payment fields for punchcard memberships', async () => {
     const punchcardData: AddMembershipWizardData = {
       ...mockData,
       membershipType: 'punchcard',
@@ -520,7 +520,7 @@ describe('MembershipSuccessStep', () => {
       associatedWaiverName: null,
     };
 
-    render(<MembershipSuccessStep data={punchcardData} onDone={mockOnDone} />);
+    await render(<MembershipSuccessStep data={punchcardData} onDone={mockOnDone} />);
 
     // Monthly Fee and Contract Length should not be present for punchcard
     const monthlyFeeLabels = Array.from(document.querySelectorAll('span')).filter(

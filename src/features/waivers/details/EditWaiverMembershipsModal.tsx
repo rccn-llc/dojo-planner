@@ -117,7 +117,7 @@ export function EditWaiverMembershipsModal({
                   <p className="py-4 text-center text-sm text-muted-foreground">{t('no_plans')}</p>
                 )
               : (
-                  <div className="max-h-[300px] space-y-2 overflow-y-auto">
+                  <div className="max-h-75 space-y-2 overflow-y-auto">
                     {allPlans.map(plan => (
                       <label
                         key={plan.id}

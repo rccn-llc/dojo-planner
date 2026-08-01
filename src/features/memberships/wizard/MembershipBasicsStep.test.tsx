@@ -78,8 +78,8 @@ describe('MembershipBasicsStep', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the step with title and subtitle', () => {
-    render(
+  it('should render the step with title and subtitle', async () => {
+    await render(
       <MembershipBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -93,8 +93,8 @@ describe('MembershipBasicsStep', () => {
     expect(heading).toBeTruthy();
   });
 
-  it('should render membership name input', () => {
-    render(
+  it('should render membership name input', async () => {
+    await render(
       <MembershipBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -109,7 +109,7 @@ describe('MembershipBasicsStep', () => {
   });
 
   it('should call onUpdate when membership name changes', async () => {
-    render(
+    await render(
       <MembershipBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -124,8 +124,8 @@ describe('MembershipBasicsStep', () => {
     expect(mockHandlers.onUpdate).toHaveBeenCalled();
   });
 
-  it('should have Next button disabled when form is incomplete', () => {
-    render(
+  it('should have Next button disabled when form is incomplete', async () => {
+    await render(
       <MembershipBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -140,14 +140,14 @@ describe('MembershipBasicsStep', () => {
     expect(nextButton?.disabled).toBe(true);
   });
 
-  it('should enable Next button when form is complete', () => {
+  it('should enable Next button when form is complete', async () => {
     const completeData: AddMembershipWizardData = {
       ...mockData,
       membershipName: '12 Month Commitment (Gold)',
       description: 'A great membership option',
     };
 
-    render(
+    await render(
       <MembershipBasicsStep
         data={completeData}
         onUpdate={mockHandlers.onUpdate}
@@ -163,7 +163,7 @@ describe('MembershipBasicsStep', () => {
   });
 
   it('should call onCancel when Cancel button is clicked', async () => {
-    render(
+    await render(
       <MembershipBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -189,7 +189,7 @@ describe('MembershipBasicsStep', () => {
       description: 'A great membership option',
     };
 
-    render(
+    await render(
       <MembershipBasicsStep
         data={completeData}
         onUpdate={mockHandlers.onUpdate}
@@ -208,8 +208,8 @@ describe('MembershipBasicsStep', () => {
     }
   });
 
-  it('should display error message when provided', () => {
-    render(
+  it('should display error message when provided', async () => {
+    await render(
       <MembershipBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -224,13 +224,13 @@ describe('MembershipBasicsStep', () => {
     expect(errorMessage).toBeTruthy();
   });
 
-  it('should show character count for description', () => {
+  it('should show character count for description', async () => {
     const dataWithDescription: AddMembershipWizardData = {
       ...mockData,
       description: 'Test description',
     };
 
-    render(
+    await render(
       <MembershipBasicsStep
         data={dataWithDescription}
         onUpdate={mockHandlers.onUpdate}
@@ -244,8 +244,8 @@ describe('MembershipBasicsStep', () => {
     expect(characterCount).toBeTruthy();
   });
 
-  it('should render status toggle', () => {
-    render(
+  it('should render status toggle', async () => {
+    await render(
       <MembershipBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -259,8 +259,8 @@ describe('MembershipBasicsStep', () => {
     expect(statusLabel).toBeTruthy();
   });
 
-  it('should display Active status by default', () => {
-    render(
+  it('should display Active status by default', async () => {
+    await render(
       <MembershipBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -274,13 +274,13 @@ describe('MembershipBasicsStep', () => {
     expect(activeStatus).toBeTruthy();
   });
 
-  it('should display Inactive when status is inactive', () => {
+  it('should display Inactive when status is inactive', async () => {
     const inactiveData: AddMembershipWizardData = {
       ...mockData,
       status: 'inactive',
     };
 
-    render(
+    await render(
       <MembershipBasicsStep
         data={inactiveData}
         onUpdate={mockHandlers.onUpdate}
@@ -294,8 +294,8 @@ describe('MembershipBasicsStep', () => {
     expect(inactiveStatus).toBeTruthy();
   });
 
-  it('should render membership type selection cards', () => {
-    render(
+  it('should render membership type selection cards', async () => {
+    await render(
       <MembershipBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -313,8 +313,8 @@ describe('MembershipBasicsStep', () => {
     expect(trialCard).toBeTruthy();
   });
 
-  it('should display Standard type selected by default with help text', () => {
-    render(
+  it('should display Standard type selected by default with help text', async () => {
+    await render(
       <MembershipBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -328,8 +328,8 @@ describe('MembershipBasicsStep', () => {
     expect(standardHelpText).toBeTruthy();
   });
 
-  it('should display both membership type cards with help text', () => {
-    render(
+  it('should display both membership type cards with help text', async () => {
+    await render(
       <MembershipBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -346,7 +346,7 @@ describe('MembershipBasicsStep', () => {
   });
 
   it('should show validation error when membership name is touched but empty', async () => {
-    render(
+    await render(
       <MembershipBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -368,7 +368,7 @@ describe('MembershipBasicsStep', () => {
   });
 
   it('should show validation error when description is touched but empty', async () => {
-    render(
+    await render(
       <MembershipBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -390,7 +390,7 @@ describe('MembershipBasicsStep', () => {
   });
 
   it('should call onUpdate with status when status toggle is clicked', async () => {
-    render(
+    await render(
       <MembershipBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -409,7 +409,7 @@ describe('MembershipBasicsStep', () => {
   });
 
   it('should call onUpdate with membershipType when trial card is clicked', async () => {
-    render(
+    await render(
       <MembershipBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -435,7 +435,7 @@ describe('MembershipBasicsStep', () => {
       membershipType: 'trial',
     };
 
-    render(
+    await render(
       <MembershipBasicsStep
         data={trialData}
         onUpdate={mockHandlers.onUpdate}
@@ -455,8 +455,8 @@ describe('MembershipBasicsStep', () => {
     }
   });
 
-  it('should render punchcard membership type card', () => {
-    render(
+  it('should render punchcard membership type card', async () => {
+    await render(
       <MembershipBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -473,7 +473,7 @@ describe('MembershipBasicsStep', () => {
   });
 
   it('should call onUpdate with membershipType when punchcard card is clicked', async () => {
-    render(
+    await render(
       <MembershipBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -493,13 +493,13 @@ describe('MembershipBasicsStep', () => {
     }
   });
 
-  it('should display punchcard type when selected', () => {
+  it('should display punchcard type when selected', async () => {
     const punchcardData: AddMembershipWizardData = {
       ...mockData,
       membershipType: 'punchcard',
     };
 
-    render(
+    await render(
       <MembershipBasicsStep
         data={punchcardData}
         onUpdate={mockHandlers.onUpdate}

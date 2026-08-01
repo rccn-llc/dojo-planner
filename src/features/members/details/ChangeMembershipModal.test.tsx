@@ -86,8 +86,8 @@ describe('ChangeMembershipModal', () => {
   });
 
   describe('Modal visibility', () => {
-    it('should not render when isOpen is false', () => {
-      render(
+    it('should not render when isOpen is false', async () => {
+      await render(
         <I18nWrapper>
           <ChangeMembershipModal
             isOpen={false}
@@ -104,7 +104,7 @@ describe('ChangeMembershipModal', () => {
 
   describe('Add mode', () => {
     it('should render add title and description', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <ChangeMembershipModal
             isOpen={true}
@@ -120,7 +120,7 @@ describe('ChangeMembershipModal', () => {
     });
 
     it('should display membership plans after loading', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <ChangeMembershipModal
             isOpen={true}
@@ -137,7 +137,7 @@ describe('ChangeMembershipModal', () => {
     });
 
     it('should display prices correctly', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <ChangeMembershipModal
             isOpen={true}
@@ -154,7 +154,7 @@ describe('ChangeMembershipModal', () => {
     });
 
     it('should disable submit button when no plan selected', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <ChangeMembershipModal
             isOpen={true}
@@ -173,7 +173,7 @@ describe('ChangeMembershipModal', () => {
     });
 
     it('should enable submit button when plan selected', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <ChangeMembershipModal
             isOpen={true}
@@ -197,7 +197,7 @@ describe('ChangeMembershipModal', () => {
     it('should call addMembership when submitting', async () => {
       const onClose = vi.fn();
 
-      render(
+      await render(
         <I18nWrapper>
           <ChangeMembershipModal
             isOpen={true}
@@ -227,7 +227,7 @@ describe('ChangeMembershipModal', () => {
 
   describe('Change mode', () => {
     it('should render change title and description', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <ChangeMembershipModal
             isOpen={true}
@@ -244,7 +244,7 @@ describe('ChangeMembershipModal', () => {
     });
 
     it('should filter out current membership plan', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <ChangeMembershipModal
             isOpen={true}
@@ -264,7 +264,7 @@ describe('ChangeMembershipModal', () => {
     it('should call changeMembership when submitting', async () => {
       const onClose = vi.fn();
 
-      render(
+      await render(
         <I18nWrapper>
           <ChangeMembershipModal
             isOpen={true}
@@ -297,7 +297,7 @@ describe('ChangeMembershipModal', () => {
     it('should call onClose when cancel clicked', async () => {
       const onClose = vi.fn();
 
-      render(
+      await render(
         <I18nWrapper>
           <ChangeMembershipModal
             isOpen={true}
@@ -321,7 +321,7 @@ describe('ChangeMembershipModal', () => {
     it('should show mock plans when fetch fails', async () => {
       mockListMembershipPlans.mockRejectedValue(new Error('Network error'));
 
-      render(
+      await render(
         <I18nWrapper>
           <ChangeMembershipModal
             isOpen={true}
@@ -340,7 +340,7 @@ describe('ChangeMembershipModal', () => {
     it('should show mock plans when API returns empty list', async () => {
       mockListMembershipPlans.mockResolvedValue({ plans: [] });
 
-      render(
+      await render(
         <I18nWrapper>
           <ChangeMembershipModal
             isOpen={true}

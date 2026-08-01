@@ -77,8 +77,8 @@ describe('MembershipContractStep', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the step with title and subtitle', () => {
-    render(
+  it('should render the step with title and subtitle', async () => {
+    await render(
       <MembershipContractStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -93,8 +93,8 @@ describe('MembershipContractStep', () => {
     expect(heading).toBeTruthy();
   });
 
-  it('should render contract length select', () => {
-    render(
+  it('should render contract length select', async () => {
+    await render(
       <MembershipContractStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -109,8 +109,8 @@ describe('MembershipContractStep', () => {
     expect(contractLengthLabel).toBeTruthy();
   });
 
-  it('should render auto-renewal select', () => {
-    render(
+  it('should render auto-renewal select', async () => {
+    await render(
       <MembershipContractStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -125,8 +125,8 @@ describe('MembershipContractStep', () => {
     expect(autoRenewalLabel).toBeTruthy();
   });
 
-  it('should render Membership Start Date select (moved here from Payments and Fees)', () => {
-    render(
+  it('should render Membership Start Date select (moved here from Payments and Fees)', async () => {
+    await render(
       <MembershipContractStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -141,13 +141,13 @@ describe('MembershipContractStep', () => {
     expect(startDateLabel).toBeTruthy();
   });
 
-  it('should show custom date input when custom start date is selected', () => {
+  it('should show custom date input when custom start date is selected', async () => {
     const customDateData: AddMembershipWizardData = {
       ...mockData,
       membershipStartDate: 'custom',
     };
 
-    render(
+    await render(
       <MembershipContractStep
         data={customDateData}
         onUpdate={mockHandlers.onUpdate}
@@ -162,8 +162,8 @@ describe('MembershipContractStep', () => {
     expect(customDateLabel).toBeTruthy();
   });
 
-  it('should NOT render Cancellation Fee on this step (moved to Payments and Fees)', () => {
-    render(
+  it('should NOT render Cancellation Fee on this step (moved to Payments and Fees)', async () => {
+    await render(
       <MembershipContractStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -180,8 +180,8 @@ describe('MembershipContractStep', () => {
     expect(cancellationFeeLabels.length).toBe(0);
   });
 
-  it('should NOT render Hold Fee on this step (moved to Payments and Fees)', () => {
-    render(
+  it('should NOT render Hold Fee on this step (moved to Payments and Fees)', async () => {
+    await render(
       <MembershipContractStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -198,8 +198,8 @@ describe('MembershipContractStep', () => {
     expect(holdFeeLabels.length).toBe(0);
   });
 
-  it('should NOT render Hold Limit per Year on this step (moved to Payments and Fees)', () => {
-    render(
+  it('should NOT render Hold Limit per Year on this step (moved to Payments and Fees)', async () => {
+    await render(
       <MembershipContractStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -216,8 +216,8 @@ describe('MembershipContractStep', () => {
     expect(holdLimitLabels.length).toBe(0);
   });
 
-  it('should have Create Membership button enabled by default', () => {
-    render(
+  it('should have Create Membership button enabled by default', async () => {
+    await render(
       <MembershipContractStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -233,8 +233,8 @@ describe('MembershipContractStep', () => {
     expect(createButton?.disabled).toBe(false);
   });
 
-  it('should disable Create button when loading', () => {
-    render(
+  it('should disable Create button when loading', async () => {
+    await render(
       <MembershipContractStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -251,8 +251,8 @@ describe('MembershipContractStep', () => {
     expect(createButton?.disabled).toBe(true);
   });
 
-  it('should show Creating... text when loading', () => {
-    render(
+  it('should show Creating... text when loading', async () => {
+    await render(
       <MembershipContractStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -269,7 +269,7 @@ describe('MembershipContractStep', () => {
   });
 
   it('should call onCancel when Cancel button is clicked', async () => {
-    render(
+    await render(
       <MembershipContractStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -290,7 +290,7 @@ describe('MembershipContractStep', () => {
   });
 
   it('should call onBack when Back button is clicked', async () => {
-    render(
+    await render(
       <MembershipContractStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -311,7 +311,7 @@ describe('MembershipContractStep', () => {
   });
 
   it('should call onNext when Create Membership button is clicked', async () => {
-    render(
+    await render(
       <MembershipContractStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -331,8 +331,8 @@ describe('MembershipContractStep', () => {
     }
   });
 
-  it('should display error message when provided', () => {
-    render(
+  it('should display error message when provided', async () => {
+    await render(
       <MembershipContractStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}

@@ -100,7 +100,7 @@ describe('CatalogPage', () => {
   it('renders empty state when there are no items', async () => {
     mockItems = [];
 
-    render(<CatalogPage organizationId="test-org-123" />);
+    await render(<CatalogPage organizationId="test-org-123" />);
 
     await expect.element(page.getByText('no_items_found')).toBeVisible();
   });
@@ -108,7 +108,7 @@ describe('CatalogPage', () => {
   it('renders only the first page of items (default page size 10)', async () => {
     mockItems = makeItems(25);
 
-    render(<CatalogPage organizationId="test-org-123" />);
+    await render(<CatalogPage organizationId="test-org-123" />);
 
     // First 10 items are rendered.
     await expect.element(page.getByText('Item 00')).toBeVisible();
@@ -121,7 +121,7 @@ describe('CatalogPage', () => {
   it('shows pagination controls when there are more items than one page', async () => {
     mockItems = makeItems(25);
 
-    render(<CatalogPage organizationId="test-org-123" />);
+    await render(<CatalogPage organizationId="test-org-123" />);
 
     expect(page.getByRole('button', { name: /Previous/i }).elements().length).toBeGreaterThan(0);
     expect(page.getByRole('button', { name: 'Next', exact: true }).elements().length).toBeGreaterThan(0);
@@ -130,7 +130,7 @@ describe('CatalogPage', () => {
   it('navigates to the second page when clicking Next', async () => {
     mockItems = makeItems(25);
 
-    render(<CatalogPage organizationId="test-org-123" />);
+    await render(<CatalogPage organizationId="test-org-123" />);
 
     const nextButton = page.getByRole('button', { name: 'Next', exact: true });
     await nextButton.click();
@@ -143,7 +143,7 @@ describe('CatalogPage', () => {
   it('renders more items after choosing a larger page size', async () => {
     mockItems = makeItems(30);
 
-    render(<CatalogPage organizationId="test-org-123" />);
+    await render(<CatalogPage organizationId="test-org-123" />);
 
     // Item 10 is on page 2 with the default page size.
     expect(page.getByText('Item 10').elements()).toHaveLength(0);
@@ -158,7 +158,7 @@ describe('CatalogPage', () => {
   it('exposes a rows-per-page selector', async () => {
     mockItems = makeItems(15);
 
-    render(<CatalogPage organizationId="test-org-123" />);
+    await render(<CatalogPage organizationId="test-org-123" />);
 
     await expect.element(page.getByLabelText('Rows per page')).toBeInTheDocument();
   });

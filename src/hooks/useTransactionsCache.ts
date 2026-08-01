@@ -1,6 +1,7 @@
 import type { TransactionData } from '@/services/TransactionsService';
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { client } from '@/libs/Orpc';
+import { clearInFlight, dedupeRequest } from './dedupeRequest';
 
 type CacheEntry = {
   data: TransactionData[];
@@ -53,7 +54,9 @@ export const useTransactionsCache = () => {
         return;
       }
 
-      const result = await client.transactions.list();
+      // Several components can mount this hook in the same tick; without
+      // de-duping, each one fires its own request against the cold cache.
+      const result = await dedupeRequest(`transactions:${'global'}`, async () => client.transactions.list());
       const transactions = (result.transactions ?? []) as TransactionData[];
 
       cacheStore = { data: transactions, timestamp: Date.now() };
@@ -70,6 +73,7 @@ export const useTransactionsCache = () => {
 
   const revalidate = useCallback(async () => {
     cacheStore = null;
+    clearInFlight();
     await fetchTransactions();
   }, [fetchTransactions]);
 
@@ -104,5 +108,6 @@ export const useTransactionsCache = () => {
 
 export const invalidateTransactionsCache = async () => {
   cacheStore = null;
+  clearInFlight();
   await Promise.all(revalidateCallbacks.map(cb => cb()));
 };

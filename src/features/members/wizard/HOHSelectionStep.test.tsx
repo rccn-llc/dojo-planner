@@ -30,7 +30,7 @@ const hoh = {
   status: 'active',
 };
 
-function renderStep(overrides?: Partial<AddMemberWizardData>) {
+async function renderStep(overrides?: Partial<AddMemberWizardData>) {
   const onUpdate = vi.fn();
   const props = {
     data: { hohMemberId: undefined, ...overrides } as AddMemberWizardData,
@@ -39,7 +39,7 @@ function renderStep(overrides?: Partial<AddMemberWizardData>) {
     onBack: vi.fn(),
     onCancel: vi.fn(),
   };
-  render(<HOHSelectionStep {...props} />);
+  await render(<HOHSelectionStep {...props} />);
   return { onUpdate, props };
 }
 
@@ -51,7 +51,7 @@ describe('HOHSelectionStep', () => {
   });
 
   it('fetches and renders HOH members on mount', async () => {
-    renderStep();
+    await renderStep();
 
     await expect.element(page.getByText('Jane Smith')).toBeInTheDocument();
     expect(searchHOH).toHaveBeenCalled();
@@ -59,14 +59,14 @@ describe('HOHSelectionStep', () => {
 
   it('shows the empty state when no HOH members exist', async () => {
     searchHOH.mockResolvedValue({ members: [] });
-    renderStep();
+    await renderStep();
 
     await expect.element(page.getByText('no_hoh_found')).toBeInTheDocument();
   });
 
   it('filters the list by search query', async () => {
     searchHOH.mockResolvedValue({ members: [hoh, { ...hoh, id: 'hoh-2', firstName: 'Bob', lastName: 'Jones', email: 'bob@example.com' }] });
-    renderStep();
+    await renderStep();
 
     await expect.element(page.getByText('Jane Smith')).toBeInTheDocument();
 
@@ -78,7 +78,7 @@ describe('HOHSelectionStep', () => {
 
   it('selecting an HOH updates selection and fetches their payment method', async () => {
     getHOHPaymentMethods.mockResolvedValue({ paymentMethods: [{ last4: '4242', type: 'card' }] });
-    const { onUpdate } = renderStep();
+    const { onUpdate } = await renderStep();
 
     await userEvent.click(page.getByText('Jane Smith'));
 
@@ -90,7 +90,7 @@ describe('HOHSelectionStep', () => {
   });
 
   it('marks HOH as having no payment method when none returned', async () => {
-    const { onUpdate } = renderStep();
+    const { onUpdate } = await renderStep();
 
     await userEvent.click(page.getByText('Jane Smith'));
 

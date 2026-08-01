@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { dedupeRequest } from '@/hooks/dedupeRequest';
 import { client } from '@/libs/Orpc';
 
 type ClassBasicsStepProps = {
@@ -40,7 +41,7 @@ export const ClassBasicsStep = ({ data, onUpdate, onNext, onCancel, error }: Cla
     const fetchPrograms = async () => {
       try {
         setProgramsLoading(true);
-        const result = await client.programs.list();
+        const result = await dedupeRequest('programs.list', async () => client.programs.list());
         const options: ProgramOption[] = (result.programs || [])
           .filter(program => program.isActive)
           .map(program => ({ id: program.id, name: program.name }));

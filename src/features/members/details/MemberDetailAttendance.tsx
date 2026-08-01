@@ -117,13 +117,13 @@ export function MemberDetailAttendance({
     // Date field uses numeric icons, text fields use alphabetic icons
     if (field === 'date') {
       return sortDirection === 'asc'
-        ? <ArrowDown01 className="h-4 w-4" />
-        : <ArrowUp10 className="h-4 w-4" />;
+        ? <ArrowDown01 className="size-4" />
+        : <ArrowUp10 className="size-4" />;
     }
 
     return sortDirection === 'asc'
-      ? <ArrowDownAZ className="h-4 w-4" />
-      : <ArrowUpZA className="h-4 w-4" />;
+      ? <ArrowDownAZ className="size-4" />
+      : <ArrowUpZA className="size-4" />;
   };
 
   return (
@@ -159,7 +159,7 @@ export function MemberDetailAttendance({
         {attendanceRecords.length > 0 && (
           <div className="border-b border-border px-6 py-4">
             <div className="relative w-full sm:w-80">
-              <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="text"
                 placeholder={t('search_placeholder')}

@@ -89,32 +89,32 @@ describe('EditScheduleInstanceModal', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the modal with title when open', () => {
-    render(<EditScheduleInstanceModal {...defaultProps} />);
+  it('should render the modal with title when open', async () => {
+    await render(<EditScheduleInstanceModal {...defaultProps} />);
 
     const heading = page.getByText('Edit Schedule Instance');
 
     expect(heading).toBeTruthy();
   });
 
-  it('should not render when isOpen is false', () => {
-    render(<EditScheduleInstanceModal {...defaultProps} isOpen={false} />);
+  it('should not render when isOpen is false', async () => {
+    await render(<EditScheduleInstanceModal {...defaultProps} isOpen={false} />);
 
     const heading = document.body.textContent?.includes('Edit Schedule Instance');
 
     expect(heading).toBe(false);
   });
 
-  it('should render the selected date information', () => {
-    render(<EditScheduleInstanceModal {...defaultProps} />);
+  it('should render the selected date information', async () => {
+    await render(<EditScheduleInstanceModal {...defaultProps} />);
 
     const dayLabel = page.getByText('Monday');
 
     expect(dayLabel).toBeTruthy();
   });
 
-  it('should render edit mode options', () => {
-    render(<EditScheduleInstanceModal {...defaultProps} />);
+  it('should render edit mode options', async () => {
+    await render(<EditScheduleInstanceModal {...defaultProps} />);
 
     const thisInstanceOption = page.getByText('This instance only');
     const futureOption = page.getByText('This and all future instances');
@@ -123,8 +123,8 @@ describe('EditScheduleInstanceModal', () => {
     expect(futureOption).toBeTruthy();
   });
 
-  it('should render edit mode descriptions', () => {
-    render(<EditScheduleInstanceModal {...defaultProps} />);
+  it('should render edit mode descriptions', async () => {
+    await render(<EditScheduleInstanceModal {...defaultProps} />);
 
     const thisInstanceDesc = page.getByText('Only modify this specific date');
     const futureDesc = page.getByText('Apply changes from this date going forward');
@@ -133,72 +133,72 @@ describe('EditScheduleInstanceModal', () => {
     expect(futureDesc).toBeTruthy();
   });
 
-  it('should render instance details section', () => {
-    render(<EditScheduleInstanceModal {...defaultProps} />);
+  it('should render instance details section', async () => {
+    await render(<EditScheduleInstanceModal {...defaultProps} />);
 
     const detailsTitle = page.getByText('Instance Details');
 
     expect(detailsTitle).toBeTruthy();
   });
 
-  it('should render time label', () => {
-    render(<EditScheduleInstanceModal {...defaultProps} />);
+  it('should render time label', async () => {
+    await render(<EditScheduleInstanceModal {...defaultProps} />);
 
     const timeLabel = page.getByText('Time');
 
     expect(timeLabel).toBeTruthy();
   });
 
-  it('should render duration label', () => {
-    render(<EditScheduleInstanceModal {...defaultProps} />);
+  it('should render duration label', async () => {
+    await render(<EditScheduleInstanceModal {...defaultProps} />);
 
     const durationLabel = page.getByText('Duration');
 
     expect(durationLabel).toBeTruthy();
   });
 
-  it('should render instructor label', () => {
-    render(<EditScheduleInstanceModal {...defaultProps} />);
+  it('should render instructor label', async () => {
+    await render(<EditScheduleInstanceModal {...defaultProps} />);
 
     const instructorLabel = page.getByText('Instructor');
 
     expect(instructorLabel).toBeTruthy();
   });
 
-  it('should render assistant label', () => {
-    render(<EditScheduleInstanceModal {...defaultProps} />);
+  it('should render assistant label', async () => {
+    await render(<EditScheduleInstanceModal {...defaultProps} />);
 
     const assistantLabel = page.getByText('Assistant');
 
     expect(assistantLabel).toBeTruthy();
   });
 
-  it('should render note input', () => {
-    render(<EditScheduleInstanceModal {...defaultProps} />);
+  it('should render note input', async () => {
+    await render(<EditScheduleInstanceModal {...defaultProps} />);
 
     const noteInput = page.getByPlaceholder('Add a note about this change...');
 
     expect(noteInput).toBeTruthy();
   });
 
-  it('should render Cancel button', () => {
-    render(<EditScheduleInstanceModal {...defaultProps} />);
+  it('should render Cancel button', async () => {
+    await render(<EditScheduleInstanceModal {...defaultProps} />);
 
     const cancelButton = page.getByText('Cancel');
 
     expect(cancelButton).toBeTruthy();
   });
 
-  it('should render Save Changes button', () => {
-    render(<EditScheduleInstanceModal {...defaultProps} />);
+  it('should render Save Changes button', async () => {
+    await render(<EditScheduleInstanceModal {...defaultProps} />);
 
     const saveButton = page.getByText('Save Changes');
 
     expect(saveButton).toBeTruthy();
   });
 
-  it('should render Delete This Instance button', () => {
-    render(<EditScheduleInstanceModal {...defaultProps} />);
+  it('should render Delete This Instance button', async () => {
+    await render(<EditScheduleInstanceModal {...defaultProps} />);
 
     const deleteButton = page.getByText('Delete This Instance');
 
@@ -206,7 +206,7 @@ describe('EditScheduleInstanceModal', () => {
   });
 
   it('should call onClose when Cancel button is clicked', async () => {
-    render(<EditScheduleInstanceModal {...defaultProps} />);
+    await render(<EditScheduleInstanceModal {...defaultProps} />);
 
     const cancelButton = page.getByText('Cancel');
     await userEvent.click(cancelButton);
@@ -214,8 +214,8 @@ describe('EditScheduleInstanceModal', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it('should have Save button disabled when no changes made', () => {
-    render(<EditScheduleInstanceModal {...defaultProps} />);
+  it('should have Save button disabled when no changes made', async () => {
+    await render(<EditScheduleInstanceModal {...defaultProps} />);
 
     const buttons = Array.from(document.querySelectorAll('button'));
     const saveButton = buttons.find(btn => btn.textContent?.includes('Save Changes'));
@@ -224,7 +224,7 @@ describe('EditScheduleInstanceModal', () => {
   });
 
   it('should call onDeleteException when Delete button is clicked', async () => {
-    render(<EditScheduleInstanceModal {...defaultProps} />);
+    await render(<EditScheduleInstanceModal {...defaultProps} />);
 
     const deleteButton = page.getByText('Delete This Instance');
     await userEvent.click(deleteButton);
@@ -239,16 +239,16 @@ describe('EditScheduleInstanceModal', () => {
     }));
   });
 
-  it('should render with default edit mode as this-instance', () => {
-    render(<EditScheduleInstanceModal {...defaultProps} />);
+  it('should render with default edit mode as this-instance', async () => {
+    await render(<EditScheduleInstanceModal {...defaultProps} />);
 
     const thisInstanceRadio = document.querySelector('[data-testid="edit-mode-this-instance"]');
 
     expect(thisInstanceRadio).toBeTruthy();
   });
 
-  it('should render time selectors with initial values', () => {
-    render(<EditScheduleInstanceModal {...defaultProps} />);
+  it('should render time selectors with initial values', async () => {
+    await render(<EditScheduleInstanceModal {...defaultProps} />);
 
     const hourSelect = document.querySelector('[data-testid="time-hour-select"]');
     const minuteSelect = document.querySelector('[data-testid="time-minute-select"]');
@@ -259,31 +259,31 @@ describe('EditScheduleInstanceModal', () => {
     expect(ampmSelect).toBeTruthy();
   });
 
-  it('should render duration selector', () => {
-    render(<EditScheduleInstanceModal {...defaultProps} />);
+  it('should render duration selector', async () => {
+    await render(<EditScheduleInstanceModal {...defaultProps} />);
 
     const durationSelect = document.querySelector('[data-testid="duration-select"]');
 
     expect(durationSelect).toBeTruthy();
   });
 
-  it('should render instructor selector', () => {
-    render(<EditScheduleInstanceModal {...defaultProps} />);
+  it('should render instructor selector', async () => {
+    await render(<EditScheduleInstanceModal {...defaultProps} />);
 
     const instructorSelect = document.querySelector('[data-testid="instructor-select"]');
 
     expect(instructorSelect).toBeTruthy();
   });
 
-  it('should render assistant selector', () => {
-    render(<EditScheduleInstanceModal {...defaultProps} />);
+  it('should render assistant selector', async () => {
+    await render(<EditScheduleInstanceModal {...defaultProps} />);
 
     const assistantSelect = document.querySelector('[data-testid="assistant-select"]');
 
     expect(assistantSelect).toBeTruthy();
   });
 
-  it('should display existing exception values when provided', () => {
+  it('should display existing exception values when provided', async () => {
     const existingException: ScheduleException = {
       id: 'exception-1',
       scheduleInstanceId: mockScheduleInstance.id,
@@ -296,23 +296,23 @@ describe('EditScheduleInstanceModal', () => {
       createdAt: '2025-01-10T00:00:00.000Z',
     };
 
-    render(<EditScheduleInstanceModal {...defaultProps} existingException={existingException} />);
+    await render(<EditScheduleInstanceModal {...defaultProps} existingException={existingException} />);
 
     const noteInput = page.getByPlaceholder('Add a note about this change...');
 
     expect(noteInput).toBeTruthy();
   });
 
-  it('should render dialog content when open', () => {
-    render(<EditScheduleInstanceModal {...defaultProps} />);
+  it('should render dialog content when open', async () => {
+    await render(<EditScheduleInstanceModal {...defaultProps} />);
 
     const title = page.getByText('Edit Schedule Instance');
 
     expect(title).toBeTruthy();
   });
 
-  it('should render the edit mode radio buttons', () => {
-    render(<EditScheduleInstanceModal {...defaultProps} />);
+  it('should render the edit mode radio buttons', async () => {
+    await render(<EditScheduleInstanceModal {...defaultProps} />);
 
     const thisInstance = page.getByText('This instance only');
     const thisFuture = page.getByText('This and all future instances');
@@ -321,42 +321,42 @@ describe('EditScheduleInstanceModal', () => {
     expect(thisFuture).toBeTruthy();
   });
 
-  it('should render time selection controls', () => {
-    render(<EditScheduleInstanceModal {...defaultProps} />);
+  it('should render time selection controls', async () => {
+    await render(<EditScheduleInstanceModal {...defaultProps} />);
 
     const timeLabel = page.getByText('Time');
 
     expect(timeLabel).toBeTruthy();
   });
 
-  it('should render duration selection control', () => {
-    render(<EditScheduleInstanceModal {...defaultProps} />);
+  it('should render duration selection control', async () => {
+    await render(<EditScheduleInstanceModal {...defaultProps} />);
 
     const durationLabel = page.getByText('Duration');
 
     expect(durationLabel).toBeTruthy();
   });
 
-  it('should display day of week for the instance', () => {
+  it('should display day of week for the instance', async () => {
     const wednesdayInstance: ScheduleInstance = {
       ...mockScheduleInstance,
       dayOfWeek: 'Wednesday',
     };
 
-    render(<EditScheduleInstanceModal {...defaultProps} scheduleInstance={wednesdayInstance} />);
+    await render(<EditScheduleInstanceModal {...defaultProps} scheduleInstance={wednesdayInstance} />);
 
     const dayLabel = page.getByText('Wednesday');
 
     expect(dayLabel).toBeTruthy();
   });
 
-  it('should handle different days of week correctly', () => {
+  it('should handle different days of week correctly', async () => {
     const fridayInstance: ScheduleInstance = {
       ...mockScheduleInstance,
       dayOfWeek: 'Friday',
     };
 
-    render(<EditScheduleInstanceModal {...defaultProps} scheduleInstance={fridayInstance} />);
+    await render(<EditScheduleInstanceModal {...defaultProps} scheduleInstance={fridayInstance} />);
 
     const dayLabel = page.getByText('Friday');
 

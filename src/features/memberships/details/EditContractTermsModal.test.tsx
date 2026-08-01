@@ -40,40 +40,40 @@ describe('EditContractTermsModal', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the modal with title when open', () => {
-    render(<EditContractTermsModal {...defaultProps} />);
+  it('should render the modal with title when open', async () => {
+    await render(<EditContractTermsModal {...defaultProps} />);
 
     const heading = page.getByText('Edit Contract Terms');
 
     expect(heading).toBeTruthy();
   });
 
-  it('should not render when isOpen is false', () => {
-    render(<EditContractTermsModal {...defaultProps} isOpen={false} />);
+  it('should not render when isOpen is false', async () => {
+    await render(<EditContractTermsModal {...defaultProps} isOpen={false} />);
 
     const heading = document.body.textContent?.includes('Edit Contract Terms');
 
     expect(heading).toBe(false);
   });
 
-  it('should render contract length label', () => {
-    render(<EditContractTermsModal {...defaultProps} />);
+  it('should render contract length label', async () => {
+    await render(<EditContractTermsModal {...defaultProps} />);
 
     const contractLengthLabel = page.getByText('Contract Length');
 
     expect(contractLengthLabel).toBeTruthy();
   });
 
-  it('should render auto-renewal label', () => {
-    render(<EditContractTermsModal {...defaultProps} />);
+  it('should render auto-renewal label', async () => {
+    await render(<EditContractTermsModal {...defaultProps} />);
 
     const autoRenewalLabel = page.getByText('Auto-Renewal');
 
     expect(autoRenewalLabel).toBeTruthy();
   });
 
-  it('should NOT render Cancellation Fee (moved to Edit Payments and Fees)', () => {
-    render(<EditContractTermsModal {...defaultProps} />);
+  it('should NOT render Cancellation Fee (moved to Edit Payments and Fees)', async () => {
+    await render(<EditContractTermsModal {...defaultProps} />);
 
     const cancellationFeeLabels = Array.from(document.querySelectorAll('label')).filter(
       el => el.textContent === 'Cancellation Fee',
@@ -82,8 +82,8 @@ describe('EditContractTermsModal', () => {
     expect(cancellationFeeLabels.length).toBe(0);
   });
 
-  it('should NOT render Hold Limit per Year (moved to Edit Payments and Fees)', () => {
-    render(<EditContractTermsModal {...defaultProps} />);
+  it('should NOT render Hold Limit per Year (moved to Edit Payments and Fees)', async () => {
+    await render(<EditContractTermsModal {...defaultProps} />);
 
     const holdLimitLabels = Array.from(document.querySelectorAll('label')).filter(
       el => el.textContent === 'Hold Limit per Year',
@@ -92,16 +92,16 @@ describe('EditContractTermsModal', () => {
     expect(holdLimitLabels.length).toBe(0);
   });
 
-  it('should render Cancel button', () => {
-    render(<EditContractTermsModal {...defaultProps} />);
+  it('should render Cancel button', async () => {
+    await render(<EditContractTermsModal {...defaultProps} />);
 
     const cancelButton = page.getByText('Cancel');
 
     expect(cancelButton).toBeTruthy();
   });
 
-  it('should render Save Changes button', () => {
-    render(<EditContractTermsModal {...defaultProps} />);
+  it('should render Save Changes button', async () => {
+    await render(<EditContractTermsModal {...defaultProps} />);
 
     const saveButton = page.getByText('Save Changes');
 
@@ -109,7 +109,7 @@ describe('EditContractTermsModal', () => {
   });
 
   it('should call onClose when Cancel button is clicked', async () => {
-    render(<EditContractTermsModal {...defaultProps} />);
+    await render(<EditContractTermsModal {...defaultProps} />);
 
     const cancelButton = page.getByRole('button', { name: 'Cancel' });
     await userEvent.click(cancelButton);
@@ -117,8 +117,8 @@ describe('EditContractTermsModal', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it('should have Save button enabled', () => {
-    render(<EditContractTermsModal {...defaultProps} />);
+  it('should have Save button enabled', async () => {
+    await render(<EditContractTermsModal {...defaultProps} />);
 
     const buttons = Array.from(document.querySelectorAll('button'));
     const saveButton = buttons.find(btn => btn.textContent?.includes('Save Changes'));
@@ -126,8 +126,8 @@ describe('EditContractTermsModal', () => {
     expect(saveButton?.disabled).toBe(false);
   });
 
-  it('should NOT render any dollar-sign fee inputs (all moved to Edit Payments and Fees)', () => {
-    render(<EditContractTermsModal {...defaultProps} />);
+  it('should NOT render any dollar-sign fee inputs (all moved to Edit Payments and Fees)', async () => {
+    await render(<EditContractTermsModal {...defaultProps} />);
 
     const dollarSigns = Array.from(document.querySelectorAll('span')).filter(s => s.textContent === '$');
 

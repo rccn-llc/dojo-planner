@@ -44,16 +44,16 @@ describe('HelpButton', () => {
   });
 
   describe('Rendering', () => {
-    it('should render the help button with correct aria label', () => {
-      render(<HelpButton />);
+    it('should render the help button with correct aria label', async () => {
+      await render(<HelpButton />);
 
       const button = page.getByRole('button', { name: 'Get help' });
 
       expect(button).toBeInTheDocument();
     });
 
-    it('should not show popover content initially', () => {
-      render(<HelpButton />);
+    it('should not show popover content initially', async () => {
+      await render(<HelpButton />);
 
       expect(page.getByText('Need help?').elements()).toHaveLength(0);
     });
@@ -61,7 +61,7 @@ describe('HelpButton', () => {
 
   describe('Popover Interaction', () => {
     it('should open popover when help button is clicked', async () => {
-      render(<HelpButton />);
+      await render(<HelpButton />);
 
       const button = page.getByRole('button', { name: 'Get help' });
       await userEvent.click(button.element());
@@ -70,7 +70,7 @@ describe('HelpButton', () => {
     });
 
     it('should show email and phone options in popover', async () => {
-      render(<HelpButton />);
+      await render(<HelpButton />);
 
       const button = page.getByRole('button', { name: 'Get help' });
       await userEvent.click(button.element());
@@ -80,7 +80,7 @@ describe('HelpButton', () => {
     });
 
     it('should close popover and open email modal when email option is clicked', async () => {
-      render(<HelpButton />);
+      await render(<HelpButton />);
 
       const button = page.getByRole('button', { name: 'Get help' });
       await userEvent.click(button.element());
@@ -95,7 +95,7 @@ describe('HelpButton', () => {
     });
 
     it('should close popover and open phone modal when phone option is clicked', async () => {
-      render(<HelpButton />);
+      await render(<HelpButton />);
 
       const button = page.getByRole('button', { name: 'Get help' });
       await userEvent.click(button.element());
@@ -112,7 +112,7 @@ describe('HelpButton', () => {
 
   describe('Modal Integration', () => {
     it('should close email modal when close button is clicked', async () => {
-      render(<HelpButton />);
+      await render(<HelpButton />);
 
       // Open popover and click email option
       const button = page.getByRole('button', { name: 'Get help' });
@@ -128,7 +128,7 @@ describe('HelpButton', () => {
     });
 
     it('should close phone modal when close button is clicked', async () => {
-      render(<HelpButton />);
+      await render(<HelpButton />);
 
       // Open popover and click phone option
       const button = page.getByRole('button', { name: 'Get help' });

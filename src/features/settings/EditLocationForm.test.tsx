@@ -45,8 +45,8 @@ describe('EditLocationForm', () => {
     vi.clearAllMocks();
   });
 
-  it('should render all form fields with labels', () => {
-    render(
+  it('should render all form fields with labels', async () => {
+    await render(
       <EditLocationForm
         onCancel={mockOnCancel}
         onSuccess={mockOnSuccess}
@@ -60,8 +60,8 @@ describe('EditLocationForm', () => {
     expect(page.getByText('Email')).toBeDefined();
   });
 
-  it('should populate fields with initial data', () => {
-    render(
+  it('should populate fields with initial data', async () => {
+    await render(
       <EditLocationForm
         onCancel={mockOnCancel}
         onSuccess={mockOnSuccess}
@@ -75,8 +75,8 @@ describe('EditLocationForm', () => {
     expect(page.getByLabelText('Email').element()).toHaveProperty('value', 'test@example.com');
   });
 
-  it('should render save and cancel buttons', () => {
-    render(
+  it('should render save and cancel buttons', async () => {
+    await render(
       <EditLocationForm
         onCancel={mockOnCancel}
         onSuccess={mockOnSuccess}
@@ -90,7 +90,7 @@ describe('EditLocationForm', () => {
   });
 
   it('should call onCancel when cancel button is clicked', async () => {
-    render(
+    await render(
       <EditLocationForm
         onCancel={mockOnCancel}
         onSuccess={mockOnSuccess}
@@ -106,7 +106,7 @@ describe('EditLocationForm', () => {
   });
 
   it('should validate required address field', async () => {
-    render(
+    await render(
       <EditLocationForm
         onCancel={mockOnCancel}
         onSuccess={mockOnSuccess}
@@ -126,7 +126,7 @@ describe('EditLocationForm', () => {
   });
 
   it('should validate required phone field', async () => {
-    render(
+    await render(
       <EditLocationForm
         onCancel={mockOnCancel}
         onSuccess={mockOnSuccess}
@@ -146,7 +146,7 @@ describe('EditLocationForm', () => {
   });
 
   it('should validate required email field', async () => {
-    render(
+    await render(
       <EditLocationForm
         onCancel={mockOnCancel}
         onSuccess={mockOnSuccess}
@@ -166,7 +166,7 @@ describe('EditLocationForm', () => {
   });
 
   it('should validate email format', async () => {
-    render(
+    await render(
       <EditLocationForm
         onCancel={mockOnCancel}
         onSuccess={mockOnSuccess}
@@ -187,7 +187,7 @@ describe('EditLocationForm', () => {
   });
 
   it('should call onSave with sanitized data on valid submission', async () => {
-    render(
+    await render(
       <EditLocationForm
         onCancel={mockOnCancel}
         onSuccess={mockOnSuccess}
@@ -209,7 +209,7 @@ describe('EditLocationForm', () => {
   });
 
   it('should sanitize inputs with dangerous characters', async () => {
-    render(
+    await render(
       <EditLocationForm
         onCancel={mockOnCancel}
         onSuccess={mockOnSuccess}
@@ -235,7 +235,7 @@ describe('EditLocationForm', () => {
   });
 
   it('should update address field when user types', async () => {
-    render(
+    await render(
       <EditLocationForm
         onCancel={mockOnCancel}
         onSuccess={mockOnSuccess}
@@ -252,7 +252,7 @@ describe('EditLocationForm', () => {
   });
 
   it('should update phone field when user types', async () => {
-    render(
+    await render(
       <EditLocationForm
         onCancel={mockOnCancel}
         onSuccess={mockOnSuccess}
@@ -269,7 +269,7 @@ describe('EditLocationForm', () => {
   });
 
   it('should update email field when user types', async () => {
-    render(
+    await render(
       <EditLocationForm
         onCancel={mockOnCancel}
         onSuccess={mockOnSuccess}
@@ -286,7 +286,7 @@ describe('EditLocationForm', () => {
   });
 
   it('should show all validation errors at once', async () => {
-    render(
+    await render(
       <EditLocationForm
         onCancel={mockOnCancel}
         onSuccess={mockOnSuccess}

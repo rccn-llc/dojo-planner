@@ -98,7 +98,7 @@ export const ClassCard = (props: ClassCardProps) => {
             <div className="mt-2 flex flex-col gap-2">
               {instructors.map(instructor => (
                 <div key={instructor.name} className="flex items-center gap-2">
-                  <Avatar className="h-6 w-6">
+                  <Avatar className="size-6">
                     <AvatarImage src={instructor.photoUrl} alt={instructor.name} />
                     <AvatarFallback>{getInitials(instructor.name)}</AvatarFallback>
                   </Avatar>
@@ -118,7 +118,7 @@ export const ClassCard = (props: ClassCardProps) => {
                 aria-label={t('edit_button_aria_label')}
                 title={t('edit_button_aria_label')}
               >
-                <Edit className="h-4 w-4" />
+                <Edit className="size-4" />
               </Button>
             </div>
           )}

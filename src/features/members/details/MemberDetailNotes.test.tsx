@@ -37,45 +37,45 @@ describe('MemberDetailNotes', () => {
   };
 
   describe('Render method', () => {
-    it('should render add note section title', () => {
-      render(<MemberDetailNotes {...mockProps} />);
+    it('should render add note section title', async () => {
+      await render(<MemberDetailNotes {...mockProps} />);
 
       expect(page.getByRole('heading', { name: 'add_note_title' })).toBeInTheDocument();
     });
 
-    it('should render notes history section title', () => {
-      render(<MemberDetailNotes {...mockProps} />);
+    it('should render notes history section title', async () => {
+      await render(<MemberDetailNotes {...mockProps} />);
 
       expect(page.getByRole('heading', { name: 'notes_history_title' })).toBeInTheDocument();
     });
 
-    it('should render textarea for new note input', () => {
-      render(<MemberDetailNotes {...mockProps} />);
+    it('should render textarea for new note input', async () => {
+      await render(<MemberDetailNotes {...mockProps} />);
 
       expect(page.getByRole('textbox', { name: 'note_placeholder' })).toBeInTheDocument();
     });
 
-    it('should render save note button', () => {
-      render(<MemberDetailNotes {...mockProps} />);
+    it('should render save note button', async () => {
+      await render(<MemberDetailNotes {...mockProps} />);
 
       expect(page.getByRole('button', { name: 'save_note_button' })).toBeInTheDocument();
     });
 
-    it('should render note content in history', () => {
-      render(<MemberDetailNotes {...mockProps} />);
+    it('should render note content in history', async () => {
+      await render(<MemberDetailNotes {...mockProps} />);
 
       expect(page.getByText('Member requested to pause membership for 2 weeks due to travel.').first()).toBeInTheDocument();
       expect(page.getByText('Updated emergency contact information.').first()).toBeInTheDocument();
     });
 
-    it('should render note authors in history', () => {
-      render(<MemberDetailNotes {...mockProps} />);
+    it('should render note authors in history', async () => {
+      await render(<MemberDetailNotes {...mockProps} />);
 
       expect(page.getByText('Staff Member').first()).toBeInTheDocument();
       expect(page.getByText('Front Desk').first()).toBeInTheDocument();
     });
 
-    it('should fall back to unknown_author when createdByName is null', () => {
+    it('should fall back to unknown_author when createdByName is null', async () => {
       const propsWithNullAuthor = {
         ...mockProps,
         notes: [{
@@ -87,13 +87,13 @@ describe('MemberDetailNotes', () => {
           updatedAt: new Date('2025-12-01T12:00:00Z'),
         }],
       };
-      render(<MemberDetailNotes {...propsWithNullAuthor} />);
+      await render(<MemberDetailNotes {...propsWithNullAuthor} />);
 
       expect(page.getByText('unknown_author').first()).toBeInTheDocument();
     });
 
-    it('should render table headers on desktop view', () => {
-      render(<MemberDetailNotes {...mockProps} />);
+    it('should render table headers on desktop view', async () => {
+      await render(<MemberDetailNotes {...mockProps} />);
 
       const dateHeaders = page.getByText('table_date');
       const authorHeaders = page.getByText('table_author');
@@ -106,32 +106,32 @@ describe('MemberDetailNotes', () => {
   });
 
   describe('Empty state', () => {
-    it('should render no notes message when notes array is empty', () => {
+    it('should render no notes message when notes array is empty', async () => {
       const propsWithNoNotes = {
         ...mockProps,
         notes: [],
       };
-      render(<MemberDetailNotes {...propsWithNoNotes} />);
+      await render(<MemberDetailNotes {...propsWithNoNotes} />);
 
       expect(page.getByText('no_notes')).toBeInTheDocument();
     });
 
-    it('should render loading message when isLoading is true', () => {
-      render(<MemberDetailNotes {...mockProps} notes={[]} isLoading={true} />);
+    it('should render loading message when isLoading is true', async () => {
+      await render(<MemberDetailNotes {...mockProps} notes={[]} isLoading={true} />);
 
       expect(page.getByText('loading')).toBeInTheDocument();
     });
   });
 
   describe('Character limit', () => {
-    it('should display character count', () => {
-      render(<MemberDetailNotes {...mockProps} />);
+    it('should display character count', async () => {
+      await render(<MemberDetailNotes {...mockProps} />);
 
       expect(page.getByText(/0\s*\/\s*2000/)).toBeInTheDocument();
     });
 
-    it('should have maxLength attribute on textarea', () => {
-      render(<MemberDetailNotes {...mockProps} />);
+    it('should have maxLength attribute on textarea', async () => {
+      await render(<MemberDetailNotes {...mockProps} />);
 
       const textarea = page.getByRole('textbox', { name: 'note_placeholder' });
 
@@ -140,8 +140,8 @@ describe('MemberDetailNotes', () => {
   });
 
   describe('Interactions', () => {
-    it('should have save button disabled when textarea is empty', () => {
-      render(<MemberDetailNotes {...mockProps} />);
+    it('should have save button disabled when textarea is empty', async () => {
+      await render(<MemberDetailNotes {...mockProps} />);
 
       const saveButton = page.getByRole('button', { name: 'save_note_button' });
 
@@ -149,7 +149,7 @@ describe('MemberDetailNotes', () => {
     });
 
     it('should enable save button when textarea has content', async () => {
-      render(<MemberDetailNotes {...mockProps} />);
+      await render(<MemberDetailNotes {...mockProps} />);
 
       const textarea = page.getByRole('textbox', { name: 'note_placeholder' });
       await userEvent.type(textarea, 'This is a new note');
@@ -161,7 +161,7 @@ describe('MemberDetailNotes', () => {
 
     it('should call onAddNote when save button is clicked', async () => {
       const onAddNoteMock = vi.fn();
-      render(<MemberDetailNotes {...mockProps} onAddNote={onAddNoteMock} />);
+      await render(<MemberDetailNotes {...mockProps} onAddNote={onAddNoteMock} />);
 
       const textarea = page.getByRole('textbox', { name: 'note_placeholder' });
       await userEvent.type(textarea, 'This is a new note');
@@ -173,7 +173,7 @@ describe('MemberDetailNotes', () => {
     });
 
     it('should clear textarea after submitting note', async () => {
-      render(<MemberDetailNotes {...mockProps} />);
+      await render(<MemberDetailNotes {...mockProps} />);
 
       const textarea = page.getByRole('textbox', { name: 'note_placeholder' });
       await userEvent.type(textarea, 'This is a new note');
@@ -186,7 +186,7 @@ describe('MemberDetailNotes', () => {
 
     it('should not call onAddNote when textarea only has whitespace', async () => {
       const onAddNoteMock = vi.fn();
-      render(<MemberDetailNotes {...mockProps} onAddNote={onAddNoteMock} />);
+      await render(<MemberDetailNotes {...mockProps} onAddNote={onAddNoteMock} />);
 
       const textarea = page.getByRole('textbox', { name: 'note_placeholder' });
       await userEvent.type(textarea, '   ');
@@ -198,8 +198,8 @@ describe('MemberDetailNotes', () => {
   });
 
   describe('Mobile view', () => {
-    it('should render mobile card view structure', () => {
-      render(<MemberDetailNotes {...mockProps} />);
+    it('should render mobile card view structure', async () => {
+      await render(<MemberDetailNotes {...mockProps} />);
 
       const mobileContainer = page.getByText('Member requested to pause membership for 2 weeks due to travel.').first();
 
@@ -208,13 +208,13 @@ describe('MemberDetailNotes', () => {
   });
 
   describe('Multiple notes', () => {
-    it('should render all notes in the list', () => {
+    it('should render all notes in the list', async () => {
       const manyNotes: MemberNote[] = [
         { id: '1', memberId: 'member-123', content: 'First note', createdByName: 'User A', createdAt: new Date('2025-12-01T00:00:00Z'), updatedAt: new Date('2025-12-01T00:00:00Z') },
         { id: '2', memberId: 'member-123', content: 'Second note', createdByName: 'User B', createdAt: new Date('2025-12-02T00:00:00Z'), updatedAt: new Date('2025-12-02T00:00:00Z') },
         { id: '3', memberId: 'member-123', content: 'Third note', createdByName: 'User C', createdAt: new Date('2025-12-03T00:00:00Z'), updatedAt: new Date('2025-12-03T00:00:00Z') },
       ];
-      render(<MemberDetailNotes {...mockProps} notes={manyNotes} />);
+      await render(<MemberDetailNotes {...mockProps} notes={manyNotes} />);
 
       expect(page.getByText('First note').first()).toBeInTheDocument();
       expect(page.getByText('Second note').first()).toBeInTheDocument();
@@ -229,7 +229,7 @@ describe('MemberDetailNotes', () => {
         memberName: 'John Doe',
         notes: mockNotes,
       };
-      render(<MemberDetailNotes {...propsWithoutCallback} />);
+      await render(<MemberDetailNotes {...propsWithoutCallback} />);
 
       const textarea = page.getByRole('textbox', { name: 'note_placeholder' });
       await userEvent.type(textarea, 'This is a new note');
@@ -253,18 +253,18 @@ describe('MemberDetailNotes', () => {
       { id: '3', memberId: 'member-A', content: 'Another note for member A', createdByName: 'Staff', createdAt: new Date('2025-12-12T00:00:00Z'), updatedAt: new Date('2025-12-12T00:00:00Z') },
     ];
 
-    it('should only display notes whose memberId matches the current member', () => {
+    it('should only display notes whose memberId matches the current member', async () => {
       const filtered = multiMemberNotes.filter(n => n.memberId === 'member-A');
-      render(<MemberDetailNotes {...mockProps} memberId="member-A" notes={filtered} />);
+      await render(<MemberDetailNotes {...mockProps} memberId="member-A" notes={filtered} />);
 
       expect(page.getByText('Note for member A').first()).toBeInTheDocument();
       expect(page.getByText('Another note for member A').first()).toBeInTheDocument();
       expect(page.getByText('Note for member B')).not.toBeInTheDocument();
     });
 
-    it('should display empty state for a brand-new member with no notes', () => {
+    it('should display empty state for a brand-new member with no notes', async () => {
       const filtered = multiMemberNotes.filter(n => n.memberId === 'member-new');
-      render(<MemberDetailNotes {...mockProps} memberId="member-new" notes={filtered} />);
+      await render(<MemberDetailNotes {...mockProps} memberId="member-new" notes={filtered} />);
 
       expect(page.getByText('no_notes')).toBeInTheDocument();
       expect(page.getByText('Note for member A')).not.toBeInTheDocument();
@@ -273,17 +273,17 @@ describe('MemberDetailNotes', () => {
   });
 
   describe('Edit and delete', () => {
-    it('should not render edit/delete buttons when callbacks are not provided', () => {
-      render(<MemberDetailNotes {...mockProps} />);
+    it('should not render edit/delete buttons when callbacks are not provided', async () => {
+      await render(<MemberDetailNotes {...mockProps} />);
 
       expect(page.getByRole('button', { name: 'edit_note_aria' })).not.toBeInTheDocument();
       expect(page.getByRole('button', { name: 'delete_note_aria' })).not.toBeInTheDocument();
     });
 
-    it('should render edit and delete buttons when callbacks are provided', () => {
+    it('should render edit and delete buttons when callbacks are provided', async () => {
       const onEditNote = vi.fn();
       const onDeleteNote = vi.fn();
-      render(
+      await render(
         <MemberDetailNotes
           {...mockProps}
           onEditNote={onEditNote}
@@ -298,7 +298,7 @@ describe('MemberDetailNotes', () => {
 
     it('should switch into edit mode and call onEditNote with the new content', async () => {
       const onEditNote = vi.fn().mockResolvedValue(undefined);
-      render(
+      await render(
         <MemberDetailNotes
           {...mockProps}
           onEditNote={onEditNote}
@@ -320,7 +320,7 @@ describe('MemberDetailNotes', () => {
 
     it('should open the confirm dialog and call onDeleteNote when the dialog is confirmed', async () => {
       const onDeleteNote = vi.fn().mockResolvedValue(undefined);
-      render(
+      await render(
         <MemberDetailNotes
           {...mockProps}
           onDeleteNote={onDeleteNote}
@@ -343,7 +343,7 @@ describe('MemberDetailNotes', () => {
 
     it('should not call onDeleteNote when the dialog is cancelled', async () => {
       const onDeleteNote = vi.fn();
-      render(
+      await render(
         <MemberDetailNotes
           {...mockProps}
           onDeleteNote={onDeleteNote}
@@ -372,8 +372,8 @@ describe('MemberDetailNotes', () => {
       notes: sortableNotes,
     };
 
-    it('should render sortable column headers as buttons', () => {
-      render(<MemberDetailNotes {...sortableProps} />);
+    it('should render sortable column headers as buttons', async () => {
+      await render(<MemberDetailNotes {...sortableProps} />);
 
       const dateButton = page.getByRole('button', { name: /table_date/i }).first();
       const authorButton = page.getByRole('button', { name: /table_author/i }).first();
@@ -385,7 +385,7 @@ describe('MemberDetailNotes', () => {
     });
 
     it('should sort by author when author header is clicked', async () => {
-      render(<MemberDetailNotes {...sortableProps} />);
+      await render(<MemberDetailNotes {...sortableProps} />);
 
       const authorButton = page.getByRole('button', { name: /table_author/i }).first();
       await authorButton.click();
@@ -396,7 +396,7 @@ describe('MemberDetailNotes', () => {
     });
 
     it('should toggle author sort direction when clicked twice', async () => {
-      render(<MemberDetailNotes {...sortableProps} />);
+      await render(<MemberDetailNotes {...sortableProps} />);
 
       const authorButton = page.getByRole('button', { name: /table_author/i }).first();
 
@@ -410,7 +410,7 @@ describe('MemberDetailNotes', () => {
     });
 
     it('should sort by content when note header is clicked', async () => {
-      render(<MemberDetailNotes {...sortableProps} />);
+      await render(<MemberDetailNotes {...sortableProps} />);
 
       const noteButton = page.getByRole('button', { name: /table_note/i }).first();
       await noteButton.click();
@@ -433,14 +433,14 @@ describe('MemberDetailNotes', () => {
       notes: searchableNotes,
     };
 
-    it('should render search input when notes exist', () => {
-      render(<MemberDetailNotes {...searchableProps} />);
+    it('should render search input when notes exist', async () => {
+      await render(<MemberDetailNotes {...searchableProps} />);
 
       expect(page.getByRole('textbox', { name: 'search_placeholder' })).toBeInTheDocument();
     });
 
-    it('should not render search input when no notes exist', () => {
-      render(<MemberDetailNotes {...mockProps} notes={[]} />);
+    it('should not render search input when no notes exist', async () => {
+      await render(<MemberDetailNotes {...mockProps} notes={[]} />);
 
       const searchInputs = page.getByRole('textbox', { name: 'search_placeholder' });
 
@@ -448,7 +448,7 @@ describe('MemberDetailNotes', () => {
     });
 
     it('should filter notes by content', async () => {
-      render(<MemberDetailNotes {...searchableProps} />);
+      await render(<MemberDetailNotes {...searchableProps} />);
 
       const searchInput = page.getByRole('textbox', { name: 'search_placeholder' });
       await userEvent.type(searchInput, 'paused');
@@ -459,7 +459,7 @@ describe('MemberDetailNotes', () => {
     });
 
     it('should filter notes by author', async () => {
-      render(<MemberDetailNotes {...searchableProps} />);
+      await render(<MemberDetailNotes {...searchableProps} />);
 
       const searchInput = page.getByRole('textbox', { name: 'search_placeholder' });
       await userEvent.type(searchInput, 'Manager');
@@ -469,7 +469,7 @@ describe('MemberDetailNotes', () => {
     });
 
     it('should be case-insensitive search', async () => {
-      render(<MemberDetailNotes {...searchableProps} />);
+      await render(<MemberDetailNotes {...searchableProps} />);
 
       const searchInput = page.getByRole('textbox', { name: 'search_placeholder' });
       await userEvent.type(searchInput, 'PAUSED');
@@ -478,7 +478,7 @@ describe('MemberDetailNotes', () => {
     });
 
     it('should show no matching notes message when search yields no results', async () => {
-      render(<MemberDetailNotes {...searchableProps} />);
+      await render(<MemberDetailNotes {...searchableProps} />);
 
       const searchInput = page.getByRole('textbox', { name: 'search_placeholder' });
       await userEvent.type(searchInput, 'nonexistent text xyz');
@@ -487,7 +487,7 @@ describe('MemberDetailNotes', () => {
     });
 
     it('should show all notes when search is cleared', async () => {
-      render(<MemberDetailNotes {...searchableProps} />);
+      await render(<MemberDetailNotes {...searchableProps} />);
 
       const searchInput = page.getByRole('textbox', { name: 'search_placeholder' });
 

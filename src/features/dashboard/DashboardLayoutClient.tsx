@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
+import { dedupeRequest } from '@/hooks/dedupeRequest';
 import { client } from '@/libs/Orpc';
 import { AppSidebar } from './AppSidebar';
 import { AppSidebarHeader } from './AppSidebarHeader';
@@ -26,7 +27,7 @@ export function DashboardLayoutClient({ children, defaultOpen, subscriptionActiv
     // Update the lastAccessedAt timestamp when the user accesses the dashboard
     const updateLastAccessed = async () => {
       try {
-        await client.member.updateLastAccessed();
+        await dedupeRequest('member.updateLastAccessed', async () => client.member.updateLastAccessed());
       } catch (error) {
         // Silently fail - don't disrupt user experience if timestamp update fails
         console.error('Failed to update lastAccessedAt:', error);

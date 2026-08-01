@@ -80,8 +80,8 @@ describe('EditProfileForm', () => {
     mockCreatePhoneNumber.mockReset();
   });
 
-  it('should render all form fields', () => {
-    render(<EditProfileForm onCancel={mockOnCancel} initialData={initialData} />);
+  it('should render all form fields', async () => {
+    await render(<EditProfileForm onCancel={mockOnCancel} initialData={initialData} />);
 
     expect(page.getByText('First Name')).toBeDefined();
     expect(page.getByText('Last Name')).toBeDefined();
@@ -89,15 +89,15 @@ describe('EditProfileForm', () => {
     expect(page.getByText('Email')).toBeDefined();
   });
 
-  it('should render save and cancel buttons', () => {
-    render(<EditProfileForm onCancel={mockOnCancel} initialData={initialData} />);
+  it('should render save and cancel buttons', async () => {
+    await render(<EditProfileForm onCancel={mockOnCancel} initialData={initialData} />);
 
     expect(page.getByRole('button', { name: /save/i })).toBeDefined();
     expect(page.getByRole('button', { name: /cancel/i })).toBeDefined();
   });
 
-  it('should populate fields with initial data', () => {
-    render(<EditProfileForm onCancel={mockOnCancel} initialData={initialData} />);
+  it('should populate fields with initial data', async () => {
+    await render(<EditProfileForm onCancel={mockOnCancel} initialData={initialData} />);
 
     const firstNameInput = page.getByPlaceholder('Enter first name');
     const lastNameInput = page.getByPlaceholder('Enter last name');
@@ -111,7 +111,7 @@ describe('EditProfileForm', () => {
   });
 
   it('should call onCancel when cancel button is clicked', async () => {
-    render(<EditProfileForm onCancel={mockOnCancel} initialData={initialData} />);
+    await render(<EditProfileForm onCancel={mockOnCancel} initialData={initialData} />);
 
     const cancelButton = page.getByRole('button', { name: /cancel/i });
     await userEvent.click(cancelButton.element());
@@ -120,7 +120,7 @@ describe('EditProfileForm', () => {
   });
 
   it('should validate required first name', async () => {
-    render(<EditProfileForm onCancel={mockOnCancel} initialData={initialData} />);
+    await render(<EditProfileForm onCancel={mockOnCancel} initialData={initialData} />);
 
     const firstNameInput = page.getByPlaceholder('Enter first name');
     await userEvent.clear(firstNameInput.element());
@@ -132,7 +132,7 @@ describe('EditProfileForm', () => {
   });
 
   it('should validate required last name', async () => {
-    render(<EditProfileForm onCancel={mockOnCancel} initialData={initialData} />);
+    await render(<EditProfileForm onCancel={mockOnCancel} initialData={initialData} />);
 
     const lastNameInput = page.getByPlaceholder('Enter last name');
     await userEvent.clear(lastNameInput.element());
@@ -144,7 +144,7 @@ describe('EditProfileForm', () => {
   });
 
   it('should validate required email', async () => {
-    render(<EditProfileForm onCancel={mockOnCancel} initialData={initialData} />);
+    await render(<EditProfileForm onCancel={mockOnCancel} initialData={initialData} />);
 
     const emailInput = page.getByPlaceholder('Enter email address');
     await userEvent.clear(emailInput.element());
@@ -156,7 +156,7 @@ describe('EditProfileForm', () => {
   });
 
   it('should validate required phone', async () => {
-    render(<EditProfileForm onCancel={mockOnCancel} initialData={initialData} />);
+    await render(<EditProfileForm onCancel={mockOnCancel} initialData={initialData} />);
 
     const phoneInput = page.getByPlaceholder('(555) 123-4567');
     await userEvent.clear(phoneInput.element());
@@ -170,7 +170,7 @@ describe('EditProfileForm', () => {
   it('should call user.update on valid submission', async () => {
     mockUpdate.mockResolvedValue({});
 
-    render(<EditProfileForm onCancel={mockOnCancel} onSuccess={mockOnSuccess} initialData={initialData} />);
+    await render(<EditProfileForm onCancel={mockOnCancel} onSuccess={mockOnSuccess} initialData={initialData} />);
 
     const firstNameInput = page.getByPlaceholder('Enter first name');
     const lastNameInput = page.getByPlaceholder('Enter last name');
@@ -192,7 +192,7 @@ describe('EditProfileForm', () => {
   it('should show success message on successful update', async () => {
     mockUpdate.mockResolvedValue({});
 
-    render(<EditProfileForm onCancel={mockOnCancel} onSuccess={mockOnSuccess} initialData={initialData} />);
+    await render(<EditProfileForm onCancel={mockOnCancel} onSuccess={mockOnSuccess} initialData={initialData} />);
 
     const saveButton = page.getByRole('button', { name: /save/i });
     await userEvent.click(saveButton.element());
@@ -206,7 +206,7 @@ describe('EditProfileForm', () => {
   it('should show alert banner on API error', async () => {
     mockUpdate.mockRejectedValue(new Error('API Error'));
 
-    render(<EditProfileForm onCancel={mockOnCancel} initialData={initialData} />);
+    await render(<EditProfileForm onCancel={mockOnCancel} initialData={initialData} />);
 
     const saveButton = page.getByRole('button', { name: /save/i });
     await userEvent.click(saveButton.element());
@@ -224,7 +224,7 @@ describe('EditProfileForm', () => {
     mockUpdate.mockResolvedValue({});
     mockCreateEmailAddress.mockResolvedValue({});
 
-    render(<EditProfileForm onCancel={mockOnCancel} onSuccess={mockOnSuccess} initialData={initialData} />);
+    await render(<EditProfileForm onCancel={mockOnCancel} onSuccess={mockOnSuccess} initialData={initialData} />);
 
     const emailInput = page.getByPlaceholder('Enter email address');
     await userEvent.clear(emailInput.element());
@@ -243,7 +243,7 @@ describe('EditProfileForm', () => {
     mockUpdate.mockResolvedValue({});
     mockCreatePhoneNumber.mockResolvedValue({});
 
-    render(<EditProfileForm onCancel={mockOnCancel} onSuccess={mockOnSuccess} initialData={initialData} />);
+    await render(<EditProfileForm onCancel={mockOnCancel} onSuccess={mockOnSuccess} initialData={initialData} />);
 
     const phoneInput = page.getByPlaceholder('(555) 123-4567');
     await userEvent.clear(phoneInput.element());
@@ -262,7 +262,7 @@ describe('EditProfileForm', () => {
     vi.useFakeTimers();
     mockUpdate.mockResolvedValue({});
 
-    render(<EditProfileForm onCancel={mockOnCancel} onSuccess={mockOnSuccess} initialData={initialData} />);
+    await render(<EditProfileForm onCancel={mockOnCancel} onSuccess={mockOnSuccess} initialData={initialData} />);
 
     const saveButton = page.getByRole('button', { name: /save/i });
     await userEvent.click(saveButton.element());

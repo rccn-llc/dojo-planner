@@ -12,7 +12,7 @@ describe('StatsCards', () => {
   ];
 
   it('renders all stat cards', async () => {
-    render(<StatsCards stats={mockStats} />);
+    await render(<StatsCards stats={mockStats} />);
 
     await expect.element(page.getByText('Total Members')).toBeInTheDocument();
     await expect.element(page.getByText('150')).toBeInTheDocument();
@@ -34,20 +34,20 @@ describe('StatsCards', () => {
       },
     ];
 
-    render(<StatsCards stats={statsWithFormatter} />);
+    await render(<StatsCards stats={statsWithFormatter} />);
 
     await expect.element(page.getByText('$1500')).toBeInTheDocument();
   });
 
   it('renders with different column configurations', async () => {
-    render(<StatsCards stats={mockStats.slice(0, 3)} columns={3} />);
+    await render(<StatsCards stats={mockStats.slice(0, 3)} columns={3} />);
 
     await expect.element(page.getByText('Total Members')).toBeInTheDocument();
   });
 
-  it('handles empty stats array', () => {
-    // Should not throw an error when rendering with empty stats
-    expect(() => render(<StatsCards stats={[]} />)).not.toThrow();
+  it('handles empty stats array', async () => {
+    // Should not reject when rendering with empty stats
+    await expect(render(<StatsCards stats={[]} />)).resolves.toBeDefined();
   });
 
   it('displays string values correctly', async () => {
@@ -55,7 +55,7 @@ describe('StatsCards', () => {
       { id: '1', label: 'Status', value: 'Active' },
     ];
 
-    render(<StatsCards stats={stringStats} />);
+    await render(<StatsCards stats={stringStats} />);
 
     await expect.element(page.getByText('Active')).toBeInTheDocument();
   });

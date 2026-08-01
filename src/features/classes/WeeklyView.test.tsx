@@ -147,8 +147,8 @@ vi.mock('@/hooks/useEventsCache', () => ({
 
 describe('WeeklyView', () => {
   describe('Page Header', () => {
-    it('should render the page title', () => {
-      render(
+    it('should render the page title', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,
@@ -161,8 +161,8 @@ describe('WeeklyView', () => {
   });
 
   describe('Filter Controls', () => {
-    it('should render location dropdown button', () => {
-      render(
+    it('should render location dropdown button', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,
@@ -173,8 +173,8 @@ describe('WeeklyView', () => {
       expect(button).toBeInTheDocument();
     });
 
-    it('should render Add New Class button', () => {
-      render(
+    it('should render Add New Class button', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,
@@ -185,8 +185,8 @@ describe('WeeklyView', () => {
       expect(addButton).toBeInTheDocument();
     });
 
-    it('should render view toggle buttons', () => {
-      render(
+    it('should render view toggle buttons', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,
@@ -199,8 +199,8 @@ describe('WeeklyView', () => {
   });
 
   describe('Navigation', () => {
-    it('should render Previous button', () => {
-      render(
+    it('should render Previous button', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,
@@ -211,8 +211,8 @@ describe('WeeklyView', () => {
       expect(prevButton).toBeInTheDocument();
     });
 
-    it('should render Next button', () => {
-      render(
+    it('should render Next button', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,
@@ -223,8 +223,8 @@ describe('WeeklyView', () => {
       expect(nextButton).toBeInTheDocument();
     });
 
-    it('should render Today button', () => {
-      render(
+    it('should render Today button', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,
@@ -235,8 +235,8 @@ describe('WeeklyView', () => {
       expect(todayButton).toBeInTheDocument();
     });
 
-    it('should render date display showing current week', () => {
-      render(
+    it('should render date display showing current week', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,
@@ -251,8 +251,8 @@ describe('WeeklyView', () => {
   });
 
   describe('Weekly Schedule Grid', () => {
-    it('should render all days of week headers', () => {
-      render(
+    it('should render all days of week headers', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,
@@ -267,8 +267,8 @@ describe('WeeklyView', () => {
       }
     });
 
-    it('should render time column', () => {
-      render(
+    it('should render time column', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,
@@ -279,8 +279,8 @@ describe('WeeklyView', () => {
       expect(timeLabel).toBeInTheDocument();
     });
 
-    it('should display hourly time slots', () => {
-      render(
+    it('should display hourly time slots', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,
@@ -292,8 +292,8 @@ describe('WeeklyView', () => {
       expect(sixAM).toBeInTheDocument();
     });
 
-    it('should render class events in schedule', () => {
-      render(
+    it('should render class events in schedule', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,
@@ -305,8 +305,8 @@ describe('WeeklyView', () => {
       expect(fundamentals).toBeInTheDocument();
     });
 
-    it('should display multiple classes on same day/time when applicable', () => {
-      render(
+    it('should display multiple classes on same day/time when applicable', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,
@@ -320,8 +320,8 @@ describe('WeeklyView', () => {
   });
 
   describe('Time Slot Layout', () => {
-    it('should render consistent grid structure', () => {
-      render(
+    it('should render consistent grid structure', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,
@@ -333,8 +333,8 @@ describe('WeeklyView', () => {
       expect(timeColumn).toBeInTheDocument();
     });
 
-    it('should show correct day numbers for each column', () => {
-      render(
+    it('should show correct day numbers for each column', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,
@@ -346,8 +346,8 @@ describe('WeeklyView', () => {
       expect(date).toBeInTheDocument();
     });
 
-    it('should align classes to correct time slots', () => {
-      render(
+    it('should align classes to correct time slots', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,
@@ -361,8 +361,8 @@ describe('WeeklyView', () => {
   });
 
   describe('Class Styling', () => {
-    it('should render classes with color coding', () => {
-      render(
+    it('should render classes with color coding', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,
@@ -373,8 +373,8 @@ describe('WeeklyView', () => {
       expect(classElement).toBeInTheDocument();
     });
 
-    it('should display class blocks with proper styling', () => {
-      render(
+    it('should display class blocks with proper styling', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,
@@ -388,8 +388,8 @@ describe('WeeklyView', () => {
   });
 
   describe('Legend', () => {
-    it('should render legend section', () => {
-      render(
+    it('should render legend section', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,
@@ -410,8 +410,8 @@ describe('WeeklyView', () => {
       }
     });
 
-    it('should show color indicators in legend', () => {
-      render(
+    it('should show color indicators in legend', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,
@@ -424,8 +424,8 @@ describe('WeeklyView', () => {
   });
 
   describe('Responsive Design', () => {
-    it('should render responsive table layout', () => {
-      render(
+    it('should render responsive table layout', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,
@@ -436,8 +436,8 @@ describe('WeeklyView', () => {
       expect(timeLabels).toBeInTheDocument();
     });
 
-    it('should handle horizontal scrolling for small screens', () => {
-      render(
+    it('should handle horizontal scrolling for small screens', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,
@@ -451,8 +451,8 @@ describe('WeeklyView', () => {
   });
 
   describe('All Mock Classes Display', () => {
-    it('should render all class types in schedule', () => {
-      render(
+    it('should render all class types in schedule', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,
@@ -473,8 +473,8 @@ describe('WeeklyView', () => {
       }
     });
 
-    it('should place classes at appropriate time slots', () => {
-      render(
+    it('should place classes at appropriate time slots', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,
@@ -486,8 +486,8 @@ describe('WeeklyView', () => {
       expect(morningClass).toBeInTheDocument();
     });
 
-    it('should display afternoon and evening classes', () => {
-      render(
+    it('should display afternoon and evening classes', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,
@@ -501,8 +501,8 @@ describe('WeeklyView', () => {
   });
 
   describe('Navigation Functionality', () => {
-    it('should render Previous button that is clickable', () => {
-      render(
+    it('should render Previous button that is clickable', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,
@@ -513,8 +513,8 @@ describe('WeeklyView', () => {
       expect(prevButton).toBeVisible();
     });
 
-    it('should render Next button that is clickable', () => {
-      render(
+    it('should render Next button that is clickable', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,
@@ -525,8 +525,8 @@ describe('WeeklyView', () => {
       expect(nextButton).toBeVisible();
     });
 
-    it('should render Today button with proper styling', () => {
-      render(
+    it('should render Today button with proper styling', async () => {
+      await render(
         <I18nWrapper>
           <WeeklyView />
         </I18nWrapper>,

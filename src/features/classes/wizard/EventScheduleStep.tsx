@@ -211,7 +211,7 @@ export const EventScheduleStep = ({
 
           {data.eventSchedule.sessions.length > 0
             ? (
-                <div className="max-h-[300px] min-h-0 flex-1 overflow-y-auto rounded-lg border border-border p-3">
+                <div className="max-h-75 min-h-0 flex-1 overflow-y-auto rounded-lg border border-border p-3">
                   <div className="space-y-3">
                     {data.eventSchedule.sessions.map((session, index) => (
                       <div
@@ -232,7 +232,7 @@ export const EventScheduleStep = ({
                             data-testid={`remove-session-${session.id}`}
                             className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <Trash2 className="size-3.5" />
                           </Button>
                         </div>
 
@@ -386,7 +386,7 @@ export const EventScheduleStep = ({
                         data-testid="add-event-session"
                         className="size-7"
                       >
-                        <Plus className="h-3.5 w-3.5" />
+                        <Plus className="size-3.5" />
                       </Button>
                     </div>
                   </div>
@@ -406,7 +406,7 @@ export const EventScheduleStep = ({
                     className="mt-4"
                     disabled={!data.eventSchedule.startDate}
                   >
-                    <Plus className="mr-1 h-4 w-4" />
+                    <Plus className="mr-1 size-4" />
                     {t('add_first_session_button')}
                   </Button>
                 </div>

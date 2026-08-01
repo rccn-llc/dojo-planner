@@ -38,7 +38,7 @@ async function renderPage() {
   // Server component returns a Promise<JSX>; resolve it, then render so the
   // mocked StaffPageClient is actually invoked and its props captured.
   const element = await CustomStaffPage();
-  render(element);
+  await render(element);
   const props = staffPageClientSpy.mock.calls.at(-1)?.[0] as { staffMembers: any[] } | undefined;
   return props?.staffMembers ?? [];
 }

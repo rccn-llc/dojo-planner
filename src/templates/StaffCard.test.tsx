@@ -15,94 +15,94 @@ describe('StaffCard', () => {
     status: 'Active' as const,
   };
 
-  it('renders staff name', () => {
-    render(<StaffCard {...defaultProps} />);
+  it('renders staff name', async () => {
+    await render(<StaffCard {...defaultProps} />);
 
     const name = page.getByText('John Doe');
 
     expect(name).toBeInTheDocument();
   });
 
-  it('renders staff email', () => {
-    render(<StaffCard {...defaultProps} />);
+  it('renders staff email', async () => {
+    await render(<StaffCard {...defaultProps} />);
 
     const email = page.getByText('john@example.com');
 
     expect(email).toBeInTheDocument();
   });
 
-  it('renders role badge as Admin for org:admin', () => {
-    render(<StaffCard {...defaultProps} />);
+  it('renders role badge as Admin for org:admin', async () => {
+    await render(<StaffCard {...defaultProps} />);
 
     const roleBadge = page.getByText('Admin');
 
     expect(roleBadge).toBeInTheDocument();
   });
 
-  it('renders other roles with proper formatting', () => {
+  it('renders other roles with proper formatting', async () => {
     // eslint-disable-next-line jsx-a11y/aria-role
-    render(<StaffCard {...defaultProps} role="instructor" />);
+    await render(<StaffCard {...defaultProps} role="instructor" />);
 
     const roleBadge = page.getByText('Instructor');
 
     expect(roleBadge).toBeInTheDocument();
   });
 
-  it('formats front-desk role correctly', () => {
+  it('formats front-desk role correctly', async () => {
     // eslint-disable-next-line jsx-a11y/aria-role
-    render(<StaffCard {...defaultProps} role="front-desk" />);
+    await render(<StaffCard {...defaultProps} role="front-desk" />);
 
     const roleBadge = page.getByText('Front Desk');
 
     expect(roleBadge).toBeInTheDocument();
   });
 
-  it('renders active status badge', () => {
-    render(<StaffCard {...defaultProps} />);
+  it('renders active status badge', async () => {
+    await render(<StaffCard {...defaultProps} />);
 
     const statusBadge = page.getByText('Active');
 
     expect(statusBadge).toBeInTheDocument();
   });
 
-  it('renders invitation sent status with proper formatting', () => {
-    render(<StaffCard {...defaultProps} status="Invitation sent" />);
+  it('renders invitation sent status with proper formatting', async () => {
+    await render(<StaffCard {...defaultProps} status="Invitation sent" />);
 
     const statusBadge = page.getByText('Invitation Sent');
 
     expect(statusBadge).toBeInTheDocument();
   });
 
-  it('renders inactive status', () => {
-    render(<StaffCard {...defaultProps} status="Inactive" />);
+  it('renders inactive status', async () => {
+    await render(<StaffCard {...defaultProps} status="Inactive" />);
 
     const statusBadge = page.getByText('Inactive');
 
     expect(statusBadge).toBeInTheDocument();
   });
 
-  it('renders edit button when onEdit is provided', () => {
+  it('renders edit button when onEdit is provided', async () => {
     const onEdit = vi.fn();
 
-    render(<StaffCard {...defaultProps} onEdit={onEdit} />);
+    await render(<StaffCard {...defaultProps} onEdit={onEdit} />);
 
     const editButton = page.getByRole('button', { name: /Edit John Doe/i });
 
     expect(editButton).toBeInTheDocument();
   });
 
-  it('renders remove button when onRemove is provided', () => {
+  it('renders remove button when onRemove is provided', async () => {
     const onRemove = vi.fn();
 
-    render(<StaffCard {...defaultProps} onRemove={onRemove} />);
+    await render(<StaffCard {...defaultProps} onRemove={onRemove} />);
 
     const removeButton = page.getByRole('button', { name: /Remove John Doe/i });
 
     expect(removeButton).toBeInTheDocument();
   });
 
-  it('does not render buttons when callbacks are not provided', () => {
-    render(<StaffCard {...defaultProps} />);
+  it('does not render buttons when callbacks are not provided', async () => {
+    await render(<StaffCard {...defaultProps} />);
 
     const buttons = page.getByRole('button').elements();
 
@@ -112,7 +112,7 @@ describe('StaffCard', () => {
   it('calls onEdit when edit button is clicked', async () => {
     const onEdit = vi.fn();
 
-    render(<StaffCard {...defaultProps} onEdit={onEdit} />);
+    await render(<StaffCard {...defaultProps} onEdit={onEdit} />);
 
     const editButton = page.getByRole('button', { name: /Edit John Doe/i });
     await userEvent.click(editButton);
@@ -123,7 +123,7 @@ describe('StaffCard', () => {
   it('calls onRemove with correct id when remove button is clicked', async () => {
     const onRemove = vi.fn();
 
-    render(<StaffCard {...defaultProps} onRemove={onRemove} />);
+    await render(<StaffCard {...defaultProps} onRemove={onRemove} />);
 
     const removeButton = page.getByRole('button', { name: /Remove John Doe/i });
     await userEvent.click(removeButton);
@@ -131,16 +131,16 @@ describe('StaffCard', () => {
     expect(onRemove).toHaveBeenCalledWith('1');
   });
 
-  it('displays avatar initials correctly', () => {
-    render(<StaffCard {...defaultProps} photoUrl={null} />);
+  it('displays avatar initials correctly', async () => {
+    await render(<StaffCard {...defaultProps} photoUrl={null} />);
 
     const initials = page.getByText('JD');
 
     expect(initials).toBeInTheDocument();
   });
 
-  it('handles null names gracefully', () => {
-    render(
+  it('handles null names gracefully', async () => {
+    await render(
       <StaffCard
         {...defaultProps}
         firstName={null}
@@ -154,11 +154,11 @@ describe('StaffCard', () => {
     expect(email).toBeInTheDocument();
   });
 
-  it('renders both action buttons when both handlers are provided', () => {
+  it('renders both action buttons when both handlers are provided', async () => {
     const onEdit = vi.fn();
     const onRemove = vi.fn();
 
-    render(
+    await render(
       <StaffCard
         {...defaultProps}
         onEdit={onEdit}
@@ -173,8 +173,8 @@ describe('StaffCard', () => {
     expect(removeButton).toBeInTheDocument();
   });
 
-  it('displays correct initials for null first name', () => {
-    render(
+  it('displays correct initials for null first name', async () => {
+    await render(
       <StaffCard
         {...defaultProps}
         firstName={null}
@@ -188,8 +188,8 @@ describe('StaffCard', () => {
     expect(fallback).toBeInTheDocument();
   });
 
-  it('displays correct initials for null last name', () => {
-    render(
+  it('displays correct initials for null last name', async () => {
+    await render(
       <StaffCard
         {...defaultProps}
         lastName={null}
@@ -206,7 +206,7 @@ describe('StaffCard', () => {
   it('calls onEdit with id when onEdit accepts an argument', async () => {
     const onEdit = vi.fn((id: string) => id);
 
-    render(<StaffCard {...defaultProps} onEdit={onEdit} />);
+    await render(<StaffCard {...defaultProps} onEdit={onEdit} />);
 
     const editButton = page.getByRole('button', { name: /Edit John Doe/i });
     await userEvent.click(editButton);
@@ -217,7 +217,7 @@ describe('StaffCard', () => {
   it('calls onEdit without id when onEdit has no parameters', async () => {
     const onEdit = vi.fn();
 
-    render(<StaffCard {...defaultProps} onEdit={onEdit} />);
+    await render(<StaffCard {...defaultProps} onEdit={onEdit} />);
 
     const editButton = page.getByRole('button', { name: /Edit John Doe/i });
     await userEvent.click(editButton);
@@ -225,17 +225,17 @@ describe('StaffCard', () => {
     expect(onEdit).toHaveBeenCalledWith();
   });
 
-  it('renders role without formatting when formatText is false', () => {
+  it('renders role without formatting when formatText is false', async () => {
     // eslint-disable-next-line jsx-a11y/aria-role
-    render(<StaffCard {...defaultProps} role="org:admin" formatText={false} />);
+    await render(<StaffCard {...defaultProps} role="org:admin" formatText={false} />);
 
     const roleBadge = page.getByText('org:admin');
 
     expect(roleBadge).toBeInTheDocument();
   });
 
-  it('renders status without formatting when formatText is false', () => {
-    render(<StaffCard {...defaultProps} status="Invitation sent" formatText={false} />);
+  it('renders status without formatting when formatText is false', async () => {
+    await render(<StaffCard {...defaultProps} status="Invitation sent" formatText={false} />);
 
     const statusBadge = page.getByText('Invitation sent');
 
@@ -243,59 +243,59 @@ describe('StaffCard', () => {
   });
 
   it('renders avatar image when photoUrl is provided', async () => {
-    render(<StaffCard {...defaultProps} />);
+    await render(<StaffCard {...defaultProps} />);
 
     const avatar = page.getByRole('img', { name: /John Doe/i });
 
     await expect.element(avatar).toBeVisible();
   });
 
-  it('applies destructive variant for inactive status', () => {
-    render(<StaffCard {...defaultProps} status="Inactive" />);
+  it('applies destructive variant for inactive status', async () => {
+    await render(<StaffCard {...defaultProps} status="Inactive" />);
 
     const statusBadge = page.getByText('Inactive');
 
     expect(statusBadge).toBeInTheDocument();
   });
 
-  it('applies secondary variant for invitation sent status', () => {
-    render(<StaffCard {...defaultProps} status="Invitation sent" />);
+  it('applies secondary variant for invitation sent status', async () => {
+    await render(<StaffCard {...defaultProps} status="Invitation sent" />);
 
     const statusBadge = page.getByText('Invitation Sent');
 
     expect(statusBadge).toBeInTheDocument();
   });
 
-  it('applies outline variant for non-admin roles', () => {
+  it('applies outline variant for non-admin roles', async () => {
     // eslint-disable-next-line jsx-a11y/aria-role
-    render(<StaffCard {...defaultProps} role="instructor" />);
+    await render(<StaffCard {...defaultProps} role="instructor" />);
 
     const roleBadge = page.getByText('Instructor');
 
     expect(roleBadge).toBeInTheDocument();
   });
 
-  it('formats hyphenated roles correctly', () => {
+  it('formats hyphenated roles correctly', async () => {
     // eslint-disable-next-line jsx-a11y/aria-role
-    render(<StaffCard {...defaultProps} role="academy-owner" />);
+    await render(<StaffCard {...defaultProps} role="academy-owner" />);
 
     const roleBadge = page.getByText('Academy Owner');
 
     expect(roleBadge).toBeInTheDocument();
   });
 
-  it('formats org:academy_owner role as Academy Owner', () => {
+  it('formats org:academy_owner role as Academy Owner', async () => {
     // eslint-disable-next-line jsx-a11y/aria-role
-    render(<StaffCard {...defaultProps} role="org:academy_owner" />);
+    await render(<StaffCard {...defaultProps} role="org:academy_owner" />);
 
     const roleBadge = page.getByText('Academy Owner');
 
     expect(roleBadge).toBeInTheDocument();
   });
 
-  it('formats org:front_desk role as Front Desk', () => {
+  it('formats org:front_desk role as Front Desk', async () => {
     // eslint-disable-next-line jsx-a11y/aria-role
-    render(<StaffCard {...defaultProps} role="org:front_desk" />);
+    await render(<StaffCard {...defaultProps} role="org:front_desk" />);
 
     const roleBadge = page.getByText('Front Desk');
 

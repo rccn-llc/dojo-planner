@@ -34,21 +34,21 @@ describe('CancelMembershipModal', () => {
     cancelMembership.mockResolvedValue({});
   });
 
-  it('does not render when closed', () => {
-    render(<CancelMembershipModal {...baseProps} isOpen={false} />);
+  it('does not render when closed', async () => {
+    await render(<CancelMembershipModal {...baseProps} isOpen={false} />);
 
     expect(page.getByText('title').elements()).toHaveLength(0);
   });
 
   it('shows the fee notice and waive checkbox when a fee applies', async () => {
-    render(<CancelMembershipModal {...baseProps} />);
+    await render(<CancelMembershipModal {...baseProps} />);
 
     await expect.element(page.getByText('fee_notice_title')).toBeInTheDocument();
     await expect.element(page.getByLabelText('waive_fee_label')).toBeInTheDocument();
   });
 
-  it('hides the fee notice when there is no fee', () => {
-    render(<CancelMembershipModal {...baseProps} cancellationFee={0} />);
+  it('hides the fee notice when there is no fee', async () => {
+    await render(<CancelMembershipModal {...baseProps} cancellationFee={0} />);
 
     expect(page.getByText('fee_notice_title').elements()).toHaveLength(0);
   });
@@ -56,7 +56,7 @@ describe('CancelMembershipModal', () => {
   it('calls cancelMembership with waiveFee=false by default and fires success', async () => {
     const onSuccess = vi.fn();
     const onClose = vi.fn();
-    render(<CancelMembershipModal {...baseProps} onSuccess={onSuccess} onClose={onClose} />);
+    await render(<CancelMembershipModal {...baseProps} onSuccess={onSuccess} onClose={onClose} />);
 
     await userEvent.click(page.getByText('confirm_button'));
 
@@ -72,7 +72,7 @@ describe('CancelMembershipModal', () => {
   });
 
   it('passes waiveFee=true when the waive checkbox is ticked', async () => {
-    render(<CancelMembershipModal {...baseProps} />);
+    await render(<CancelMembershipModal {...baseProps} />);
 
     await userEvent.click(page.getByLabelText('waive_fee_label'));
     await userEvent.click(page.getByText('confirm_button'));
@@ -84,7 +84,7 @@ describe('CancelMembershipModal', () => {
 
   it('surfaces an error message when the cancel call throws', async () => {
     cancelMembership.mockRejectedValue(new Error('boom'));
-    render(<CancelMembershipModal {...baseProps} />);
+    await render(<CancelMembershipModal {...baseProps} />);
 
     await userEvent.click(page.getByText('confirm_button'));
 
@@ -95,7 +95,7 @@ describe('CancelMembershipModal', () => {
     cancelMembership.mockResolvedValue({ feeChargeError: 'card declined' });
     const onSuccess = vi.fn();
     const onClose = vi.fn();
-    render(<CancelMembershipModal {...baseProps} onSuccess={onSuccess} onClose={onClose} />);
+    await render(<CancelMembershipModal {...baseProps} onSuccess={onSuccess} onClose={onClose} />);
 
     await userEvent.click(page.getByText('confirm_button'));
 

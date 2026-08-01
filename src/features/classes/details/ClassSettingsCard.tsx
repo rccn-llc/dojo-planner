@@ -55,7 +55,7 @@ export function ClassSettingsCard({
       {onEdit && (
         <div className="mt-6 flex justify-end">
           <Button variant="outline" size="icon" onClick={onEdit}>
-            <Edit className="h-4 w-4" />
+            <Edit className="size-4" />
           </Button>
         </div>
       )}

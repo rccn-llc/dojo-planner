@@ -23,7 +23,7 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
   render: () => (
-    <Command className="w-[300px] rounded-lg border">
+    <Command className="w-75 rounded-lg border">
       <CommandInput placeholder="Type a command or search..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
@@ -45,7 +45,7 @@ export const Default: Story = {
 
 export const WithGroups: Story = {
   render: () => (
-    <Command className="w-[300px] rounded-lg border">
+    <Command className="w-75 rounded-lg border">
       <CommandInput placeholder="Search commands..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
@@ -79,7 +79,7 @@ export const WithGroups: Story = {
 
 export const Searchable: Story = {
   render: () => (
-    <Command className="w-[300px] rounded-lg border">
+    <Command className="w-75 rounded-lg border">
       <CommandInput placeholder="Search users..." />
       <CommandList>
         <CommandEmpty>No users found.</CommandEmpty>

@@ -20,24 +20,24 @@ describe('MemberFilterBar', () => {
   });
 
   describe('Render', () => {
-    it('should render search input with placeholder', () => {
-      render(<MemberFilterBar {...defaultProps} />);
+    it('should render search input with placeholder', async () => {
+      await render(<MemberFilterBar {...defaultProps} />);
 
       const searchInput = page.getByPlaceholder('search_placeholder');
 
       expect(searchInput).toBeInTheDocument();
     });
 
-    it('should render status filter dropdown', () => {
-      render(<MemberFilterBar {...defaultProps} />);
+    it('should render status filter dropdown', async () => {
+      await render(<MemberFilterBar {...defaultProps} />);
 
       const comboboxes = page.getByRole('combobox');
 
       expect(comboboxes.first()).toBeInTheDocument();
     });
 
-    it('should render membership type filter dropdown', () => {
-      render(<MemberFilterBar {...defaultProps} />);
+    it('should render membership type filter dropdown', async () => {
+      await render(<MemberFilterBar {...defaultProps} />);
 
       const comboboxes = page.getByRole('combobox');
 
@@ -45,8 +45,8 @@ describe('MemberFilterBar', () => {
       expect(comboboxes.nth(1)).toBeInTheDocument();
     });
 
-    it('should render with empty status options', () => {
-      render(
+    it('should render with empty status options', async () => {
+      await render(
         <MemberFilterBar
           {...defaultProps}
           availableStatuses={[]}
@@ -58,8 +58,8 @@ describe('MemberFilterBar', () => {
       expect(comboboxes.first()).toBeInTheDocument();
     });
 
-    it('should render with empty membership type options', () => {
-      render(
+    it('should render with empty membership type options', async () => {
+      await render(
         <MemberFilterBar
           {...defaultProps}
           availableMembershipTypes={[]}
@@ -75,7 +75,7 @@ describe('MemberFilterBar', () => {
   describe('Search functionality', () => {
     it('should call onFiltersChangeAction when search input changes', async () => {
       const mockOnFiltersChange = vi.fn();
-      render(
+      await render(
         <MemberFilterBar
           {...defaultProps}
           onFiltersChangeAction={mockOnFiltersChange}
@@ -94,7 +94,7 @@ describe('MemberFilterBar', () => {
 
     it('should update search value as user types', async () => {
       const mockOnFiltersChange = vi.fn();
-      render(
+      await render(
         <MemberFilterBar
           {...defaultProps}
           onFiltersChangeAction={mockOnFiltersChange}
@@ -113,7 +113,7 @@ describe('MemberFilterBar', () => {
   describe('Status filter functionality', () => {
     it('should call onFiltersChangeAction when status filter changes', async () => {
       const mockOnFiltersChange = vi.fn();
-      render(
+      await render(
         <MemberFilterBar
           {...defaultProps}
           onFiltersChangeAction={mockOnFiltersChange}
@@ -136,7 +136,7 @@ describe('MemberFilterBar', () => {
     });
 
     it('should display all status options from availableStatuses', async () => {
-      render(<MemberFilterBar {...defaultProps} />);
+      await render(<MemberFilterBar {...defaultProps} />);
 
       const statusTrigger = page.getByRole('combobox').first();
       await statusTrigger.click();
@@ -154,7 +154,7 @@ describe('MemberFilterBar', () => {
   describe('Membership type filter functionality', () => {
     it('should call onFiltersChangeAction when membership type filter changes', async () => {
       const mockOnFiltersChange = vi.fn();
-      render(
+      await render(
         <MemberFilterBar
           {...defaultProps}
           onFiltersChangeAction={mockOnFiltersChange}
@@ -177,7 +177,7 @@ describe('MemberFilterBar', () => {
     });
 
     it('should display all membership type options from availableMembershipTypes', async () => {
-      render(<MemberFilterBar {...defaultProps} />);
+      await render(<MemberFilterBar {...defaultProps} />);
 
       const membershipTypeTrigger = page.getByRole('combobox').nth(1);
       await membershipTypeTrigger.click();
@@ -192,7 +192,7 @@ describe('MemberFilterBar', () => {
 
   describe('Label mapping', () => {
     it('should display correct labels for known statuses', async () => {
-      render(
+      await render(
         <MemberFilterBar
           {...defaultProps}
           availableStatuses={['active', 'hold', 'trial', 'cancelled', 'past_due']}
@@ -210,7 +210,7 @@ describe('MemberFilterBar', () => {
     });
 
     it('should capitalize unknown status values', async () => {
-      render(
+      await render(
         <MemberFilterBar
           {...defaultProps}
           availableStatuses={['unknown_status']}
@@ -225,7 +225,7 @@ describe('MemberFilterBar', () => {
     });
 
     it('should format unknown membership types with capitalization', async () => {
-      render(
+      await render(
         <MemberFilterBar
           {...defaultProps}
           availableMembershipTypes={['premium-yearly']}
@@ -243,7 +243,7 @@ describe('MemberFilterBar', () => {
   describe('Combined filters', () => {
     it('should maintain filter state when changing multiple filters', async () => {
       const mockOnFiltersChange = vi.fn();
-      render(
+      await render(
         <MemberFilterBar
           {...defaultProps}
           onFiltersChangeAction={mockOnFiltersChange}

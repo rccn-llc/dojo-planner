@@ -43,22 +43,22 @@ describe('EditLocationModal', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the modal title', () => {
-    render(<EditLocationModal {...defaultProps} />);
+  it('should render the modal title', async () => {
+    await render(<EditLocationModal {...defaultProps} />);
 
     expect(page.getByText('Edit Location Information')).toBeDefined();
   });
 
-  it('should render all form field labels', () => {
-    render(<EditLocationModal {...defaultProps} />);
+  it('should render all form field labels', async () => {
+    await render(<EditLocationModal {...defaultProps} />);
 
     expect(page.getByText('Address')).toBeDefined();
     expect(page.getByText('Phone')).toBeDefined();
     expect(page.getByText('Email')).toBeDefined();
   });
 
-  it('should display initial values in form fields', () => {
-    render(<EditLocationModal {...defaultProps} />);
+  it('should display initial values in form fields', async () => {
+    await render(<EditLocationModal {...defaultProps} />);
 
     const addressInput = page.getByPlaceholder('Enter address');
     const phoneInput = page.getByPlaceholder('(555) 123-4567');
@@ -69,8 +69,8 @@ describe('EditLocationModal', () => {
     expect(emailInput.element()).toHaveProperty('value', 'downtown@example.com');
   });
 
-  it('should render cancel and save buttons', () => {
-    render(<EditLocationModal {...defaultProps} />);
+  it('should render cancel and save buttons', async () => {
+    await render(<EditLocationModal {...defaultProps} />);
 
     expect(page.getByRole('button', { name: /cancel/i })).toBeDefined();
     expect(page.getByRole('button', { name: /save changes/i })).toBeDefined();
@@ -78,7 +78,7 @@ describe('EditLocationModal', () => {
 
   it('should call onClose when cancel button is clicked', async () => {
     const onClose = vi.fn();
-    render(<EditLocationModal {...defaultProps} onClose={onClose} />);
+    await render(<EditLocationModal {...defaultProps} onClose={onClose} />);
 
     const cancelButton = page.getByRole('button', { name: /cancel/i });
     await userEvent.click(cancelButton.element());
@@ -87,7 +87,7 @@ describe('EditLocationModal', () => {
   });
 
   it('should show error when address field is empty on blur', async () => {
-    render(<EditLocationModal {...defaultProps} />);
+    await render(<EditLocationModal {...defaultProps} />);
 
     const addressInput = page.getByPlaceholder('Enter address');
     await userEvent.clear(addressInput.element());
@@ -97,7 +97,7 @@ describe('EditLocationModal', () => {
   });
 
   it('should show error when phone field is empty on blur', async () => {
-    render(<EditLocationModal {...defaultProps} />);
+    await render(<EditLocationModal {...defaultProps} />);
 
     const phoneInput = page.getByPlaceholder('(555) 123-4567');
     await userEvent.clear(phoneInput.element());
@@ -107,7 +107,7 @@ describe('EditLocationModal', () => {
   });
 
   it('should show error when email is invalid on blur', async () => {
-    render(<EditLocationModal {...defaultProps} />);
+    await render(<EditLocationModal {...defaultProps} />);
 
     const emailInput = page.getByPlaceholder('location@example.com');
     await userEvent.clear(emailInput.element());
@@ -118,7 +118,7 @@ describe('EditLocationModal', () => {
   });
 
   it('should disable save button when form is invalid', async () => {
-    render(<EditLocationModal {...defaultProps} />);
+    await render(<EditLocationModal {...defaultProps} />);
 
     const addressInput = page.getByPlaceholder('Enter address');
     await userEvent.clear(addressInput.element());
@@ -128,8 +128,8 @@ describe('EditLocationModal', () => {
     expect(saveButton.element()).toBeDisabled();
   });
 
-  it('should enable save button when form is valid', () => {
-    render(<EditLocationModal {...defaultProps} />);
+  it('should enable save button when form is valid', async () => {
+    await render(<EditLocationModal {...defaultProps} />);
 
     const saveButton = page.getByRole('button', { name: /save changes/i });
 
@@ -138,7 +138,7 @@ describe('EditLocationModal', () => {
 
   it('should call onSave with updated data when save is clicked', async () => {
     const onSave = vi.fn();
-    render(<EditLocationModal {...defaultProps} onSave={onSave} />);
+    await render(<EditLocationModal {...defaultProps} onSave={onSave} />);
 
     const addressInput = page.getByPlaceholder('Enter address');
     await userEvent.clear(addressInput.element());
@@ -157,8 +157,8 @@ describe('EditLocationModal', () => {
     });
   });
 
-  it('should not render when isOpen is false', () => {
-    render(<EditLocationModal {...defaultProps} isOpen={false} />);
+  it('should not render when isOpen is false', async () => {
+    await render(<EditLocationModal {...defaultProps} isOpen={false} />);
 
     const modalTitle = page.getByText('Edit Location Information');
 
@@ -166,7 +166,7 @@ describe('EditLocationModal', () => {
   });
 
   it('should reset form values when cancel is clicked', async () => {
-    render(<EditLocationModal {...defaultProps} />);
+    await render(<EditLocationModal {...defaultProps} />);
 
     // Modify a field
     const addressInput = page.getByPlaceholder('Enter address');
@@ -183,7 +183,7 @@ describe('EditLocationModal', () => {
 
   it('should update all fields correctly', async () => {
     const onSave = vi.fn();
-    render(<EditLocationModal {...defaultProps} onSave={onSave} />);
+    await render(<EditLocationModal {...defaultProps} onSave={onSave} />);
 
     // Update all fields
     const addressInput = page.getByPlaceholder('Enter address');
@@ -213,7 +213,7 @@ describe('EditLocationModal', () => {
   });
 
   it('should show saving state while submitting', async () => {
-    render(<EditLocationModal {...defaultProps} />);
+    await render(<EditLocationModal {...defaultProps} />);
 
     const saveButton = page.getByRole('button', { name: /save changes/i });
     await userEvent.click(saveButton.element());
@@ -223,7 +223,7 @@ describe('EditLocationModal', () => {
   });
 
   it('should validate email format correctly', async () => {
-    render(<EditLocationModal {...defaultProps} />);
+    await render(<EditLocationModal {...defaultProps} />);
 
     const emailInput = page.getByPlaceholder('location@example.com');
 
@@ -275,7 +275,7 @@ describe('EditLocationModal', () => {
   });
 
   it('should accept valid email format', async () => {
-    render(<EditLocationModal {...defaultProps} />);
+    await render(<EditLocationModal {...defaultProps} />);
 
     const emailInput = page.getByPlaceholder('location@example.com');
     await userEvent.clear(emailInput.element());

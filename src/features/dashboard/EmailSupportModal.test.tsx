@@ -33,34 +33,34 @@ describe('EmailSupportModal', () => {
   });
 
   describe('Rendering', () => {
-    it('should render the modal title', () => {
-      render(<EmailSupportModal {...defaultProps} />);
+    it('should render the modal title', async () => {
+      await render(<EmailSupportModal {...defaultProps} />);
 
       expect(page.getByText('Email Support')).toBeInTheDocument();
     });
 
-    it('should render the modal description', () => {
-      render(<EmailSupportModal {...defaultProps} />);
+    it('should render the modal description', async () => {
+      await render(<EmailSupportModal {...defaultProps} />);
 
       expect(page.getByText(/Send us a message/)).toBeInTheDocument();
     });
 
-    it('should render subject and message form fields', () => {
-      render(<EmailSupportModal {...defaultProps} />);
+    it('should render subject and message form fields', async () => {
+      await render(<EmailSupportModal {...defaultProps} />);
 
       expect(page.getByPlaceholder('What do you need help with?')).toBeInTheDocument();
       expect(page.getByPlaceholder('Describe your issue or question in detail...')).toBeInTheDocument();
     });
 
-    it('should render cancel and send buttons', () => {
-      render(<EmailSupportModal {...defaultProps} />);
+    it('should render cancel and send buttons', async () => {
+      await render(<EmailSupportModal {...defaultProps} />);
 
       expect(page.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
       expect(page.getByRole('button', { name: /send message/i })).toBeInTheDocument();
     });
 
-    it('should not render when isOpen is false', () => {
-      render(<EmailSupportModal {...defaultProps} isOpen={false} />);
+    it('should not render when isOpen is false', async () => {
+      await render(<EmailSupportModal {...defaultProps} isOpen={false} />);
 
       expect(page.getByText('Email Support').elements()).toHaveLength(0);
     });
@@ -68,7 +68,7 @@ describe('EmailSupportModal', () => {
 
   describe('Form Interaction', () => {
     it('should update subject field when typing', async () => {
-      render(<EmailSupportModal {...defaultProps} />);
+      await render(<EmailSupportModal {...defaultProps} />);
 
       const subjectInput = page.getByPlaceholder('What do you need help with?');
       await userEvent.type(subjectInput.element(), 'Test Subject');
@@ -77,7 +77,7 @@ describe('EmailSupportModal', () => {
     });
 
     it('should update message field when typing', async () => {
-      render(<EmailSupportModal {...defaultProps} />);
+      await render(<EmailSupportModal {...defaultProps} />);
 
       const messageInput = page.getByPlaceholder('Describe your issue or question in detail...');
       await userEvent.type(messageInput.element(), 'Test Message');
@@ -87,7 +87,7 @@ describe('EmailSupportModal', () => {
 
     it('should call onClose when cancel button is clicked', async () => {
       const onClose = vi.fn();
-      render(<EmailSupportModal {...defaultProps} onClose={onClose} />);
+      await render(<EmailSupportModal {...defaultProps} onClose={onClose} />);
 
       const cancelButton = page.getByRole('button', { name: /cancel/i });
       await userEvent.click(cancelButton.element());
@@ -98,7 +98,7 @@ describe('EmailSupportModal', () => {
 
   describe('Validation', () => {
     it('should show error when submitting with empty subject', async () => {
-      render(<EmailSupportModal {...defaultProps} />);
+      await render(<EmailSupportModal {...defaultProps} />);
 
       // Fill only message
       const messageInput = page.getByPlaceholder('Describe your issue or question in detail...');
@@ -111,7 +111,7 @@ describe('EmailSupportModal', () => {
     });
 
     it('should show error when submitting with empty message', async () => {
-      render(<EmailSupportModal {...defaultProps} />);
+      await render(<EmailSupportModal {...defaultProps} />);
 
       // Fill only subject
       const subjectInput = page.getByPlaceholder('What do you need help with?');
@@ -126,7 +126,7 @@ describe('EmailSupportModal', () => {
 
   describe('Submission', () => {
     it('should show sending state when form is submitted', async () => {
-      render(<EmailSupportModal {...defaultProps} />);
+      await render(<EmailSupportModal {...defaultProps} />);
 
       // Fill form
       const subjectInput = page.getByPlaceholder('What do you need help with?');
@@ -142,7 +142,7 @@ describe('EmailSupportModal', () => {
 
     it('should close modal and reset form after successful submission', async () => {
       const onClose = vi.fn();
-      render(<EmailSupportModal {...defaultProps} onClose={onClose} />);
+      await render(<EmailSupportModal {...defaultProps} onClose={onClose} />);
 
       // Fill form
       const subjectInput = page.getByPlaceholder('What do you need help with?');
@@ -161,7 +161,7 @@ describe('EmailSupportModal', () => {
 
     it('should reset form when modal is closed via cancel', async () => {
       const onClose = vi.fn();
-      render(<EmailSupportModal {...defaultProps} onClose={onClose} />);
+      await render(<EmailSupportModal {...defaultProps} onClose={onClose} />);
 
       // Fill form
       const subjectInput = page.getByPlaceholder('What do you need help with?');

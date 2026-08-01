@@ -10,8 +10,8 @@ describe('PaymentSettingsForm', () => {
     vi.clearAllMocks();
   });
 
-  it('renders the three IQPro credential fields', () => {
-    render(
+  it('renders the three IQPro credential fields', async () => {
+    await render(
       <PaymentSettingsForm
         title="IQPro Merchant Credentials"
         description="desc"
@@ -29,8 +29,8 @@ describe('PaymentSettingsForm', () => {
     expect(page.getByLabelText(/Gateway ID/i)).toBeDefined();
   });
 
-  it('shows a "Secret configured" badge when hasSecret is true', () => {
-    render(
+  it('shows a "Secret configured" badge when hasSecret is true', async () => {
+    await render(
       <PaymentSettingsForm
         title="t"
         description="d"
@@ -46,8 +46,8 @@ describe('PaymentSettingsForm', () => {
     expect(page.getByText(/Secret configured/i)).toBeDefined();
   });
 
-  it('pre-fills clientId and gatewayId but NOT the secret', () => {
-    render(
+  it('pre-fills clientId and gatewayId but NOT the secret', async () => {
+    await render(
       <PaymentSettingsForm
         title="t"
         description="d"
@@ -66,7 +66,7 @@ describe('PaymentSettingsForm', () => {
   });
 
   it('submitting without filling clientSecret omits it from the payload (means "keep")', async () => {
-    render(
+    await render(
       <PaymentSettingsForm
         title="t"
         description="d"
@@ -92,7 +92,7 @@ describe('PaymentSettingsForm', () => {
   });
 
   it('submitting with a clientSecret includes it in the payload', async () => {
-    render(
+    await render(
       <PaymentSettingsForm
         title="t"
         description="d"
@@ -116,8 +116,8 @@ describe('PaymentSettingsForm', () => {
     });
   });
 
-  it('displays the error message when provided', () => {
-    render(
+  it('displays the error message when provided', async () => {
+    await render(
       <PaymentSettingsForm
         title="t"
         description="d"
@@ -133,8 +133,8 @@ describe('PaymentSettingsForm', () => {
     expect(page.getByText(/Encryption key missing/i)).toBeDefined();
   });
 
-  it('disables submit while saving', () => {
-    render(
+  it('disables submit while saving', async () => {
+    await render(
       <PaymentSettingsForm
         title="t"
         description="d"

@@ -96,8 +96,8 @@ describe('ClassScheduleStep', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the step with title and subtitle', () => {
-    render(
+  it('should render the step with title and subtitle', async () => {
+    await render(
       <ClassScheduleStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -113,8 +113,8 @@ describe('ClassScheduleStep', () => {
     expect(heading).toBeTruthy();
   });
 
-  it('should render empty state when no schedule instances', () => {
-    render(
+  it('should render empty state when no schedule instances', async () => {
+    await render(
       <ClassScheduleStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -130,8 +130,8 @@ describe('ClassScheduleStep', () => {
     expect(emptyMessage).toBeTruthy();
   });
 
-  it('should render add time slot button in empty state', () => {
-    render(
+  it('should render add time slot button in empty state', async () => {
+    await render(
       <ClassScheduleStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -147,8 +147,8 @@ describe('ClassScheduleStep', () => {
     expect(addButton).toBeTruthy();
   });
 
-  it('should have Next button disabled when form is incomplete (no instances)', () => {
-    render(
+  it('should have Next button disabled when form is incomplete (no instances)', async () => {
+    await render(
       <ClassScheduleStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -165,7 +165,7 @@ describe('ClassScheduleStep', () => {
     expect(nextButton?.disabled).toBe(true);
   });
 
-  it('should enable Next button when form has valid schedule instance', () => {
+  it('should enable Next button when form has valid schedule instance', async () => {
     const completeData: AddClassWizardData = {
       ...mockData,
       schedule: {
@@ -175,7 +175,7 @@ describe('ClassScheduleStep', () => {
       },
     };
 
-    render(
+    await render(
       <ClassScheduleStep
         data={completeData}
         onUpdate={mockHandlers.onUpdate}
@@ -193,7 +193,7 @@ describe('ClassScheduleStep', () => {
   });
 
   it('should call onCancel when Cancel button is clicked', async () => {
-    render(
+    await render(
       <ClassScheduleStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -215,7 +215,7 @@ describe('ClassScheduleStep', () => {
   });
 
   it('should call onBack when Back button is clicked', async () => {
-    render(
+    await render(
       <ClassScheduleStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -236,8 +236,8 @@ describe('ClassScheduleStep', () => {
     }
   });
 
-  it('should display error message when provided', () => {
-    render(
+  it('should display error message when provided', async () => {
+    await render(
       <ClassScheduleStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -254,7 +254,7 @@ describe('ClassScheduleStep', () => {
     expect(errorMessage).toBeTruthy();
   });
 
-  it('should render schedule instances table when instances exist', () => {
+  it('should render schedule instances table when instances exist', async () => {
     const dataWithInstances: AddClassWizardData = {
       ...mockData,
       schedule: {
@@ -264,7 +264,7 @@ describe('ClassScheduleStep', () => {
       },
     };
 
-    render(
+    await render(
       <ClassScheduleStep
         data={dataWithInstances}
         onUpdate={mockHandlers.onUpdate}
@@ -295,7 +295,7 @@ describe('ClassScheduleStep', () => {
       },
     };
 
-    render(
+    await render(
       <ClassScheduleStep
         data={completeData}
         onUpdate={mockHandlers.onUpdate}
@@ -317,7 +317,7 @@ describe('ClassScheduleStep', () => {
   });
 
   it('should call onUpdateSchedule when adding a new instance', async () => {
-    render(
+    await render(
       <ClassScheduleStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -342,7 +342,7 @@ describe('ClassScheduleStep', () => {
     }
   });
 
-  it('should render multiple schedule instances', () => {
+  it('should render multiple schedule instances', async () => {
     const multipleInstances: ScheduleInstance[] = [
       { ...mockInstance, id: 'instance-1', dayOfWeek: 'Monday' },
       { ...mockInstance, id: 'instance-2', dayOfWeek: 'Wednesday' },
@@ -358,7 +358,7 @@ describe('ClassScheduleStep', () => {
       },
     };
 
-    render(
+    await render(
       <ClassScheduleStep
         data={dataWithMultiple}
         onUpdate={mockHandlers.onUpdate}
@@ -375,7 +375,7 @@ describe('ClassScheduleStep', () => {
     expect(rows.length).toBe(3);
   });
 
-  it('should have disabled Next button when instance has no duration', () => {
+  it('should have disabled Next button when instance has no duration', async () => {
     const invalidInstance: ScheduleInstance = {
       ...mockInstance,
       durationHours: 0,
@@ -391,7 +391,7 @@ describe('ClassScheduleStep', () => {
       },
     };
 
-    render(
+    await render(
       <ClassScheduleStep
         data={dataWithInvalidInstance}
         onUpdate={mockHandlers.onUpdate}
@@ -408,7 +408,7 @@ describe('ClassScheduleStep', () => {
     expect(nextButton?.disabled).toBe(true);
   });
 
-  it('should have disabled Next button when instance has no staff member', () => {
+  it('should have disabled Next button when instance has no staff member', async () => {
     const invalidInstance: ScheduleInstance = {
       ...mockInstance,
       staffMember: '',
@@ -423,7 +423,7 @@ describe('ClassScheduleStep', () => {
       },
     };
 
-    render(
+    await render(
       <ClassScheduleStep
         data={dataWithInvalidInstance}
         onUpdate={mockHandlers.onUpdate}
@@ -440,7 +440,7 @@ describe('ClassScheduleStep', () => {
     expect(nextButton?.disabled).toBe(true);
   });
 
-  it('should render instructor column header', () => {
+  it('should render instructor column header', async () => {
     const dataWithInstances: AddClassWizardData = {
       ...mockData,
       schedule: {
@@ -450,7 +450,7 @@ describe('ClassScheduleStep', () => {
       },
     };
 
-    render(
+    await render(
       <ClassScheduleStep
         data={dataWithInstances}
         onUpdate={mockHandlers.onUpdate}
@@ -466,7 +466,7 @@ describe('ClassScheduleStep', () => {
     expect(instructorHeader).toBeTruthy();
   });
 
-  it('should render assistant column header', () => {
+  it('should render assistant column header', async () => {
     const dataWithInstances: AddClassWizardData = {
       ...mockData,
       schedule: {
@@ -476,7 +476,7 @@ describe('ClassScheduleStep', () => {
       },
     };
 
-    render(
+    await render(
       <ClassScheduleStep
         data={dataWithInstances}
         onUpdate={mockHandlers.onUpdate}
@@ -492,7 +492,7 @@ describe('ClassScheduleStep', () => {
     expect(assistantHeader).toBeTruthy();
   });
 
-  it('should render actions column header', () => {
+  it('should render actions column header', async () => {
     const dataWithInstances: AddClassWizardData = {
       ...mockData,
       schedule: {
@@ -502,7 +502,7 @@ describe('ClassScheduleStep', () => {
       },
     };
 
-    render(
+    await render(
       <ClassScheduleStep
         data={dataWithInstances}
         onUpdate={mockHandlers.onUpdate}
@@ -518,8 +518,8 @@ describe('ClassScheduleStep', () => {
     expect(actionsHeader).toBeTruthy();
   });
 
-  it('should render Schedule Instances label', () => {
-    render(
+  it('should render Schedule Instances label', async () => {
+    await render(
       <ClassScheduleStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -545,7 +545,7 @@ describe('ClassScheduleStep', () => {
       },
     };
 
-    render(
+    await render(
       <ClassScheduleStep
         data={dataWithInstance}
         onUpdate={mockHandlers.onUpdate}
@@ -569,7 +569,7 @@ describe('ClassScheduleStep', () => {
     }
   });
 
-  it('should render add time slot button in header when instances exist', () => {
+  it('should render add time slot button in header when instances exist', async () => {
     const dataWithInstances: AddClassWizardData = {
       ...mockData,
       schedule: {
@@ -579,7 +579,7 @@ describe('ClassScheduleStep', () => {
       },
     };
 
-    render(
+    await render(
       <ClassScheduleStep
         data={dataWithInstances}
         onUpdate={mockHandlers.onUpdate}

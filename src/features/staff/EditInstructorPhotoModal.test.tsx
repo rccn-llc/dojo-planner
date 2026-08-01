@@ -58,8 +58,8 @@ describe('EditInstructorPhotoModal', () => {
     vi.stubGlobal('FileReader', MockFileReader as unknown as typeof FileReader);
   });
 
-  it('renders the title and the no-photo placeholder when no current photo is set', () => {
-    render(
+  it('renders the title and the no-photo placeholder when no current photo is set', async () => {
+    await render(
       <I18nWrapper>
         <EditInstructorPhotoModal {...baseProps} />
       </I18nWrapper>,
@@ -69,8 +69,8 @@ describe('EditInstructorPhotoModal', () => {
     expect(page.getByText('No photo uploaded')).toBeInTheDocument();
   });
 
-  it('shows Save disabled until the user picks a file or removes', () => {
-    render(
+  it('shows Save disabled until the user picks a file or removes', async () => {
+    await render(
       <I18nWrapper>
         <EditInstructorPhotoModal {...baseProps} />
       </I18nWrapper>,
@@ -79,8 +79,8 @@ describe('EditInstructorPhotoModal', () => {
     expect(page.getByRole('button', { name: 'Save' })).toBeDisabled();
   });
 
-  it('does not render the Remove button when there is no current photo', () => {
-    render(
+  it('does not render the Remove button when there is no current photo', async () => {
+    await render(
       <I18nWrapper>
         <EditInstructorPhotoModal {...baseProps} />
       </I18nWrapper>,
@@ -89,8 +89,8 @@ describe('EditInstructorPhotoModal', () => {
     expect(page.getByRole('button', { name: 'Remove' }).elements().length).toBe(0);
   });
 
-  it('renders the Remove button when there is a current photo', () => {
-    render(
+  it('renders the Remove button when there is a current photo', async () => {
+    await render(
       <I18nWrapper>
         <EditInstructorPhotoModal {...baseProps} currentPhotoUrl={SAMPLE_DATA_URL} />
       </I18nWrapper>,
@@ -100,7 +100,7 @@ describe('EditInstructorPhotoModal', () => {
   });
 
   it('opens the confirm dialog and only clears the photo on confirm (photoUrl null)', async () => {
-    render(
+    await render(
       <I18nWrapper>
         <EditInstructorPhotoModal {...baseProps} currentPhotoUrl={SAMPLE_DATA_URL} />
       </I18nWrapper>,
@@ -120,7 +120,7 @@ describe('EditInstructorPhotoModal', () => {
   it('renders an error banner when the server rejects', async () => {
     updatePhotoMock.mockRejectedValueOnce(new Error('server boom'));
 
-    render(
+    await render(
       <I18nWrapper>
         <EditInstructorPhotoModal {...baseProps} currentPhotoUrl={SAMPLE_DATA_URL} />
       </I18nWrapper>,
@@ -136,7 +136,7 @@ describe('EditInstructorPhotoModal', () => {
   it('calls onSavedAction and onCloseAction after a successful save', async () => {
     const onSaved = vi.fn();
     const onClose = vi.fn();
-    render(
+    await render(
       <I18nWrapper>
         <EditInstructorPhotoModal
           {...baseProps}

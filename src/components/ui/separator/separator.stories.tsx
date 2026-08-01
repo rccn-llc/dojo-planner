@@ -15,7 +15,7 @@ type Story = StoryObj<typeof meta>;
 
 export const Horizontal: Story = {
   render: () => (
-    <div className="w-[300px] space-y-4">
+    <div className="w-75 space-y-4">
       <div>
         <h3 className="text-lg font-semibold">Section 1</h3>
         <p className="text-sm text-gray-500">Content goes here</p>
@@ -31,7 +31,7 @@ export const Horizontal: Story = {
 
 export const Vertical: Story = {
   render: () => (
-    <div className="flex h-[100px] items-center gap-4">
+    <div className="flex h-25 items-center gap-4">
       <div>
         <h3 className="text-sm font-semibold">Left</h3>
         <p className="text-xs text-gray-500">Content</p>
@@ -47,7 +47,7 @@ export const Vertical: Story = {
 
 export const InMenu: Story = {
   render: () => (
-    <div className="w-[200px] overflow-hidden rounded-lg border">
+    <div className="w-50 overflow-hidden rounded-lg border">
       <button type="button" className="w-full px-4 py-2 text-left hover:bg-gray-100">
         Edit
       </button>
@@ -64,7 +64,7 @@ export const InMenu: Story = {
 
 export const WithText: Story = {
   render: () => (
-    <div className="w-[300px] space-y-4">
+    <div className="w-75 space-y-4">
       <div className="text-center">
         <div className="flex items-center gap-4">
           <Separator className="flex-1" />

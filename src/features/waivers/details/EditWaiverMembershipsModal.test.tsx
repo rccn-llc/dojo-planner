@@ -52,15 +52,15 @@ describe('EditWaiverMembershipsModal', () => {
   });
 
   it('should render dialog with correct title when open', async () => {
-    render(<EditWaiverMembershipsModal {...defaultProps} />);
+    await render(<EditWaiverMembershipsModal {...defaultProps} />);
 
     const heading = page.getByText('Edit Memberships');
 
     expect(heading).toBeTruthy();
   });
 
-  it('should not render dialog content when closed', () => {
-    render(<EditWaiverMembershipsModal {...defaultProps} isOpen={false} />);
+  it('should not render dialog content when closed', async () => {
+    await render(<EditWaiverMembershipsModal {...defaultProps} isOpen={false} />);
 
     const heading = page.getByText('Edit Memberships');
 
@@ -68,17 +68,17 @@ describe('EditWaiverMembershipsModal', () => {
   });
 
   it('should display description text', async () => {
-    render(<EditWaiverMembershipsModal {...defaultProps} />);
+    await render(<EditWaiverMembershipsModal {...defaultProps} />);
 
     const description = page.getByText('Select which membership plans require this waiver.');
 
     expect(description).toBeTruthy();
   });
 
-  it('should show loading skeletons while fetching plans', () => {
+  it('should show loading skeletons while fetching plans', async () => {
     mockListMembershipPlans.mockImplementation(() => new Promise(() => {}));
 
-    render(<EditWaiverMembershipsModal {...defaultProps} />);
+    await render(<EditWaiverMembershipsModal {...defaultProps} />);
 
     const skeletons = document.querySelectorAll('[data-slot="skeleton"]');
 
@@ -86,7 +86,7 @@ describe('EditWaiverMembershipsModal', () => {
   });
 
   it('should render membership plan checkboxes after loading', async () => {
-    render(<EditWaiverMembershipsModal {...defaultProps} />);
+    await render(<EditWaiverMembershipsModal {...defaultProps} />);
 
     await vi.waitFor(() => {
       expect(page.getByText('Adult BJJ Monthly').element()).toBeTruthy();
@@ -97,7 +97,7 @@ describe('EditWaiverMembershipsModal', () => {
   });
 
   it('should show pre-selected membership plans as checked', async () => {
-    render(<EditWaiverMembershipsModal {...defaultProps} />);
+    await render(<EditWaiverMembershipsModal {...defaultProps} />);
 
     await vi.waitFor(() => {
       expect(page.getByText('Adult BJJ Monthly').element()).toBeTruthy();
@@ -110,7 +110,7 @@ describe('EditWaiverMembershipsModal', () => {
   });
 
   it('should show non-selected membership plans as unchecked', async () => {
-    render(<EditWaiverMembershipsModal {...defaultProps} />);
+    await render(<EditWaiverMembershipsModal {...defaultProps} />);
 
     await vi.waitFor(() => {
       expect(page.getByText('Adult BJJ Monthly').element()).toBeTruthy();
@@ -125,7 +125,7 @@ describe('EditWaiverMembershipsModal', () => {
   });
 
   it('should toggle checkbox when clicked', async () => {
-    render(<EditWaiverMembershipsModal {...defaultProps} />);
+    await render(<EditWaiverMembershipsModal {...defaultProps} />);
 
     await vi.waitFor(() => {
       expect(page.getByText('Kids Program Quarterly').element()).toBeTruthy();
@@ -142,7 +142,7 @@ describe('EditWaiverMembershipsModal', () => {
   });
 
   it('should uncheck a previously checked checkbox when clicked', async () => {
-    render(<EditWaiverMembershipsModal {...defaultProps} />);
+    await render(<EditWaiverMembershipsModal {...defaultProps} />);
 
     await vi.waitFor(() => {
       expect(page.getByText('Adult BJJ Monthly').element()).toBeTruthy();
@@ -161,7 +161,7 @@ describe('EditWaiverMembershipsModal', () => {
   it('should show no plans message when no membership plans exist', async () => {
     mockListMembershipPlans.mockResolvedValue({ plans: [] });
 
-    render(<EditWaiverMembershipsModal {...defaultProps} />);
+    await render(<EditWaiverMembershipsModal {...defaultProps} />);
 
     await vi.waitFor(() => {
       expect(page.getByText('No membership plans found.').element()).toBeTruthy();
@@ -169,7 +169,7 @@ describe('EditWaiverMembershipsModal', () => {
   });
 
   it('should call onSave with selected membership IDs when save is clicked', async () => {
-    render(<EditWaiverMembershipsModal {...defaultProps} />);
+    await render(<EditWaiverMembershipsModal {...defaultProps} />);
 
     await vi.waitFor(() => {
       expect(page.getByText('Adult BJJ Monthly').element()).toBeTruthy();
@@ -184,7 +184,7 @@ describe('EditWaiverMembershipsModal', () => {
   });
 
   it('should call onSave with updated selection after toggling checkboxes', async () => {
-    render(<EditWaiverMembershipsModal {...defaultProps} />);
+    await render(<EditWaiverMembershipsModal {...defaultProps} />);
 
     await vi.waitFor(() => {
       expect(page.getByText('Adult BJJ Monthly').element()).toBeTruthy();
@@ -208,7 +208,7 @@ describe('EditWaiverMembershipsModal', () => {
   });
 
   it('should call onClose when cancel is clicked', async () => {
-    render(<EditWaiverMembershipsModal {...defaultProps} />);
+    await render(<EditWaiverMembershipsModal {...defaultProps} />);
 
     await vi.waitFor(() => {
       expect(page.getByText('Adult BJJ Monthly').element()).toBeTruthy();
@@ -226,7 +226,7 @@ describe('EditWaiverMembershipsModal', () => {
       resolvePromise = resolve;
     }));
 
-    render(<EditWaiverMembershipsModal {...defaultProps} onSave={slowOnSave} />);
+    await render(<EditWaiverMembershipsModal {...defaultProps} onSave={slowOnSave} />);
 
     await vi.waitFor(() => {
       expect(page.getByText('Adult BJJ Monthly').element()).toBeTruthy();
@@ -244,10 +244,10 @@ describe('EditWaiverMembershipsModal', () => {
     resolvePromise!();
   });
 
-  it('should disable save button while plans are loading', () => {
+  it('should disable save button while plans are loading', async () => {
     mockListMembershipPlans.mockImplementation(() => new Promise(() => {}));
 
-    render(<EditWaiverMembershipsModal {...defaultProps} />);
+    await render(<EditWaiverMembershipsModal {...defaultProps} />);
 
     const buttons = Array.from(document.querySelectorAll('button'));
     const saveButton = buttons.find(btn => btn.textContent?.includes('Save Changes'));
@@ -261,7 +261,7 @@ describe('EditWaiverMembershipsModal', () => {
       resolvePromise = resolve;
     }));
 
-    render(<EditWaiverMembershipsModal {...defaultProps} onSave={slowOnSave} />);
+    await render(<EditWaiverMembershipsModal {...defaultProps} onSave={slowOnSave} />);
 
     await vi.waitFor(() => {
       expect(page.getByText('Adult BJJ Monthly').element()).toBeTruthy();
@@ -280,14 +280,14 @@ describe('EditWaiverMembershipsModal', () => {
     resolvePromise!();
   });
 
-  it('should fetch membership plans when dialog opens', () => {
-    render(<EditWaiverMembershipsModal {...defaultProps} />);
+  it('should fetch membership plans when dialog opens', async () => {
+    await render(<EditWaiverMembershipsModal {...defaultProps} />);
 
     expect(mockListMembershipPlans).toHaveBeenCalledTimes(1);
   });
 
-  it('should not fetch membership plans when dialog is closed', () => {
-    render(<EditWaiverMembershipsModal {...defaultProps} isOpen={false} />);
+  it('should not fetch membership plans when dialog is closed', async () => {
+    await render(<EditWaiverMembershipsModal {...defaultProps} isOpen={false} />);
 
     expect(mockListMembershipPlans).not.toHaveBeenCalled();
   });
@@ -295,7 +295,7 @@ describe('EditWaiverMembershipsModal', () => {
   it('should handle fetch error gracefully', async () => {
     mockListMembershipPlans.mockRejectedValue(new Error('Network error'));
 
-    render(<EditWaiverMembershipsModal {...defaultProps} />);
+    await render(<EditWaiverMembershipsModal {...defaultProps} />);
 
     // Should render without crashing and show no plans
     await vi.waitFor(() => {
@@ -306,7 +306,7 @@ describe('EditWaiverMembershipsModal', () => {
   });
 
   it('should reset selection to current membership IDs when cancel is clicked after toggling', async () => {
-    render(<EditWaiverMembershipsModal {...defaultProps} />);
+    await render(<EditWaiverMembershipsModal {...defaultProps} />);
 
     await vi.waitFor(() => {
       expect(page.getByText('Adult BJJ Monthly').element()).toBeTruthy();

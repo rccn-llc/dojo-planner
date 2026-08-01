@@ -50,14 +50,14 @@ describe('MemberDetailAttendance', () => {
   };
 
   describe('Render method', () => {
-    it('should render attendance history section title', () => {
-      render(<MemberDetailAttendance {...mockProps} />);
+    it('should render attendance history section title', async () => {
+      await render(<MemberDetailAttendance {...mockProps} />);
 
       expect(page.getByRole('heading', { name: 'title' })).toBeInTheDocument();
     });
 
-    it('should render table headers on desktop view', () => {
-      render(<MemberDetailAttendance {...mockProps} />);
+    it('should render table headers on desktop view', async () => {
+      await render(<MemberDetailAttendance {...mockProps} />);
 
       const classHeaders = page.getByText('table_class');
       const dateHeaders = page.getByText('table_date');
@@ -70,8 +70,8 @@ describe('MemberDetailAttendance', () => {
       expect(instructorHeaders.first()).toBeInTheDocument();
     });
 
-    it('should render class names in history', () => {
-      render(<MemberDetailAttendance {...mockProps} />);
+    it('should render class names in history', async () => {
+      await render(<MemberDetailAttendance {...mockProps} />);
 
       // Use first() because content appears in both desktop table and mobile card views
       expect(page.getByText('BJJ Fundamentals I').first()).toBeInTheDocument();
@@ -79,24 +79,24 @@ describe('MemberDetailAttendance', () => {
       expect(page.getByText('Open Mat').first()).toBeInTheDocument();
     });
 
-    it('should render dates in history', () => {
-      render(<MemberDetailAttendance {...mockProps} />);
+    it('should render dates in history', async () => {
+      await render(<MemberDetailAttendance {...mockProps} />);
 
       expect(page.getByText('Jan 10, 2026').first()).toBeInTheDocument();
       expect(page.getByText('Jan 9, 2026').first()).toBeInTheDocument();
       expect(page.getByText('Jan 5, 2026').first()).toBeInTheDocument();
     });
 
-    it('should render times in history', () => {
-      render(<MemberDetailAttendance {...mockProps} />);
+    it('should render times in history', async () => {
+      await render(<MemberDetailAttendance {...mockProps} />);
 
       expect(page.getByText('6:00 PM - 7:00 PM').first()).toBeInTheDocument();
       expect(page.getByText('6:00 PM - 7:30 PM').first()).toBeInTheDocument();
       expect(page.getByText('10:00 AM - 12:00 PM').first()).toBeInTheDocument();
     });
 
-    it('should render instructors in history', () => {
-      render(<MemberDetailAttendance {...mockProps} />);
+    it('should render instructors in history', async () => {
+      await render(<MemberDetailAttendance {...mockProps} />);
 
       expect(page.getByText('Coach Alex').first()).toBeInTheDocument();
       expect(page.getByText('Professor Ivan').first()).toBeInTheDocument();
@@ -105,70 +105,70 @@ describe('MemberDetailAttendance', () => {
   });
 
   describe('Empty state', () => {
-    it('should render no attendance message when records array is empty', () => {
+    it('should render no attendance message when records array is empty', async () => {
       const propsWithNoAttendance = {
         ...mockProps,
         attendanceRecords: [],
       };
-      render(<MemberDetailAttendance {...propsWithNoAttendance} />);
+      await render(<MemberDetailAttendance {...propsWithNoAttendance} />);
 
       expect(page.getByText('no_attendance')).toBeInTheDocument();
     });
   });
 
   describe('Punchcard info', () => {
-    it('should not render punchcard section when punchcardInfo is null', () => {
-      render(<MemberDetailAttendance {...mockProps} />);
+    it('should not render punchcard section when punchcardInfo is null', async () => {
+      await render(<MemberDetailAttendance {...mockProps} />);
 
       expect(page.getByText('punchcard_info_title')).not.toBeInTheDocument();
     });
 
-    it('should render punchcard section when punchcardInfo is provided', () => {
+    it('should render punchcard section when punchcardInfo is provided', async () => {
       const propsWithPunchcard = {
         ...mockProps,
         punchcardInfo: mockPunchcardInfo,
       };
-      render(<MemberDetailAttendance {...propsWithPunchcard} />);
+      await render(<MemberDetailAttendance {...propsWithPunchcard} />);
 
       expect(page.getByRole('heading', { name: 'punchcard_info_title' })).toBeInTheDocument();
     });
 
-    it('should render classes remaining', () => {
+    it('should render classes remaining', async () => {
       const propsWithPunchcard = {
         ...mockProps,
         punchcardInfo: mockPunchcardInfo,
       };
-      render(<MemberDetailAttendance {...propsWithPunchcard} />);
+      await render(<MemberDetailAttendance {...propsWithPunchcard} />);
 
       expect(page.getByText('classes_remaining')).toBeInTheDocument();
       // Use first() because the number may appear in attendance table dates
       expect(page.getByText('6').first()).toBeInTheDocument();
     });
 
-    it('should render classes used', () => {
+    it('should render classes used', async () => {
       const propsWithPunchcard = {
         ...mockProps,
         punchcardInfo: mockPunchcardInfo,
       };
-      render(<MemberDetailAttendance {...propsWithPunchcard} />);
+      await render(<MemberDetailAttendance {...propsWithPunchcard} />);
 
       expect(page.getByText('classes_used')).toBeInTheDocument();
       expect(page.getByText('4')).toBeInTheDocument();
     });
 
-    it('should render total classes', () => {
+    it('should render total classes', async () => {
       const propsWithPunchcard = {
         ...mockProps,
         punchcardInfo: mockPunchcardInfo,
       };
-      render(<MemberDetailAttendance {...propsWithPunchcard} />);
+      await render(<MemberDetailAttendance {...propsWithPunchcard} />);
 
       expect(page.getByText('total_classes')).toBeInTheDocument();
       // Use first() because the number may appear in attendance table dates
       expect(page.getByText('10').first()).toBeInTheDocument();
     });
 
-    it('should show low classes remaining in destructive color', () => {
+    it('should show low classes remaining in destructive color', async () => {
       const lowClassesInfo: PunchcardInfo = {
         totalClasses: 10,
         classesUsed: 8,
@@ -178,7 +178,7 @@ describe('MemberDetailAttendance', () => {
         ...mockProps,
         punchcardInfo: lowClassesInfo,
       };
-      render(<MemberDetailAttendance {...propsWithLowClasses} />);
+      await render(<MemberDetailAttendance {...propsWithLowClasses} />);
 
       // The remaining classes (2) should be visible
       // Use first() because the number may appear in attendance table dates
@@ -199,8 +199,8 @@ describe('MemberDetailAttendance', () => {
       attendanceRecords: sortableRecords,
     };
 
-    it('should render sortable column headers as buttons', () => {
-      render(<MemberDetailAttendance {...sortableProps} />);
+    it('should render sortable column headers as buttons', async () => {
+      await render(<MemberDetailAttendance {...sortableProps} />);
 
       const classButton = page.getByRole('button', { name: /table_class/i }).first();
       const dateButton = page.getByRole('button', { name: /table_date/i }).first();
@@ -213,15 +213,15 @@ describe('MemberDetailAttendance', () => {
       expect(instructorButton).toBeInTheDocument();
     });
 
-    it('should default to sorting by date descending (newest first)', () => {
-      render(<MemberDetailAttendance {...sortableProps} />);
+    it('should default to sorting by date descending (newest first)', async () => {
+      await render(<MemberDetailAttendance {...sortableProps} />);
 
       // Default sort is by date descending, so Jan 10 (newest) should appear first
       expect(page.getByText('Jan 10, 2026').first()).toBeInTheDocument();
     });
 
     it('should sort by date ascending when date header is clicked', async () => {
-      render(<MemberDetailAttendance {...sortableProps} />);
+      await render(<MemberDetailAttendance {...sortableProps} />);
 
       const dateButton = page.getByRole('button', { name: /table_date/i }).first();
       await dateButton.click();
@@ -232,7 +232,7 @@ describe('MemberDetailAttendance', () => {
     });
 
     it('should sort by class name when class header is clicked', async () => {
-      render(<MemberDetailAttendance {...sortableProps} />);
+      await render(<MemberDetailAttendance {...sortableProps} />);
 
       const classButton = page.getByRole('button', { name: /table_class/i }).first();
       await classButton.click();
@@ -243,7 +243,7 @@ describe('MemberDetailAttendance', () => {
     });
 
     it('should toggle class sort direction when clicked twice', async () => {
-      render(<MemberDetailAttendance {...sortableProps} />);
+      await render(<MemberDetailAttendance {...sortableProps} />);
 
       const classButton = page.getByRole('button', { name: /table_class/i }).first();
 
@@ -260,7 +260,7 @@ describe('MemberDetailAttendance', () => {
     });
 
     it('should sort by instructor when instructor header is clicked', async () => {
-      render(<MemberDetailAttendance {...sortableProps} />);
+      await render(<MemberDetailAttendance {...sortableProps} />);
 
       const instructorButton = page.getByRole('button', { name: /table_instructor/i }).first();
       await instructorButton.click();
@@ -283,14 +283,14 @@ describe('MemberDetailAttendance', () => {
       attendanceRecords: searchableRecords,
     };
 
-    it('should render search input when records exist', () => {
-      render(<MemberDetailAttendance {...searchableProps} />);
+    it('should render search input when records exist', async () => {
+      await render(<MemberDetailAttendance {...searchableProps} />);
 
       expect(page.getByRole('textbox', { name: 'search_placeholder' })).toBeInTheDocument();
     });
 
-    it('should not render search input when no records exist', () => {
-      render(<MemberDetailAttendance {...mockProps} attendanceRecords={[]} />);
+    it('should not render search input when no records exist', async () => {
+      await render(<MemberDetailAttendance {...mockProps} attendanceRecords={[]} />);
 
       const searchInputs = page.getByRole('textbox', { name: 'search_placeholder' });
 
@@ -298,7 +298,7 @@ describe('MemberDetailAttendance', () => {
     });
 
     it('should filter records by class name', async () => {
-      render(<MemberDetailAttendance {...searchableProps} />);
+      await render(<MemberDetailAttendance {...searchableProps} />);
 
       const searchInput = page.getByRole('textbox', { name: 'search_placeholder' });
       await userEvent.type(searchInput, 'Open Mat');
@@ -312,7 +312,7 @@ describe('MemberDetailAttendance', () => {
     });
 
     it('should filter records by instructor', async () => {
-      render(<MemberDetailAttendance {...searchableProps} />);
+      await render(<MemberDetailAttendance {...searchableProps} />);
 
       const searchInput = page.getByRole('textbox', { name: 'search_placeholder' });
       await userEvent.type(searchInput, 'Coach Alex');
@@ -325,7 +325,7 @@ describe('MemberDetailAttendance', () => {
     });
 
     it('should filter records by date', async () => {
-      render(<MemberDetailAttendance {...searchableProps} />);
+      await render(<MemberDetailAttendance {...searchableProps} />);
 
       const searchInput = page.getByRole('textbox', { name: 'search_placeholder' });
       await userEvent.type(searchInput, 'Jan 5');
@@ -338,7 +338,7 @@ describe('MemberDetailAttendance', () => {
     });
 
     it('should filter records by time', async () => {
-      render(<MemberDetailAttendance {...searchableProps} />);
+      await render(<MemberDetailAttendance {...searchableProps} />);
 
       const searchInput = page.getByRole('textbox', { name: 'search_placeholder' });
       await userEvent.type(searchInput, '10:00 AM');
@@ -351,7 +351,7 @@ describe('MemberDetailAttendance', () => {
     });
 
     it('should be case-insensitive search', async () => {
-      render(<MemberDetailAttendance {...searchableProps} />);
+      await render(<MemberDetailAttendance {...searchableProps} />);
 
       const searchInput = page.getByRole('textbox', { name: 'search_placeholder' });
       await userEvent.type(searchInput, 'OPEN MAT');
@@ -361,7 +361,7 @@ describe('MemberDetailAttendance', () => {
     });
 
     it('should show no matching records message when search yields no results', async () => {
-      render(<MemberDetailAttendance {...searchableProps} />);
+      await render(<MemberDetailAttendance {...searchableProps} />);
 
       const searchInput = page.getByRole('textbox', { name: 'search_placeholder' });
       await userEvent.type(searchInput, 'nonexistent class xyz');
@@ -371,7 +371,7 @@ describe('MemberDetailAttendance', () => {
     });
 
     it('should show all records when search is cleared', async () => {
-      render(<MemberDetailAttendance {...searchableProps} />);
+      await render(<MemberDetailAttendance {...searchableProps} />);
 
       const searchInput = page.getByRole('textbox', { name: 'search_placeholder' });
 
@@ -393,8 +393,8 @@ describe('MemberDetailAttendance', () => {
   });
 
   describe('Mobile view', () => {
-    it('should render mobile card view structure', () => {
-      render(<MemberDetailAttendance {...mockProps} />);
+    it('should render mobile card view structure', async () => {
+      await render(<MemberDetailAttendance {...mockProps} />);
 
       // Mobile cards should exist (hidden on lg screens)
       const mobileContainer = page.getByText('BJJ Fundamentals I').first();
@@ -404,13 +404,13 @@ describe('MemberDetailAttendance', () => {
   });
 
   describe('Multiple records', () => {
-    it('should render all records in the list', () => {
+    it('should render all records in the list', async () => {
       const manyRecords: AttendanceRecord[] = [
         { id: '1', className: 'Class A', date: 'Jan 1, 2026', time: '9:00 AM', instructor: 'Instructor A' },
         { id: '2', className: 'Class B', date: 'Jan 2, 2026', time: '10:00 AM', instructor: 'Instructor B' },
         { id: '3', className: 'Class C', date: 'Jan 3, 2026', time: '11:00 AM', instructor: 'Instructor C' },
       ];
-      render(<MemberDetailAttendance {...mockProps} attendanceRecords={manyRecords} />);
+      await render(<MemberDetailAttendance {...mockProps} attendanceRecords={manyRecords} />);
 
       expect(page.getByText('Class A').first()).toBeInTheDocument();
       expect(page.getByText('Class B').first()).toBeInTheDocument();
@@ -419,8 +419,8 @@ describe('MemberDetailAttendance', () => {
   });
 
   describe('Loading state', () => {
-    it('shows the loading message instead of the empty state when isLoading is true', () => {
-      render(
+    it('shows the loading message instead of the empty state when isLoading is true', async () => {
+      await render(
         <MemberDetailAttendance
           {...mockProps}
           attendanceRecords={[]}
@@ -432,8 +432,8 @@ describe('MemberDetailAttendance', () => {
       expect(page.getByText('no_attendance').elements().length).toBe(0);
     });
 
-    it('falls back to the empty state when not loading and there are no records', () => {
-      render(
+    it('falls back to the empty state when not loading and there are no records', async () => {
+      await render(
         <MemberDetailAttendance
           {...mockProps}
           attendanceRecords={[]}

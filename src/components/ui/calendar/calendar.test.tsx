@@ -5,31 +5,31 @@ import { Calendar } from './calendar';
 
 describe('Calendar', () => {
   describe('Rendering', () => {
-    it('should render calendar with default props', () => {
-      render(<Calendar />);
+    it('should render calendar with default props', async () => {
+      await render(<Calendar />);
 
       // Calendar should be visible with month grid
       expect(page.getByRole('grid')).toBeInTheDocument();
     });
 
-    it('should render with selected date', () => {
+    it('should render with selected date', async () => {
       const selectedDate = new Date(2024, 5, 15); // June 15, 2024
-      render(<Calendar mode="single" selected={selectedDate} />);
+      await render(<Calendar mode="single" selected={selectedDate} />);
 
       // Calendar grid should be visible
       expect(page.getByRole('grid')).toBeInTheDocument();
     });
 
-    it('should apply custom className', () => {
-      render(<Calendar className="w-96" data-testid="test-calendar" />);
+    it('should apply custom className', async () => {
+      await render(<Calendar className="w-96" data-testid="test-calendar" />);
 
       const calendar = page.getByTestId('test-calendar');
 
       expect(calendar).toHaveClass('w-96');
     });
 
-    it('should render navigation buttons', () => {
-      render(<Calendar />);
+    it('should render navigation buttons', async () => {
+      await render(<Calendar />);
 
       // Should have previous and next navigation buttons
       const buttons = page.getByRole('button').elements();
@@ -41,7 +41,7 @@ describe('Calendar', () => {
   describe('Navigation', () => {
     it('should navigate to next month when next button is clicked', async () => {
       const today = new Date(2024, 5, 15); // June 2024
-      render(<Calendar mode="single" defaultMonth={today} />);
+      await render(<Calendar mode="single" defaultMonth={today} />);
 
       // Get the next button (usually has an aria-label or specific position)
       const nextButton = page.getByRole('button', { name: /next/i });
@@ -53,7 +53,7 @@ describe('Calendar', () => {
 
     it('should navigate to previous month when previous button is clicked', async () => {
       const today = new Date(2024, 5, 15); // June 2024
-      render(<Calendar mode="single" defaultMonth={today} />);
+      await render(<Calendar mode="single" defaultMonth={today} />);
 
       // Get the previous button
       const prevButton = page.getByRole('button', { name: /previous/i });
@@ -67,7 +67,7 @@ describe('Calendar', () => {
   describe('Date selection', () => {
     it('should call onSelect when a date is clicked', async () => {
       const onSelect = vi.fn();
-      render(
+      await render(
         <Calendar
           mode="single"
           onSelect={onSelect}
@@ -82,9 +82,9 @@ describe('Calendar', () => {
       expect(onSelect).toHaveBeenCalledTimes(1);
     });
 
-    it('should highlight selected date', () => {
+    it('should highlight selected date', async () => {
       const selectedDate = new Date(2024, 5, 15);
-      render(
+      await render(
         <Calendar
           mode="single"
           selected={selectedDate}
@@ -100,8 +100,8 @@ describe('Calendar', () => {
   });
 
   describe('WeekNumber display', () => {
-    it('should render week numbers when showWeekNumber is true', () => {
-      render(
+    it('should render week numbers when showWeekNumber is true', async () => {
+      await render(
         <Calendar
           mode="single"
           showWeekNumber
@@ -115,8 +115,8 @@ describe('Calendar', () => {
   });
 
   describe('Dropdown caption layout', () => {
-    it('should render with dropdown caption layout', () => {
-      render(
+    it('should render with dropdown caption layout', async () => {
+      await render(
         <Calendar
           mode="single"
           captionLayout="dropdown"
@@ -130,8 +130,8 @@ describe('Calendar', () => {
   });
 
   describe('Button variant', () => {
-    it('should apply outline button variant', () => {
-      render(
+    it('should apply outline button variant', async () => {
+      await render(
         <Calendar
           mode="single"
           buttonVariant="outline"
@@ -144,8 +144,8 @@ describe('Calendar', () => {
   });
 
   describe('Outside days', () => {
-    it('should hide outside days when showOutsideDays is false', () => {
-      render(
+    it('should hide outside days when showOutsideDays is false', async () => {
+      await render(
         <Calendar
           mode="single"
           showOutsideDays={false}
@@ -162,7 +162,7 @@ describe('Calendar', () => {
       const disabledDate = new Date(2024, 5, 15);
       const onSelect = vi.fn();
 
-      render(
+      await render(
         <Calendar
           mode="single"
           disabled={[disabledDate]}

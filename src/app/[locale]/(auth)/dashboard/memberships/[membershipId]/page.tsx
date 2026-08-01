@@ -29,6 +29,7 @@ import { MembershipContractTermsCard } from '@/features/memberships/details/Memb
 import { MembershipPaymentDetailsCard } from '@/features/memberships/details/MembershipPaymentDetailsCard';
 import { MembershipStatsCard } from '@/features/memberships/details/MembershipStatsCard';
 import { transformDetailDataToDb } from '@/features/memberships/membershipPlanTransformers';
+import { dedupeRequest } from '@/hooks/dedupeRequest';
 import { useHasRole } from '@/hooks/useHasRole';
 import { invalidateMembershipPlansCache, useMembershipPlansCache } from '@/hooks/useMembershipPlansCache';
 import { client } from '@/libs/Orpc';
@@ -210,7 +211,7 @@ export default function MembershipDetailPage({ params }: { params: Promise<PageP
     let cancelled = false;
     const fetchWaivers = async () => {
       try {
-        const result = await client.waivers.getWaiversForMembership({ membershipPlanId: planId });
+        const result = await dedupeRequest(`waivers.getWaiversForMembership:${JSON.stringify({ membershipPlanId: planId })}`, async () => client.waivers.getWaiversForMembership({ membershipPlanId: planId }));
         const waivers = result.waivers || [];
         if (!cancelled && waivers.length > 0) {
           const waiver = waivers[0] as { id: string; name: string; version: number };
@@ -348,7 +349,7 @@ export default function MembershipDetailPage({ params }: { params: Promise<PageP
       <div className="flex items-center gap-4">
         <Link href="/dashboard/memberships">
           <Button variant="ghost" size="sm">
-            <ArrowLeft className="mr-2 h-4 w-4" />
+            <ArrowLeft className="mr-2 size-4" />
             {t('back_to_memberships')}
           </Button>
         </Link>
@@ -482,7 +483,7 @@ export default function MembershipDetailPage({ params }: { params: Promise<PageP
             variant="destructive"
             onClick={() => setIsDeleteDialogOpen(true)}
           >
-            <Trash2 className="mr-2 h-4 w-4" />
+            <Trash2 className="mr-2 size-4" />
             {t('delete_button')}
           </Button>
         </div>

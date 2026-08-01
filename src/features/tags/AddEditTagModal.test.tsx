@@ -16,8 +16,8 @@ describe('AddEditTagModal', () => {
     vi.clearAllMocks();
   });
 
-  it('renders the create-mode title', () => {
-    render(
+  it('renders the create-mode title', async () => {
+    await render(
       <I18nWrapper>
         <AddEditTagModal {...baseProps} />
       </I18nWrapper>,
@@ -26,8 +26,8 @@ describe('AddEditTagModal', () => {
     expect(page.getByRole('heading', { name: /add.*tag/i })).toBeInTheDocument();
   });
 
-  it('renders the edit-mode title and pre-fills the inputs', () => {
-    render(
+  it('renders the edit-mode title and pre-fills the inputs', async () => {
+    await render(
       <I18nWrapper>
         <AddEditTagModal
           {...baseProps}
@@ -45,8 +45,8 @@ describe('AddEditTagModal', () => {
     expect(nameInput).toHaveValue('Beginner');
   });
 
-  it('disables save when name is empty', () => {
-    render(
+  it('disables save when name is empty', async () => {
+    await render(
       <I18nWrapper>
         <AddEditTagModal {...baseProps} />
       </I18nWrapper>,
@@ -59,7 +59,7 @@ describe('AddEditTagModal', () => {
 
   it('calls onSubmitAction with trimmed name and chosen color', async () => {
     const onSubmitAction = vi.fn(async () => undefined);
-    render(
+    await render(
       <I18nWrapper>
         <AddEditTagModal {...baseProps} onSubmitAction={onSubmitAction} />
       </I18nWrapper>,
@@ -80,7 +80,7 @@ describe('AddEditTagModal', () => {
     const onSubmitAction = vi.fn(async () => 'A tag named "Beginner" already exists for this entity type.');
     const onCloseAction = vi.fn();
 
-    render(
+    await render(
       <I18nWrapper>
         <AddEditTagModal
           {...baseProps}
@@ -102,7 +102,7 @@ describe('AddEditTagModal', () => {
     const onSubmitAction = vi.fn(async () => undefined);
     const onCloseAction = vi.fn();
 
-    render(
+    await render(
       <I18nWrapper>
         <AddEditTagModal
           {...baseProps}
@@ -119,8 +119,8 @@ describe('AddEditTagModal', () => {
     expect(onCloseAction).toHaveBeenCalled();
   });
 
-  it('does not render when isOpen is false', () => {
-    render(
+  it('does not render when isOpen is false', async () => {
+    await render(
       <I18nWrapper>
         <AddEditTagModal {...baseProps} isOpen={false} />
       </I18nWrapper>,

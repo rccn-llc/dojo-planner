@@ -50,33 +50,33 @@ describe('MemberDetailOverview', () => {
   };
 
   describe('Render method', () => {
-    it('should render member header with name', () => {
-      render(<I18nWrapper><MemberDetailOverview {...mockProps} /></I18nWrapper>);
+    it('should render member header with name', async () => {
+      await render(<I18nWrapper><MemberDetailOverview {...mockProps} /></I18nWrapper>);
 
       expect(page.getByRole('heading', { name: 'Anika Smith' })).toBeInTheDocument();
     });
 
-    it('should render member badges', () => {
-      render(<I18nWrapper><MemberDetailOverview {...mockProps} /></I18nWrapper>);
+    it('should render member badges', async () => {
+      await render(<I18nWrapper><MemberDetailOverview {...mockProps} /></I18nWrapper>);
 
       expect(page.getByText('Billing Contact')).toBeInTheDocument();
     });
 
-    it('should render contact information section', () => {
-      render(<I18nWrapper><MemberDetailOverview {...mockProps} /></I18nWrapper>);
+    it('should render contact information section', async () => {
+      await render(<I18nWrapper><MemberDetailOverview {...mockProps} /></I18nWrapper>);
 
       expect(page.getByText('Contact Information')).toBeInTheDocument();
       expect(page.getByText('1234 S Side Road, San Francisco CA 94125')).toBeInTheDocument();
     });
 
-    it('should render family members section', () => {
-      render(<I18nWrapper><MemberDetailOverview {...mockProps} /></I18nWrapper>);
+    it('should render family members section', async () => {
+      await render(<I18nWrapper><MemberDetailOverview {...mockProps} /></I18nWrapper>);
 
       expect(page.getByText('John Smith')).toBeInTheDocument();
     });
 
-    it('should render action buttons', () => {
-      render(<I18nWrapper><MemberDetailOverview {...mockProps} /></I18nWrapper>);
+    it('should render action buttons', async () => {
+      await render(<I18nWrapper><MemberDetailOverview {...mockProps} /></I18nWrapper>);
 
       expect(page.getByRole('button', { name: 'Edit Details' }).first()).toBeInTheDocument();
     });
@@ -84,7 +84,7 @@ describe('MemberDetailOverview', () => {
 
   describe('Actions', () => {
     it('should call onEditDetails when edit button clicked', async () => {
-      render(<I18nWrapper><MemberDetailOverview {...mockProps} /></I18nWrapper>);
+      await render(<I18nWrapper><MemberDetailOverview {...mockProps} /></I18nWrapper>);
       const editButton = page.getByRole('button', { name: 'Edit Details' }).first();
       await editButton.click();
 
@@ -92,7 +92,7 @@ describe('MemberDetailOverview', () => {
     });
 
     it('should call onAddFamilyMember when add family clicked', async () => {
-      render(<I18nWrapper><MemberDetailOverview {...mockProps} /></I18nWrapper>);
+      await render(<I18nWrapper><MemberDetailOverview {...mockProps} /></I18nWrapper>);
       const addButton = page.getByRole('button', { name: 'Add Family Member' });
       await addButton.click();
 
@@ -100,7 +100,7 @@ describe('MemberDetailOverview', () => {
     });
 
     it('should call onChangeMembership', async () => {
-      render(<I18nWrapper><MemberDetailOverview {...mockProps} /></I18nWrapper>);
+      await render(<I18nWrapper><MemberDetailOverview {...mockProps} /></I18nWrapper>);
       const changeButton = page.getByRole('button', { name: 'Change Membership' }).first();
       await changeButton.click();
 
@@ -108,7 +108,7 @@ describe('MemberDetailOverview', () => {
     });
 
     it('should call onHoldMembership', async () => {
-      render(<I18nWrapper><MemberDetailOverview {...mockProps} /></I18nWrapper>);
+      await render(<I18nWrapper><MemberDetailOverview {...mockProps} /></I18nWrapper>);
       const holdButton = page.getByRole('button', { name: 'Hold' });
       await holdButton.click();
 
@@ -117,24 +117,24 @@ describe('MemberDetailOverview', () => {
   });
 
   describe('Empty states', () => {
-    it('should render empty family members list with add button', () => {
+    it('should render empty family members list with add button', async () => {
       const propsWithoutFamily = {
         ...mockProps,
         familyMembers: [],
       };
-      render(<I18nWrapper><MemberDetailOverview {...propsWithoutFamily} /></I18nWrapper>);
+      await render(<I18nWrapper><MemberDetailOverview {...propsWithoutFamily} /></I18nWrapper>);
 
       expect(page.getByRole('button', { name: 'Add Family Member' })).toBeInTheDocument();
     });
   });
 
   describe('Avatar rendering', () => {
-    it('should render avatar with initials when no photo', () => {
+    it('should render avatar with initials when no photo', async () => {
       const propsWithoutPhoto = {
         ...mockProps,
         photoUrl: undefined,
       };
-      render(<I18nWrapper><MemberDetailOverview {...propsWithoutPhoto} /></I18nWrapper>);
+      await render(<I18nWrapper><MemberDetailOverview {...propsWithoutPhoto} /></I18nWrapper>);
 
       expect(page.getByText('AS').first()).toBeInTheDocument();
     });

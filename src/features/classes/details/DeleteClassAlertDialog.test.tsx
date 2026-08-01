@@ -34,40 +34,40 @@ describe('DeleteClassAlertDialog', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the dialog with title when open', () => {
-    render(<DeleteClassAlertDialog {...defaultProps} />);
+  it('should render the dialog with title when open', async () => {
+    await render(<DeleteClassAlertDialog {...defaultProps} />);
 
     const heading = page.getByText('Are you absolutely sure?');
 
     expect(heading).toBeTruthy();
   });
 
-  it('should not render when isOpen is false', () => {
-    render(<DeleteClassAlertDialog {...defaultProps} isOpen={false} />);
+  it('should not render when isOpen is false', async () => {
+    await render(<DeleteClassAlertDialog {...defaultProps} isOpen={false} />);
 
     const heading = document.body.textContent?.includes('Are you absolutely sure?');
 
     expect(heading).toBe(false);
   });
 
-  it('should render description with class name', () => {
-    render(<DeleteClassAlertDialog {...defaultProps} />);
+  it('should render description with class name', async () => {
+    await render(<DeleteClassAlertDialog {...defaultProps} />);
 
     const description = page.getByText(/This action cannot be undone. This will permanently delete the "BJJ Fundamentals I" class/);
 
     expect(description).toBeTruthy();
   });
 
-  it('should render Cancel button', () => {
-    render(<DeleteClassAlertDialog {...defaultProps} />);
+  it('should render Cancel button', async () => {
+    await render(<DeleteClassAlertDialog {...defaultProps} />);
 
     const cancelButton = page.getByText('Cancel');
 
     expect(cancelButton).toBeTruthy();
   });
 
-  it('should render Delete button', () => {
-    render(<DeleteClassAlertDialog {...defaultProps} />);
+  it('should render Delete button', async () => {
+    await render(<DeleteClassAlertDialog {...defaultProps} />);
 
     const deleteButton = page.getByText('Delete');
 
@@ -75,7 +75,7 @@ describe('DeleteClassAlertDialog', () => {
   });
 
   it('should call onCloseAction when Cancel button is clicked', async () => {
-    render(<DeleteClassAlertDialog {...defaultProps} />);
+    await render(<DeleteClassAlertDialog {...defaultProps} />);
 
     const cancelButton = page.getByText('Cancel');
     await userEvent.click(cancelButton);
@@ -84,7 +84,7 @@ describe('DeleteClassAlertDialog', () => {
   });
 
   it('should call onConfirmAction when Delete button is clicked', async () => {
-    render(<DeleteClassAlertDialog {...defaultProps} />);
+    await render(<DeleteClassAlertDialog {...defaultProps} />);
 
     const deleteButton = page.getByRole('button', { name: 'Delete' });
     await userEvent.click(deleteButton);
@@ -92,8 +92,8 @@ describe('DeleteClassAlertDialog', () => {
     expect(mockOnConfirmAction).toHaveBeenCalledTimes(1);
   });
 
-  it('should display different class names', () => {
-    render(<DeleteClassAlertDialog {...defaultProps} classDisplayName="Advanced Sparring" />);
+  it('should display different class names', async () => {
+    await render(<DeleteClassAlertDialog {...defaultProps} classDisplayName="Advanced Sparring" />);
 
     const description = page.getByText(/This action cannot be undone. This will permanently delete the "Advanced Sparring" class/);
 

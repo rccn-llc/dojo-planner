@@ -65,8 +65,8 @@ describe('AddMemberModal', () => {
     vi.clearAllMocks();
   });
 
-  it('should not render dialog when isOpen is false', () => {
-    render(
+  it('should not render dialog when isOpen is false', async () => {
+    await render(
       <AddMemberModal
         isOpen={false}
         onCloseAction={mockHandlers.onCloseAction}
@@ -83,8 +83,8 @@ describe('AddMemberModal', () => {
     }
   });
 
-  it('should render dialog when isOpen is true', () => {
-    render(
+  it('should render dialog when isOpen is true', async () => {
+    await render(
       <AddMemberModal
         isOpen={true}
         onCloseAction={mockHandlers.onCloseAction}
@@ -96,8 +96,8 @@ describe('AddMemberModal', () => {
     expect(modal).toBeTruthy();
   });
 
-  it('should display dialog title', () => {
-    render(
+  it('should display dialog title', async () => {
+    await render(
       <AddMemberModal
         isOpen={true}
         onCloseAction={mockHandlers.onCloseAction}
@@ -110,8 +110,8 @@ describe('AddMemberModal', () => {
     expect(heading).toBeTruthy();
   });
 
-  it('should render buttons for wizard navigation', () => {
-    render(
+  it('should render buttons for wizard navigation', async () => {
+    await render(
       <AddMemberModal
         isOpen={true}
         onCloseAction={mockHandlers.onCloseAction}
@@ -129,8 +129,8 @@ describe('AddMemberModal', () => {
     }
   });
 
-  it('should have proper dialog structure', () => {
-    render(
+  it('should have proper dialog structure', async () => {
+    await render(
       <AddMemberModal
         isOpen={true}
         onCloseAction={mockHandlers.onCloseAction}
@@ -153,7 +153,7 @@ describe('AddMemberModal', () => {
   });
 
   it('should call onCloseAction when Cancel button is clicked', async () => {
-    render(
+    await render(
       <AddMemberModal
         isOpen={true}
         onCloseAction={mockHandlers.onCloseAction}
@@ -166,8 +166,8 @@ describe('AddMemberModal', () => {
     expect(mockHandlers.onCloseAction).toHaveBeenCalled();
   });
 
-  it('should start with member type step', () => {
-    render(
+  it('should start with member type step', async () => {
+    await render(
       <AddMemberModal
         isOpen={true}
         onCloseAction={mockHandlers.onCloseAction}

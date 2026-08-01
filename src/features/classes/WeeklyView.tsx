@@ -185,7 +185,7 @@ export function WeeklyView({ withFilters }: WeeklyViewProps = {}) {
 
               {/* Add New Class Button */}
               <Button>
-                <Plus className="h-4 w-4" />
+                <Plus className="size-4" />
                 <span className="ml-1 hidden sm:inline">Add New Class</span>
               </Button>
             </div>
@@ -301,7 +301,7 @@ export function WeeklyView({ withFilters }: WeeklyViewProps = {}) {
         {Object.entries(classColors).map(([className, color]) => (
           <div key={className} className="flex items-center gap-2">
             <div
-              className="h-3 w-3 rounded"
+              className="size-3 rounded"
               style={{ backgroundColor: color }}
             />
             <span className="text-xs text-foreground sm:text-sm">{className}</span>

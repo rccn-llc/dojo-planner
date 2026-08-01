@@ -54,7 +54,7 @@ export const EventCard = (props: EventCardProps) => {
         {/* Title and Event Badge */}
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-primary" />
+            <Calendar className="size-4 text-primary" />
             <Badge variant="default" className="bg-primary text-primary-foreground">
               {t('event_badge')}
             </Badge>
@@ -101,7 +101,7 @@ export const EventCard = (props: EventCardProps) => {
               <div className="mt-2 flex flex-col gap-2">
                 {instructors.map(instructor => (
                   <div key={instructor.name} className="flex items-center gap-2">
-                    <Avatar className="h-6 w-6">
+                    <Avatar className="size-6">
                       <AvatarImage src={instructor.photoUrl} alt={instructor.name} />
                       <AvatarFallback>{getInitials(instructor.name)}</AvatarFallback>
                     </Avatar>
@@ -122,7 +122,7 @@ export const EventCard = (props: EventCardProps) => {
                 aria-label={t('edit_button_aria_label')}
                 title={t('edit_button_aria_label')}
               >
-                <Edit className="h-4 w-4" />
+                <Edit className="size-4" />
               </Button>
             </div>
           )}

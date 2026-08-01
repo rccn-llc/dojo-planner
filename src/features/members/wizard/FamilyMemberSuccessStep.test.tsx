@@ -31,7 +31,7 @@ describe('FamilyMemberSuccessStep', () => {
   });
 
   it('should display success title', async () => {
-    render(
+    await render(
       <FamilyMemberSuccessStep
         memberName="Alice Smith"
         completedMembers={[]}
@@ -44,7 +44,7 @@ describe('FamilyMemberSuccessStep', () => {
   });
 
   it('should display member name in description', async () => {
-    render(
+    await render(
       <FamilyMemberSuccessStep
         memberName="Alice Smith"
         completedMembers={[]}
@@ -62,7 +62,7 @@ describe('FamilyMemberSuccessStep', () => {
       { id: 'member-2', name: 'Bob Smith' },
     ];
 
-    render(
+    await render(
       <FamilyMemberSuccessStep
         memberName="Carol Smith"
         completedMembers={completedMembers}
@@ -77,7 +77,7 @@ describe('FamilyMemberSuccessStep', () => {
   });
 
   it('should not display members section when no completed members', async () => {
-    render(
+    await render(
       <FamilyMemberSuccessStep
         memberName="Alice Smith"
         completedMembers={[]}
@@ -90,7 +90,7 @@ describe('FamilyMemberSuccessStep', () => {
   });
 
   it('should call onAddAnother when "Add Another" button is clicked', async () => {
-    render(
+    await render(
       <FamilyMemberSuccessStep
         memberName="Alice Smith"
         completedMembers={[]}
@@ -105,7 +105,7 @@ describe('FamilyMemberSuccessStep', () => {
   });
 
   it('should call onDone when "Done" button is clicked', async () => {
-    render(
+    await render(
       <FamilyMemberSuccessStep
         memberName="Alice Smith"
         completedMembers={[]}

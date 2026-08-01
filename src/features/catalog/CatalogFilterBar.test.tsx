@@ -103,7 +103,7 @@ describe('CatalogFilterBar', () => {
 
   describe('Rendering', () => {
     it('should render search input', async () => {
-      render(
+      await render(
         <CatalogFilterBar
           filters={defaultFilters}
           onFiltersChange={mockOnFiltersChange}
@@ -118,7 +118,7 @@ describe('CatalogFilterBar', () => {
     });
 
     it('should render type filter dropdown', async () => {
-      render(
+      await render(
         <CatalogFilterBar
           filters={defaultFilters}
           onFiltersChange={mockOnFiltersChange}
@@ -132,7 +132,7 @@ describe('CatalogFilterBar', () => {
     });
 
     it('should render category filter dropdown', async () => {
-      render(
+      await render(
         <CatalogFilterBar
           filters={defaultFilters}
           onFiltersChange={mockOnFiltersChange}
@@ -145,7 +145,7 @@ describe('CatalogFilterBar', () => {
     });
 
     it('should render stock filter dropdown', async () => {
-      render(
+      await render(
         <CatalogFilterBar
           filters={defaultFilters}
           onFiltersChange={mockOnFiltersChange}
@@ -160,7 +160,7 @@ describe('CatalogFilterBar', () => {
 
   describe('Search functionality', () => {
     it('should call onFiltersChange when search input changes', async () => {
-      render(
+      await render(
         <CatalogFilterBar
           filters={defaultFilters}
           onFiltersChange={mockOnFiltersChange}
@@ -176,7 +176,7 @@ describe('CatalogFilterBar', () => {
     });
 
     it('should update filter with each keystroke', async () => {
-      render(
+      await render(
         <CatalogFilterBar
           filters={defaultFilters}
           onFiltersChange={mockOnFiltersChange}
@@ -192,7 +192,7 @@ describe('CatalogFilterBar', () => {
     });
 
     it('should preserve other filter values when search changes', async () => {
-      render(
+      await render(
         <CatalogFilterBar
           filters={{ ...defaultFilters, type: 'merchandise' }}
           onFiltersChange={mockOnFiltersChange}
@@ -217,7 +217,7 @@ describe('CatalogFilterBar', () => {
 
   describe('Type filter functionality', () => {
     it('should show available types in dropdown', async () => {
-      render(
+      await render(
         <CatalogFilterBar
           filters={defaultFilters}
           onFiltersChange={mockOnFiltersChange}
@@ -236,7 +236,7 @@ describe('CatalogFilterBar', () => {
     });
 
     it('should call onFiltersChange when type is selected', async () => {
-      render(
+      await render(
         <CatalogFilterBar
           filters={defaultFilters}
           onFiltersChange={mockOnFiltersChange}
@@ -257,7 +257,7 @@ describe('CatalogFilterBar', () => {
     });
 
     it('should reset type filter when "All" is selected', async () => {
-      render(
+      await render(
         <CatalogFilterBar
           filters={{ ...defaultFilters, type: 'merchandise' }}
           onFiltersChange={mockOnFiltersChange}
@@ -281,7 +281,7 @@ describe('CatalogFilterBar', () => {
 
   describe('Category filter functionality', () => {
     it('should only show active categories in dropdown', async () => {
-      render(
+      await render(
         <CatalogFilterBar
           filters={defaultFilters}
           onFiltersChange={mockOnFiltersChange}
@@ -302,7 +302,7 @@ describe('CatalogFilterBar', () => {
     });
 
     it('should call onFiltersChange when category is selected', async () => {
-      render(
+      await render(
         <CatalogFilterBar
           filters={defaultFilters}
           onFiltersChange={mockOnFiltersChange}
@@ -325,7 +325,7 @@ describe('CatalogFilterBar', () => {
 
   describe('Stock filter functionality', () => {
     it('should show stock options when available', async () => {
-      render(
+      await render(
         <CatalogFilterBar
           filters={defaultFilters}
           onFiltersChange={mockOnFiltersChange}
@@ -342,7 +342,7 @@ describe('CatalogFilterBar', () => {
     });
 
     it('should call onFiltersChange when stock filter is selected', async () => {
-      render(
+      await render(
         <CatalogFilterBar
           filters={defaultFilters}
           onFiltersChange={mockOnFiltersChange}
@@ -365,7 +365,7 @@ describe('CatalogFilterBar', () => {
 
   describe('Filter combinations', () => {
     it('should preserve other filter values when search changes', async () => {
-      render(
+      await render(
         <CatalogFilterBar
           filters={{
             search: 'test',
@@ -397,7 +397,7 @@ describe('CatalogFilterBar', () => {
       // When items are filtered to only event_access, merchandise should not appear
       const eventOnlyItems: CatalogItem[] = [mockItems[1]!];
 
-      render(
+      await render(
         <CatalogFilterBar
           filters={defaultFilters}
           onFiltersChange={mockOnFiltersChange}
@@ -418,7 +418,7 @@ describe('CatalogFilterBar', () => {
       // Create items that only have Gis category
       const gisOnlyItems: CatalogItem[] = [mockItems[0]!];
 
-      render(
+      await render(
         <CatalogFilterBar
           filters={defaultFilters}
           onFiltersChange={mockOnFiltersChange}
@@ -438,7 +438,7 @@ describe('CatalogFilterBar', () => {
 
   describe('Empty states', () => {
     it('should render with empty items array', async () => {
-      render(
+      await render(
         <CatalogFilterBar
           filters={defaultFilters}
           onFiltersChange={mockOnFiltersChange}
@@ -451,7 +451,7 @@ describe('CatalogFilterBar', () => {
     });
 
     it('should render with empty categories array', async () => {
-      render(
+      await render(
         <CatalogFilterBar
           filters={defaultFilters}
           onFiltersChange={mockOnFiltersChange}

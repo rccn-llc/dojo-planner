@@ -154,7 +154,7 @@ export function EditMemberPhotoModal({
           <div className="flex flex-col items-center gap-4">
             {isCompressing
               ? (
-                  <div className="flex h-48 w-48 items-center justify-center rounded-lg border-2 border-dashed border-border bg-accent/50">
+                  <div className="flex size-48 items-center justify-center rounded-lg border-2 border-dashed border-border bg-accent/50">
                     <Spinner size="lg" />
                   </div>
                 )
@@ -172,7 +172,7 @@ export function EditMemberPhotoModal({
                     />
                   )
                 : (
-                    <div className="flex h-48 w-48 items-center justify-center rounded-lg border-2 border-dashed border-border bg-accent/50">
+                    <div className="flex size-48 items-center justify-center rounded-lg border-2 border-dashed border-border bg-accent/50">
                       <p className="text-sm text-muted-foreground">{t('no_photo')}</p>
                     </div>
                   )}

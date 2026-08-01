@@ -351,8 +351,8 @@ export function MembersTable({
                               Member name
                               {sortField === 'firstName' && (
                                 sortDirection === 'asc'
-                                  ? <ArrowDownAZ className="h-4 w-4" />
-                                  : <ArrowUpZA className="h-4 w-4" />
+                                  ? <ArrowDownAZ className="size-4" />
+                                  : <ArrowUpZA className="size-4" />
                               )}
                             </button>
                           </th>
@@ -365,8 +365,8 @@ export function MembersTable({
                               Member type
                               {sortField === 'membershipType' && (
                                 sortDirection === 'asc'
-                                  ? <ArrowDownAZ className="h-4 w-4" />
-                                  : <ArrowUpZA className="h-4 w-4" />
+                                  ? <ArrowDownAZ className="size-4" />
+                                  : <ArrowUpZA className="size-4" />
                               )}
                             </button>
                           </th>
@@ -379,8 +379,8 @@ export function MembersTable({
                               Amount due
                               {sortField === 'amountDue' && (
                                 sortDirection === 'asc'
-                                  ? <ArrowDown01 className="h-4 w-4" />
-                                  : <ArrowUp10 className="h-4 w-4" />
+                                  ? <ArrowDown01 className="size-4" />
+                                  : <ArrowUp10 className="size-4" />
                               )}
                             </button>
                           </th>
@@ -393,8 +393,8 @@ export function MembersTable({
                               Next payment
                               {sortField === 'nextPayment' && (
                                 sortDirection === 'asc'
-                                  ? <ArrowDownAZ className="h-4 w-4" />
-                                  : <ArrowUpZA className="h-4 w-4" />
+                                  ? <ArrowDownAZ className="size-4" />
+                                  : <ArrowUpZA className="size-4" />
                               )}
                             </button>
                           </th>
@@ -407,8 +407,8 @@ export function MembersTable({
                               Status
                               {sortField === 'status' && (
                                 sortDirection === 'asc'
-                                  ? <ArrowDownAZ className="h-4 w-4" />
-                                  : <ArrowUpZA className="h-4 w-4" />
+                                  ? <ArrowDownAZ className="size-4" />
+                                  : <ArrowUpZA className="size-4" />
                               )}
                             </button>
                           </th>
@@ -421,8 +421,8 @@ export function MembersTable({
                               Last visited
                               {sortField === 'lastAccessedAt' && (
                                 sortDirection === 'asc'
-                                  ? <ArrowDownAZ className="h-4 w-4" />
-                                  : <ArrowUpZA className="h-4 w-4" />
+                                  ? <ArrowDownAZ className="size-4" />
+                                  : <ArrowUpZA className="size-4" />
                               )}
                             </button>
                           </th>
@@ -437,7 +437,7 @@ export function MembersTable({
                           >
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-3">
-                                <Avatar className="h-8 w-8 shrink-0">
+                                <Avatar className="size-8 shrink-0">
                                   {member.photoUrl && (
                                     <AvatarImage src={member.photoUrl} />
                                   )}

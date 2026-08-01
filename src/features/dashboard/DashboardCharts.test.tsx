@@ -53,8 +53,8 @@ const mockEarningsData = {
 };
 
 describe('DashboardCharts', () => {
-  it('renders Member average chart heading', () => {
-    render(
+  it('renders Member average chart heading', async () => {
+    await render(
       <DashboardCharts
         memberAverageData={mockMemberAverageData}
         earningsData={mockEarningsData}
@@ -66,8 +66,8 @@ describe('DashboardCharts', () => {
     expect(memberAverageHeading).toBeInTheDocument();
   });
 
-  it('renders Earnings chart heading', () => {
-    render(
+  it('renders Earnings chart heading', async () => {
+    await render(
       <DashboardCharts
         memberAverageData={mockMemberAverageData}
         earningsData={mockEarningsData}
@@ -79,8 +79,8 @@ describe('DashboardCharts', () => {
     expect(earningsHeading).toBeInTheDocument();
   });
 
-  it('renders time period select for Member average', () => {
-    render(
+  it('renders time period select for Member average', async () => {
+    await render(
       <DashboardCharts
         memberAverageData={mockMemberAverageData}
         earningsData={mockEarningsData}
@@ -92,8 +92,8 @@ describe('DashboardCharts', () => {
     expect(memberAverageSelect).toBeInTheDocument();
   });
 
-  it('renders time period select for Earnings', () => {
-    render(
+  it('renders time period select for Earnings', async () => {
+    await render(
       <DashboardCharts
         memberAverageData={mockMemberAverageData}
         earningsData={mockEarningsData}
@@ -105,8 +105,8 @@ describe('DashboardCharts', () => {
     expect(earningsSelect).toBeInTheDocument();
   });
 
-  it('defaults to Monthly view for Member average', () => {
-    render(
+  it('defaults to Monthly view for Member average', async () => {
+    await render(
       <DashboardCharts
         memberAverageData={mockMemberAverageData}
         earningsData={mockEarningsData}
@@ -118,8 +118,8 @@ describe('DashboardCharts', () => {
     expect(memberAverageSelect).toHaveTextContent('Monthly');
   });
 
-  it('defaults to Monthly view for Earnings', () => {
-    render(
+  it('defaults to Monthly view for Earnings', async () => {
+    await render(
       <DashboardCharts
         memberAverageData={mockMemberAverageData}
         earningsData={mockEarningsData}
@@ -132,7 +132,7 @@ describe('DashboardCharts', () => {
   });
 
   it('can change Member average to Yearly view', async () => {
-    render(
+    await render(
       <DashboardCharts
         memberAverageData={mockMemberAverageData}
         earningsData={mockEarningsData}
@@ -149,7 +149,7 @@ describe('DashboardCharts', () => {
   });
 
   it('can change Earnings to Yearly view', async () => {
-    render(
+    await render(
       <DashboardCharts
         memberAverageData={mockMemberAverageData}
         earningsData={mockEarningsData}
@@ -165,8 +165,8 @@ describe('DashboardCharts', () => {
     expect(earningsSelect).toHaveTextContent('Yearly');
   });
 
-  it('does not render dead "View details" buttons (#230)', () => {
-    render(
+  it('does not render dead "View details" buttons (#230)', async () => {
+    await render(
       <DashboardCharts
         memberAverageData={mockMemberAverageData}
         earningsData={mockEarningsData}
@@ -181,7 +181,7 @@ describe('DashboardCharts', () => {
   });
 
   it('Member average and Earnings selects work independently', async () => {
-    render(
+    await render(
       <DashboardCharts
         memberAverageData={mockMemberAverageData}
         earningsData={mockEarningsData}
@@ -201,8 +201,8 @@ describe('DashboardCharts', () => {
     expect(earningsSelect).toHaveTextContent('Monthly');
   });
 
-  it('renders comparison checkbox for Member average when in monthly view', () => {
-    render(
+  it('renders comparison checkbox for Member average when in monthly view', async () => {
+    await render(
       <DashboardCharts
         memberAverageData={mockMemberAverageData}
         earningsData={mockEarningsData}
@@ -215,8 +215,8 @@ describe('DashboardCharts', () => {
     expect(checkboxes.elements().length).toBeGreaterThanOrEqual(2);
   });
 
-  it('renders comparison checkbox for Earnings when in monthly view', () => {
-    render(
+  it('renders comparison checkbox for Earnings when in monthly view', async () => {
+    await render(
       <DashboardCharts
         memberAverageData={mockMemberAverageData}
         earningsData={mockEarningsData}
@@ -230,7 +230,7 @@ describe('DashboardCharts', () => {
   });
 
   it('comparison checkbox toggles on click', async () => {
-    render(
+    await render(
       <DashboardCharts
         memberAverageData={mockMemberAverageData}
         earningsData={mockEarningsData}
@@ -248,7 +248,7 @@ describe('DashboardCharts', () => {
   });
 
   it('comparison checkbox is hidden when switching to yearly view', async () => {
-    render(
+    await render(
       <DashboardCharts
         memberAverageData={mockMemberAverageData}
         earningsData={mockEarningsData}
@@ -271,8 +271,8 @@ describe('DashboardCharts', () => {
     expect(remainingCheckboxes.elements().length).toBe(1);
   });
 
-  it('displays compare with last year label text', () => {
-    render(
+  it('displays compare with last year label text', async () => {
+    await render(
       <DashboardCharts
         memberAverageData={mockMemberAverageData}
         earningsData={mockEarningsData}

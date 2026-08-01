@@ -47,7 +47,7 @@ export function CatalogItemCard({
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             {/* Small Image Thumbnail */}
-            <div className="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-muted">
+            <div className="size-12 shrink-0 overflow-hidden rounded-md bg-muted">
               {primaryImage
                 ? (
                     <Image
@@ -55,13 +55,13 @@ export function CatalogItemCard({
                       alt={primaryImage.altText || item.name}
                       width={48}
                       height={48}
-                      className="h-full w-full object-cover"
+                      className="size-full object-cover"
                       unoptimized
                     />
                   )
                 : (
-                    <div className="flex h-full w-full items-center justify-center">
-                      <Package className="h-6 w-6 text-muted-foreground" />
+                    <div className="flex size-full items-center justify-center">
+                      <Package className="size-6 text-muted-foreground" />
                     </div>
                   )}
             </div>
@@ -100,7 +100,7 @@ export function CatalogItemCard({
             </Badge>
             {item.isFeatured && (
               <Badge className="bg-yellow-500 text-gray-900 hover:bg-yellow-600">
-                <Star className="mr-1 h-3 w-3" />
+                <Star className="mr-1 size-3" />
                 {t('featured_badge')}
               </Badge>
             )}
@@ -181,7 +181,7 @@ export function CatalogItemCard({
             aria-label={t('edit_button_aria_label')}
             title={t('edit_button_aria_label')}
           >
-            <Edit className="h-4 w-4" />
+            <Edit className="size-4" />
           </Button>
           <Button
             variant="destructive"
@@ -190,7 +190,7 @@ export function CatalogItemCard({
             aria-label={t('delete_button_aria_label')}
             title={t('delete_button_aria_label')}
           >
-            <Trash2 className="h-4 w-4" />
+            <Trash2 className="size-4" />
           </Button>
         </div>
       </div>

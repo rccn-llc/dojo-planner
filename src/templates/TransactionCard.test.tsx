@@ -22,92 +22,92 @@ describe('TransactionCard', () => {
   };
 
   describe('Header Section', () => {
-    it('should render date', () => {
-      render(<TransactionCard {...defaultProps} />);
+    it('should render date', async () => {
+      await render(<TransactionCard {...defaultProps} />);
 
       expect(page.getByText('April 15, 2025')).toBeInTheDocument();
     });
 
-    it('should render member name', () => {
-      render(<TransactionCard {...defaultProps} />);
+    it('should render member name', async () => {
+      await render(<TransactionCard {...defaultProps} />);
 
       expect(page.getByText('John Smith')).toBeInTheDocument();
     });
 
-    it('should render transaction ID', () => {
-      render(<TransactionCard {...defaultProps} />);
+    it('should render transaction ID', async () => {
+      await render(<TransactionCard {...defaultProps} />);
 
       expect(page.getByText('TXN71MC01ANQ130')).toBeInTheDocument();
     });
 
-    it('should render amount', () => {
-      render(<TransactionCard {...defaultProps} />);
+    it('should render amount', async () => {
+      await render(<TransactionCard {...defaultProps} />);
 
       expect(page.getByText('$160.00')).toBeInTheDocument();
     });
 
-    it('should render purpose', () => {
-      render(<TransactionCard {...defaultProps} />);
+    it('should render purpose', async () => {
+      await render(<TransactionCard {...defaultProps} />);
 
       expect(page.getByText('Membership Dues')).toBeInTheDocument();
     });
 
-    it('should render status badge', () => {
-      render(<TransactionCard {...defaultProps} />);
+    it('should render status badge', async () => {
+      await render(<TransactionCard {...defaultProps} />);
 
       expect(page.getByText('status_paid')).toBeInTheDocument();
     });
   });
 
   describe('Details Section', () => {
-    it('should render method', () => {
-      render(<TransactionCard {...defaultProps} />);
+    it('should render method', async () => {
+      await render(<TransactionCard {...defaultProps} />);
 
       expect(page.getByText('Saved Card Ending ****1234')).toBeInTheDocument();
     });
 
-    it('should render method label', () => {
-      render(<TransactionCard {...defaultProps} />);
+    it('should render method label', async () => {
+      await render(<TransactionCard {...defaultProps} />);
 
       expect(page.getByText('table_method')).toBeInTheDocument();
     });
   });
 
   describe('Status Badge Variants', () => {
-    it('should render paid status badge', () => {
-      render(<TransactionCard {...defaultProps} status="paid" />);
+    it('should render paid status badge', async () => {
+      await render(<TransactionCard {...defaultProps} status="paid" />);
 
       expect(page.getByText('status_paid')).toBeInTheDocument();
     });
 
-    it('should render pending status badge', () => {
-      render(<TransactionCard {...defaultProps} status="pending" />);
+    it('should render pending status badge', async () => {
+      await render(<TransactionCard {...defaultProps} status="pending" />);
 
       expect(page.getByText('status_pending')).toBeInTheDocument();
     });
 
-    it('should render declined status badge', () => {
-      render(<TransactionCard {...defaultProps} status="declined" />);
+    it('should render declined status badge', async () => {
+      await render(<TransactionCard {...defaultProps} status="declined" />);
 
       expect(page.getByText('status_declined')).toBeInTheDocument();
     });
 
-    it('should render refunded status badge', () => {
-      render(<TransactionCard {...defaultProps} status="refunded" />);
+    it('should render refunded status badge', async () => {
+      await render(<TransactionCard {...defaultProps} status="refunded" />);
 
       expect(page.getByText('status_refunded')).toBeInTheDocument();
     });
 
-    it('should render processing status badge', () => {
-      render(<TransactionCard {...defaultProps} status="processing" />);
+    it('should render processing status badge', async () => {
+      await render(<TransactionCard {...defaultProps} status="processing" />);
 
       expect(page.getByText('status_processing')).toBeInTheDocument();
     });
   });
 
   describe('Different Transaction Types', () => {
-    it('should render merchandise transaction', () => {
-      render(
+    it('should render merchandise transaction', async () => {
+      await render(
         <TransactionCard
           {...defaultProps}
           purpose="Merchandise"
@@ -119,8 +119,8 @@ describe('TransactionCard', () => {
       expect(page.getByText('$75.00')).toBeInTheDocument();
     });
 
-    it('should render private lesson transaction', () => {
-      render(
+    it('should render private lesson transaction', async () => {
+      await render(
         <TransactionCard
           {...defaultProps}
           purpose="Private Lesson"
@@ -133,8 +133,8 @@ describe('TransactionCard', () => {
       expect(page.getByText('Cash')).toBeInTheDocument();
     });
 
-    it('should render seminar transaction', () => {
-      render(
+    it('should render seminar transaction', async () => {
+      await render(
         <TransactionCard
           {...defaultProps}
           purpose="Seminar"
@@ -150,7 +150,7 @@ describe('TransactionCard', () => {
   describe('Click Interaction', () => {
     it('should call onClickAction when clicked', async () => {
       const mockOnClick = vi.fn();
-      render(<TransactionCard {...defaultProps} onClickAction={mockOnClick} />);
+      await render(<TransactionCard {...defaultProps} onClickAction={mockOnClick} />);
 
       const card = page.getByRole('button');
       await card.click();
@@ -160,7 +160,7 @@ describe('TransactionCard', () => {
 
     it('should call onClickAction when Enter key is pressed', async () => {
       const mockOnClick = vi.fn();
-      render(<TransactionCard {...defaultProps} onClickAction={mockOnClick} />);
+      await render(<TransactionCard {...defaultProps} onClickAction={mockOnClick} />);
 
       const card = page.getByRole('button');
       await card.click();
@@ -171,7 +171,7 @@ describe('TransactionCard', () => {
 
     it('should call onClickAction when Space key is pressed', async () => {
       const mockOnClick = vi.fn();
-      render(<TransactionCard {...defaultProps} onClickAction={mockOnClick} />);
+      await render(<TransactionCard {...defaultProps} onClickAction={mockOnClick} />);
 
       const card = page.getByRole('button');
       await card.click();
@@ -180,8 +180,8 @@ describe('TransactionCard', () => {
       expect(mockOnClick).toHaveBeenCalled();
     });
 
-    it('should be focusable', () => {
-      render(<TransactionCard {...defaultProps} />);
+    it('should be focusable', async () => {
+      await render(<TransactionCard {...defaultProps} />);
 
       const card = page.getByRole('button');
 
@@ -190,16 +190,16 @@ describe('TransactionCard', () => {
   });
 
   describe('Card Structure', () => {
-    it('should render as a card component', () => {
-      render(<TransactionCard {...defaultProps} />);
+    it('should render as a card component', async () => {
+      await render(<TransactionCard {...defaultProps} />);
 
       expect(page.getByText('April 15, 2025')).toBeInTheDocument();
       expect(page.getByText('$160.00')).toBeInTheDocument();
       expect(page.getByText('John Smith')).toBeInTheDocument();
     });
 
-    it('should render with cursor pointer style', () => {
-      render(<TransactionCard {...defaultProps} />);
+    it('should render with cursor pointer style', async () => {
+      await render(<TransactionCard {...defaultProps} />);
 
       const card = page.getByRole('button');
 
@@ -208,14 +208,14 @@ describe('TransactionCard', () => {
   });
 
   describe('Different Members', () => {
-    it('should display different member names', () => {
-      render(<TransactionCard {...defaultProps} memberName="Jane Doe" />);
+    it('should display different member names', async () => {
+      await render(<TransactionCard {...defaultProps} memberName="Jane Doe" />);
 
       expect(page.getByText('Jane Doe')).toBeInTheDocument();
     });
 
-    it('should display different transaction IDs', () => {
-      render(<TransactionCard {...defaultProps} transactionId="TXN999999" />);
+    it('should display different transaction IDs', async () => {
+      await render(<TransactionCard {...defaultProps} transactionId="TXN999999" />);
 
       expect(page.getByText('TXN999999')).toBeInTheDocument();
     });

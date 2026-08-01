@@ -56,56 +56,56 @@ describe('EditMembershipBasicsModal', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the modal with title when open', () => {
-    render(<EditMembershipBasicsModal {...defaultProps} />);
+  it('should render the modal with title when open', async () => {
+    await render(<EditMembershipBasicsModal {...defaultProps} />);
 
     const heading = page.getByText('Edit Membership Basics');
 
     expect(heading).toBeTruthy();
   });
 
-  it('should not render when isOpen is false', () => {
-    render(<EditMembershipBasicsModal {...defaultProps} isOpen={false} />);
+  it('should not render when isOpen is false', async () => {
+    await render(<EditMembershipBasicsModal {...defaultProps} isOpen={false} />);
 
     const heading = document.body.textContent?.includes('Edit Membership Basics');
 
     expect(heading).toBe(false);
   });
 
-  it('should render membership name input with initial value', () => {
-    render(<EditMembershipBasicsModal {...defaultProps} />);
+  it('should render membership name input with initial value', async () => {
+    await render(<EditMembershipBasicsModal {...defaultProps} />);
 
     const input = page.getByPlaceholder('e.g., 12 Month Commitment (Gold)');
 
     expect(input).toBeTruthy();
   });
 
-  it('should render Cancel button', () => {
-    render(<EditMembershipBasicsModal {...defaultProps} />);
+  it('should render Cancel button', async () => {
+    await render(<EditMembershipBasicsModal {...defaultProps} />);
 
     const cancelButton = page.getByText('Cancel');
 
     expect(cancelButton).toBeTruthy();
   });
 
-  it('should render Save Changes button', () => {
-    render(<EditMembershipBasicsModal {...defaultProps} />);
+  it('should render Save Changes button', async () => {
+    await render(<EditMembershipBasicsModal {...defaultProps} />);
 
     const saveButton = page.getByText('Save Changes');
 
     expect(saveButton).toBeTruthy();
   });
 
-  it('should render status toggle', () => {
-    render(<EditMembershipBasicsModal {...defaultProps} />);
+  it('should render status toggle', async () => {
+    await render(<EditMembershipBasicsModal {...defaultProps} />);
 
     const statusLabel = page.getByText('Status');
 
     expect(statusLabel).toBeTruthy();
   });
 
-  it('should render membership type selection cards', () => {
-    render(<EditMembershipBasicsModal {...defaultProps} />);
+  it('should render membership type selection cards', async () => {
+    await render(<EditMembershipBasicsModal {...defaultProps} />);
 
     const standardCard = page.getByText('Standard');
     const trialCard = page.getByText('Trial Membership');
@@ -114,16 +114,16 @@ describe('EditMembershipBasicsModal', () => {
     expect(trialCard).toBeTruthy();
   });
 
-  it('should render description textarea', () => {
-    render(<EditMembershipBasicsModal {...defaultProps} />);
+  it('should render description textarea', async () => {
+    await render(<EditMembershipBasicsModal {...defaultProps} />);
 
     const descriptionLabel = page.getByText('Description');
 
     expect(descriptionLabel).toBeTruthy();
   });
 
-  it('should show character count for description', () => {
-    render(<EditMembershipBasicsModal {...defaultProps} />);
+  it('should show character count for description', async () => {
+    await render(<EditMembershipBasicsModal {...defaultProps} />);
 
     const characterCount = page.getByText(/of 2000 characters used/);
 
@@ -131,7 +131,7 @@ describe('EditMembershipBasicsModal', () => {
   });
 
   it('should call onClose when Cancel button is clicked', async () => {
-    render(<EditMembershipBasicsModal {...defaultProps} />);
+    await render(<EditMembershipBasicsModal {...defaultProps} />);
 
     const cancelButton = page.getByText('Cancel');
     await userEvent.click(cancelButton);
@@ -139,8 +139,8 @@ describe('EditMembershipBasicsModal', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it('should have Save button enabled when form is valid', () => {
-    render(<EditMembershipBasicsModal {...defaultProps} />);
+  it('should have Save button enabled when form is valid', async () => {
+    await render(<EditMembershipBasicsModal {...defaultProps} />);
 
     const buttons = Array.from(document.querySelectorAll('button'));
     const saveButton = buttons.find(btn => btn.textContent?.includes('Save Changes'));
@@ -148,32 +148,32 @@ describe('EditMembershipBasicsModal', () => {
     expect(saveButton?.disabled).toBe(false);
   });
 
-  it('should display Active status when status is active', () => {
-    render(<EditMembershipBasicsModal {...defaultProps} />);
+  it('should display Active status when status is active', async () => {
+    await render(<EditMembershipBasicsModal {...defaultProps} />);
 
     const activeStatus = page.getByText('Active');
 
     expect(activeStatus).toBeTruthy();
   });
 
-  it('should display Inactive status when status is inactive', () => {
-    render(<EditMembershipBasicsModal {...defaultProps} status="inactive" />);
+  it('should display Inactive status when status is inactive', async () => {
+    await render(<EditMembershipBasicsModal {...defaultProps} status="inactive" />);
 
     const inactiveStatus = page.getByText('Inactive');
 
     expect(inactiveStatus).toBeTruthy();
   });
 
-  it('should render membership type help text for standard', () => {
-    render(<EditMembershipBasicsModal {...defaultProps} />);
+  it('should render membership type help text for standard', async () => {
+    await render(<EditMembershipBasicsModal {...defaultProps} />);
 
     const standardHelp = page.getByText(/Regular paid membership with recurring billing/);
 
     expect(standardHelp).toBeTruthy();
   });
 
-  it('should render membership type help text for trial', () => {
-    render(<EditMembershipBasicsModal {...defaultProps} />);
+  it('should render membership type help text for trial', async () => {
+    await render(<EditMembershipBasicsModal {...defaultProps} />);
 
     const trialHelp = page.getByText(/Free or low-cost introductory offer/);
 

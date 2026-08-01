@@ -238,7 +238,7 @@ export function RolesPageClient({ roles, totalPermissions, availablePermissions,
           />
         </div>
         <Button onClick={handleAddRoleClick} data-testid="add-role-button">
-          <Plus className="mr-2 h-4 w-4" />
+          <Plus className="mr-2 size-4" />
           {t('add_role_button')}
         </Button>
       </div>

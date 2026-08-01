@@ -21,10 +21,10 @@ export const Default: Story = {
     return (
       <ButtonGroupRoot value={value} onValueChange={setValue}>
         <ButtonGroupItem value="list" title="List view">
-          <List className="h-4 w-4" />
+          <List className="size-4" />
         </ButtonGroupItem>
         <ButtonGroupItem value="grid" title="Grid view">
-          <Grid3x3 className="h-4 w-4" />
+          <Grid3x3 className="size-4" />
         </ButtonGroupItem>
       </ButtonGroupRoot>
     );

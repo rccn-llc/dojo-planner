@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { dedupeRequest } from '@/hooks/dedupeRequest';
 import { client } from '@/libs/Orpc';
 
 const MAX_DESCRIPTION_LENGTH = 2000;
@@ -78,7 +79,7 @@ export function EditClassBasicsModal({
     const fetchPrograms = async () => {
       try {
         setProgramsLoading(true);
-        const result = await client.programs.list();
+        const result = await dedupeRequest('programs.list', async () => client.programs.list());
         const names = (result.programs || [])
           .filter(program => program.isActive)
           .map(program => program.name);

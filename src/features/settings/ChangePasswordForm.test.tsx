@@ -61,23 +61,23 @@ describe('ChangePasswordForm', () => {
     mockUpdatePassword.mockReset();
   });
 
-  it('should render all form fields', () => {
-    render(<ChangePasswordForm onCancel={mockOnCancel} />);
+  it('should render all form fields', async () => {
+    await render(<ChangePasswordForm onCancel={mockOnCancel} />);
 
     expect(page.getByText('Enter Current Password')).toBeDefined();
     expect(page.getByText('Enter New Password')).toBeDefined();
     expect(page.getByText('Confirm New Password')).toBeDefined();
   });
 
-  it('should render save and cancel buttons', () => {
-    render(<ChangePasswordForm onCancel={mockOnCancel} />);
+  it('should render save and cancel buttons', async () => {
+    await render(<ChangePasswordForm onCancel={mockOnCancel} />);
 
     expect(page.getByRole('button', { name: /save/i })).toBeDefined();
     expect(page.getByRole('button', { name: /cancel/i })).toBeDefined();
   });
 
   it('should call onCancel when cancel button is clicked', async () => {
-    render(<ChangePasswordForm onCancel={mockOnCancel} />);
+    await render(<ChangePasswordForm onCancel={mockOnCancel} />);
 
     const cancelButton = page.getByRole('button', { name: /cancel/i });
     await userEvent.click(cancelButton.element());
@@ -86,7 +86,7 @@ describe('ChangePasswordForm', () => {
   });
 
   it('should validate required fields', async () => {
-    render(<ChangePasswordForm onCancel={mockOnCancel} />);
+    await render(<ChangePasswordForm onCancel={mockOnCancel} />);
 
     const saveButton = page.getByRole('button', { name: /save/i });
     await userEvent.click(saveButton.element());
@@ -96,7 +96,7 @@ describe('ChangePasswordForm', () => {
   });
 
   it('should validate weak passwords', async () => {
-    render(<ChangePasswordForm onCancel={mockOnCancel} />);
+    await render(<ChangePasswordForm onCancel={mockOnCancel} />);
 
     const currentPasswordInput = page.getByPlaceholder('Enter current password');
     const newPasswordInput = page.getByPlaceholder('Enter new password');
@@ -114,7 +114,7 @@ describe('ChangePasswordForm', () => {
   });
 
   it('should validate password mismatch', async () => {
-    render(<ChangePasswordForm onCancel={mockOnCancel} />);
+    await render(<ChangePasswordForm onCancel={mockOnCancel} />);
 
     const currentPasswordInput = page.getByPlaceholder('Enter current password');
     const newPasswordInput = page.getByPlaceholder('Enter new password');
@@ -133,7 +133,7 @@ describe('ChangePasswordForm', () => {
   it('should call updatePassword on valid submission', async () => {
     mockUpdatePassword.mockResolvedValue({});
 
-    render(<ChangePasswordForm onCancel={mockOnCancel} onSuccess={mockOnSuccess} />);
+    await render(<ChangePasswordForm onCancel={mockOnCancel} onSuccess={mockOnSuccess} />);
 
     const currentPasswordInput = page.getByPlaceholder('Enter current password');
     const newPasswordInput = page.getByPlaceholder('Enter new password');
@@ -155,7 +155,7 @@ describe('ChangePasswordForm', () => {
   it('should show success message on successful password change', async () => {
     mockUpdatePassword.mockResolvedValue({});
 
-    render(<ChangePasswordForm onCancel={mockOnCancel} onSuccess={mockOnSuccess} />);
+    await render(<ChangePasswordForm onCancel={mockOnCancel} onSuccess={mockOnSuccess} />);
 
     const currentPasswordInput = page.getByPlaceholder('Enter current password');
     const newPasswordInput = page.getByPlaceholder('Enter new password');
@@ -179,7 +179,7 @@ describe('ChangePasswordForm', () => {
       errors: [{ code: 'form_password_incorrect', message: 'Incorrect password' }],
     });
 
-    render(<ChangePasswordForm onCancel={mockOnCancel} />);
+    await render(<ChangePasswordForm onCancel={mockOnCancel} />);
 
     const currentPasswordInput = page.getByPlaceholder('Enter current password');
     const newPasswordInput = page.getByPlaceholder('Enter new password');
@@ -198,8 +198,8 @@ describe('ChangePasswordForm', () => {
     expect(page.getByText('Current password is incorrect')).toBeDefined();
   });
 
-  it('should have autocomplete off for password fields', () => {
-    render(<ChangePasswordForm onCancel={mockOnCancel} />);
+  it('should have autocomplete off for password fields', async () => {
+    await render(<ChangePasswordForm onCancel={mockOnCancel} />);
 
     const currentPasswordInput = page.getByPlaceholder('Enter current password');
     const newPasswordInput = page.getByPlaceholder('Enter new password');
@@ -215,7 +215,7 @@ describe('ChangePasswordForm', () => {
       errors: [{ code: 'unknown_error', message: 'Something went wrong' }],
     });
 
-    render(<ChangePasswordForm onCancel={mockOnCancel} />);
+    await render(<ChangePasswordForm onCancel={mockOnCancel} />);
 
     const currentPasswordInput = page.getByPlaceholder('Enter current password');
     const newPasswordInput = page.getByPlaceholder('Enter new password');
@@ -241,7 +241,7 @@ describe('ChangePasswordForm', () => {
   it('should show alert banner when API throws unexpected error', async () => {
     mockUpdatePassword.mockRejectedValue(new Error('Network error'));
 
-    render(<ChangePasswordForm onCancel={mockOnCancel} />);
+    await render(<ChangePasswordForm onCancel={mockOnCancel} />);
 
     const currentPasswordInput = page.getByPlaceholder('Enter current password');
     const newPasswordInput = page.getByPlaceholder('Enter new password');

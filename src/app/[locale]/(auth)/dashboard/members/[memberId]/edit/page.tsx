@@ -30,6 +30,7 @@ import { ArchiveMemberModal } from '@/features/members/lifecycle/ArchiveMemberMo
 import { CancelMembershipModal } from '@/features/members/lifecycle/CancelMembershipModal';
 import { HoldMembershipModal } from '@/features/members/lifecycle/HoldMembershipModal';
 import { AddFamilyMembersModal } from '@/features/members/wizard/AddFamilyMembersModal';
+import { dedupeRequest } from '@/hooks/dedupeRequest';
 import { useCouponsCache } from '@/hooks/useCouponsCache';
 import { useHasRole } from '@/hooks/useHasRole';
 import { invalidateMembersCache, useMembersCache } from '@/hooks/useMembersCache';
@@ -672,7 +673,9 @@ export default function EditMemberPage() {
   }, [memberId]);
 
   useEffect(() => {
-    void reloadMemberPhoto();
+    void (async () => {
+      await reloadMemberPhoto();
+    })();
   }, [reloadMemberPhoto]);
 
   // Fetch signed waivers for this member
@@ -683,7 +686,7 @@ export default function EditMemberPage() {
       }
       setIsLoadingWaivers(true);
       try {
-        const result = await client.waivers.listMemberSignedWaivers({ memberId });
+        const result = await dedupeRequest(`waivers.listMemberSignedWaivers:${JSON.stringify({ memberId })}`, async () => client.waivers.listMemberSignedWaivers({ memberId }));
         setSignedWaivers(result.waivers);
       } catch (err) {
         console.warn('[Edit Member] Failed to fetch signed waivers:', err);
@@ -745,7 +748,9 @@ export default function EditMemberPage() {
   }, [memberId, reloadPaymentMethods]);
 
   useEffect(() => {
-    void reloadPaymentMethods();
+    void (async () => {
+      await reloadPaymentMethods();
+    })();
   }, [reloadPaymentMethods]);
 
   // Fetch billing history for this member. Extracted into a useCallback so a
@@ -779,7 +784,9 @@ export default function EditMemberPage() {
   }, [memberId]);
 
   useEffect(() => {
-    void reloadBillingHistory();
+    void (async () => {
+      await reloadBillingHistory();
+    })();
   }, [reloadBillingHistory]);
 
   // Refunds are ADMIN-only (mirrors the transactions.refund guard). Non-admins
@@ -832,7 +839,9 @@ export default function EditMemberPage() {
   }, [memberId, isHOH]);
 
   useEffect(() => {
-    fetchFamilyMembers();
+    void (async () => {
+      await fetchFamilyMembers();
+    })();
   }, [fetchFamilyMembers]);
 
   const handleAddFamilyModalClose = useCallback(async () => {
@@ -865,7 +874,9 @@ export default function EditMemberPage() {
     }
   }, [memberId]);
   useEffect(() => {
-    fetchNotes();
+    void (async () => {
+      await fetchNotes();
+    })();
   }, [fetchNotes]);
 
   // Fetch attendance for this member
@@ -885,7 +896,9 @@ export default function EditMemberPage() {
     }
   }, [memberId]);
   useEffect(() => {
-    fetchAttendance();
+    void (async () => {
+      await fetchAttendance();
+    })();
   }, [fetchAttendance]);
 
   const handleAddNote = useCallback(async (content: string) => {
@@ -923,7 +936,9 @@ export default function EditMemberPage() {
     }
   }, [memberId, isFamilyMember]);
   useEffect(() => {
-    fetchCurrentHOH();
+    void (async () => {
+      await fetchCurrentHOH();
+    })();
   }, [fetchCurrentHOH]);
 
   // Derive applied coupon from signed waivers (most recent with coupon data)
@@ -944,8 +959,13 @@ export default function EditMemberPage() {
     };
   }, [signedWaivers]);
 
+  // Read through to the name up front so the memoization dependency is the
+  // plain `organizationName` value rather than an optional-chained property
+  // access, which the React Compiler cannot match against `organization`.
+  const organizationName = organization?.name;
+
   const handleDownloadWaiver = useCallback(async (waiver: SignedWaiverWithTemplateName) => {
-    if (!organization?.name) {
+    if (!organizationName) {
       return;
     }
 
@@ -953,7 +973,7 @@ export default function EditMemberPage() {
     const signedAt = new Date(waiver.signedAt);
     generateAndDownloadWaiverPdf(
       {
-        organizationName: organization.name,
+        organizationName,
         waiverName: waiver.waiverName,
         waiverVersion: waiver.waiverTemplateVersion,
         renderedContent: waiver.renderedContent,
@@ -982,7 +1002,7 @@ export default function EditMemberPage() {
         signedAt,
       }),
     );
-  }, [organization?.name]);
+  }, [organizationName]);
 
   const handleRemoveFamilyMember = useCallback(async (familyMemberId: string) => {
     if (!memberId) {
@@ -1048,8 +1068,8 @@ export default function EditMemberPage() {
 
       {/* Member Header */}
       <div className="flex items-center gap-4">
-        <div className="relative h-16 w-16 shrink-0">
-          <Avatar className="h-16 w-16">
+        <div className="relative size-16 shrink-0">
+          <Avatar className="size-16">
             {memberPhoto && <AvatarImage src={memberPhoto} alt={state.currentData.memberName} />}
             <AvatarFallback>{getInitials(state.currentData.memberName)}</AvatarFallback>
           </Avatar>
@@ -1059,7 +1079,7 @@ export default function EditMemberPage() {
             aria-label="Edit photo"
             className="absolute -right-1 -bottom-1 cursor-pointer rounded-full border border-border bg-background p-1 shadow-sm hover:bg-accent"
           >
-            <Pencil className="h-3.5 w-3.5" />
+            <Pencil className="size-3.5" />
           </button>
         </div>
         <div className="flex flex-col gap-2">
@@ -1075,7 +1095,7 @@ export default function EditMemberPage() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="h-8 gap-1 text-sm">
-                  <ArrowRightLeft className="h-3.5 w-3.5" />
+                  <ArrowRightLeft className="size-3.5" />
                   Convert
                 </Button>
               </DropdownMenuTrigger>
@@ -1117,7 +1137,7 @@ export default function EditMemberPage() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm" className="h-8 gap-1 text-sm">
-                    <MoreVertical className="h-3.5 w-3.5" />
+                    <MoreVertical className="size-3.5" />
                     Actions
                   </Button>
                 </DropdownMenuTrigger>
@@ -1163,7 +1183,7 @@ export default function EditMemberPage() {
                       className="h-8 gap-1 text-sm"
                       onClick={() => setArchiveModalMode('restore')}
                     >
-                      <ArchiveRestore className="h-3.5 w-3.5" />
+                      <ArchiveRestore className="size-3.5" />
                       Restore Member
                     </Button>
                   )
@@ -1174,7 +1194,7 @@ export default function EditMemberPage() {
                       className="h-8 gap-1 text-sm text-destructive hover:text-destructive"
                       onClick={() => setArchiveModalMode('archive')}
                     >
-                      <Archive className="h-3.5 w-3.5" />
+                      <Archive className="size-3.5" />
                       Archive Member
                     </Button>
                   )
@@ -1494,7 +1514,7 @@ export default function EditMemberPage() {
                       onClick={() => setIsEditPaymentMethodOpen(true)}
                       aria-label="Add payment method"
                     >
-                      <Plus className="mr-1 h-4 w-4" />
+                      <Plus className="mr-1 size-4" />
                       {' '}
                       Add
                     </Button>
@@ -1555,7 +1575,7 @@ export default function EditMemberPage() {
                                     aria-label="Delete payment method"
                                     onClick={() => handleDeletePaymentMethod(pm.id)}
                                   >
-                                    <Trash2 className="h-4 w-4" />
+                                    <Trash2 className="size-4" />
                                   </Button>
                                 </div>
                               </div>
@@ -1566,7 +1586,7 @@ export default function EditMemberPage() {
                             <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950/30">
                               <div className="flex items-center gap-2">
                                 <span className="text-green-600 dark:text-green-400">
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                     <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
                                     <line x1="7" y1="7" x2="7.01" y2="7" />
                                   </svg>
@@ -1631,7 +1651,7 @@ export default function EditMemberPage() {
                               onClick={() => handleDownloadWaiver(waiver)}
                               className="w-fit gap-2 bg-foreground text-background hover:bg-foreground/90"
                             >
-                              <Download className="h-4 w-4" />
+                              <Download className="size-4" />
                               Download
                             </Button>
                           </div>
@@ -1673,16 +1693,16 @@ export default function EditMemberPage() {
                         <tbody>
                           {billingHistory.map(item => (
                             <tr key={item.id} className="border-b border-border hover:bg-secondary/30">
-                              <td className="px-4 py-4">
+                              <td className="p-4">
                                 <span className="text-sm font-semibold text-foreground">{item.member}</span>
                               </td>
-                              <td className="px-4 py-4 text-sm text-muted-foreground">{item.date}</td>
-                              <td className="px-4 py-4 text-sm font-semibold text-primary">
+                              <td className="p-4 text-sm text-muted-foreground">{item.date}</td>
+                              <td className="p-4 text-sm font-semibold text-primary">
                                 {formatCurrency(item.amount)}
                               </td>
-                              <td className="px-4 py-4 text-sm text-muted-foreground">{item.purpose}</td>
-                              <td className="hidden px-4 py-4 text-sm text-muted-foreground sm:table-cell">{item.method}</td>
-                              <td className="px-4 py-4">
+                              <td className="p-4 text-sm text-muted-foreground">{item.purpose}</td>
+                              <td className="hidden p-4 text-sm text-muted-foreground sm:table-cell">{item.method}</td>
+                              <td className="p-4">
                                 {canRefund && (
                                   <Button
                                     size="sm"
@@ -1719,13 +1739,13 @@ export default function EditMemberPage() {
                         aria-label={`Unlink ${member.name}`}
                         title={`Unlink ${member.name} from this household`}
                       >
-                        <Unlink className="mr-1 h-4 w-4" />
+                        <Unlink className="mr-1 size-4" />
                         Unlink
                       </Button>
 
                       <div className="mb-4 flex flex-col gap-3 pr-10">
                         <div className="flex min-w-0 items-center gap-3">
-                          <Avatar className="h-10 w-10 shrink-0">
+                          <Avatar className="size-10 shrink-0">
                             {member.photoUrl && <AvatarImage src={member.photoUrl} alt={member.name} />}
                             <AvatarFallback>{getInitials(member.name)}</AvatarFallback>
                           </Avatar>
@@ -1764,7 +1784,7 @@ export default function EditMemberPage() {
               <Card className="border-2 border-dashed p-6">
                 <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
                   <div className="rounded-lg bg-secondary p-3">
-                    <Plus className="h-6 w-6 text-muted-foreground" />
+                    <Plus className="size-6 text-muted-foreground" />
                   </div>
                   <h3 className="font-semibold text-foreground">Add Family Member</h3>
                   <p className="text-sm text-muted-foreground">Create a new family membership</p>

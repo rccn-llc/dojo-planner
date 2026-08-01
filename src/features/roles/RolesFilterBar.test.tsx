@@ -23,8 +23,8 @@ describe('RolesFilterBar', () => {
   });
 
   describe('Search Input', () => {
-    it('should render search input with placeholder', () => {
-      render(
+    it('should render search input with placeholder', async () => {
+      await render(
         <RolesFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availablePermissions={availablePermissions}
@@ -37,7 +37,7 @@ describe('RolesFilterBar', () => {
     });
 
     it('should call onFiltersChangeAction when typing in search', async () => {
-      render(
+      await render(
         <RolesFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availablePermissions={availablePermissions}
@@ -56,7 +56,7 @@ describe('RolesFilterBar', () => {
         capturedFilters = filters;
       };
 
-      render(
+      await render(
         <RolesFilterBar
           onFiltersChangeAction={captureFilters}
           availablePermissions={availablePermissions}
@@ -71,8 +71,8 @@ describe('RolesFilterBar', () => {
   });
 
   describe('Permission Filter', () => {
-    it('should render permission filter dropdown', () => {
-      render(
+    it('should render permission filter dropdown', async () => {
+      await render(
         <RolesFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availablePermissions={availablePermissions}
@@ -84,8 +84,8 @@ describe('RolesFilterBar', () => {
       expect(comboboxes.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('should show All Permissions as default', () => {
-      render(
+    it('should show All Permissions as default', async () => {
+      await render(
         <RolesFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availablePermissions={availablePermissions}
@@ -96,7 +96,7 @@ describe('RolesFilterBar', () => {
     });
 
     it('should call onFiltersChangeAction when permission changes', async () => {
-      render(
+      await render(
         <RolesFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availablePermissions={availablePermissions}
@@ -115,7 +115,7 @@ describe('RolesFilterBar', () => {
 
   describe('Filter Options', () => {
     it('should render available permission options', async () => {
-      render(
+      await render(
         <RolesFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availablePermissions={availablePermissions}
@@ -138,7 +138,7 @@ describe('RolesFilterBar', () => {
         lastFilters = filters;
       };
 
-      render(
+      await render(
         <RolesFilterBar
           onFiltersChangeAction={captureFilters}
           availablePermissions={availablePermissions}
@@ -158,7 +158,7 @@ describe('RolesFilterBar', () => {
         lastFilters = filters;
       };
 
-      render(
+      await render(
         <RolesFilterBar
           onFiltersChangeAction={captureFilters}
           availablePermissions={availablePermissions}
@@ -176,8 +176,8 @@ describe('RolesFilterBar', () => {
   });
 
   describe('Search Icon', () => {
-    it('should render search icon', () => {
-      render(
+    it('should render search icon', async () => {
+      await render(
         <RolesFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availablePermissions={availablePermissions}
@@ -191,8 +191,8 @@ describe('RolesFilterBar', () => {
   });
 
   describe('Responsive Layout', () => {
-    it('should render with proper flex layout', () => {
-      render(
+    it('should render with proper flex layout', async () => {
+      await render(
         <RolesFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availablePermissions={availablePermissions}
@@ -205,8 +205,8 @@ describe('RolesFilterBar', () => {
   });
 
   describe('Empty States', () => {
-    it('should handle empty permissions array', () => {
-      render(
+    it('should handle empty permissions array', async () => {
+      await render(
         <RolesFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availablePermissions={[]}

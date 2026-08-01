@@ -61,10 +61,10 @@ const TIERS: EventBilling[] = [
   { id: 'tier-1', name: 'Regular', price: 50, memberOnly: false, validUntil: null },
 ];
 
-function renderModal(overrides: Partial<Parameters<typeof EnrollMemberModal>[0]> = {}) {
+async function renderModal(overrides: Partial<Parameters<typeof EnrollMemberModal>[0]> = {}) {
   const onClose = vi.fn();
   const onEnrolled = vi.fn();
-  render(
+  await render(
     <EnrollMemberModal
       isOpen
       eventId="ev-1"
@@ -88,14 +88,14 @@ describe('EnrollMemberModal', () => {
   });
 
   it('loads and lists members', async () => {
-    renderModal();
+    await renderModal();
 
     await expect.element(page.getByText('Jane Doe')).toBeInTheDocument();
     await expect.element(page.getByText('John Smith')).toBeInTheDocument();
   });
 
   it('enrolls a member without charging when no saved card', async () => {
-    const { onEnrolled } = renderModal();
+    const { onEnrolled } = await renderModal();
 
     await page.getByText('Jane Doe').click();
     // No saved card → the enroll button reads "Enroll"
@@ -114,7 +114,7 @@ describe('EnrollMemberModal', () => {
 
   it('charges the saved card then enrolls with the transaction id', async () => {
     mockListPaymentMethods.mockResolvedValue({ paymentMethods: [{ type: 'card', last4: '4242' }] });
-    renderModal();
+    await renderModal();
 
     await page.getByText('Jane Doe').click();
     // Pick the paid tier so the charge option becomes available.
@@ -148,7 +148,7 @@ describe('EnrollMemberModal', () => {
   it('surfaces a decline and does not register', async () => {
     mockListPaymentMethods.mockResolvedValue({ paymentMethods: [{ type: 'card', last4: '4242' }] });
     mockProcess.mockResolvedValue({ success: false, declineReason: 'Card declined' });
-    renderModal();
+    await renderModal();
 
     await page.getByText('Jane Doe').click();
     await page.getByRole('combobox').click();
@@ -165,7 +165,7 @@ describe('EnrollMemberModal', () => {
   });
 
   it('filters the member list by search query', async () => {
-    renderModal();
+    await renderModal();
 
     await expect.element(page.getByText('John Smith')).toBeInTheDocument();
 

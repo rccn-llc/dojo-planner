@@ -46,6 +46,7 @@ vi.mock('next/navigation', () => ({
   useParams: () => ({
     locale: 'en',
   }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 // Mock ORPC client
@@ -89,15 +90,15 @@ describe('Members Page', () => {
     vi.clearAllMocks();
   });
 
-  it('renders members page wrapper', () => {
-    render(<MembersPage />);
+  it('renders members page wrapper', async () => {
+    await render(<MembersPage />);
 
     // Component should render without errors
     expect(true).toBe(true);
   });
 
-  it('renders members table component', () => {
-    render(<MembersPage />);
+  it('renders members table component', async () => {
+    await render(<MembersPage />);
 
     try {
       // Check for table or member list content
@@ -110,8 +111,8 @@ describe('Members Page', () => {
     }
   });
 
-  it('renders header with action buttons', () => {
-    render(<MembersPage />);
+  it('renders header with action buttons', async () => {
+    await render(<MembersPage />);
 
     try {
       // Check for Add Member button
@@ -126,16 +127,16 @@ describe('Members Page', () => {
 });
 
 describe('Members Page - Loading State', () => {
-  it('displays spinner while members data is loading', () => {
-    render(<MembersPage />);
+  it('displays spinner while members data is loading', async () => {
+    await render(<MembersPage />);
 
     // Component renders with loading state capability
     // The spinner displays while members data is being fetched
     expect(true).toBe(true);
   });
 
-  it('displays loading text while data is loading', () => {
-    render(<MembersPage />);
+  it('displays loading text while data is loading', async () => {
+    await render(<MembersPage />);
 
     try {
       // Look for the loading text
@@ -155,8 +156,8 @@ describe('Members Page - Loading State', () => {
 });
 
 describe('Members Page - Search and Filter', () => {
-  it('renders search input', () => {
-    render(<MembersPage />);
+  it('renders search input', async () => {
+    await render(<MembersPage />);
 
     try {
       // Check for search input
@@ -169,8 +170,8 @@ describe('Members Page - Search and Filter', () => {
     }
   });
 
-  it('renders status filter dropdown', () => {
-    render(<MembersPage />);
+  it('renders status filter dropdown', async () => {
+    await render(<MembersPage />);
 
     try {
       // Check for status filter - look for the combobox that contains status options
@@ -183,8 +184,8 @@ describe('Members Page - Search and Filter', () => {
     }
   });
 
-  it('renders membership type filter dropdown', () => {
-    render(<MembersPage />);
+  it('renders membership type filter dropdown', async () => {
+    await render(<MembersPage />);
 
     try {
       // Check for membership type filter

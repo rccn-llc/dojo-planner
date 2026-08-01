@@ -19,6 +19,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { AddWaiverModal } from '@/features/waivers/AddWaiverModal';
 import { MergeFieldsManagement } from '@/features/waivers/MergeFieldsManagement';
+import { dedupeRequest } from '@/hooks/dedupeRequest';
 import { client } from '@/libs/Orpc';
 import { StatsCards } from '@/templates/StatsCards';
 import { WaiverCard } from '@/templates/WaiverCard';
@@ -37,11 +38,16 @@ export default function WaiversPage() {
     membershipsUsing: 0,
   });
 
+  // Both fetches are de-duped so React's development double-invoke of effects
+  // (StrictMode) issues one request rather than two. The pending request is
+  // shared only while in flight — nothing is cached across mounts, so a
+  // remount after creating a waiver still loads fresh data.
   useEffect(() => {
     const fetchWaivers = async () => {
       try {
         setIsLoading(true);
-        const result = await client.waivers.listTemplates();
+        const result = await dedupeRequest('waivers:listTemplates', async () =>
+          client.waivers.listTemplates());
         setWaivers(result.templates);
       } catch (err) {
         console.error('Failed to fetch waivers:', err);
@@ -56,7 +62,8 @@ export default function WaiversPage() {
   useEffect(() => {
     const fetchDashboardStats = async () => {
       try {
-        const result = await client.waivers.getDashboardStats();
+        const result = await dedupeRequest('waivers:dashboardStats', async () =>
+          client.waivers.getDashboardStats());
         setDashboardStats({
           signedThisMonth: result.signedThisMonth,
           membershipsUsing: result.membershipsUsing,
@@ -222,7 +229,7 @@ export default function WaiversPage() {
 
         {/* Add New Waiver Button */}
         <Button onClick={handleAddWaiver}>
-          <Plus className="h-4 w-4" />
+          <Plus className="size-4" />
           <span className="ml-1 hidden sm:inline">{t('add_new_waiver_button')}</span>
         </Button>
       </div>

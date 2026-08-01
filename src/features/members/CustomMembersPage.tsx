@@ -69,7 +69,7 @@ export function CustomMembersPage() {
         onPageChangeAction={handlePageChange}
         headerActions={(
           <Button onClick={() => setIsAddMemberModalOpen(true)}>
-            <Plus className="mr-0.5 h-4 w-4" />
+            <Plus className="mr-0.5 size-4" />
             {t('add_member_button')}
           </Button>
         )}

@@ -111,11 +111,11 @@ export const WithFilterBar: Story = {
             <div className="flex items-center gap-2">
               <ButtonGroupRoot value={viewType} onValueChange={setViewType}>
                 <ButtonGroupItem value="list" title="List view">
-                  <List className="h-4 w-4" />
+                  <List className="size-4" />
                   <span className="ml-1 hidden text-xs sm:ml-2 sm:inline">List</span>
                 </ButtonGroupItem>
                 <ButtonGroupItem value="grid" title="Grid view">
-                  <Grid3x3 className="h-4 w-4" />
+                  <Grid3x3 className="size-4" />
                   <span className="ml-1 hidden text-xs sm:ml-2 sm:inline">Grid</span>
                 </ButtonGroupItem>
                 <ButtonGroupItem value="weekly" title="Weekly view">
@@ -127,7 +127,7 @@ export const WithFilterBar: Story = {
               </ButtonGroupRoot>
 
               <Button>
-                <Plus className="h-4 w-4" />
+                <Plus className="size-4" />
                 <span className="ml-1 hidden sm:inline">Add New Class</span>
               </Button>
             </div>

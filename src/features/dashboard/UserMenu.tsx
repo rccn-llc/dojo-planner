@@ -32,7 +32,7 @@ export function UserMenu() {
             type="button"
             className="flex cursor-pointer items-center rounded-full px-2 py-1.5 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
           >
-            <Avatar className="h-8 w-8">
+            <Avatar className="size-8">
               <AvatarImage src={user?.imageUrl} alt={user?.fullName ?? 'User avatar'} />
               <AvatarFallback>{userInitials}</AvatarFallback>
             </Avatar>
@@ -43,14 +43,14 @@ export function UserMenu() {
             className="cursor-pointer"
             onClick={() => setProfileDialogOpen(true)}
           >
-            <User className="mr-2 h-4 w-4" />
+            <User className="mr-2 size-4" />
             {t('manage_profile')}
           </DropdownMenuItem>
           <DropdownMenuItem
             className="cursor-pointer"
             onClick={() => setSubscriptionDialogOpen(true)}
           >
-            <CreditCard className="mr-2 h-4 w-4" />
+            <CreditCard className="mr-2 size-4" />
             {t('subscription')}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
@@ -59,7 +59,7 @@ export function UserMenu() {
             variant="destructive"
             onClick={handleSignOut}
           >
-            <LogOut className="mr-2 h-4 w-4" />
+            <LogOut className="mr-2 size-4" />
             {t('sign_out')}
           </DropdownMenuItem>
         </DropdownMenuContent>

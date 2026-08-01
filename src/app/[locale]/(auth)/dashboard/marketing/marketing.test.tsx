@@ -44,16 +44,16 @@ async function waitFor(callback: () => void | Promise<void>, options?: { timeout
 
 describe('Marketing Page', () => {
   describe('Header and Layout', () => {
-    it('renders marketing header', () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+    it('renders marketing header', async () => {
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const heading = page.getByRole('heading', { name: /Marketing/i });
 
       expect(heading).toBeInTheDocument();
     });
 
-    it('renders add new coupon button', () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+    it('renders add new coupon button', async () => {
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const button = page.getByRole('button', { name: /Add New Coupon/i });
 
@@ -62,8 +62,8 @@ describe('Marketing Page', () => {
   });
 
   describe('Statistics Cards', () => {
-    it('renders all statistics cards', () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+    it('renders all statistics cards', async () => {
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const totalCoupons = page.getByText(/Total Coupons/);
       const totalSavings = page.getByText(/Total Savings/);
@@ -74,8 +74,8 @@ describe('Marketing Page', () => {
       expect(timesUsed).toBeInTheDocument();
     });
 
-    it('renders statistics cards at the top of the page', () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+    it('renders statistics cards at the top of the page', async () => {
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const totalCoupons = page.getByText(/Total Coupons/);
 
@@ -84,24 +84,24 @@ describe('Marketing Page', () => {
   });
 
   describe('Search and Filters', () => {
-    it('renders search input', () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+    it('renders search input', async () => {
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const searchInput = page.getByTestId('coupon-search-input');
 
       expect(searchInput).toBeInTheDocument();
     });
 
-    it('renders status filter dropdown', () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+    it('renders status filter dropdown', async () => {
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const statusFilter = page.getByTestId('coupon-status-filter');
 
       expect(statusFilter).toBeInTheDocument();
     });
 
-    it('renders type filter dropdown', () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+    it('renders type filter dropdown', async () => {
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const typeFilter = page.getByTestId('coupon-type-filter');
 
@@ -109,7 +109,7 @@ describe('Marketing Page', () => {
     });
 
     it('filters coupons by search term', async () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const searchInput = page.getByTestId('coupon-search-input');
       await userEvent.type(searchInput, 'FAMILY');
@@ -124,8 +124,8 @@ describe('Marketing Page', () => {
   });
 
   describe('Coupons Table', () => {
-    it('renders coupons table headers', () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+    it('renders coupons table headers', async () => {
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const table = page.getByRole('table');
       const codeHeader = table.getByRole('button', { name: /Code/ });
@@ -137,8 +137,8 @@ describe('Marketing Page', () => {
       expect(statusHeader).toBeInTheDocument();
     });
 
-    it('renders coupon data in table with type abbreviations', () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+    it('renders coupon data in table with type abbreviations', async () => {
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const table = page.getByRole('table');
       const couponCode = table.getByText(/CTA_FAMILY_1/);
@@ -149,8 +149,8 @@ describe('Marketing Page', () => {
       expect(couponType).toBeInTheDocument();
     });
 
-    it('does not render selection column', () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+    it('does not render selection column', async () => {
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const table = page.getByRole('table');
       const checkboxes = table.element()?.querySelectorAll('input[type="checkbox"]');
@@ -158,8 +158,8 @@ describe('Marketing Page', () => {
       expect(checkboxes?.length || 0).toBe(0);
     });
 
-    it('renders edit button for each coupon', () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+    it('renders edit button for each coupon', async () => {
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const table = page.getByRole('table');
       const editButton = table.getByRole('button', { name: /Edit CTA_FAMILY_1/i });
@@ -167,8 +167,8 @@ describe('Marketing Page', () => {
       expect(editButton).toBeInTheDocument();
     });
 
-    it('renders delete button for coupons with 0 usage', () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+    it('renders delete button for coupons with 0 usage', async () => {
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const table = page.getByRole('table');
       // NEWYEAR25 has 0/150 usage
@@ -177,8 +177,8 @@ describe('Marketing Page', () => {
       expect(deleteButton).toBeInTheDocument();
     });
 
-    it('hides delete button for coupons with active usage', () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+    it('hides delete button for coupons with active usage', async () => {
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const table = page.getByRole('table');
       // CTA_FAMILY_1 has 23/100 usage (active usage, not 0 or 100%)
@@ -198,8 +198,8 @@ describe('Marketing Page', () => {
       }
     });
 
-    it('renders delete button for coupons at 100% usage', () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+    it('renders delete button for coupons at 100% usage', async () => {
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const table = page.getByRole('table');
       // FLASH20 has 50/50 usage (100%)
@@ -210,16 +210,16 @@ describe('Marketing Page', () => {
   });
 
   describe('Pagination', () => {
-    it('renders pagination controls', () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+    it('renders pagination controls', async () => {
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const nextButton = page.getByRole('button', { name: /^Next$/i });
 
       expect(nextButton).toBeInTheDocument();
     });
 
-    it('shows 10 records per page', () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+    it('shows 10 records per page', async () => {
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const paginationText = page.getByText(/Showing 1-10 of 12 entries/);
 
@@ -229,7 +229,7 @@ describe('Marketing Page', () => {
 
   describe('Add/Edit Modal', () => {
     it('opens add modal when clicking Add New Coupon button', async () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const addButton = page.getByRole('button', { name: /Add New Coupon/i });
       await userEvent.click(addButton);
@@ -242,7 +242,7 @@ describe('Marketing Page', () => {
     });
 
     it('opens edit modal when clicking edit button', async () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const table = page.getByRole('table');
       const editButton = table.getByRole('button', { name: /Edit CTA_FAMILY_1/i });
@@ -256,7 +256,7 @@ describe('Marketing Page', () => {
     });
 
     it('closes modal when clicking close button', async () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const addButton = page.getByRole('button', { name: /Add New Coupon/i });
       await userEvent.click(addButton);
@@ -278,7 +278,7 @@ describe('Marketing Page', () => {
 
   describe('Sorting', () => {
     it('can sort by code column', async () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const table = page.getByRole('table');
       const codeHeader = table.getByRole('button', { name: /Code/ });
@@ -288,7 +288,7 @@ describe('Marketing Page', () => {
     });
 
     it('can sort by code column twice to toggle direction', async () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const table = page.getByRole('table');
       const codeHeader = table.getByRole('button', { name: /Code/ });
@@ -299,7 +299,7 @@ describe('Marketing Page', () => {
     });
 
     it('can sort by type column', async () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const table = page.getByRole('table');
       const typeHeader = table.getByRole('button', { name: /Type/ });
@@ -309,7 +309,7 @@ describe('Marketing Page', () => {
     });
 
     it('can sort by amount column', async () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const table = page.getByRole('table');
       const amountHeader = table.getByRole('button', { name: /Amount/ });
@@ -319,7 +319,7 @@ describe('Marketing Page', () => {
     });
 
     it('can sort by apply to column', async () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const table = page.getByRole('table');
       const applyToHeader = table.getByRole('button', { name: /Apply to/ });
@@ -329,7 +329,7 @@ describe('Marketing Page', () => {
     });
 
     it('can sort by usage column', async () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const table = page.getByRole('table');
       const usageHeader = table.getByRole('button', { name: /Usage/ });
@@ -339,7 +339,7 @@ describe('Marketing Page', () => {
     });
 
     it('can sort by effective column', async () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const table = page.getByRole('table');
       const effectiveHeader = table.getByRole('button', { name: /Effective/ });
@@ -349,7 +349,7 @@ describe('Marketing Page', () => {
     });
 
     it('can sort by status column', async () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const table = page.getByRole('table');
       const statusHeader = table.getByRole('button', { name: /Status/ });
@@ -361,7 +361,7 @@ describe('Marketing Page', () => {
 
   describe('Delete functionality', () => {
     it('opens delete confirmation dialog when clicking delete button', async () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const table = page.getByRole('table');
       // NEWYEAR25 has 0/150 usage so delete button is visible
@@ -376,7 +376,7 @@ describe('Marketing Page', () => {
     });
 
     it('closes delete dialog when cancel is clicked', async () => {
-      render(<I18nWrapper><MarketingPage /></I18nWrapper>);
+      await render(<I18nWrapper><MarketingPage /></I18nWrapper>);
 
       const table = page.getByRole('table');
       const deleteButton = table.getByRole('button', { name: /Delete NEWYEAR25/i });

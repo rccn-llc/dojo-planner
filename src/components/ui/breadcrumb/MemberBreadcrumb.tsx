@@ -27,9 +27,9 @@ export function MemberBreadcrumb({ memberName, onBackClick }: MemberBreadcrumbPr
         size="icon"
         onClick={handleBack}
         aria-label="Go back to members"
-        className="h-8 w-8 dark:bg-secondary enabled:dark:hover:bg-secondary/50"
+        className="size-8 dark:bg-secondary enabled:dark:hover:bg-secondary/50"
       >
-        <ChevronLeft className="h-4 w-4" />
+        <ChevronLeft className="size-4" />
       </Button>
       <span className="text-foreground">Members</span>
       <span className="text-muted-foreground">&gt;</span>

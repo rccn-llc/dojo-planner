@@ -71,8 +71,8 @@ describe('ClassTagsStep', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the step with title and subtitle', () => {
-    render(
+  it('should render the step with title and subtitle', async () => {
+    await render(
       <ClassTagsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -89,8 +89,8 @@ describe('ClassTagsStep', () => {
     expect(heading).toBeTruthy();
   });
 
-  it('should show message when no tags are selected', () => {
-    render(
+  it('should show message when no tags are selected', async () => {
+    await render(
       <ClassTagsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -107,8 +107,8 @@ describe('ClassTagsStep', () => {
     expect(noTagsMessage).toBeTruthy();
   });
 
-  it('should render available tags section', () => {
-    render(
+  it('should render available tags section', async () => {
+    await render(
       <ClassTagsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -125,8 +125,8 @@ describe('ClassTagsStep', () => {
     expect(availableTagsLabel).toBeTruthy();
   });
 
-  it('constrains the available-tags list height so it scrolls instead of overflowing (#234)', () => {
-    render(
+  it('constrains the available-tags list height so it scrolls instead of overflowing (#234)', async () => {
+    await render(
       <ClassTagsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -149,7 +149,7 @@ describe('ClassTagsStep', () => {
   });
 
   it('should call onCancel when Cancel button is clicked', async () => {
-    render(
+    await render(
       <ClassTagsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -172,7 +172,7 @@ describe('ClassTagsStep', () => {
   });
 
   it('should call onBack when Back button is clicked', async () => {
-    render(
+    await render(
       <ClassTagsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -194,8 +194,8 @@ describe('ClassTagsStep', () => {
     }
   });
 
-  it('should display Create Class button', () => {
-    render(
+  it('should display Create Class button', async () => {
+    await render(
       <ClassTagsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -213,8 +213,8 @@ describe('ClassTagsStep', () => {
     expect(createButton).toBeTruthy();
   });
 
-  it('should show Creating... button when loading', () => {
-    render(
+  it('should show Creating... button when loading', async () => {
+    await render(
       <ClassTagsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -232,8 +232,8 @@ describe('ClassTagsStep', () => {
     expect(creatingButton).toBeTruthy();
   });
 
-  it('should disable Create Class button when loading', () => {
-    render(
+  it('should disable Create Class button when loading', async () => {
+    await render(
       <ClassTagsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -252,7 +252,7 @@ describe('ClassTagsStep', () => {
   });
 
   it('should call onNext when Create Class button is clicked', async () => {
-    render(
+    await render(
       <ClassTagsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -274,8 +274,8 @@ describe('ClassTagsStep', () => {
     }
   });
 
-  it('should display error message when provided', () => {
-    render(
+  it('should display error message when provided', async () => {
+    await render(
       <ClassTagsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -293,13 +293,13 @@ describe('ClassTagsStep', () => {
     expect(errorMessage).toBeTruthy();
   });
 
-  it('should display selected tags when they exist', () => {
+  it('should display selected tags when they exist', async () => {
     const dataWithTags: AddClassWizardData = {
       ...mockData,
       tags: ['tag-1'],
     };
 
-    render(
+    await render(
       <ClassTagsStep
         data={dataWithTags}
         onUpdate={mockHandlers.onUpdate}
@@ -316,8 +316,8 @@ describe('ClassTagsStep', () => {
     expect(selectedTagsLabel).toBeTruthy();
   });
 
-  it('should show help text', () => {
-    render(
+  it('should show help text', async () => {
+    await render(
       <ClassTagsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -334,8 +334,8 @@ describe('ClassTagsStep', () => {
     expect(helpText).toBeTruthy();
   });
 
-  it('should render calendar color picker', () => {
-    render(
+  it('should render calendar color picker', async () => {
+    await render(
       <ClassTagsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -352,8 +352,8 @@ describe('ClassTagsStep', () => {
     expect(colorLabel).toBeTruthy();
   });
 
-  it('should render calendar color help text', () => {
-    render(
+  it('should render calendar color help text', async () => {
+    await render(
       <ClassTagsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}

@@ -32,6 +32,12 @@ type CacheAction
 
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 let cacheStore: CacheEntry | null = null;
+// The cache is only populated once the request resolves, so instances that
+// mount in the same tick would all miss and each issue their own call. A class
+// page renders many components that use this hook, and `instructors.list()`
+// hits the Clerk API (~175ms), so the duplicates are expensive. Sharing the
+// pending promise collapses them into one request.
+let inFlight: { promise: Promise<Instructor[]>; organizationId: string } | null = null;
 const revalidateCallbacks: Array<() => void | Promise<void>> = [];
 
 function cacheReducer(state: CacheState, action: CacheAction): CacheState {
@@ -86,14 +92,35 @@ export const useInstructorsCache = (organizationId?: string | undefined) => {
         return;
       }
 
-      const result = await client.instructors.list();
-      const instructors = (result.instructors || []) as Instructor[];
+      const orgKey = organizationId || '';
 
-      cacheStore = {
-        instructors,
-        timestamp: Date.now(),
-        organizationId: organizationId || '',
-      };
+      // Join an in-flight request for the same org instead of starting another.
+      let request = inFlight && inFlight.organizationId === orgKey
+        ? inFlight.promise
+        : null;
+
+      if (!request) {
+        request = (async () => {
+          const result = await client.instructors.list();
+          const fetched = (result.instructors || []) as Instructor[];
+          cacheStore = {
+            instructors: fetched,
+            timestamp: Date.now(),
+            organizationId: orgKey,
+          };
+          return fetched;
+        })();
+        inFlight = { promise: request, organizationId: orgKey };
+        // Clear the shared slot once settled, whether it resolved or threw, so
+        // a failure doesn't pin every later caller to the same rejection.
+        void request.catch(() => {}).finally(() => {
+          if (inFlight?.promise === request) {
+            inFlight = null;
+          }
+        });
+      }
+
+      const instructors = await request;
 
       dispatch({ type: 'SET_INSTRUCTORS', payload: instructors });
     } catch (err) {
@@ -110,6 +137,9 @@ export const useInstructorsCache = (organizationId?: string | undefined) => {
 
   const revalidate = useCallback(async () => {
     cacheStore = null;
+    // Also drop any pending request, otherwise a revalidate could attach to the
+    // in-flight call it is meant to supersede and resolve with stale data.
+    inFlight = null;
     await fetchInstructors();
   }, [fetchInstructors]);
 

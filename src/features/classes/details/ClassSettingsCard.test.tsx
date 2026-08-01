@@ -38,40 +38,40 @@ describe('ClassSettingsCard', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the card with title', () => {
-    render(<ClassSettingsCard {...defaultProps} />);
+  it('should render the card with title', async () => {
+    await render(<ClassSettingsCard {...defaultProps} />);
 
     const heading = page.getByText('Class Settings');
 
     expect(heading).toBeTruthy();
   });
 
-  it('should render maximum capacity', () => {
-    render(<ClassSettingsCard {...defaultProps} />);
+  it('should render maximum capacity', async () => {
+    await render(<ClassSettingsCard {...defaultProps} />);
 
     const capacity = page.getByText('25');
 
     expect(capacity).toBeTruthy();
   });
 
-  it('should render minimum age', () => {
-    render(<ClassSettingsCard {...defaultProps} />);
+  it('should render minimum age', async () => {
+    await render(<ClassSettingsCard {...defaultProps} />);
 
     const age = page.getByText('16 years');
 
     expect(age).toBeTruthy();
   });
 
-  it('should render allow walk-ins badge', () => {
-    render(<ClassSettingsCard {...defaultProps} />);
+  it('should render allow walk-ins badge', async () => {
+    await render(<ClassSettingsCard {...defaultProps} />);
 
     const walkIns = page.getByText('Yes');
 
     expect(walkIns).toBeTruthy();
   });
 
-  it('should render Edit button', () => {
-    render(<ClassSettingsCard {...defaultProps} />);
+  it('should render Edit button', async () => {
+    await render(<ClassSettingsCard {...defaultProps} />);
 
     const editButton = page.getByRole('button');
 
@@ -79,7 +79,7 @@ describe('ClassSettingsCard', () => {
   });
 
   it('should call onEdit when Edit button is clicked', async () => {
-    render(<ClassSettingsCard {...defaultProps} />);
+    await render(<ClassSettingsCard {...defaultProps} />);
 
     const editButton = page.getByRole('button');
     await userEvent.click(editButton);
@@ -87,8 +87,8 @@ describe('ClassSettingsCard', () => {
     expect(mockOnEdit).toHaveBeenCalledTimes(1);
   });
 
-  it('should render all field labels', () => {
-    render(<ClassSettingsCard {...defaultProps} />);
+  it('should render all field labels', async () => {
+    await render(<ClassSettingsCard {...defaultProps} />);
 
     const capacityLabel = page.getByText('Maximum Capacity');
     const ageLabel = page.getByText('Minimum Age');
@@ -99,24 +99,24 @@ describe('ClassSettingsCard', () => {
     expect(walkInsLabel).toBeTruthy();
   });
 
-  it('should show no limit when capacity is null', () => {
-    render(<ClassSettingsCard {...defaultProps} maximumCapacity={null} />);
+  it('should show no limit when capacity is null', async () => {
+    await render(<ClassSettingsCard {...defaultProps} maximumCapacity={null} />);
 
     const noLimit = page.getByText('No limit');
 
     expect(noLimit).toBeTruthy();
   });
 
-  it('should show no minimum when age is null', () => {
-    render(<ClassSettingsCard {...defaultProps} minimumAge={null} />);
+  it('should show no minimum when age is null', async () => {
+    await render(<ClassSettingsCard {...defaultProps} minimumAge={null} />);
 
     const noMinimum = page.getByText('No minimum');
 
     expect(noMinimum).toBeTruthy();
   });
 
-  it('should show No badge when walk-ins not allowed', () => {
-    render(<ClassSettingsCard {...defaultProps} allowWalkIns="No" />);
+  it('should show No badge when walk-ins not allowed', async () => {
+    await render(<ClassSettingsCard {...defaultProps} allowWalkIns="No" />);
 
     const noBadge = page.getByText('No');
 

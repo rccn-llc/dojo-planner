@@ -31,7 +31,7 @@ export function HelpButton() {
           <Button
             variant="default"
             size="icon"
-            className="fixed right-6 bottom-6 z-50 h-[30px] w-[30px] rounded-full shadow-lg"
+            className="fixed right-6 bottom-6 z-50 size-[30px] rounded-full shadow-lg"
             aria-label={t('button_aria_label')}
           >
             <HelpCircle className="size-5" />
@@ -50,7 +50,7 @@ export function HelpButton() {
             <button
               type="button"
               onClick={handleEmailClick}
-              className="flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              className="flex w-full cursor-pointer items-center gap-3 rounded-md p-2 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
             >
               <Mail className="size-4 text-muted-foreground" />
               {t('email_option')}
@@ -58,7 +58,7 @@ export function HelpButton() {
             <button
               type="button"
               onClick={handlePhoneClick}
-              className="flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              className="flex w-full cursor-pointer items-center gap-3 rounded-md p-2 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
             >
               <Phone className="size-4 text-muted-foreground" />
               {t('phone_option')}

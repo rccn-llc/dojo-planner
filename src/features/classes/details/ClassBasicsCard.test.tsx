@@ -35,64 +35,64 @@ describe('ClassBasicsCard', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the card with title', () => {
-    render(<ClassBasicsCard {...defaultProps} />);
+  it('should render the card with title', async () => {
+    await render(<ClassBasicsCard {...defaultProps} />);
 
     const heading = page.getByText('Class Basics');
 
     expect(heading).toBeTruthy();
   });
 
-  it('should render the class name', () => {
-    render(<ClassBasicsCard {...defaultProps} />);
+  it('should render the class name', async () => {
+    await render(<ClassBasicsCard {...defaultProps} />);
 
     const name = page.getByText('BJJ Fundamentals I');
 
     expect(name).toBeTruthy();
   });
 
-  it('should render the program label', () => {
-    render(<ClassBasicsCard {...defaultProps} />);
+  it('should render the program label', async () => {
+    await render(<ClassBasicsCard {...defaultProps} />);
 
     const programLabel = page.getByText('Adult Brazilian Jiu-Jitsu');
 
     expect(programLabel).toBeTruthy();
   });
 
-  it('should render the description', () => {
-    render(<ClassBasicsCard {...defaultProps} />);
+  it('should render the description', async () => {
+    await render(<ClassBasicsCard {...defaultProps} />);
 
     const description = page.getByText('Covers core positions, escapes, and submissions.');
 
     expect(description).toBeTruthy();
   });
 
-  it('should render level badge', () => {
-    render(<ClassBasicsCard {...defaultProps} />);
+  it('should render level badge', async () => {
+    await render(<ClassBasicsCard {...defaultProps} />);
 
     const levelBadge = page.getByText('Beginner');
 
     expect(levelBadge).toBeTruthy();
   });
 
-  it('should render type badge', () => {
-    render(<ClassBasicsCard {...defaultProps} />);
+  it('should render type badge', async () => {
+    await render(<ClassBasicsCard {...defaultProps} />);
 
     const typeBadge = page.getByText('Adults');
 
     expect(typeBadge).toBeTruthy();
   });
 
-  it('should render style badge', () => {
-    render(<ClassBasicsCard {...defaultProps} />);
+  it('should render style badge', async () => {
+    await render(<ClassBasicsCard {...defaultProps} />);
 
     const styleBadge = page.getByText('Gi');
 
     expect(styleBadge).toBeTruthy();
   });
 
-  it('should render Edit button', () => {
-    render(<ClassBasicsCard {...defaultProps} />);
+  it('should render Edit button', async () => {
+    await render(<ClassBasicsCard {...defaultProps} />);
 
     const editButton = page.getByRole('button');
 
@@ -100,7 +100,7 @@ describe('ClassBasicsCard', () => {
   });
 
   it('should call onEdit when Edit button is clicked', async () => {
-    render(<ClassBasicsCard {...defaultProps} />);
+    await render(<ClassBasicsCard {...defaultProps} />);
 
     const editButton = page.getByRole('button');
     await userEvent.click(editButton);
@@ -108,8 +108,8 @@ describe('ClassBasicsCard', () => {
     expect(mockOnEdit).toHaveBeenCalledTimes(1);
   });
 
-  it('should render all field labels', () => {
-    render(<ClassBasicsCard {...defaultProps} />);
+  it('should render all field labels', async () => {
+    await render(<ClassBasicsCard {...defaultProps} />);
 
     const nameLabel = page.getByText('Name');
     const programLabel = page.getByText('Program');
@@ -126,16 +126,16 @@ describe('ClassBasicsCard', () => {
     expect(descriptionLabel).toBeTruthy();
   });
 
-  it('should render different level badges correctly', () => {
-    render(<ClassBasicsCard {...defaultProps} level="Advanced" />);
+  it('should render different level badges correctly', async () => {
+    await render(<ClassBasicsCard {...defaultProps} level="Advanced" />);
 
     const advancedBadge = page.getByText('Advanced');
 
     expect(advancedBadge).toBeTruthy();
   });
 
-  it('should render different style badges correctly', () => {
-    render(<ClassBasicsCard {...defaultProps} style="No Gi" />);
+  it('should render different style badges correctly', async () => {
+    await render(<ClassBasicsCard {...defaultProps} style="No Gi" />);
 
     const noGiBadge = page.getByText('No Gi');
 

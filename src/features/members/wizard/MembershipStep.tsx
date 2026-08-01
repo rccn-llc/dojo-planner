@@ -184,7 +184,7 @@ export const MembershipStep = ({
                   >
                     {data.membershipPlanId === plan.id && (
                       <div className="absolute top-3 right-3">
-                        <Check className="h-5 w-5 text-primary" />
+                        <Check className="size-5 text-primary" />
                       </div>
                     )}
                     <div className="flex flex-col gap-2 pr-8">

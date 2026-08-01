@@ -72,8 +72,8 @@ describe('ClassBasicsStep', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the step with title and subtitle', () => {
-    render(
+  it('should render the step with title and subtitle', async () => {
+    await render(
       <ClassBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -87,8 +87,8 @@ describe('ClassBasicsStep', () => {
     expect(heading).toBeTruthy();
   });
 
-  it('should render class name input', () => {
-    render(
+  it('should render class name input', async () => {
+    await render(
       <ClassBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -103,7 +103,7 @@ describe('ClassBasicsStep', () => {
   });
 
   it('should call onUpdate when class name changes', async () => {
-    render(
+    await render(
       <ClassBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -118,8 +118,8 @@ describe('ClassBasicsStep', () => {
     expect(mockHandlers.onUpdate).toHaveBeenCalled();
   });
 
-  it('should have Next button disabled when form is incomplete', () => {
-    render(
+  it('should have Next button disabled when form is incomplete', async () => {
+    await render(
       <ClassBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -134,7 +134,7 @@ describe('ClassBasicsStep', () => {
     expect(nextButton?.disabled).toBe(true);
   });
 
-  it('should enable Next button when form is complete', () => {
+  it('should enable Next button when form is complete', async () => {
     const completeData: AddClassWizardData = {
       ...mockData,
       className: 'BJJ Fundamentals',
@@ -142,7 +142,7 @@ describe('ClassBasicsStep', () => {
       description: 'A beginner class',
     };
 
-    render(
+    await render(
       <ClassBasicsStep
         data={completeData}
         onUpdate={mockHandlers.onUpdate}
@@ -158,7 +158,7 @@ describe('ClassBasicsStep', () => {
   });
 
   it('should call onCancel when Cancel button is clicked', async () => {
-    render(
+    await render(
       <ClassBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -185,7 +185,7 @@ describe('ClassBasicsStep', () => {
       description: 'A beginner class',
     };
 
-    render(
+    await render(
       <ClassBasicsStep
         data={completeData}
         onUpdate={mockHandlers.onUpdate}
@@ -204,8 +204,8 @@ describe('ClassBasicsStep', () => {
     }
   });
 
-  it('should display error message when provided', () => {
-    render(
+  it('should display error message when provided', async () => {
+    await render(
       <ClassBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -220,13 +220,13 @@ describe('ClassBasicsStep', () => {
     expect(errorMessage).toBeTruthy();
   });
 
-  it('should show character count for description', () => {
+  it('should show character count for description', async () => {
     const dataWithDescription: AddClassWizardData = {
       ...mockData,
       description: 'Test description',
     };
 
-    render(
+    await render(
       <ClassBasicsStep
         data={dataWithDescription}
         onUpdate={mockHandlers.onUpdate}
@@ -240,8 +240,8 @@ describe('ClassBasicsStep', () => {
     expect(characterCount).toBeTruthy();
   });
 
-  it('should render program select', () => {
-    render(
+  it('should render program select', async () => {
+    await render(
       <ClassBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -255,8 +255,8 @@ describe('ClassBasicsStep', () => {
     expect(programLabel).toBeTruthy();
   });
 
-  it('should render optional fields', () => {
-    render(
+  it('should render optional fields', async () => {
+    await render(
       <ClassBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -275,7 +275,7 @@ describe('ClassBasicsStep', () => {
   });
 
   it('should show validation error when class name is touched but empty', async () => {
-    render(
+    await render(
       <ClassBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -297,7 +297,7 @@ describe('ClassBasicsStep', () => {
   });
 
   it('should update maximum capacity when changed', async () => {
-    render(
+    await render(
       <ClassBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}
@@ -313,7 +313,7 @@ describe('ClassBasicsStep', () => {
   });
 
   it('should update minimum age when changed', async () => {
-    render(
+    await render(
       <ClassBasicsStep
         data={mockData}
         onUpdate={mockHandlers.onUpdate}

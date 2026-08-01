@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { client } from '@/libs/Orpc';
+import { clearInFlight, dedupeRequest } from './dedupeRequest';
 
 // =============================================================================
 // TYPES
@@ -125,7 +126,9 @@ export const useEventsCache = (organizationId?: string | undefined) => {
 
       console.info('[Events Cache] Fetching fresh events data for organization:', organizationId);
 
-      const eventsData = await client.events.list();
+      // Several components can mount this hook in the same tick; without
+      // de-duping, each one fires its own request against the cold cache.
+      const eventsData = await dedupeRequest(`events:${organizationId || ''}`, async () => client.events.list());
       const events = (eventsData.events || []) as EventData[];
 
       cacheStore = {
@@ -165,6 +168,7 @@ export const useEventsCache = (organizationId?: string | undefined) => {
   const revalidate = useCallback(async () => {
     console.info('[Events Cache] Manual revalidation triggered');
     cacheStore = null;
+    clearInFlight();
     await fetchEvents();
   }, [fetchEvents]);
 
@@ -208,5 +212,6 @@ export const useEventsCache = (organizationId?: string | undefined) => {
 export const invalidateEventsCache = async () => {
   console.info('[Events Cache] Global cache invalidation triggered');
   cacheStore = null;
+  clearInFlight();
   await Promise.all(revalidateCallbacks.map(callback => callback()));
 };

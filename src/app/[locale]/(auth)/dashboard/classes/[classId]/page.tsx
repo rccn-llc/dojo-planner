@@ -21,6 +21,7 @@ import { EditClassScheduleModal } from '@/features/classes/details/EditClassSche
 import { EditClassSettingsModal } from '@/features/classes/details/EditClassSettingsModal';
 import { EditScheduleInstanceModal } from '@/features/classes/details/EditScheduleInstanceModal';
 import { UpcomingSessionsCard } from '@/features/classes/details/UpcomingSessionsCard';
+import { dedupeRequest } from '@/hooks/dedupeRequest';
 import { invalidateClassesCache, useClassesCache } from '@/hooks/useClassesCache';
 import { useHasRole } from '@/hooks/useHasRole';
 import { useProgramsCache } from '@/hooks/useProgramsCache';
@@ -239,7 +240,7 @@ export default function ClassDetailPage({ params }: { params: Promise<PageParams
   const [attendance, setAttendance] = useState<Awaited<ReturnType<typeof client.classes.getAttendance>> | null>(null);
   useEffect(() => {
     let active = true;
-    client.classes.getAttendance({ classId: resolvedParams.classId })
+    dedupeRequest(`classes.getAttendance:${JSON.stringify({ classId: resolvedParams.classId })}`, async () => client.classes.getAttendance({ classId: resolvedParams.classId }))
       .then((res) => {
         if (active) {
           setAttendance(res);
@@ -444,7 +445,7 @@ export default function ClassDetailPage({ params }: { params: Promise<PageParams
       <div className="flex items-center gap-4">
         <Link href={backToClassesUrl}>
           <Button variant="ghost" size="sm">
-            <ArrowLeft className="mr-2 h-4 w-4" />
+            <ArrowLeft className="mr-2 size-4" />
             {t('back_to_classes')}
           </Button>
         </Link>
@@ -570,7 +571,7 @@ export default function ClassDetailPage({ params }: { params: Promise<PageParams
             variant="destructive"
             onClick={() => setIsDeleteDialogOpen(true)}
           >
-            <Trash2 className="mr-2 h-4 w-4" />
+            <Trash2 className="mr-2 size-4" />
             {t('delete_button')}
           </Button>
         </div>

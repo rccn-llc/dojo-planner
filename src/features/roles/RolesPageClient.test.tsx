@@ -120,48 +120,48 @@ describe('RolesPageClient', () => {
   };
 
   describe('Page Header', () => {
-    it('should render the page title', () => {
-      render(<RolesPageClient {...defaultProps} />);
+    it('should render the page title', async () => {
+      await render(<RolesPageClient {...defaultProps} />);
 
       expect(page.getByText('Roles')).toBeDefined();
     });
 
-    it('should render the permissions by role section title', () => {
-      render(<RolesPageClient {...defaultProps} />);
+    it('should render the permissions by role section title', async () => {
+      await render(<RolesPageClient {...defaultProps} />);
 
       expect(page.getByText('Permissions by Role')).toBeDefined();
     });
   });
 
   describe('Summary Stats', () => {
-    it('should render total roles stat card', () => {
-      render(<RolesPageClient {...defaultProps} />);
+    it('should render total roles stat card', async () => {
+      await render(<RolesPageClient {...defaultProps} />);
 
       expect(page.getByText('Total Roles')).toBeDefined();
     });
 
-    it('should render total permissions stat card', () => {
-      render(<RolesPageClient {...defaultProps} />);
+    it('should render total permissions stat card', async () => {
+      await render(<RolesPageClient {...defaultProps} />);
 
       expect(page.getByText('Total Permissions')).toBeDefined();
     });
 
-    it('should render total members stat card', () => {
-      render(<RolesPageClient {...defaultProps} />);
+    it('should render total members stat card', async () => {
+      await render(<RolesPageClient {...defaultProps} />);
 
       expect(page.getByText('Total Members')).toBeDefined();
     });
 
-    it('should display correct roles count', () => {
-      render(<RolesPageClient {...defaultProps} />);
+    it('should display correct roles count', async () => {
+      await render(<RolesPageClient {...defaultProps} />);
 
       const threeElements = page.getByText('3', { exact: true }).elements();
 
       expect(threeElements.length).toBeGreaterThan(0);
     });
 
-    it('should display correct total members count', () => {
-      render(<RolesPageClient {...defaultProps} />);
+    it('should display correct total members count', async () => {
+      await render(<RolesPageClient {...defaultProps} />);
 
       // 3 + 8 + 25 = 36 total members
       const membersElement = page.getByText('36', { exact: true }).elements();
@@ -171,22 +171,22 @@ describe('RolesPageClient', () => {
   });
 
   describe('Filter Bar', () => {
-    it('should render search input', () => {
-      render(<RolesPageClient {...defaultProps} />);
+    it('should render search input', async () => {
+      await render(<RolesPageClient {...defaultProps} />);
 
       const searchInput = page.getByPlaceholder(/search roles/i);
 
       expect(searchInput).toBeDefined();
     });
 
-    it('should render permission filter dropdown', () => {
-      render(<RolesPageClient {...defaultProps} />);
+    it('should render permission filter dropdown', async () => {
+      await render(<RolesPageClient {...defaultProps} />);
 
       expect(page.getByText('All Permissions')).toBeDefined();
     });
 
-    it('should render add role button', () => {
-      render(<RolesPageClient {...defaultProps} />);
+    it('should render add role button', async () => {
+      await render(<RolesPageClient {...defaultProps} />);
 
       const addRoleButton = page.getByRole('button', { name: /add role/i });
 
@@ -195,48 +195,48 @@ describe('RolesPageClient', () => {
   });
 
   describe('Role Cards', () => {
-    it('should render all role cards', () => {
-      render(<RolesPageClient {...defaultProps} />);
+    it('should render all role cards', async () => {
+      await render(<RolesPageClient {...defaultProps} />);
 
       expect(page.getByText('Admin')).toBeDefined();
       expect(page.getByText('Coach')).toBeDefined();
       expect(page.getByText('Member')).toBeDefined();
     });
 
-    it('should render role descriptions', () => {
-      render(<RolesPageClient {...defaultProps} />);
+    it('should render role descriptions', async () => {
+      await render(<RolesPageClient {...defaultProps} />);
 
       expect(page.getByText('Full administrative access')).toBeDefined();
       expect(page.getByText('Can manage classes and attendance')).toBeDefined();
       expect(page.getByText('Basic member access')).toBeDefined();
     });
 
-    it('should render role key badges', () => {
-      render(<RolesPageClient {...defaultProps} />);
+    it('should render role key badges', async () => {
+      await render(<RolesPageClient {...defaultProps} />);
 
       expect(page.getByText('org:admin')).toBeDefined();
       expect(page.getByText('org:coach')).toBeDefined();
       expect(page.getByText('org:member')).toBeDefined();
     });
 
-    it('should render permission badges on role cards', () => {
-      render(<RolesPageClient {...defaultProps} />);
+    it('should render permission badges on role cards', async () => {
+      await render(<RolesPageClient {...defaultProps} />);
 
       expect(page.getByText('Manage Members')).toBeDefined();
       expect(page.getByText('Manage Billing')).toBeDefined();
       expect(page.getByText('View Members')).toBeDefined();
     });
 
-    it('should render system role badge for system roles', () => {
-      render(<RolesPageClient {...defaultProps} />);
+    it('should render system role badge for system roles', async () => {
+      await render(<RolesPageClient {...defaultProps} />);
 
       const systemBadges = page.getByText('System').elements();
 
       expect(systemBadges.length).toBeGreaterThan(0);
     });
 
-    it('should render member counts on role cards', () => {
-      render(<RolesPageClient {...defaultProps} />);
+    it('should render member counts on role cards', async () => {
+      await render(<RolesPageClient {...defaultProps} />);
 
       // Member counts are displayed as "X Members" text
       expect(page.getByText(/8\s*Members/)).toBeDefined();
@@ -246,7 +246,7 @@ describe('RolesPageClient', () => {
 
   describe('Filtering', () => {
     it('should filter roles by search term matching name', async () => {
-      render(<RolesPageClient {...defaultProps} />);
+      await render(<RolesPageClient {...defaultProps} />);
 
       const searchInput = page.getByPlaceholder(/search roles/i);
       await userEvent.fill(searchInput, 'Admin');
@@ -259,7 +259,7 @@ describe('RolesPageClient', () => {
     });
 
     it('should filter roles by search term matching description', async () => {
-      render(<RolesPageClient {...defaultProps} />);
+      await render(<RolesPageClient {...defaultProps} />);
 
       const searchInput = page.getByPlaceholder(/search roles/i);
       await userEvent.fill(searchInput, 'classes');
@@ -272,7 +272,7 @@ describe('RolesPageClient', () => {
     });
 
     it('should filter roles by search term matching role key', async () => {
-      render(<RolesPageClient {...defaultProps} />);
+      await render(<RolesPageClient {...defaultProps} />);
 
       const searchInput = page.getByPlaceholder(/search roles/i);
       await userEvent.fill(searchInput, 'org:coach');
@@ -281,7 +281,7 @@ describe('RolesPageClient', () => {
     });
 
     it('should filter roles by search term matching permission name', async () => {
-      render(<RolesPageClient {...defaultProps} />);
+      await render(<RolesPageClient {...defaultProps} />);
 
       const searchInput = page.getByPlaceholder(/search roles/i);
       await userEvent.fill(searchInput, 'Billing');
@@ -290,7 +290,7 @@ describe('RolesPageClient', () => {
     });
 
     it('should show no roles found message when no matches', async () => {
-      render(<RolesPageClient {...defaultProps} />);
+      await render(<RolesPageClient {...defaultProps} />);
 
       const searchInput = page.getByPlaceholder(/search roles/i);
       await userEvent.fill(searchInput, 'NonexistentRole');
@@ -300,22 +300,22 @@ describe('RolesPageClient', () => {
   });
 
   describe('Empty State', () => {
-    it('should render no roles found when roles array is empty', () => {
-      render(<RolesPageClient {...defaultProps} roles={[]} totalPermissions={0} />);
+    it('should render no roles found when roles array is empty', async () => {
+      await render(<RolesPageClient {...defaultProps} roles={[]} totalPermissions={0} />);
 
       expect(page.getByText('No roles found')).toBeDefined();
     });
 
-    it('should still render stats cards when no roles', () => {
-      render(<RolesPageClient {...defaultProps} roles={[]} totalPermissions={0} />);
+    it('should still render stats cards when no roles', async () => {
+      await render(<RolesPageClient {...defaultProps} roles={[]} totalPermissions={0} />);
 
       expect(page.getByText('Total Roles')).toBeDefined();
       expect(page.getByText('Total Permissions')).toBeDefined();
       expect(page.getByText('Total Members')).toBeDefined();
     });
 
-    it('should show zero for counts when no roles', () => {
-      render(<RolesPageClient {...defaultProps} roles={[]} totalPermissions={0} />);
+    it('should show zero for counts when no roles', async () => {
+      await render(<RolesPageClient {...defaultProps} roles={[]} totalPermissions={0} />);
 
       const zeroElements = page.getByText('0', { exact: true }).elements();
 
@@ -324,16 +324,16 @@ describe('RolesPageClient', () => {
   });
 
   describe('Action Buttons on Cards', () => {
-    it('should render edit buttons on role cards', () => {
-      render(<RolesPageClient {...defaultProps} />);
+    it('should render edit buttons on role cards', async () => {
+      await render(<RolesPageClient {...defaultProps} />);
 
       const editButtons = page.getByRole('button', { name: /edit role/i }).elements();
 
       expect(editButtons.length).toBe(3);
     });
 
-    it('should render delete buttons only on non-system roles for non-admin users', () => {
-      render(<RolesPageClient {...defaultProps} />);
+    it('should render delete buttons only on non-system roles for non-admin users', async () => {
+      await render(<RolesPageClient {...defaultProps} />);
 
       const deleteButtons = page.getByRole('button', { name: /delete role/i }).elements();
 
@@ -341,8 +341,8 @@ describe('RolesPageClient', () => {
       expect(deleteButtons.length).toBe(2);
     });
 
-    it('should render delete buttons on non-admin roles for admin users', () => {
-      render(<RolesPageClient {...adminProps} />);
+    it('should render delete buttons on non-admin roles for admin users', async () => {
+      await render(<RolesPageClient {...adminProps} />);
 
       const deleteButtons = page.getByRole('button', { name: /delete role/i }).elements();
 
@@ -352,8 +352,8 @@ describe('RolesPageClient', () => {
   });
 
   describe('Responsive Grid', () => {
-    it('should render role cards in a grid layout', () => {
-      render(<RolesPageClient {...defaultProps} />);
+    it('should render role cards in a grid layout', async () => {
+      await render(<RolesPageClient {...defaultProps} />);
 
       // All three roles should be visible
       expect(page.getByText('Admin')).toBeDefined();
@@ -364,7 +364,7 @@ describe('RolesPageClient', () => {
 
   describe('Permission Filter Dropdown', () => {
     it('should populate available permissions from roles', async () => {
-      render(<RolesPageClient {...defaultProps} />);
+      await render(<RolesPageClient {...defaultProps} />);
 
       const permissionTrigger = page.getByText('All Permissions');
       await userEvent.click(permissionTrigger);
@@ -375,7 +375,7 @@ describe('RolesPageClient', () => {
     });
 
     it('should filter by selected permission', async () => {
-      render(<RolesPageClient {...defaultProps} />);
+      await render(<RolesPageClient {...defaultProps} />);
 
       const permissionTrigger = page.getByText('All Permissions');
       await userEvent.click(permissionTrigger);
@@ -394,9 +394,9 @@ describe('RolesPageClient', () => {
   });
 
   describe('Single Role', () => {
-    it('should render correctly with single role', () => {
+    it('should render correctly with single role', async () => {
       const singleRole: Role[] = [mockRoles[0]!];
-      render(<RolesPageClient {...defaultProps} roles={singleRole} totalPermissions={2} />);
+      await render(<RolesPageClient {...defaultProps} roles={singleRole} totalPermissions={2} />);
 
       expect(page.getByText('Admin')).toBeDefined();
       expect(page.getByText('1', { exact: true })).toBeDefined();
@@ -404,8 +404,8 @@ describe('RolesPageClient', () => {
   });
 
   describe('Role with No Permissions', () => {
-    it('should show no permissions message for role without permissions', () => {
-      render(<RolesPageClient {...defaultProps} />);
+    it('should show no permissions message for role without permissions', async () => {
+      await render(<RolesPageClient {...defaultProps} />);
 
       // Member role has no permissions
       expect(page.getByText('No permissions assigned')).toBeDefined();
@@ -414,7 +414,7 @@ describe('RolesPageClient', () => {
 
   describe('Add/Edit Role Modal Integration', () => {
     it('should open add role modal when Add Role button is clicked', async () => {
-      render(<RolesPageClient {...defaultProps} />);
+      await render(<RolesPageClient {...defaultProps} />);
 
       const addButton = page.getByTestId('add-role-button');
       await userEvent.click(addButton);
@@ -425,7 +425,7 @@ describe('RolesPageClient', () => {
     });
 
     it('should open edit role modal when edit button is clicked', async () => {
-      render(<RolesPageClient {...defaultProps} />);
+      await render(<RolesPageClient {...defaultProps} />);
 
       const editButtons = page.getByRole('button', { name: /edit role/i }).elements();
       await userEvent.click(editButtons[0]!);
@@ -436,7 +436,7 @@ describe('RolesPageClient', () => {
     });
 
     it('should populate form with role data when editing', async () => {
-      render(<RolesPageClient {...defaultProps} />);
+      await render(<RolesPageClient {...defaultProps} />);
 
       const editButtons = page.getByRole('button', { name: /edit role/i }).elements();
       await userEvent.click(editButtons[0]!);
@@ -447,7 +447,7 @@ describe('RolesPageClient', () => {
     });
 
     it('should close modal when cancel is clicked', async () => {
-      render(<RolesPageClient {...defaultProps} />);
+      await render(<RolesPageClient {...defaultProps} />);
 
       const addButton = page.getByTestId('add-role-button');
       await userEvent.click(addButton);
@@ -468,7 +468,7 @@ describe('RolesPageClient', () => {
 
   describe('Delete Role', () => {
     it('opens the confirmation dialog with the role name when delete is clicked', async () => {
-      render(<RolesPageClient {...defaultProps} />);
+      await render(<RolesPageClient {...defaultProps} />);
 
       const deleteButtons = page.getByRole('button', { name: /delete role/i }).elements();
       await userEvent.click(deleteButtons[0]!);
@@ -479,7 +479,7 @@ describe('RolesPageClient', () => {
     });
 
     it('calls client.roles.remove and refreshes when confirmed', async () => {
-      render(<RolesPageClient {...defaultProps} />);
+      await render(<RolesPageClient {...defaultProps} />);
 
       const deleteButtons = page.getByRole('button', { name: /delete role/i }).elements();
       await userEvent.click(deleteButtons[0]!);
@@ -493,7 +493,7 @@ describe('RolesPageClient', () => {
 
     it('surfaces the error message when remove rejects', async () => {
       mockRemove.mockRejectedValueOnce(new Error('Clerk API error: 422 - role assigned to members'));
-      render(<RolesPageClient {...defaultProps} />);
+      await render(<RolesPageClient {...defaultProps} />);
 
       const deleteButtons = page.getByRole('button', { name: /delete role/i }).elements();
       await userEvent.click(deleteButtons[0]!);
@@ -510,7 +510,7 @@ describe('RolesPageClient', () => {
 
   describe('Save Role (Create / Update)', () => {
     it('calls client.roles.create with permission keys and refreshes', async () => {
-      render(<RolesPageClient {...adminProps} />);
+      await render(<RolesPageClient {...adminProps} />);
 
       await userEvent.click(page.getByTestId('add-role-button'));
       await userEvent.fill(page.getByTestId('role-name-input'), 'Front Desk');
@@ -530,7 +530,7 @@ describe('RolesPageClient', () => {
     });
 
     it('calls client.roles.update with id + present fields when editing', async () => {
-      render(<RolesPageClient {...adminProps} />);
+      await render(<RolesPageClient {...adminProps} />);
 
       // Edit Coach (the first non-system, non-admin role visible to admin).
       const editButtons = page.getByRole('button', { name: /edit role/i }).elements();

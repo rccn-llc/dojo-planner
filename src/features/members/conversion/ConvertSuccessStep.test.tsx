@@ -24,7 +24,7 @@ const baseData: ConvertMemberWizardData = {
 
 describe('ConvertSuccessStep', () => {
   it('should render success title', async () => {
-    render(
+    await render(
       <I18nWrapper>
         <ConvertSuccessStep data={baseData} onDone={vi.fn()} />
       </I18nWrapper>,
@@ -34,7 +34,7 @@ describe('ConvertSuccessStep', () => {
   });
 
   it('should render member name in description', async () => {
-    render(
+    await render(
       <I18nWrapper>
         <ConvertSuccessStep data={baseData} onDone={vi.fn()} />
       </I18nWrapper>,
@@ -46,7 +46,7 @@ describe('ConvertSuccessStep', () => {
   it('should show membership plan info when present', async () => {
     const data = { ...baseData, membershipPlanName: 'Monthly BJJ' };
 
-    render(
+    await render(
       <I18nWrapper>
         <ConvertSuccessStep data={data} onDone={vi.fn()} />
       </I18nWrapper>,
@@ -58,7 +58,7 @@ describe('ConvertSuccessStep', () => {
   it('should call onDone when done button is clicked', async () => {
     const onDone = vi.fn();
 
-    render(
+    await render(
       <I18nWrapper>
         <ConvertSuccessStep data={baseData} onDone={onDone} />
       </I18nWrapper>,

@@ -10,28 +10,28 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 type TimePeriod = 'monthly' | 'yearly';
 
-type MonthlyDataPoint = {
-  month: string;
+// Monthly and yearly points differ only in their x-axis key (`month` vs `year`),
+// selected at runtime via `memberAverageXKey` / `earningsXKey`. Both keys are
+// optional on a single shape so the monthly/yearly union collapses: recharts
+// types the chart `data` prop as `ChartData<T> = ReadonlyArray<T>`, which infers
+// `T` from the first union member and then rejects the second.
+type ChartDataPoint = {
+  month?: string;
+  year?: string;
   average?: number;
   earnings?: number;
   previousYearAverage?: number;
   previousYearEarnings?: number;
 };
 
-type YearlyDataPoint = {
-  year: string;
-  average?: number;
-  earnings?: number;
-};
-
 type DashboardChartsProps = {
   memberAverageData: {
-    monthly: MonthlyDataPoint[];
-    yearly: YearlyDataPoint[];
+    monthly: ChartDataPoint[];
+    yearly: ChartDataPoint[];
   };
   earningsData: {
-    monthly: MonthlyDataPoint[];
-    yearly: YearlyDataPoint[];
+    monthly: ChartDataPoint[];
+    yearly: ChartDataPoint[];
   };
 };
 
@@ -121,9 +121,9 @@ export default function DashboardCharts({ memberAverageData, earningsData }: Das
               itemStyle={{
                 color: 'hsl(210 40% 98%)',
               }}
-              formatter={(value: number | undefined, name?: string) => {
-                if (value === undefined) {
-                  return ['N/A', name ?? 'Value'];
+              formatter={(value, name) => {
+                if (typeof value !== 'number') {
+                  return ['N/A', typeof name === 'string' ? name : 'Value'];
                 }
                 const label = name === 'previousYearAverage' ? 'Last Year' : 'This Year';
                 return [value, label];
@@ -193,9 +193,9 @@ export default function DashboardCharts({ memberAverageData, earningsData }: Das
               itemStyle={{
                 color: 'hsl(210 40% 98%)',
               }}
-              formatter={(value: number | undefined, name?: string) => {
-                if (value === undefined) {
-                  return ['N/A', name ?? 'Value'];
+              formatter={(value, name) => {
+                if (typeof value !== 'number') {
+                  return ['N/A', typeof name === 'string' ? name : 'Value'];
                 }
                 const formattedValue = value >= 1000 ? `$${(value / 1000).toFixed(1)}k` : `$${value}`;
                 const label = name === 'previousYearEarnings' ? 'Last Year' : 'This Year';

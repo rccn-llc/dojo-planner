@@ -112,27 +112,27 @@ describe('ManageProfileDialog', () => {
     mockUser.totpEnabled = false;
   });
 
-  it('should render the dialog when open', () => {
-    render(<ManageProfileDialog open onOpenChange={() => {}} />);
+  it('should render the dialog when open', async () => {
+    await render(<ManageProfileDialog open onOpenChange={() => {}} />);
 
     expect(page.getByText('Manage Profile')).toBeDefined();
   });
 
-  it('should not render when closed', () => {
-    render(<ManageProfileDialog open={false} onOpenChange={() => {}} />);
+  it('should not render when closed', async () => {
+    await render(<ManageProfileDialog open={false} onOpenChange={() => {}} />);
 
     expect(page.getByText('Manage Profile').elements().length).toBe(0);
   });
 
-  it('should display user information from Clerk', () => {
-    render(<ManageProfileDialog open onOpenChange={() => {}} />);
+  it('should display user information from Clerk', async () => {
+    await render(<ManageProfileDialog open onOpenChange={() => {}} />);
 
     expect(page.getByText('John Doe')).toBeDefined();
     expect(page.getByText('Account Owner')).toBeDefined();
   });
 
-  it('should display user details in the profile section', () => {
-    render(<ManageProfileDialog open onOpenChange={() => {}} />);
+  it('should display user details in the profile section', async () => {
+    await render(<ManageProfileDialog open onOpenChange={() => {}} />);
 
     expect(page.getByText('John')).toBeDefined();
     expect(page.getByText('Doe')).toBeDefined();
@@ -140,8 +140,8 @@ describe('ManageProfileDialog', () => {
     expect(page.getByText('john.doe@example.com')).toBeDefined();
   });
 
-  it('should render all profile label fields', () => {
-    render(<ManageProfileDialog open onOpenChange={() => {}} />);
+  it('should render all profile label fields', async () => {
+    await render(<ManageProfileDialog open onOpenChange={() => {}} />);
 
     expect(page.getByText('First Name')).toBeDefined();
     expect(page.getByText('Last Name')).toBeDefined();
@@ -149,21 +149,21 @@ describe('ManageProfileDialog', () => {
     expect(page.getByText('Email')).toBeDefined();
   });
 
-  it('should render the edit button in the profile card', () => {
-    render(<ManageProfileDialog open onOpenChange={() => {}} />);
+  it('should render the edit button in the profile card', async () => {
+    await render(<ManageProfileDialog open onOpenChange={() => {}} />);
     const editButton = page.getByRole('button', { name: /^edit$/i });
 
     expect(editButton).toBeDefined();
   });
 
-  it('should render change password section for password-authenticated users', () => {
-    render(<ManageProfileDialog open onOpenChange={() => {}} />);
+  it('should render change password section for password-authenticated users', async () => {
+    await render(<ManageProfileDialog open onOpenChange={() => {}} />);
 
     expect(page.getByText('Change Password')).toBeDefined();
   });
 
-  it('should render 2FA section', () => {
-    render(<ManageProfileDialog open onOpenChange={() => {}} />);
+  it('should render 2FA section', async () => {
+    await render(<ManageProfileDialog open onOpenChange={() => {}} />);
 
     expect(page.getByText('2-Factor Authentication (2FA)')).toBeDefined();
     expect(
@@ -171,24 +171,24 @@ describe('ManageProfileDialog', () => {
     ).toBeDefined();
   });
 
-  it('should render Add 2FA button when TOTP is not enabled', () => {
-    render(<ManageProfileDialog open onOpenChange={() => {}} />);
+  it('should render Add 2FA button when TOTP is not enabled', async () => {
+    await render(<ManageProfileDialog open onOpenChange={() => {}} />);
     const add2faButton = page.getByRole('button', { name: /add 2fa/i });
 
     expect(add2faButton).toBeDefined();
     expect(add2faButton.element().hasAttribute('disabled')).toBe(false);
   });
 
-  it('should render Remove 2FA button and Enabled badge when TOTP is enabled', () => {
+  it('should render Remove 2FA button and Enabled badge when TOTP is enabled', async () => {
     mockUser.totpEnabled = true;
-    render(<ManageProfileDialog open onOpenChange={() => {}} />);
+    await render(<ManageProfileDialog open onOpenChange={() => {}} />);
 
     expect(page.getByText('Enabled')).toBeDefined();
     expect(page.getByRole('button', { name: /remove 2fa/i })).toBeDefined();
   });
 
   it('should show password form when change password button is clicked', async () => {
-    render(<ManageProfileDialog open onOpenChange={() => {}} />);
+    await render(<ManageProfileDialog open onOpenChange={() => {}} />);
     const changePasswordButton = page.getByRole('button', { name: /change password/i });
 
     await userEvent.click(changePasswordButton.element());
@@ -199,7 +199,7 @@ describe('ManageProfileDialog', () => {
   });
 
   it('should hide password form when cancel button is clicked', async () => {
-    render(<ManageProfileDialog open onOpenChange={() => {}} />);
+    await render(<ManageProfileDialog open onOpenChange={() => {}} />);
     const changePasswordButton = page.getByRole('button', { name: /change password/i });
 
     await userEvent.click(changePasswordButton.element());
@@ -210,15 +210,15 @@ describe('ManageProfileDialog', () => {
     expect(page.getByText('Enter Current Password').elements().length).toBe(0);
   });
 
-  it('should render avatar with user initials as fallback', () => {
-    render(<ManageProfileDialog open onOpenChange={() => {}} />);
+  it('should render avatar with user initials as fallback', async () => {
+    await render(<ManageProfileDialog open onOpenChange={() => {}} />);
 
     // The avatar fallback should contain initials JD
     expect(page.getByText('JD')).toBeDefined();
   });
 
   it('should show edit profile form when edit button is clicked', async () => {
-    render(<ManageProfileDialog open onOpenChange={() => {}} />);
+    await render(<ManageProfileDialog open onOpenChange={() => {}} />);
 
     const editButton = page.getByRole('button', { name: /^edit$/i });
     await userEvent.click(editButton.element());
@@ -229,7 +229,7 @@ describe('ManageProfileDialog', () => {
   });
 
   it('should hide edit profile form when cancel is clicked', async () => {
-    render(<ManageProfileDialog open onOpenChange={() => {}} />);
+    await render(<ManageProfileDialog open onOpenChange={() => {}} />);
 
     // Click edit button to show form
     const editButton = page.getByRole('button', { name: /^edit$/i });

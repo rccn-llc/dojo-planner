@@ -216,26 +216,26 @@ describe('ReportsPage', () => {
     window.history.pushState = mockPushState;
   });
 
-  afterEach(() => {
-    cleanup();
+  afterEach(async () => {
+    await cleanup();
     window.history.pushState = originalPushState;
   });
 
   describe('Reports Landing Page', () => {
-    it('should render the page title', () => {
-      render(<ReportsPage />);
+    it('should render the page title', async () => {
+      await render(<ReportsPage />);
 
       expect(page.getByText('Reports')).toBeDefined();
     });
 
-    it('should render the page subtitle', () => {
-      render(<ReportsPage />);
+    it('should render the page subtitle', async () => {
+      await render(<ReportsPage />);
 
       expect(page.getByText('Select a report to view detailed analytics and insights')).toBeDefined();
     });
 
-    it('should render all report cards', () => {
-      render(<ReportsPage />);
+    it('should render all report cards', async () => {
+      await render(<ReportsPage />);
 
       expect(page.getByText('Accounts with Autopay Suspended')).toBeDefined();
       expect(page.getByText('Expiring Credit Cards')).toBeDefined();
@@ -247,15 +247,15 @@ describe('ReportsPage', () => {
       expect(page.getByText('Income Per Student')).toBeDefined();
     });
 
-    it('should render report descriptions', () => {
-      render(<ReportsPage />);
+    it('should render report descriptions', async () => {
+      await render(<ReportsPage />);
 
       expect(page.getByText('View all accounts that have had their automatic payments suspended')).toBeDefined();
       expect(page.getByText('Credit cards expiring in the next 60 days')).toBeDefined();
     });
 
-    it('should render current values on cards', () => {
-      render(<ReportsPage />);
+    it('should render current values on cards', async () => {
+      await render(<ReportsPage />);
 
       expect(page.getByText('2')).toBeDefined(); // accounts autopay suspended
       expect(page.getByText('5')).toBeDefined(); // expiring credit cards
@@ -264,7 +264,7 @@ describe('ReportsPage', () => {
     });
 
     it('should have clickable report cards', async () => {
-      render(<ReportsPage />);
+      await render(<ReportsPage />);
 
       const card = page.getByTestId('report-card-accounts-autopay-suspended');
       await userEvent.click(card);
@@ -272,8 +272,8 @@ describe('ReportsPage', () => {
       expect(mockPushState).toHaveBeenCalled();
     });
 
-    it('should render 8 report cards total', () => {
-      render(<ReportsPage />);
+    it('should render 8 report cards total', async () => {
+      await render(<ReportsPage />);
 
       const cards = page.getByTestId(/^report-card-/);
 
@@ -286,40 +286,40 @@ describe('ReportsPage', () => {
       mockSearchParams.set('report', 'accounts-autopay-suspended');
     });
 
-    it('should render back button', () => {
-      renderReportDetail();
+    it('should render back button', async () => {
+      await renderReportDetail();
 
       expect(page.getByTestId('back-button')).toBeDefined();
     });
 
-    it('should render report title in detail view', () => {
-      renderReportDetail();
+    it('should render report title in detail view', async () => {
+      await renderReportDetail();
 
       const titles = page.getByText('Accounts with Autopay Suspended');
 
       expect(titles.elements().length).toBeGreaterThan(0);
     });
 
-    it('should render chart section', () => {
-      renderReportDetail();
+    it('should render chart section', async () => {
+      await renderReportDetail();
 
       expect(page.getByText('Historical Data')).toBeDefined();
     });
 
-    it('should render insights section', () => {
-      renderReportDetail();
+    it('should render insights section', async () => {
+      await renderReportDetail();
 
       expect(page.getByText('Insights')).toBeDefined();
     });
 
-    it('should render time period selector', () => {
-      renderReportDetail();
+    it('should render time period selector', async () => {
+      await renderReportDetail();
 
       expect(page.getByTestId('select')).toBeDefined();
     });
 
     it('should navigate back when back button is clicked', async () => {
-      renderReportDetail();
+      await renderReportDetail();
 
       const backButton = page.getByTestId('back-button');
       await userEvent.click(backButton);
@@ -334,16 +334,16 @@ describe('ReportsPage', () => {
       mockSearchParams.set('report', 'amount-due');
     });
 
-    it('should render amount due report title', () => {
-      renderReportDetail();
+    it('should render amount due report title', async () => {
+      await renderReportDetail();
 
       const titles = page.getByText('Amount Due');
 
       expect(titles.elements().length).toBeGreaterThan(0);
     });
 
-    it('should render amount due current value', () => {
-      renderReportDetail();
+    it('should render amount due current value', async () => {
+      await renderReportDetail();
 
       expect(page.getByText('$14,394.20')).toBeDefined();
     });
@@ -354,16 +354,16 @@ describe('ReportsPage', () => {
       mockSearchParams.set('report', 'failed-payments');
     });
 
-    it('should render failed payments report title', () => {
-      renderReportDetail();
+    it('should render failed payments report title', async () => {
+      await renderReportDetail();
 
       const titles = page.getByText('Failed Payments');
 
       expect(titles.elements().length).toBeGreaterThan(0);
     });
 
-    it('should render failed payments current value', () => {
-      renderReportDetail();
+    it('should render failed payments current value', async () => {
+      await renderReportDetail();
 
       expect(page.getByText('$1,834.67')).toBeDefined();
     });
@@ -374,16 +374,16 @@ describe('ReportsPage', () => {
       mockSearchParams.set('report', 'income-per-student');
     });
 
-    it('should render income per student report title', () => {
-      renderReportDetail();
+    it('should render income per student report title', async () => {
+      await renderReportDetail();
 
       const titles = page.getByText('Income Per Student');
 
       expect(titles.elements().length).toBeGreaterThan(0);
     });
 
-    it('should render income per student current value', () => {
-      renderReportDetail();
+    it('should render income per student current value', async () => {
+      await renderReportDetail();
 
       expect(page.getByText('$118.47')).toBeDefined();
     });
@@ -391,7 +391,7 @@ describe('ReportsPage', () => {
 
   describe('Report Card Interactions', () => {
     it('should open expiring credit cards report on click', async () => {
-      render(<ReportsPage />);
+      await render(<ReportsPage />);
 
       const card = page.getByTestId('report-card-expiring-credit-cards');
       await userEvent.click(card);
@@ -404,7 +404,7 @@ describe('ReportsPage', () => {
     });
 
     it('should open past due report on click', async () => {
-      render(<ReportsPage />);
+      await render(<ReportsPage />);
 
       const card = page.getByTestId('report-card-past-due');
       await userEvent.click(card);
@@ -417,7 +417,7 @@ describe('ReportsPage', () => {
     });
 
     it('should open payments last 30 days report on click', async () => {
-      render(<ReportsPage />);
+      await render(<ReportsPage />);
 
       const card = page.getByTestId('report-card-payments-last-30-days');
       await userEvent.click(card);
@@ -430,7 +430,7 @@ describe('ReportsPage', () => {
     });
 
     it('should open payments pending report on click', async () => {
-      render(<ReportsPage />);
+      await render(<ReportsPage />);
 
       const card = page.getByTestId('report-card-payments-pending');
       await userEvent.click(card);
@@ -443,7 +443,7 @@ describe('ReportsPage', () => {
     });
 
     it('should open failed payments report on click', async () => {
-      render(<ReportsPage />);
+      await render(<ReportsPage />);
 
       const card = page.getByTestId('report-card-failed-payments');
       await userEvent.click(card);
@@ -456,7 +456,7 @@ describe('ReportsPage', () => {
     });
 
     it('should open income per student report on click', async () => {
-      render(<ReportsPage />);
+      await render(<ReportsPage />);
 
       const card = page.getByTestId('report-card-income-per-student');
       await userEvent.click(card);
@@ -469,7 +469,7 @@ describe('ReportsPage', () => {
     });
 
     it('should open amount due report on click', async () => {
-      render(<ReportsPage />);
+      await render(<ReportsPage />);
 
       const card = page.getByTestId('report-card-amount-due');
       await userEvent.click(card);
@@ -487,14 +487,14 @@ describe('ReportsPage', () => {
       mockSearchParams.set('report', 'accounts-autopay-suspended');
     });
 
-    it('should display insights for accounts autopay suspended', () => {
-      renderReportDetail();
+    it('should display insights for accounts autopay suspended', async () => {
+      await renderReportDetail();
 
       expect(page.getByText(/Current suspended accounts represent/)).toBeDefined();
     });
 
-    it('should display multiple insight items', () => {
-      renderReportDetail();
+    it('should display multiple insight items', async () => {
+      await renderReportDetail();
 
       expect(page.getByText(/Most suspensions occur/)).toBeDefined();
       expect(page.getByText(/Average time to resolve/)).toBeDefined();
@@ -502,30 +502,30 @@ describe('ReportsPage', () => {
   });
 
   describe('Chart Components', () => {
-    it('should render line chart for amount-due report', () => {
+    it('should render line chart for amount-due report', async () => {
       mockSearchParams.set('report', 'amount-due');
-      renderReportDetail();
+      await renderReportDetail();
 
       expect(page.getByTestId('line-chart')).toBeDefined();
     });
 
-    it('should render bar chart for payments-last-30-days report', () => {
+    it('should render bar chart for payments-last-30-days report', async () => {
       mockSearchParams.set('report', 'payments-last-30-days');
-      renderReportDetail();
+      await renderReportDetail();
 
       expect(page.getByTestId('bar-chart')).toBeDefined();
     });
 
-    it('should render area chart for accounts-autopay-suspended report', () => {
+    it('should render area chart for accounts-autopay-suspended report', async () => {
       mockSearchParams.set('report', 'accounts-autopay-suspended');
-      renderReportDetail();
+      await renderReportDetail();
 
       expect(page.getByTestId('area-chart')).toBeDefined();
     });
 
-    it('should render responsive container', () => {
+    it('should render responsive container', async () => {
       mockSearchParams.set('report', 'amount-due');
-      renderReportDetail();
+      await renderReportDetail();
 
       expect(page.getByTestId('responsive-container')).toBeDefined();
     });
@@ -533,7 +533,7 @@ describe('ReportsPage', () => {
 
   describe('URL State Management', () => {
     it('should update URL when selecting a report', async () => {
-      render(<ReportsPage />);
+      await render(<ReportsPage />);
 
       const card = page.getByTestId('report-card-past-due');
       await userEvent.click(card);
@@ -547,7 +547,7 @@ describe('ReportsPage', () => {
 
     it('should remove report from URL when going back', async () => {
       mockSearchParams.set('report', 'past-due');
-      renderReportDetail();
+      await renderReportDetail();
 
       const backButton = page.getByTestId('back-button');
       await userEvent.click(backButton);
@@ -564,12 +564,12 @@ describe('ReportsPage - Landing Grid Layout', () => {
     mockSearchParams.delete('report');
   });
 
-  afterEach(() => {
-    cleanup();
+  afterEach(async () => {
+    await cleanup();
   });
 
-  it('should render cards in a grid layout', () => {
-    render(<ReportsPage />);
+  it('should render cards in a grid layout', async () => {
+    await render(<ReportsPage />);
 
     // All 8 cards should be rendered
     const cards = page.getByTestId(/^report-card-/);
@@ -583,12 +583,12 @@ describe('ReportsPage - Accessibility', () => {
     mockSearchParams.delete('report');
   });
 
-  afterEach(() => {
-    cleanup();
+  afterEach(async () => {
+    await cleanup();
   });
 
-  it('should have accessible report cards', () => {
-    render(<ReportsPage />);
+  it('should have accessible report cards', async () => {
+    await render(<ReportsPage />);
 
     // Cards should be clickable
     const card = page.getByTestId('report-card-accounts-autopay-suspended');
@@ -596,9 +596,9 @@ describe('ReportsPage - Accessibility', () => {
     expect(card).toBeDefined();
   });
 
-  it('should have accessible back button', () => {
+  it('should have accessible back button', async () => {
     mockSearchParams.set('report', 'accounts-autopay-suspended');
-    renderReportDetail();
+    await renderReportDetail();
 
     const backButton = page.getByTestId('back-button');
 
@@ -612,15 +612,15 @@ describe('ReportsPage - Invalid Report Handling', () => {
     window.history.pushState = mockPushState;
   });
 
-  afterEach(() => {
-    cleanup();
+  afterEach(async () => {
+    await cleanup();
     mockSearchParams.delete('report');
     window.history.pushState = originalPushState;
   });
 
-  it('should render detail view with back button for invalid report ID', () => {
+  it('should render detail view with back button for invalid report ID', async () => {
     mockSearchParams.set('report', 'invalid-report-id');
-    renderReportDetail();
+    await renderReportDetail();
 
     // Should render the detail view which will show back button
     // The component doesn't validate report IDs, it just renders the detail view
@@ -629,7 +629,7 @@ describe('ReportsPage - Invalid Report Handling', () => {
 
   it('should navigate back from invalid report', async () => {
     mockSearchParams.set('report', 'invalid-report-id');
-    renderReportDetail();
+    await renderReportDetail();
 
     // The back button in the detail view has the 'back-button' test ID
     const backButton = page.getByTestId('back-button');
@@ -647,14 +647,14 @@ describe('ReportsPage - Time Period Switching', () => {
     capturedOnValueChange = undefined;
   });
 
-  afterEach(() => {
-    cleanup();
+  afterEach(async () => {
+    await cleanup();
     mockSearchParams.delete('report');
     window.history.pushState = originalPushState;
   });
 
-  it('should allow switching to yearly time period', () => {
-    renderReportDetail();
+  it('should allow switching to yearly time period', async () => {
+    await renderReportDetail();
 
     // Check that onValueChange was captured
     expect(capturedOnValueChange).toBeDefined();
@@ -665,8 +665,8 @@ describe('ReportsPage - Time Period Switching', () => {
     }
   });
 
-  it('should allow switching back to monthly time period', () => {
-    renderReportDetail();
+  it('should allow switching back to monthly time period', async () => {
+    await renderReportDetail();
 
     // Simulate switching to yearly then back to monthly
     if (capturedOnValueChange) {
@@ -686,15 +686,15 @@ describe('ReportsPage - Value Formatting', () => {
     capturedTooltipFormatter = undefined;
   });
 
-  afterEach(() => {
-    cleanup();
+  afterEach(async () => {
+    await cleanup();
     mockSearchParams.delete('report');
     window.history.pushState = originalPushState;
   });
 
-  it('should format currency values >= 1000 with k suffix for amount-due report', () => {
+  it('should format currency values >= 1000 with k suffix for amount-due report', async () => {
     mockSearchParams.set('report', 'amount-due');
-    renderReportDetail();
+    await renderReportDetail();
 
     // Verify tickFormatter was captured
     expect(capturedTickFormatter).toBeDefined();
@@ -706,9 +706,9 @@ describe('ReportsPage - Value Formatting', () => {
     }
   });
 
-  it('should format currency values < 1000 without k suffix for amount-due report', () => {
+  it('should format currency values < 1000 without k suffix for amount-due report', async () => {
     mockSearchParams.set('report', 'amount-due');
-    renderReportDetail();
+    await renderReportDetail();
 
     if (capturedTickFormatter) {
       expect(capturedTickFormatter(500)).toBe('$500');
@@ -716,9 +716,9 @@ describe('ReportsPage - Value Formatting', () => {
     }
   });
 
-  it('should format values for income-per-student report', () => {
+  it('should format values for income-per-student report', async () => {
     mockSearchParams.set('report', 'income-per-student');
-    renderReportDetail();
+    await renderReportDetail();
 
     expect(capturedTickFormatter).toBeDefined();
 
@@ -728,9 +728,9 @@ describe('ReportsPage - Value Formatting', () => {
     }
   });
 
-  it('should format non-currency values as plain numbers for accounts-autopay-suspended', () => {
+  it('should format non-currency values as plain numbers for accounts-autopay-suspended', async () => {
     mockSearchParams.set('report', 'accounts-autopay-suspended');
-    renderReportDetail();
+    await renderReportDetail();
 
     expect(capturedTickFormatter).toBeDefined();
 
@@ -740,9 +740,9 @@ describe('ReportsPage - Value Formatting', () => {
     }
   });
 
-  it('should format values correctly via tooltip formatter for failed-payments report', () => {
+  it('should format values correctly via tooltip formatter for failed-payments report', async () => {
     mockSearchParams.set('report', 'failed-payments');
-    renderReportDetail();
+    await renderReportDetail();
 
     expect(capturedTooltipFormatter).toBeDefined();
 
@@ -754,9 +754,9 @@ describe('ReportsPage - Value Formatting', () => {
     }
   });
 
-  it('should format values correctly via tooltip formatter for past-due report', () => {
+  it('should format values correctly via tooltip formatter for past-due report', async () => {
     mockSearchParams.set('report', 'past-due');
-    renderReportDetail();
+    await renderReportDetail();
 
     if (capturedTooltipFormatter) {
       const result = capturedTooltipFormatter(451);
@@ -766,9 +766,9 @@ describe('ReportsPage - Value Formatting', () => {
     }
   });
 
-  it('should format values correctly via tooltip formatter for payments-pending report', () => {
+  it('should format values correctly via tooltip formatter for payments-pending report', async () => {
     mockSearchParams.set('report', 'payments-pending');
-    renderReportDetail();
+    await renderReportDetail();
 
     if (capturedTooltipFormatter) {
       const result = capturedTooltipFormatter(0);
@@ -778,9 +778,9 @@ describe('ReportsPage - Value Formatting', () => {
     }
   });
 
-  it('should format values correctly via tooltip formatter for payments-last-30-days report', () => {
+  it('should format values correctly via tooltip formatter for payments-last-30-days report', async () => {
     mockSearchParams.set('report', 'payments-last-30-days');
-    renderReportDetail();
+    await renderReportDetail();
 
     if (capturedTooltipFormatter) {
       const result = capturedTooltipFormatter(13150);
@@ -790,9 +790,9 @@ describe('ReportsPage - Value Formatting', () => {
     }
   });
 
-  it('should format values correctly via tooltip formatter for non-currency report', () => {
+  it('should format values correctly via tooltip formatter for non-currency report', async () => {
     mockSearchParams.set('report', 'expiring-credit-cards');
-    renderReportDetail();
+    await renderReportDetail();
 
     if (capturedTooltipFormatter) {
       const result = capturedTooltipFormatter(5);
@@ -811,21 +811,21 @@ describe('ReportsPage - Year Comparison Feature', () => {
     capturedOnCheckedChange = undefined;
   });
 
-  afterEach(() => {
-    cleanup();
+  afterEach(async () => {
+    await cleanup();
     mockSearchParams.delete('report');
     window.history.pushState = originalPushState;
   });
 
-  it('should show compare with last year checkbox in monthly view', () => {
-    renderReportDetail();
+  it('should show compare with last year checkbox in monthly view', async () => {
+    await renderReportDetail();
 
     expect(page.getByTestId('compare-years-checkbox')).toBeDefined();
     expect(page.getByText('Compare with last year')).toBeDefined();
   });
 
-  it('should allow toggling year comparison', () => {
-    renderReportDetail();
+  it('should allow toggling year comparison', async () => {
+    await renderReportDetail();
 
     expect(capturedOnCheckedChange).toBeDefined();
 
@@ -835,8 +835,8 @@ describe('ReportsPage - Year Comparison Feature', () => {
     }
   });
 
-  it('should hide compare checkbox when switching to yearly view', () => {
-    renderReportDetail();
+  it('should hide compare checkbox when switching to yearly view', async () => {
+    await renderReportDetail();
 
     // Initially checkbox should be visible in monthly view
     expect(page.getByTestId('compare-years-checkbox')).toBeDefined();

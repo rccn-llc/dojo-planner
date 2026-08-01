@@ -42,64 +42,64 @@ describe('EditClassSettingsModal', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the modal with title when open', () => {
-    render(<EditClassSettingsModal {...defaultProps} />);
+  it('should render the modal with title when open', async () => {
+    await render(<EditClassSettingsModal {...defaultProps} />);
 
     const heading = page.getByText('Edit Class Settings');
 
     expect(heading).toBeTruthy();
   });
 
-  it('should not render when isOpen is false', () => {
-    render(<EditClassSettingsModal {...defaultProps} isOpen={false} />);
+  it('should not render when isOpen is false', async () => {
+    await render(<EditClassSettingsModal {...defaultProps} isOpen={false} />);
 
     const heading = document.body.textContent?.includes('Edit Class Settings');
 
     expect(heading).toBe(false);
   });
 
-  it('should render maximum capacity input', () => {
-    render(<EditClassSettingsModal {...defaultProps} />);
+  it('should render maximum capacity input', async () => {
+    await render(<EditClassSettingsModal {...defaultProps} />);
 
     const capacityLabel = page.getByText('Maximum Capacity');
 
     expect(capacityLabel).toBeTruthy();
   });
 
-  it('should render Cancel button', () => {
-    render(<EditClassSettingsModal {...defaultProps} />);
+  it('should render Cancel button', async () => {
+    await render(<EditClassSettingsModal {...defaultProps} />);
 
     const cancelButton = page.getByText('Cancel');
 
     expect(cancelButton).toBeTruthy();
   });
 
-  it('should render Save Changes button', () => {
-    render(<EditClassSettingsModal {...defaultProps} />);
+  it('should render Save Changes button', async () => {
+    await render(<EditClassSettingsModal {...defaultProps} />);
 
     const saveButton = page.getByText('Save Changes');
 
     expect(saveButton).toBeTruthy();
   });
 
-  it('should render minimum age input', () => {
-    render(<EditClassSettingsModal {...defaultProps} />);
+  it('should render minimum age input', async () => {
+    await render(<EditClassSettingsModal {...defaultProps} />);
 
     const ageLabel = page.getByText('Minimum Age');
 
     expect(ageLabel).toBeTruthy();
   });
 
-  it('should render allow walk-ins select', () => {
-    render(<EditClassSettingsModal {...defaultProps} />);
+  it('should render allow walk-ins select', async () => {
+    await render(<EditClassSettingsModal {...defaultProps} />);
 
     const walkInsLabel = page.getByText('Allow Walk-ins');
 
     expect(walkInsLabel).toBeTruthy();
   });
 
-  it('should render help texts', () => {
-    render(<EditClassSettingsModal {...defaultProps} />);
+  it('should render help texts', async () => {
+    await render(<EditClassSettingsModal {...defaultProps} />);
 
     const capacityHelp = page.getByText('Leave empty for no limit');
     const ageHelp = page.getByText('Leave empty for no minimum');
@@ -111,7 +111,7 @@ describe('EditClassSettingsModal', () => {
   });
 
   it('should call onClose when Cancel button is clicked', async () => {
-    render(<EditClassSettingsModal {...defaultProps} />);
+    await render(<EditClassSettingsModal {...defaultProps} />);
 
     const cancelButton = page.getByText('Cancel');
     await userEvent.click(cancelButton);
@@ -119,8 +119,8 @@ describe('EditClassSettingsModal', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it('should have Save button enabled when form is valid', () => {
-    render(<EditClassSettingsModal {...defaultProps} />);
+  it('should have Save button enabled when form is valid', async () => {
+    await render(<EditClassSettingsModal {...defaultProps} />);
 
     const buttons = Array.from(document.querySelectorAll('button'));
     const saveButton = buttons.find(btn => btn.textContent?.includes('Save Changes'));
@@ -129,7 +129,7 @@ describe('EditClassSettingsModal', () => {
   });
 
   it('should call onSave with updated values when Save button is clicked', async () => {
-    render(<EditClassSettingsModal {...defaultProps} />);
+    await render(<EditClassSettingsModal {...defaultProps} />);
 
     const saveButton = page.getByText('Save Changes');
     await userEvent.click(saveButton);
@@ -145,7 +145,7 @@ describe('EditClassSettingsModal', () => {
   });
 
   it('should show saving state when submitting', async () => {
-    render(<EditClassSettingsModal {...defaultProps} />);
+    await render(<EditClassSettingsModal {...defaultProps} />);
 
     const saveButton = page.getByText('Save Changes');
     await userEvent.click(saveButton);
@@ -157,7 +157,7 @@ describe('EditClassSettingsModal', () => {
   });
 
   it('should update maximum capacity when input changes', async () => {
-    render(<EditClassSettingsModal {...defaultProps} />);
+    await render(<EditClassSettingsModal {...defaultProps} />);
 
     const capacityInput = page.getByPlaceholder('e.g., 20');
     await userEvent.clear(capacityInput);
@@ -174,7 +174,7 @@ describe('EditClassSettingsModal', () => {
   });
 
   it('should update minimum age when input changes', async () => {
-    render(<EditClassSettingsModal {...defaultProps} />);
+    await render(<EditClassSettingsModal {...defaultProps} />);
 
     const ageInput = page.getByPlaceholder('e.g., 16');
     await userEvent.clear(ageInput);
@@ -191,7 +191,7 @@ describe('EditClassSettingsModal', () => {
   });
 
   it('should allow empty maximum capacity (null)', async () => {
-    render(<EditClassSettingsModal {...defaultProps} />);
+    await render(<EditClassSettingsModal {...defaultProps} />);
 
     const capacityInput = page.getByPlaceholder('e.g., 20');
     await userEvent.clear(capacityInput);
@@ -207,7 +207,7 @@ describe('EditClassSettingsModal', () => {
   });
 
   it('should allow empty minimum age (null)', async () => {
-    render(<EditClassSettingsModal {...defaultProps} />);
+    await render(<EditClassSettingsModal {...defaultProps} />);
 
     const ageInput = page.getByPlaceholder('e.g., 16');
     await userEvent.clear(ageInput);
@@ -222,8 +222,8 @@ describe('EditClassSettingsModal', () => {
     }));
   });
 
-  it('should render with null values for capacity and age', () => {
-    render(<EditClassSettingsModal {...defaultProps} maximumCapacity={null} minimumAge={null} />);
+  it('should render with null values for capacity and age', async () => {
+    await render(<EditClassSettingsModal {...defaultProps} maximumCapacity={null} minimumAge={null} />);
 
     const capacityInput = page.getByPlaceholder('e.g., 20');
     const ageInput = page.getByPlaceholder('e.g., 16');

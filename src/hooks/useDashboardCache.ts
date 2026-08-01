@@ -1,6 +1,7 @@
 import type { ChartData, FinancialStats, MembershipStats } from '@/services/DashboardService';
 import { useCallback, useEffect, useReducer } from 'react';
 import { client } from '@/libs/Orpc';
+import { dedupeRequest } from './dedupeRequest';
 
 type DashboardData = {
   membershipStats: MembershipStats | null;
@@ -59,14 +60,19 @@ export const useDashboardCache = () => {
         return;
       }
 
-      const [membershipStats, financialStats, memberAverageData, earningsData] = await Promise.all([
-        client.dashboard.membershipStats() as Promise<MembershipStats>,
-        client.dashboard.financialStats() as Promise<FinancialStats>,
-        client.dashboard.memberAverageChart() as Promise<ChartData>,
-        client.dashboard.earningsChart() as Promise<ChartData>,
-      ]);
+      // De-duped as one unit: this fans out to four endpoints, so a second
+      // instance mounting against the cold cache would double all of them.
+      const data = await dedupeRequest('dashboard', async () => {
+        const [membershipStats, financialStats, memberAverageData, earningsData] = await Promise.all([
+          client.dashboard.membershipStats() as Promise<MembershipStats>,
+          client.dashboard.financialStats() as Promise<FinancialStats>,
+          client.dashboard.memberAverageChart() as Promise<ChartData>,
+          client.dashboard.earningsChart() as Promise<ChartData>,
+        ]);
 
-      const data: DashboardData = { membershipStats, financialStats, memberAverageData, earningsData };
+        return { membershipStats, financialStats, memberAverageData, earningsData } as DashboardData;
+      });
+
       cacheStore = { data, timestamp: Date.now() };
       dispatch({ type: 'SET_DATA', payload: data });
     } catch (err) {

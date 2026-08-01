@@ -130,8 +130,8 @@ vi.mock('@/hooks/useEventsCache', () => ({
 
 describe('MonthlyView', () => {
   describe('Page Header', () => {
-    it('should render the page title', () => {
-      render(
+    it('should render the page title', async () => {
+      await render(
         <I18nWrapper>
           <MonthlyView />
         </I18nWrapper>,
@@ -144,8 +144,8 @@ describe('MonthlyView', () => {
   });
 
   describe('Filter Controls', () => {
-    it('should render location dropdown button', () => {
-      render(
+    it('should render location dropdown button', async () => {
+      await render(
         <I18nWrapper>
           <MonthlyView />
         </I18nWrapper>,
@@ -156,8 +156,8 @@ describe('MonthlyView', () => {
       expect(button).toBeInTheDocument();
     });
 
-    it('should render Add New Class button', () => {
-      render(
+    it('should render Add New Class button', async () => {
+      await render(
         <I18nWrapper>
           <MonthlyView />
         </I18nWrapper>,
@@ -168,8 +168,8 @@ describe('MonthlyView', () => {
       expect(addButton).toBeInTheDocument();
     });
 
-    it('should render view toggle buttons', () => {
-      render(
+    it('should render view toggle buttons', async () => {
+      await render(
         <I18nWrapper>
           <MonthlyView />
         </I18nWrapper>,
@@ -182,8 +182,8 @@ describe('MonthlyView', () => {
   });
 
   describe('Navigation', () => {
-    it('should render Previous button', () => {
-      render(
+    it('should render Previous button', async () => {
+      await render(
         <I18nWrapper>
           <MonthlyView />
         </I18nWrapper>,
@@ -194,8 +194,8 @@ describe('MonthlyView', () => {
       expect(prevButton).toBeInTheDocument();
     });
 
-    it('should render Next button', () => {
-      render(
+    it('should render Next button', async () => {
+      await render(
         <I18nWrapper>
           <MonthlyView />
         </I18nWrapper>,
@@ -206,8 +206,8 @@ describe('MonthlyView', () => {
       expect(nextButton).toBeInTheDocument();
     });
 
-    it('should render Today button', () => {
-      render(
+    it('should render Today button', async () => {
+      await render(
         <I18nWrapper>
           <MonthlyView />
         </I18nWrapper>,
@@ -218,8 +218,8 @@ describe('MonthlyView', () => {
       expect(todayButton).toBeInTheDocument();
     });
 
-    it('should render date display showing current month', () => {
-      render(
+    it('should render date display showing current month', async () => {
+      await render(
         <I18nWrapper>
           <MonthlyView />
         </I18nWrapper>,
@@ -234,8 +234,8 @@ describe('MonthlyView', () => {
   });
 
   describe('Calendar Grid', () => {
-    it('should render all days of week headers', () => {
-      render(
+    it('should render all days of week headers', async () => {
+      await render(
         <I18nWrapper>
           <MonthlyView />
         </I18nWrapper>,
@@ -250,8 +250,8 @@ describe('MonthlyView', () => {
       }
     });
 
-    it('should render calendar days', () => {
-      render(
+    it('should render calendar days', async () => {
+      await render(
         <I18nWrapper>
           <MonthlyView />
         </I18nWrapper>,
@@ -265,8 +265,8 @@ describe('MonthlyView', () => {
       expect(day15).toBeInTheDocument();
     });
 
-    it('should display class events on calendar days', () => {
-      render(
+    it('should display class events on calendar days', async () => {
+      await render(
         <I18nWrapper>
           <MonthlyView />
         </I18nWrapper>,
@@ -278,8 +278,8 @@ describe('MonthlyView', () => {
       expect(fundamentals).toBeInTheDocument();
     });
 
-    it('should show multiple classes per day when applicable', () => {
-      render(
+    it('should show multiple classes per day when applicable', async () => {
+      await render(
         <I18nWrapper>
           <MonthlyView />
         </I18nWrapper>,
@@ -294,8 +294,8 @@ describe('MonthlyView', () => {
   });
 
   describe('Class Styling', () => {
-    it('should render classes with color coding', () => {
-      render(
+    it('should render classes with color coding', async () => {
+      await render(
         <I18nWrapper>
           <MonthlyView />
         </I18nWrapper>,
@@ -306,8 +306,8 @@ describe('MonthlyView', () => {
       expect(classElement).toBeInTheDocument();
     });
 
-    it('should display class badges with proper styling', () => {
-      render(
+    it('should display class badges with proper styling', async () => {
+      await render(
         <I18nWrapper>
           <MonthlyView />
         </I18nWrapper>,
@@ -321,8 +321,8 @@ describe('MonthlyView', () => {
   });
 
   describe('Legend', () => {
-    it('should render legend section', () => {
-      render(
+    it('should render legend section', async () => {
+      await render(
         <I18nWrapper>
           <MonthlyView />
         </I18nWrapper>,
@@ -343,8 +343,8 @@ describe('MonthlyView', () => {
       }
     });
 
-    it('should show color indicators in legend', () => {
-      render(
+    it('should show color indicators in legend', async () => {
+      await render(
         <I18nWrapper>
           <MonthlyView />
         </I18nWrapper>,
@@ -357,8 +357,8 @@ describe('MonthlyView', () => {
   });
 
   describe('Responsive Design', () => {
-    it('should render responsive grid layout', () => {
-      render(
+    it('should render responsive grid layout', async () => {
+      await render(
         <I18nWrapper>
           <MonthlyView />
         </I18nWrapper>,
@@ -369,8 +369,8 @@ describe('MonthlyView', () => {
       expect(calendar).toBeInTheDocument();
     });
 
-    it('should truncate class names on small screens', () => {
-      render(
+    it('should truncate class names on small screens', async () => {
+      await render(
         <I18nWrapper>
           <MonthlyView />
         </I18nWrapper>,
@@ -384,8 +384,8 @@ describe('MonthlyView', () => {
   });
 
   describe('All Mock Classes Display', () => {
-    it('should render all class types on calendar', () => {
-      render(
+    it('should render all class types on calendar', async () => {
+      await render(
         <I18nWrapper>
           <MonthlyView />
         </I18nWrapper>,
@@ -406,8 +406,8 @@ describe('MonthlyView', () => {
       }
     });
 
-    it('should distribute classes across week days appropriately', () => {
-      render(
+    it('should distribute classes across week days appropriately', async () => {
+      await render(
         <I18nWrapper>
           <MonthlyView />
         </I18nWrapper>,

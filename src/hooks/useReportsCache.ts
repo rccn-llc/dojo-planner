@@ -1,6 +1,7 @@
 import type { ReportChartData, ReportCurrentValues, ReportRange } from '@/services/ReportsService';
 import { useCallback, useEffect, useReducer } from 'react';
 import { client } from '@/libs/Orpc';
+import { dedupeRequest } from './dedupeRequest';
 
 // Hook for fetching report current values (the overview cards)
 type CurrentValuesState = {
@@ -114,13 +115,23 @@ export const useReportDetail = (reportType: string | null, range?: ReportRange) 
     const fetchDetail = async () => {
       dispatch({ type: 'LOADING_START' });
       try {
-        const [chartData, insights] = await Promise.all([
-          client.reports.chartData({
-            reportType: reportType as Parameters<typeof client.reports.chartData>[0]['reportType'],
-            ...(range ? { range } : {}),
-          }) as Promise<ReportChartData>,
-          client.reports.insights({ reportType: reportType as Parameters<typeof client.reports.insights>[0]['reportType'] }) as Promise<string[]>,
-        ]);
+        // De-duped as one unit and keyed by the inputs, so concurrent mounts
+        // for the same report share a request while a different report or
+        // range still fetches its own.
+        const { chartData, insights } = await dedupeRequest(
+          `reports.detail:${reportType}:${range ?? ''}`,
+          async () => {
+            const [fetchedChart, fetchedInsights] = await Promise.all([
+              client.reports.chartData({
+                reportType: reportType as Parameters<typeof client.reports.chartData>[0]['reportType'],
+                ...(range ? { range } : {}),
+              }) as Promise<ReportChartData>,
+              client.reports.insights({ reportType: reportType as Parameters<typeof client.reports.insights>[0]['reportType'] }) as Promise<string[]>,
+            ]);
+
+            return { chartData: fetchedChart, insights: fetchedInsights };
+          },
+        );
 
         if (!cancelled) {
           dispatch({ type: 'SET_DATA', payload: { chartData, insights } });

@@ -48,7 +48,7 @@ function DatePicker({
             className,
           )}
         >
-          <CalendarIcon className="mr-2 h-4 w-4" />
+          <CalendarIcon className="mr-2 size-4" />
           {value ? format(value, 'yyyy-MM-dd') : <span>{placeholder}</span>}
         </Button>
       </PopoverTrigger>
@@ -85,7 +85,7 @@ function TimePicker({
 
   return (
     <div className={cn('relative', className)}>
-      <ClockIcon className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <ClockIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
       <Input
         type="time"
         step="1"
@@ -160,7 +160,7 @@ function DateTimePicker({
                 !parsedDate && 'text-muted-foreground',
               )}
             >
-              <CalendarIcon className="mr-2 h-4 w-4" />
+              <CalendarIcon className="mr-2 size-4" />
               {parsedDate ? format(parsedDate, 'yyyy-MM-dd') : <span>{datePlaceholder}</span>}
             </Button>
           </PopoverTrigger>

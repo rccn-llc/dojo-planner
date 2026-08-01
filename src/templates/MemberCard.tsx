@@ -170,7 +170,7 @@ export function MemberCard({
       <div className="space-y-4">
         {/* Member Name */}
         <div className="flex items-center gap-3 border-b border-border pb-4">
-          <Avatar className="h-10 w-10 shrink-0">
+          <Avatar className="size-10 shrink-0">
             {photoUrl && (
               <AvatarImage src={photoUrl} alt={`${firstName} ${lastName}`} />
             )}

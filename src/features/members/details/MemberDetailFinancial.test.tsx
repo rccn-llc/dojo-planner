@@ -55,44 +55,44 @@ describe('MemberDetailFinancial', () => {
   };
 
   describe('Render method', () => {
-    it('should render member header with name', () => {
-      render(<MemberDetailFinancial {...mockProps} />);
+    it('should render member header with name', async () => {
+      await render(<MemberDetailFinancial {...mockProps} />);
 
       expect(page.getByRole('heading', { name: 'Anika Smith' })).toBeInTheDocument();
     });
 
-    it('should render membership details', () => {
-      render(<MemberDetailFinancial {...mockProps} />);
+    it('should render membership details', async () => {
+      await render(<MemberDetailFinancial {...mockProps} />);
 
       expect(page.getByRole('heading', { name: 'membership_details' })).toBeInTheDocument();
     });
 
-    it('should render program information', () => {
-      render(<MemberDetailFinancial {...mockProps} />);
+    it('should render program information', async () => {
+      await render(<MemberDetailFinancial {...mockProps} />);
 
       expect(page.getByText('Caio Terra Academy Palo Alto (Adults)')).toBeInTheDocument();
     });
 
-    it('should render payment method section', () => {
-      render(<MemberDetailFinancial {...mockProps} />);
+    it('should render payment method section', async () => {
+      await render(<MemberDetailFinancial {...mockProps} />);
 
       expect(page.getByRole('heading', { name: 'payment_method' })).toBeInTheDocument();
     });
 
-    it('should render agreement section', () => {
-      render(<MemberDetailFinancial {...mockProps} />);
+    it('should render agreement section', async () => {
+      await render(<MemberDetailFinancial {...mockProps} />);
 
       expect(page.getByText('agreement_waiver')).toBeInTheDocument();
     });
 
-    it('should render billing history', () => {
-      render(<MemberDetailFinancial {...mockProps} />);
+    it('should render billing history', async () => {
+      await render(<MemberDetailFinancial {...mockProps} />);
 
       expect(page.getByText('billing_history')).toBeInTheDocument();
     });
 
-    it('should render action buttons', () => {
-      render(<MemberDetailFinancial {...mockProps} />);
+    it('should render action buttons', async () => {
+      await render(<MemberDetailFinancial {...mockProps} />);
 
       expect(page.getByRole('button', { name: 'change_membership_button' })).toBeInTheDocument();
       expect(page.getByRole('button', { name: 'download_button' })).toBeInTheDocument();
@@ -101,7 +101,7 @@ describe('MemberDetailFinancial', () => {
 
   describe('Actions', () => {
     it('should call onChangeMembership when change membership button is clicked', async () => {
-      render(<MemberDetailFinancial {...mockProps} />);
+      await render(<MemberDetailFinancial {...mockProps} />);
       const changeButton = page.getByRole('button', { name: 'change_membership_button' });
       await changeButton.click();
 
@@ -109,7 +109,7 @@ describe('MemberDetailFinancial', () => {
     });
 
     it('should call onDownloadAgreement when download button is clicked', async () => {
-      render(<MemberDetailFinancial {...mockProps} />);
+      await render(<MemberDetailFinancial {...mockProps} />);
       const downloadButton = page.getByRole('button', { name: 'download_button' });
       await downloadButton.click();
 
@@ -118,13 +118,13 @@ describe('MemberDetailFinancial', () => {
   });
 
   describe('Status rendering', () => {
-    it('should render active status', () => {
-      render(<MemberDetailFinancial {...mockProps} />);
+    it('should render active status', async () => {
+      await render(<MemberDetailFinancial {...mockProps} />);
 
       expect(page.getByText('Active').first()).toBeInTheDocument();
     });
 
-    it('should render on-hold status', () => {
+    it('should render on-hold status', async () => {
       const propsWithHold = {
         ...mockProps,
         membershipDetails: {
@@ -132,14 +132,14 @@ describe('MemberDetailFinancial', () => {
           status: 'on-hold' as const,
         },
       };
-      render(<MemberDetailFinancial {...propsWithHold} />);
+      await render(<MemberDetailFinancial {...propsWithHold} />);
 
       expect(page.getByText('On Hold')).toBeInTheDocument();
     });
   });
 
   describe('Billing type and autopay functionality', () => {
-    it('should render billing type label when billing type is provided', () => {
+    it('should render billing type label when billing type is provided', async () => {
       const propsWithBillingType = {
         ...mockProps,
         membershipDetails: {
@@ -147,12 +147,12 @@ describe('MemberDetailFinancial', () => {
           billingType: 'autopay' as const,
         },
       };
-      render(<MemberDetailFinancial {...propsWithBillingType} />);
+      await render(<MemberDetailFinancial {...propsWithBillingType} />);
 
       expect(page.getByText('billing_type_label')).toBeInTheDocument();
     });
 
-    it('should render autopay badge when billing type is autopay', () => {
+    it('should render autopay badge when billing type is autopay', async () => {
       const propsWithAutopay = {
         ...mockProps,
         membershipDetails: {
@@ -160,12 +160,12 @@ describe('MemberDetailFinancial', () => {
           billingType: 'autopay' as const,
         },
       };
-      render(<MemberDetailFinancial {...propsWithAutopay} />);
+      await render(<MemberDetailFinancial {...propsWithAutopay} />);
 
       expect(page.getByText('billing_type_autopay')).toBeInTheDocument();
     });
 
-    it('should render one-time badge when billing type is one-time', () => {
+    it('should render one-time badge when billing type is one-time', async () => {
       const propsWithOneTime = {
         ...mockProps,
         membershipDetails: {
@@ -173,12 +173,12 @@ describe('MemberDetailFinancial', () => {
           billingType: 'one-time' as const,
         },
       };
-      render(<MemberDetailFinancial {...propsWithOneTime} />);
+      await render(<MemberDetailFinancial {...propsWithOneTime} />);
 
       expect(page.getByText('billing_type_onetime')).toBeInTheDocument();
     });
 
-    it('should not render billing type section when billing type is not provided', () => {
+    it('should not render billing type section when billing type is not provided', async () => {
       const propsWithoutBillingType = {
         ...mockProps,
         membershipDetails: {
@@ -186,7 +186,7 @@ describe('MemberDetailFinancial', () => {
           billingType: undefined,
         },
       };
-      render(<MemberDetailFinancial {...propsWithoutBillingType} />);
+      await render(<MemberDetailFinancial {...propsWithoutBillingType} />);
 
       // Check that the billing type label is not in the document
       const billingTypeLabel = Array.from(document.querySelectorAll('p')).find(el => el.textContent === 'billing_type_label');
@@ -194,7 +194,7 @@ describe('MemberDetailFinancial', () => {
       expect(billingTypeLabel).toBeFalsy();
     });
 
-    it('should not render billing type section when payment frequency is N/A', () => {
+    it('should not render billing type section when payment frequency is N/A', async () => {
       const propsWithNoFrequency = {
         ...mockProps,
         membershipDetails: {
@@ -203,7 +203,7 @@ describe('MemberDetailFinancial', () => {
           paymentFrequency: 'N/A',
         },
       };
-      render(<MemberDetailFinancial {...propsWithNoFrequency} />);
+      await render(<MemberDetailFinancial {...propsWithNoFrequency} />);
 
       // Check that the billing type label is not in the document
       const billingTypeLabel = Array.from(document.querySelectorAll('p')).find(el => el.textContent === 'billing_type_label');
@@ -211,7 +211,7 @@ describe('MemberDetailFinancial', () => {
       expect(billingTypeLabel).toBeFalsy();
     });
 
-    it('should render first payment date when provided', () => {
+    it('should render first payment date when provided', async () => {
       const propsWithFirstPayment = {
         ...mockProps,
         membershipDetails: {
@@ -219,13 +219,13 @@ describe('MemberDetailFinancial', () => {
           firstPaymentDate: 'Sep 01, 2025',
         },
       };
-      render(<MemberDetailFinancial {...propsWithFirstPayment} />);
+      await render(<MemberDetailFinancial {...propsWithFirstPayment} />);
 
       expect(page.getByText('first_payment_date_label')).toBeInTheDocument();
       expect(page.getByText('Sep 01, 2025').last()).toBeInTheDocument();
     });
 
-    it('should not render first payment date when not provided', () => {
+    it('should not render first payment date when not provided', async () => {
       const propsWithoutFirstPayment = {
         ...mockProps,
         membershipDetails: {
@@ -233,7 +233,7 @@ describe('MemberDetailFinancial', () => {
           firstPaymentDate: undefined,
         },
       };
-      render(<MemberDetailFinancial {...propsWithoutFirstPayment} />);
+      await render(<MemberDetailFinancial {...propsWithoutFirstPayment} />);
 
       // Check that the first payment date label is not in the document
       const firstPaymentLabel = Array.from(document.querySelectorAll('p')).find(el => el.textContent === 'first_payment_date_label');
@@ -241,7 +241,7 @@ describe('MemberDetailFinancial', () => {
       expect(firstPaymentLabel).toBeFalsy();
     });
 
-    it('should render next payment date only when billing type is autopay', () => {
+    it('should render next payment date only when billing type is autopay', async () => {
       const propsWithAutopay = {
         ...mockProps,
         membershipDetails: {
@@ -250,12 +250,12 @@ describe('MemberDetailFinancial', () => {
           nextPaymentDate: 'Oct 01, 2025',
         },
       };
-      render(<MemberDetailFinancial {...propsWithAutopay} />);
+      await render(<MemberDetailFinancial {...propsWithAutopay} />);
 
       expect(page.getByText('next_payment_date_label')).toBeInTheDocument();
     });
 
-    it('should not render next payment date when billing type is one-time', () => {
+    it('should not render next payment date when billing type is one-time', async () => {
       const propsWithOneTime = {
         ...mockProps,
         membershipDetails: {
@@ -264,7 +264,7 @@ describe('MemberDetailFinancial', () => {
           nextPaymentDate: 'Oct 01, 2025',
         },
       };
-      render(<MemberDetailFinancial {...propsWithOneTime} />);
+      await render(<MemberDetailFinancial {...propsWithOneTime} />);
 
       // Check that the next payment date label is not in the document (for one-time billing)
       const nextPaymentLabel = Array.from(document.querySelectorAll('p')).find(el => el.textContent === 'next_payment_date_label');
@@ -272,7 +272,7 @@ describe('MemberDetailFinancial', () => {
       expect(nextPaymentLabel).toBeFalsy();
     });
 
-    it('should render next payment amount only when billing type is autopay', () => {
+    it('should render next payment amount only when billing type is autopay', async () => {
       const propsWithAutopay = {
         ...mockProps,
         membershipDetails: {
@@ -281,12 +281,12 @@ describe('MemberDetailFinancial', () => {
           nextPaymentAmount: 300,
         },
       };
-      render(<MemberDetailFinancial {...propsWithAutopay} />);
+      await render(<MemberDetailFinancial {...propsWithAutopay} />);
 
       expect(page.getByText('next_payment_amount_label')).toBeInTheDocument();
     });
 
-    it('should not render next payment amount when billing type is one-time', () => {
+    it('should not render next payment amount when billing type is one-time', async () => {
       const propsWithOneTime = {
         ...mockProps,
         membershipDetails: {
@@ -295,7 +295,7 @@ describe('MemberDetailFinancial', () => {
           nextPaymentAmount: 300,
         },
       };
-      render(<MemberDetailFinancial {...propsWithOneTime} />);
+      await render(<MemberDetailFinancial {...propsWithOneTime} />);
 
       // Check that the next payment amount label is not in the document (for one-time billing)
       const nextPaymentAmountLabel = Array.from(document.querySelectorAll('p')).find(el => el.textContent === 'next_payment_amount_label');
@@ -303,7 +303,7 @@ describe('MemberDetailFinancial', () => {
       expect(nextPaymentAmountLabel).toBeFalsy();
     });
 
-    it('should show both first payment date and next payment date for autopay', () => {
+    it('should show both first payment date and next payment date for autopay', async () => {
       const propsWithAutopay = {
         ...mockProps,
         membershipDetails: {
@@ -313,13 +313,13 @@ describe('MemberDetailFinancial', () => {
           nextPaymentDate: 'Oct 01, 2025',
         },
       };
-      render(<MemberDetailFinancial {...propsWithAutopay} />);
+      await render(<MemberDetailFinancial {...propsWithAutopay} />);
 
       expect(page.getByText('first_payment_date_label')).toBeInTheDocument();
       expect(page.getByText('next_payment_date_label')).toBeInTheDocument();
     });
 
-    it('should only show first payment date for one-time billing', () => {
+    it('should only show first payment date for one-time billing', async () => {
       const propsWithOneTime = {
         ...mockProps,
         membershipDetails: {
@@ -329,7 +329,7 @@ describe('MemberDetailFinancial', () => {
           nextPaymentDate: 'Oct 01, 2025',
         },
       };
-      render(<MemberDetailFinancial {...propsWithOneTime} />);
+      await render(<MemberDetailFinancial {...propsWithOneTime} />);
 
       expect(page.getByText('first_payment_date_label')).toBeInTheDocument();
 

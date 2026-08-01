@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { dedupeRequest } from '@/hooks/dedupeRequest';
 import { invalidateMembersCache } from '@/hooks/useMembersCache';
 import { client } from '@/libs/Orpc';
 
@@ -165,7 +166,7 @@ export function ChangeMembershipModal({
       const fetchPlans = async () => {
         setIsFetchingPlans(true);
         try {
-          const result = await client.member.listMembershipPlans();
+          const result = await dedupeRequest('member.listMembershipPlans', async () => client.member.listMembershipPlans());
           // Filter to only show active plans and use mocks as fallback
           const activePlans = result.plans.filter(plan => plan.isActive);
           if (activePlans.length > 0) {
@@ -313,7 +314,7 @@ export function ChangeMembershipModal({
                       >
                         {selectedPlanId === plan.id && (
                           <div className="absolute top-2 right-2">
-                            <Check className="h-5 w-5 text-primary" />
+                            <Check className="size-5 text-primary" />
                           </div>
                         )}
 

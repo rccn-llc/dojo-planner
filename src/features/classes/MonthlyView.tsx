@@ -176,7 +176,7 @@ export function MonthlyView({ withFilters }: MonthlyViewProps = {}) {
 
               {/* Add New Class Button */}
               <Button>
-                <Plus className="h-4 w-4" />
+                <Plus className="size-4" />
                 <span className="ml-1 hidden sm:inline">Add New Class</span>
               </Button>
             </div>
@@ -233,7 +233,7 @@ export function MonthlyView({ withFilters }: MonthlyViewProps = {}) {
           <tbody className="bg-background">
             {weeks.map(week => (
               <tr key={week.key} className="border-b border-border last:border-b-0">
-                {week.days.map((day) => {
+                {week.days.map((day, dayIndex) => {
                   const today = new Date();
                   const isToday = day !== null
                     && today.getFullYear() === year
@@ -241,7 +241,9 @@ export function MonthlyView({ withFilters }: MonthlyViewProps = {}) {
                     && today.getDate() === day;
                   return (
                     <td
-                      key={day ?? `empty-${week.key}`}
+                      // A week can hold several leading/trailing empty cells,
+                      // so the week key alone is not unique across them.
+                      key={day ?? `empty-${week.key}-${dayIndex}`}
                       className={`h-20 border-r border-border p-1 align-top last:border-r-0 sm:h-24 sm:p-2 ${
                         !day ? 'bg-muted' : isToday ? 'bg-blue-50 dark:bg-blue-950/40' : ''
                       }`}
@@ -326,7 +328,7 @@ export function MonthlyView({ withFilters }: MonthlyViewProps = {}) {
         {Object.entries(classColors).map(([className, color]) => (
           <div key={className} className="flex items-center gap-2">
             <div
-              className="h-3 w-3 rounded"
+              className="size-3 rounded"
               style={{ backgroundColor: color }}
             />
             <span className="text-xs text-foreground sm:text-sm">{className}</span>

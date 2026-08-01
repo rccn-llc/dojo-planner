@@ -17,8 +17,8 @@ describe('DeleteCouponAlertDialog', () => {
   });
 
   describe('Dialog Content', () => {
-    it('renders the dialog title', () => {
-      render(
+    it('renders the dialog title', async () => {
+      await render(
         <I18nWrapper>
           <DeleteCouponAlertDialog {...defaultProps} />
         </I18nWrapper>,
@@ -29,8 +29,8 @@ describe('DeleteCouponAlertDialog', () => {
       expect(title).toBeInTheDocument();
     });
 
-    it('renders the dialog description with coupon code', () => {
-      render(
+    it('renders the dialog description with coupon code', async () => {
+      await render(
         <I18nWrapper>
           <DeleteCouponAlertDialog {...defaultProps} />
         </I18nWrapper>,
@@ -41,8 +41,8 @@ describe('DeleteCouponAlertDialog', () => {
       expect(description).toBeInTheDocument();
     });
 
-    it('renders the cancel button', () => {
-      render(
+    it('renders the cancel button', async () => {
+      await render(
         <I18nWrapper>
           <DeleteCouponAlertDialog {...defaultProps} />
         </I18nWrapper>,
@@ -53,8 +53,8 @@ describe('DeleteCouponAlertDialog', () => {
       expect(cancelButton).toBeInTheDocument();
     });
 
-    it('renders the delete button', () => {
-      render(
+    it('renders the delete button', async () => {
+      await render(
         <I18nWrapper>
           <DeleteCouponAlertDialog {...defaultProps} />
         </I18nWrapper>,
@@ -67,8 +67,8 @@ describe('DeleteCouponAlertDialog', () => {
   });
 
   describe('Dialog Visibility', () => {
-    it('does not render content when isOpen is false', () => {
-      render(
+    it('does not render content when isOpen is false', async () => {
+      await render(
         <I18nWrapper>
           <DeleteCouponAlertDialog {...defaultProps} isOpen={false} />
         </I18nWrapper>,
@@ -79,8 +79,8 @@ describe('DeleteCouponAlertDialog', () => {
       expect(titles.length).toBe(0);
     });
 
-    it('renders content when isOpen is true', () => {
-      render(
+    it('renders content when isOpen is true', async () => {
+      await render(
         <I18nWrapper>
           <DeleteCouponAlertDialog {...defaultProps} isOpen />
         </I18nWrapper>,
@@ -96,7 +96,7 @@ describe('DeleteCouponAlertDialog', () => {
     it('calls onCloseAction when cancel button is clicked', async () => {
       const onCloseAction = vi.fn();
 
-      render(
+      await render(
         <I18nWrapper>
           <DeleteCouponAlertDialog {...defaultProps} onCloseAction={onCloseAction} />
         </I18nWrapper>,
@@ -113,7 +113,7 @@ describe('DeleteCouponAlertDialog', () => {
     it('calls onConfirmAction when delete button is clicked', async () => {
       const onConfirmAction = vi.fn();
 
-      render(
+      await render(
         <I18nWrapper>
           <DeleteCouponAlertDialog {...defaultProps} onConfirmAction={onConfirmAction} />
         </I18nWrapper>,
@@ -129,7 +129,7 @@ describe('DeleteCouponAlertDialog', () => {
       const onCloseAction = vi.fn();
       const onConfirmAction = vi.fn();
 
-      render(
+      await render(
         <I18nWrapper>
           <DeleteCouponAlertDialog
             {...defaultProps}
@@ -148,8 +148,8 @@ describe('DeleteCouponAlertDialog', () => {
   });
 
   describe('Button Styles', () => {
-    it('delete button has destructive styling', () => {
-      render(
+    it('delete button has destructive styling', async () => {
+      await render(
         <I18nWrapper>
           <DeleteCouponAlertDialog {...defaultProps} />
         </I18nWrapper>,
@@ -162,8 +162,8 @@ describe('DeleteCouponAlertDialog', () => {
   });
 
   describe('Accessibility', () => {
-    it('has accessible dialog role', () => {
-      render(
+    it('has accessible dialog role', async () => {
+      await render(
         <I18nWrapper>
           <DeleteCouponAlertDialog {...defaultProps} />
         </I18nWrapper>,
@@ -174,8 +174,8 @@ describe('DeleteCouponAlertDialog', () => {
       expect(alertDialog).toBeInTheDocument();
     });
 
-    it('has accessible dialog description', () => {
-      render(
+    it('has accessible dialog description', async () => {
+      await render(
         <I18nWrapper>
           <DeleteCouponAlertDialog {...defaultProps} />
         </I18nWrapper>,

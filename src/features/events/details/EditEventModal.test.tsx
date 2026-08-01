@@ -116,8 +116,8 @@ beforeEach(() => {
 });
 
 describe('EditEventModal', () => {
-  it('does not render when isOpen is false', () => {
-    render(
+  it('does not render when isOpen is false', async () => {
+    await render(
       <EditEventModal
         isOpen={false}
         event={baseEvent}
@@ -128,8 +128,8 @@ describe('EditEventModal', () => {
     expect(document.body.textContent).not.toContain('Edit Event');
   });
 
-  it('renders the title and pre-populates the name field', () => {
-    render(
+  it('renders the title and pre-populates the name field', async () => {
+    await render(
       <EditEventModal
         isOpen={true}
         event={baseEvent}
@@ -145,7 +145,7 @@ describe('EditEventModal', () => {
   });
 
   it('opens on the initial tab and switches between tabs', async () => {
-    render(
+    await render(
       <EditEventModal
         isOpen={true}
         event={baseEvent}
@@ -163,7 +163,7 @@ describe('EditEventModal', () => {
 
   it('calls client.events.update with the canonical payload on save', async () => {
     const onClose = vi.fn();
-    render(
+    await render(
       <EditEventModal
         isOpen={true}
         event={baseEvent}
@@ -192,7 +192,7 @@ describe('EditEventModal', () => {
   });
 
   it('includes the chosen per-session instructor in the update payload', async () => {
-    render(
+    await render(
       <EditEventModal
         isOpen={true}
         event={baseEvent}
@@ -225,9 +225,9 @@ describe('EditEventModal', () => {
     expect(payload.sessions[0]!.primaryInstructorClerkId).toBe('ins-1');
   });
 
-  it('coerces unknown event types to "other" on open', () => {
+  it('coerces unknown event types to "other" on open', async () => {
     const oddEvent = { ...baseEvent, eventType: 'something-weird' };
-    render(
+    await render(
       <EditEventModal
         isOpen={true}
         event={oddEvent}

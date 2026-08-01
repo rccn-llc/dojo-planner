@@ -171,7 +171,7 @@ export function DateOfBirthInput({
               aria-label="Open calendar"
               data-testid={dataTestId ? `${dataTestId}-calendar-trigger` : undefined}
             >
-              <CalendarIcon className="h-4 w-4" />
+              <CalendarIcon className="size-4" />
             </Button>
           </PopoverTrigger>
           <PopoverContent align="end" className="w-auto p-0">

@@ -79,7 +79,7 @@ export function ArchiveMemberModal({
             ? (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950">
                   <div className="flex items-start gap-3">
-                    <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-600 dark:text-amber-400" />
                     <p className="text-sm text-amber-800 dark:text-amber-200">{t('archive_notice')}</p>
                   </div>
                 </div>
@@ -87,7 +87,7 @@ export function ArchiveMemberModal({
             : (
                 <div className="rounded-lg border border-border p-4">
                   <div className="flex items-start gap-3">
-                    <ArchiveRestore className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
+                    <ArchiveRestore className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">{t('restore_notice')}</p>
                   </div>
                 </div>

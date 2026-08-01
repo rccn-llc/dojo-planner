@@ -22,16 +22,16 @@ describe('ClassStatsCard', () => {
     level: 'Beginner' as const,
   };
 
-  it('should render the stats card', () => {
-    render(<ClassStatsCard {...defaultProps} />);
+  it('should render the stats card', async () => {
+    await render(<ClassStatsCard {...defaultProps} />);
 
     const enrollments = page.getByText('45');
 
     expect(enrollments).toBeTruthy();
   });
 
-  it('should render active enrollments stat', () => {
-    render(<ClassStatsCard {...defaultProps} />);
+  it('should render active enrollments stat', async () => {
+    await render(<ClassStatsCard {...defaultProps} />);
 
     const enrollmentsLabel = page.getByText('Active Enrollments');
     const enrollmentsValue = page.getByText('45');
@@ -40,8 +40,8 @@ describe('ClassStatsCard', () => {
     expect(enrollmentsValue).toBeTruthy();
   });
 
-  it('should render average attendance stat', () => {
-    render(<ClassStatsCard {...defaultProps} />);
+  it('should render average attendance stat', async () => {
+    await render(<ClassStatsCard {...defaultProps} />);
 
     const attendanceLabel = page.getByText('Avg. Attendance');
     const attendanceValue = page.getByText('18');
@@ -50,8 +50,8 @@ describe('ClassStatsCard', () => {
     expect(attendanceValue).toBeTruthy();
   });
 
-  it('should render total sessions stat', () => {
-    render(<ClassStatsCard {...defaultProps} />);
+  it('should render total sessions stat', async () => {
+    await render(<ClassStatsCard {...defaultProps} />);
 
     const sessionsLabel = page.getByText('Total Sessions');
     const sessionsValue = page.getByText('156');
@@ -60,32 +60,32 @@ describe('ClassStatsCard', () => {
     expect(sessionsValue).toBeTruthy();
   });
 
-  it('should render level badge', () => {
-    render(<ClassStatsCard {...defaultProps} />);
+  it('should render level badge', async () => {
+    await render(<ClassStatsCard {...defaultProps} />);
 
     const levelBadge = page.getByText('Beginner');
 
     expect(levelBadge).toBeTruthy();
   });
 
-  it('should render different level badges correctly', () => {
-    render(<ClassStatsCard {...defaultProps} level="Advanced" />);
+  it('should render different level badges correctly', async () => {
+    await render(<ClassStatsCard {...defaultProps} level="Advanced" />);
 
     const advancedBadge = page.getByText('Advanced');
 
     expect(advancedBadge).toBeTruthy();
   });
 
-  it('should render Intermediate level badge', () => {
-    render(<ClassStatsCard {...defaultProps} level="Intermediate" />);
+  it('should render Intermediate level badge', async () => {
+    await render(<ClassStatsCard {...defaultProps} level="Intermediate" />);
 
     const intermediateBadge = page.getByText('Intermediate');
 
     expect(intermediateBadge).toBeTruthy();
   });
 
-  it('should render All Levels badge', () => {
-    render(<ClassStatsCard {...defaultProps} level="All Levels" />);
+  it('should render All Levels badge', async () => {
+    await render(<ClassStatsCard {...defaultProps} level="All Levels" />);
 
     const allLevelsBadge = page.getByText('All Levels');
 

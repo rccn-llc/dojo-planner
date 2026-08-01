@@ -105,16 +105,16 @@ vi.mock('@/libs/Orpc', () => ({
 
 describe('Programs Page', () => {
   describe('Page Layout', () => {
-    it('renders programs management header', () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+    it('renders programs management header', async () => {
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       const heading = page.getByRole('heading', { name: /Programs Management/i });
 
       expect(heading).toBeInTheDocument();
     });
 
-    it('renders statistics cards', () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+    it('renders statistics cards', async () => {
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       const totalPrograms = page.getByText(/Total Programs/);
       const active = page.getByText('Active').elements();
@@ -125,8 +125,8 @@ describe('Programs Page', () => {
       expect(totalClasses).toBeInTheDocument();
     });
 
-    it('renders statistics values', () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+    it('renders statistics values', async () => {
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // Stats should show dynamic values from mock data
       // Total programs count of 5 appears in stats card
@@ -135,8 +135,8 @@ describe('Programs Page', () => {
       expect(statValues.length).toBeGreaterThan(0);
     });
 
-    it('renders total classes count correctly', () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+    it('renders total classes count correctly', async () => {
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // Total classes should be 11 (5 + 2 + 3 + 1 + 0 for Wrestling)
       const classCount = page.getByText('11', { exact: true }).elements();
@@ -144,24 +144,24 @@ describe('Programs Page', () => {
       expect(classCount.length).toBeGreaterThan(0);
     });
 
-    it('renders add new program button', () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+    it('renders add new program button', async () => {
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       const button = page.getByRole('button', { name: /Add New Program/i });
 
       expect(button).toBeInTheDocument();
     });
 
-    it('renders search input', () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+    it('renders search input', async () => {
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       const searchInput = page.getByPlaceholder(/Search programs/i);
 
       expect(searchInput).toBeInTheDocument();
     });
 
-    it('renders status filter dropdown', () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+    it('renders status filter dropdown', async () => {
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // Select trigger should be rendered
       const statusSelect = page.getByRole('combobox').elements();
@@ -171,8 +171,8 @@ describe('Programs Page', () => {
   });
 
   describe('Program Cards', () => {
-    it('renders program cards with names', () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+    it('renders program cards with names', async () => {
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       const adultProgram = page.getByRole('heading', { name: 'Adult Brazilian Jiu-jitsu' });
       const kidsProgram = page.getByRole('heading', { name: 'Kids Program' });
@@ -185,8 +185,8 @@ describe('Programs Page', () => {
       expect(judoProgram).toBeInTheDocument();
     });
 
-    it('renders program card descriptions', () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+    it('renders program card descriptions', async () => {
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       const adultDescription = page.getByText(/Traditional Brazilian Jiu-Jitsu program for adults/);
       const kidsDescription = page.getByText(/Fun and engaging martial arts program/);
@@ -195,8 +195,8 @@ describe('Programs Page', () => {
       expect(kidsDescription).toBeInTheDocument();
     });
 
-    it('renders program card class counts', () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+    it('renders program card class counts', async () => {
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // Adult BJJ has 5 classes
       const fiveClasses = page.getByText('5', { exact: true }).elements();
@@ -204,24 +204,24 @@ describe('Programs Page', () => {
       expect(fiveClasses.length).toBeGreaterThan(0);
     });
 
-    it('renders classes label on program cards', () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+    it('renders classes label on program cards', async () => {
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       const classesLabels = page.getByText('Classes').elements();
 
       expect(classesLabels.length).toBeGreaterThan(0);
     });
 
-    it('renders edit buttons on program cards', () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+    it('renders edit buttons on program cards', async () => {
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       const editButtons = page.getByRole('button', { name: /Edit program/i }).elements();
 
       expect(editButtons.length).toBe(5);
     });
 
-    it('renders all five program cards', () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+    it('renders all five program cards', async () => {
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // Verify all programs are rendered by checking unique program names using headings
       const adultBjj = page.getByRole('heading', { name: 'Adult Brazilian Jiu-jitsu' });
@@ -237,8 +237,8 @@ describe('Programs Page', () => {
       expect(wrestlingFundamentals).toBeInTheDocument();
     });
 
-    it('renders active status badges on program cards', () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+    it('renders active status badges on program cards', async () => {
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // All 4 programs are Active
       const activeBadges = page.getByText('Active').elements();
@@ -247,8 +247,8 @@ describe('Programs Page', () => {
       expect(activeBadges.length).toBeGreaterThanOrEqual(4);
     });
 
-    it('renders inactive status badge for Wrestling Fundamentals', () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+    it('renders inactive status badge for Wrestling Fundamentals', async () => {
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       const inactiveBadges = page.getByText('Inactive').elements();
 
@@ -256,8 +256,8 @@ describe('Programs Page', () => {
       expect(inactiveBadges.length).toBe(1);
     });
 
-    it('renders active count of 4 in stats card', () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+    it('renders active count of 4 in stats card', async () => {
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // 4 out of 5 programs are active
       const fourElements = page.getByText('4', { exact: true }).elements();
@@ -267,8 +267,8 @@ describe('Programs Page', () => {
   });
 
   describe('Delete Button Conditional Visibility', () => {
-    it('shows delete button only for programs with no classes', () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+    it('shows delete button only for programs with no classes', async () => {
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // Only Wrestling Fundamentals has 0 classes, so only 1 delete button should appear
       const deleteButtons = page.getByRole('button', { name: /Delete program/i }).elements();
@@ -276,8 +276,8 @@ describe('Programs Page', () => {
       expect(deleteButtons.length).toBe(1);
     });
 
-    it('does not show delete button for programs with classes', () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+    it('does not show delete button for programs with classes', async () => {
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // Programs with classes should not have delete buttons
       // Adult BJJ has 5 classes, Kids has 2, Competition has 3, Judo has 1
@@ -290,7 +290,7 @@ describe('Programs Page', () => {
 
   describe('Add Program Modal', () => {
     it('opens add program modal when add button is clicked', async () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       const addButton = page.getByRole('button', { name: /Add New Program/i });
       await userEvent.click(addButton);
@@ -301,7 +301,7 @@ describe('Programs Page', () => {
     });
 
     it('closes modal when cancel button is clicked', async () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // Open modal
       const addButton = page.getByRole('button', { name: /Add New Program/i });
@@ -322,7 +322,7 @@ describe('Programs Page', () => {
     });
 
     it('shows empty form in add mode', async () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // Open modal
       const addButton = page.getByRole('button', { name: /Add New Program/i });
@@ -336,7 +336,7 @@ describe('Programs Page', () => {
     });
 
     it('disables submit button when form is empty', async () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // Open modal
       const addButton = page.getByRole('button', { name: /Add New Program/i });
@@ -349,7 +349,7 @@ describe('Programs Page', () => {
     });
 
     it('can fill in the form fields', async () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // Open modal
       const addButton = page.getByRole('button', { name: /Add New Program/i });
@@ -367,7 +367,7 @@ describe('Programs Page', () => {
     });
 
     it('can toggle status to inactive', async () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // Open modal
       const addButton = page.getByRole('button', { name: /Add New Program/i });
@@ -392,7 +392,7 @@ describe('Programs Page', () => {
 
   describe('Edit Program Modal', () => {
     it('opens edit program modal when edit button is clicked', async () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // Click first edit button (Adult BJJ)
       const editButtons = page.getByRole('button', { name: /Edit program/i }).elements();
@@ -404,7 +404,7 @@ describe('Programs Page', () => {
     });
 
     it('populates form with program data in edit mode', async () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // Click first edit button (Adult BJJ)
       const editButtons = page.getByRole('button', { name: /Edit program/i }).elements();
@@ -418,7 +418,7 @@ describe('Programs Page', () => {
     });
 
     it('shows save changes button in edit mode', async () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // Click first edit button
       const editButtons = page.getByRole('button', { name: /Edit program/i }).elements();
@@ -430,7 +430,7 @@ describe('Programs Page', () => {
     });
 
     it('closes edit modal when cancel button is clicked', async () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // Click first edit button
       const editButtons = page.getByRole('button', { name: /Edit program/i }).elements();
@@ -447,7 +447,7 @@ describe('Programs Page', () => {
     });
 
     it('can modify name in edit mode', async () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // Click first edit button (Adult BJJ)
       const editButtons = page.getByRole('button', { name: /Edit program/i }).elements();
@@ -462,7 +462,7 @@ describe('Programs Page', () => {
     });
 
     it('can toggle status in edit mode', async () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // Click first edit button (Adult BJJ which is Active)
       const editButtons = page.getByRole('button', { name: /Edit program/i }).elements();
@@ -483,7 +483,7 @@ describe('Programs Page', () => {
 
   describe('Delete Program', () => {
     it('opens delete confirmation dialog when delete button is clicked', async () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // Click delete button (only Wrestling has one since it has 0 classes)
       const deleteButton = page.getByRole('button', { name: /Delete program/i });
@@ -496,7 +496,7 @@ describe('Programs Page', () => {
     });
 
     it('shows correct warning message in delete confirmation dialog', async () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // Click delete button
       const deleteButton = page.getByRole('button', { name: /Delete program/i });
@@ -509,7 +509,7 @@ describe('Programs Page', () => {
     });
 
     it('closes delete dialog when cancel button is clicked', async () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // Click delete button
       const deleteButton = page.getByRole('button', { name: /Delete program/i });
@@ -530,7 +530,7 @@ describe('Programs Page', () => {
 
     it('calls programs.remove with the program id when delete is confirmed', async () => {
       const { client } = await import('@/libs/Orpc');
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // Click delete button (only Wrestling has one since it has 0 classes)
       const deleteButton = page.getByRole('button', { name: /Delete program/i });
@@ -547,7 +547,7 @@ describe('Programs Page', () => {
     });
 
     it('closes dialog after confirming deletion', async () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // Click delete button
       const deleteButton = page.getByRole('button', { name: /Delete program/i });
@@ -566,7 +566,7 @@ describe('Programs Page', () => {
 
   describe('Modal Close Button', () => {
     it('closes add modal when X button is clicked', async () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // Open modal
       const addButton = page.getByRole('button', { name: /Add New Program/i });
@@ -587,7 +587,7 @@ describe('Programs Page', () => {
     });
 
     it('closes edit modal when X button is clicked', async () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // Open edit modal
       const editButtons = page.getByRole('button', { name: /Edit program/i }).elements();
@@ -610,7 +610,7 @@ describe('Programs Page', () => {
 
   describe('Form Fields', () => {
     it('does not show required indicator on program name field', async () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // Open modal
       const addButton = page.getByRole('button', { name: /Add New Program/i });
@@ -623,7 +623,7 @@ describe('Programs Page', () => {
     });
 
     it('shows description label', async () => {
-      render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
+      await render(<I18nWrapper><ProgramsPage /></I18nWrapper>);
 
       // Open modal
       const addButton = page.getByRole('button', { name: /Add New Program/i });

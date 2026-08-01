@@ -36,64 +36,64 @@ describe('MembershipBasicsCard', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the card with title', () => {
-    render(<MembershipBasicsCard {...defaultProps} />);
+  it('should render the card with title', async () => {
+    await render(<MembershipBasicsCard {...defaultProps} />);
 
     const heading = page.getByText('Membership Basics');
 
     expect(heading).toBeTruthy();
   });
 
-  it('should render the membership name', () => {
-    render(<MembershipBasicsCard {...defaultProps} />);
+  it('should render the membership name', async () => {
+    await render(<MembershipBasicsCard {...defaultProps} />);
 
     const name = page.getByText('12 Month Commitment (Gold)');
 
     expect(name).toBeTruthy();
   });
 
-  it('should render the description', () => {
-    render(<MembershipBasicsCard {...defaultProps} />);
+  it('should render the description', async () => {
+    await render(<MembershipBasicsCard {...defaultProps} />);
 
     const description = page.getByText('Our most popular membership option');
 
     expect(description).toBeTruthy();
   });
 
-  it('should render Active status badge for active membership', () => {
-    render(<MembershipBasicsCard {...defaultProps} />);
+  it('should render Active status badge for active membership', async () => {
+    await render(<MembershipBasicsCard {...defaultProps} />);
 
     const statusBadge = page.getByText('Active');
 
     expect(statusBadge).toBeTruthy();
   });
 
-  it('should render Inactive status badge for inactive membership', () => {
-    render(<MembershipBasicsCard {...defaultProps} status="inactive" />);
+  it('should render Inactive status badge for inactive membership', async () => {
+    await render(<MembershipBasicsCard {...defaultProps} status="inactive" />);
 
     const statusBadge = page.getByText('Inactive');
 
     expect(statusBadge).toBeTruthy();
   });
 
-  it('should render Standard type badge for standard membership', () => {
-    render(<MembershipBasicsCard {...defaultProps} />);
+  it('should render Standard type badge for standard membership', async () => {
+    await render(<MembershipBasicsCard {...defaultProps} />);
 
     const typeBadge = page.getByText('Standard');
 
     expect(typeBadge).toBeTruthy();
   });
 
-  it('should render Trial type badge for trial membership', () => {
-    render(<MembershipBasicsCard {...defaultProps} membershipType="trial" />);
+  it('should render Trial type badge for trial membership', async () => {
+    await render(<MembershipBasicsCard {...defaultProps} membershipType="trial" />);
 
     const typeBadge = page.getByText('Trial');
 
     expect(typeBadge).toBeTruthy();
   });
 
-  it('should render Edit button', () => {
-    render(<MembershipBasicsCard {...defaultProps} />);
+  it('should render Edit button', async () => {
+    await render(<MembershipBasicsCard {...defaultProps} />);
 
     const editButton = page.getByRole('button');
 
@@ -101,7 +101,7 @@ describe('MembershipBasicsCard', () => {
   });
 
   it('should call onEdit when Edit button is clicked', async () => {
-    render(<MembershipBasicsCard {...defaultProps} />);
+    await render(<MembershipBasicsCard {...defaultProps} />);
 
     const editButton = page.getByRole('button');
     await userEvent.click(editButton);
@@ -109,8 +109,8 @@ describe('MembershipBasicsCard', () => {
     expect(mockOnEdit).toHaveBeenCalledTimes(1);
   });
 
-  it('should render all field labels', () => {
-    render(<MembershipBasicsCard {...defaultProps} />);
+  it('should render all field labels', async () => {
+    await render(<MembershipBasicsCard {...defaultProps} />);
 
     const nameLabel = page.getByText('Name');
     const statusLabel = page.getByText('Status');

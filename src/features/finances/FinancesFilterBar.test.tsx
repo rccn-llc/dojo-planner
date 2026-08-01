@@ -13,10 +13,10 @@ vi.mock('next-intl', () => ({
 
 describe('FinancesFilterBar', () => {
   describe('Search Input', () => {
-    it('should render search input', () => {
+    it('should render search input', async () => {
       const mockOnFiltersChange = vi.fn();
 
-      render(
+      await render(
         <FinancesFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableOrigins={[]}
@@ -32,7 +32,7 @@ describe('FinancesFilterBar', () => {
     it('should call onFiltersChangeAction when typing in search', async () => {
       const mockOnFiltersChange = vi.fn();
 
-      render(
+      await render(
         <FinancesFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableOrigins={[]}
@@ -50,10 +50,10 @@ describe('FinancesFilterBar', () => {
       });
     });
 
-    it('should have search icon', () => {
+    it('should have search icon', async () => {
       const mockOnFiltersChange = vi.fn();
 
-      render(
+      await render(
         <FinancesFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableOrigins={[]}
@@ -68,10 +68,10 @@ describe('FinancesFilterBar', () => {
   });
 
   describe('Status Filter', () => {
-    it('should render status filter dropdown', () => {
+    it('should render status filter dropdown', async () => {
       const mockOnFiltersChange = vi.fn();
 
-      render(
+      await render(
         <FinancesFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableOrigins={[]}
@@ -87,7 +87,7 @@ describe('FinancesFilterBar', () => {
     it('should show All Statuses option', async () => {
       const mockOnFiltersChange = vi.fn();
 
-      render(
+      await render(
         <FinancesFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableOrigins={[]}
@@ -104,7 +104,7 @@ describe('FinancesFilterBar', () => {
     it('should show status options', async () => {
       const mockOnFiltersChange = vi.fn();
 
-      render(
+      await render(
         <FinancesFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableOrigins={[]}
@@ -125,7 +125,7 @@ describe('FinancesFilterBar', () => {
     it('should call onFiltersChangeAction when selecting status', async () => {
       const mockOnFiltersChange = vi.fn();
 
-      render(
+      await render(
         <FinancesFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableOrigins={[]}
@@ -148,10 +148,10 @@ describe('FinancesFilterBar', () => {
   });
 
   describe('Origin Filter', () => {
-    it('should render origin filter dropdown', () => {
+    it('should render origin filter dropdown', async () => {
       const mockOnFiltersChange = vi.fn();
 
-      render(
+      await render(
         <FinancesFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableOrigins={['Membership Dues', 'Merchandise']}
@@ -167,7 +167,7 @@ describe('FinancesFilterBar', () => {
     it('should show All Origins option', async () => {
       const mockOnFiltersChange = vi.fn();
 
-      render(
+      await render(
         <FinancesFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableOrigins={['Membership Dues']}
@@ -184,7 +184,7 @@ describe('FinancesFilterBar', () => {
     it('should show available origin options', async () => {
       const mockOnFiltersChange = vi.fn();
 
-      render(
+      await render(
         <FinancesFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableOrigins={['Membership Dues', 'Merchandise', 'Private Lesson']}
@@ -203,7 +203,7 @@ describe('FinancesFilterBar', () => {
     it('should call onFiltersChangeAction when selecting origin', async () => {
       const mockOnFiltersChange = vi.fn();
 
-      render(
+      await render(
         <FinancesFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableOrigins={['Membership Dues', 'Merchandise']}
@@ -229,7 +229,7 @@ describe('FinancesFilterBar', () => {
     it('should maintain search when changing origin', async () => {
       const mockOnFiltersChange = vi.fn();
 
-      render(
+      await render(
         <FinancesFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableOrigins={['Membership Dues', 'Merchandise']}
@@ -257,7 +257,7 @@ describe('FinancesFilterBar', () => {
     it('should maintain origin when typing in search', async () => {
       const mockOnFiltersChange = vi.fn();
 
-      render(
+      await render(
         <FinancesFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableOrigins={['Membership Dues', 'Merchandise']}
@@ -285,7 +285,7 @@ describe('FinancesFilterBar', () => {
     it('should maintain all filters when changing status', async () => {
       const mockOnFiltersChange = vi.fn();
 
-      render(
+      await render(
         <FinancesFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableOrigins={['Membership Dues', 'Merchandise']}
@@ -318,10 +318,10 @@ describe('FinancesFilterBar', () => {
   });
 
   describe('Empty State', () => {
-    it('should render with empty available origins', () => {
+    it('should render with empty available origins', async () => {
       const mockOnFiltersChange = vi.fn();
 
-      render(
+      await render(
         <FinancesFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableOrigins={[]}
@@ -337,7 +337,7 @@ describe('FinancesFilterBar', () => {
     it('should only show All Origins when no origins available', async () => {
       const mockOnFiltersChange = vi.fn();
 
-      render(
+      await render(
         <FinancesFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableOrigins={[]}
@@ -357,7 +357,7 @@ describe('FinancesFilterBar', () => {
       const mockOnFiltersChange = vi.fn();
       const limitedStatuses: TransactionStatus[] = ['paid', 'pending'];
 
-      render(
+      await render(
         <FinancesFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableOrigins={[]}
@@ -379,7 +379,7 @@ describe('FinancesFilterBar', () => {
       const mockOnFiltersChange = vi.fn();
       const limitedStatuses: TransactionStatus[] = ['paid'];
 
-      render(
+      await render(
         <FinancesFilterBar
           onFiltersChangeAction={mockOnFiltersChange}
           availableOrigins={[]}

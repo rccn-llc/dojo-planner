@@ -74,16 +74,16 @@ describe('MembershipPaymentDetailsCard', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the card with title', () => {
-    render(<MembershipPaymentDetailsCard {...defaultProps} />);
+  it('should render the card with title', async () => {
+    await render(<MembershipPaymentDetailsCard {...defaultProps} />);
 
     const heading = page.getByText('Payments and Fees');
 
     expect(heading).toBeTruthy();
   });
 
-  it('should render the Cancellation and Hold Fees section', () => {
-    render(<MembershipPaymentDetailsCard {...defaultProps} cancellationFee={50} holdFeeAmount={25} holdFeeFrequency="monthly" holdLimitPerYear={2} />);
+  it('should render the Cancellation and Hold Fees section', async () => {
+    await render(<MembershipPaymentDetailsCard {...defaultProps} cancellationFee={50} holdFeeAmount={25} holdFeeFrequency="monthly" holdLimitPerYear={2} />);
 
     expect(page.getByText('Cancellation and Hold Fees')).toBeTruthy();
     expect(page.getByText('Cancellation Fee')).toBeTruthy();
@@ -91,8 +91,8 @@ describe('MembershipPaymentDetailsCard', () => {
     expect(page.getByText('Hold Limit')).toBeTruthy();
   });
 
-  it('should NOT render fees section for punchcards', () => {
-    render(<MembershipPaymentDetailsCard {...defaultProps} isPunchcard={true} />);
+  it('should NOT render fees section for punchcards', async () => {
+    await render(<MembershipPaymentDetailsCard {...defaultProps} isPunchcard={true} />);
 
     const sectionLabels = Array.from(document.querySelectorAll('h3')).filter(
       el => el.textContent === 'Cancellation and Hold Fees',
@@ -101,8 +101,8 @@ describe('MembershipPaymentDetailsCard', () => {
     expect(sectionLabels.length).toBe(0);
   });
 
-  it('should render Edit button', () => {
-    render(<MembershipPaymentDetailsCard {...defaultProps} />);
+  it('should render Edit button', async () => {
+    await render(<MembershipPaymentDetailsCard {...defaultProps} />);
 
     const editButton = page.getByRole('button');
 
@@ -110,7 +110,7 @@ describe('MembershipPaymentDetailsCard', () => {
   });
 
   it('should call onEdit when Edit button is clicked', async () => {
-    render(<MembershipPaymentDetailsCard {...defaultProps} />);
+    await render(<MembershipPaymentDetailsCard {...defaultProps} />);
 
     const editButton = page.getByRole('button');
     await userEvent.click(editButton);
@@ -118,8 +118,8 @@ describe('MembershipPaymentDetailsCard', () => {
     expect(mockOnEdit).toHaveBeenCalledTimes(1);
   });
 
-  it('should render sign-up fee for standard membership', () => {
-    render(<MembershipPaymentDetailsCard {...defaultProps} />);
+  it('should render sign-up fee for standard membership', async () => {
+    await render(<MembershipPaymentDetailsCard {...defaultProps} />);
 
     const signUpFeeLabel = page.getByText('Sign-up Fee');
     const signUpFeeValue = page.getByText('$35.00');
@@ -128,16 +128,16 @@ describe('MembershipPaymentDetailsCard', () => {
     expect(signUpFeeValue).toBeTruthy();
   });
 
-  it('should not render sign-up fee for trial membership', () => {
-    render(<MembershipPaymentDetailsCard {...defaultProps} isTrial={true} />);
+  it('should not render sign-up fee for trial membership', async () => {
+    await render(<MembershipPaymentDetailsCard {...defaultProps} isTrial={true} />);
 
     const signUpFeeLabel = document.body.textContent?.includes('Sign-up Fee');
 
     expect(signUpFeeLabel).toBe(false);
   });
 
-  it('should render monthly fee with Monthly Fee label', () => {
-    render(<MembershipPaymentDetailsCard {...defaultProps} />);
+  it('should render monthly fee with Monthly Fee label', async () => {
+    await render(<MembershipPaymentDetailsCard {...defaultProps} />);
 
     const monthlyFeeLabel = page.getByText('Monthly Fee');
     const monthlyFeeValue = page.getByText('$150.00');
@@ -146,8 +146,8 @@ describe('MembershipPaymentDetailsCard', () => {
     expect(monthlyFeeValue).toBeTruthy();
   });
 
-  it('should render Weekly Fee label for weekly frequency', () => {
-    render(
+  it('should render Weekly Fee label for weekly frequency', async () => {
+    await render(
       <MembershipPaymentDetailsCard
         {...defaultProps}
         paymentFrequency="weekly"
@@ -159,8 +159,8 @@ describe('MembershipPaymentDetailsCard', () => {
     expect(weeklyFeeLabel).toBeTruthy();
   });
 
-  it('should render Annual Fee label for annual frequency', () => {
-    render(
+  it('should render Annual Fee label for annual frequency', async () => {
+    await render(
       <MembershipPaymentDetailsCard
         {...defaultProps}
         paymentFrequency="annually"
@@ -172,8 +172,8 @@ describe('MembershipPaymentDetailsCard', () => {
     expect(annualFeeLabel).toBeTruthy();
   });
 
-  it('should render payment frequency', () => {
-    render(<MembershipPaymentDetailsCard {...defaultProps} />);
+  it('should render payment frequency', async () => {
+    await render(<MembershipPaymentDetailsCard {...defaultProps} />);
 
     const frequencyLabel = page.getByText('Payment Frequency');
     const frequencyValue = page.getByText('Monthly');
@@ -182,8 +182,8 @@ describe('MembershipPaymentDetailsCard', () => {
     expect(frequencyValue).toBeTruthy();
   });
 
-  it('should render pro-rate first payment as Yes when enabled', () => {
-    render(<MembershipPaymentDetailsCard {...defaultProps} />);
+  it('should render pro-rate first payment as Yes when enabled', async () => {
+    await render(<MembershipPaymentDetailsCard {...defaultProps} />);
 
     const prorateLabel = page.getByText('Pro-rate First Payment');
     const prorateValue = page.getByText('Yes');
@@ -192,8 +192,8 @@ describe('MembershipPaymentDetailsCard', () => {
     expect(prorateValue).toBeTruthy();
   });
 
-  it('should render pro-rate first payment as No when disabled', () => {
-    render(
+  it('should render pro-rate first payment as No when disabled', async () => {
+    await render(
       <MembershipPaymentDetailsCard
         {...defaultProps}
         proRateFirstPayment={false}
@@ -205,16 +205,16 @@ describe('MembershipPaymentDetailsCard', () => {
     expect(prorateValue).toBeTruthy();
   });
 
-  it('should not render pro-rate for trial membership', () => {
-    render(<MembershipPaymentDetailsCard {...defaultProps} isTrial={true} />);
+  it('should not render pro-rate for trial membership', async () => {
+    await render(<MembershipPaymentDetailsCard {...defaultProps} isTrial={true} />);
 
     const prorateLabel = document.body.textContent?.includes('Pro-rate First Payment');
 
     expect(prorateLabel).toBe(false);
   });
 
-  it('should render Free for null monthly fee', () => {
-    render(
+  it('should render Free for null monthly fee', async () => {
+    await render(
       <MembershipPaymentDetailsCard
         {...defaultProps}
         monthlyFee={null}
@@ -226,8 +226,8 @@ describe('MembershipPaymentDetailsCard', () => {
     expect(freeValue).toBeTruthy();
   });
 
-  it('should render Free for zero monthly fee', () => {
-    render(
+  it('should render Free for zero monthly fee', async () => {
+    await render(
       <MembershipPaymentDetailsCard
         {...defaultProps}
         monthlyFee={0}
@@ -239,8 +239,8 @@ describe('MembershipPaymentDetailsCard', () => {
     expect(freeValue).toBeTruthy();
   });
 
-  it('should render charge at registration label when applicable', () => {
-    render(<MembershipPaymentDetailsCard {...defaultProps} />);
+  it('should render charge at registration label when applicable', async () => {
+    await render(<MembershipPaymentDetailsCard {...defaultProps} />);
 
     const chargeLabel = page.getByText('Charge Sign-up Fee');
     const chargeValue = page.getByText('At time of registration');
@@ -249,8 +249,8 @@ describe('MembershipPaymentDetailsCard', () => {
     expect(chargeValue).toBeTruthy();
   });
 
-  it('should render with first payment option', () => {
-    render(
+  it('should render with first payment option', async () => {
+    await render(
       <MembershipPaymentDetailsCard
         {...defaultProps}
         chargeSignUpFee="first-payment"

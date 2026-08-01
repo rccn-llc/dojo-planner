@@ -281,8 +281,8 @@ describe('ClassesPage', () => {
   });
 
   describe('Summary Cards', () => {
-    it('should render total classes stat card', () => {
-      render(
+    it('should render total classes stat card', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -293,8 +293,8 @@ describe('ClassesPage', () => {
       expect(totalClassesLabel).toBeInTheDocument();
     });
 
-    it('should render tags stat card', () => {
-      render(
+    it('should render tags stat card', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -305,8 +305,8 @@ describe('ClassesPage', () => {
       expect(tagsLabel).toBeInTheDocument();
     });
 
-    it('should render instructors stat card', () => {
-      render(
+    it('should render instructors stat card', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -318,8 +318,8 @@ describe('ClassesPage', () => {
       expect(instructorsLabel).toBeInTheDocument();
     });
 
-    it('should display correct total classes count of 9', () => {
-      render(
+    it('should display correct total classes count of 9', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -331,8 +331,8 @@ describe('ClassesPage', () => {
       expect(nineElements.length).toBeGreaterThan(0);
     });
 
-    it('should display correct tags count', () => {
-      render(
+    it('should display correct tags count', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -344,8 +344,8 @@ describe('ClassesPage', () => {
       expect(nineElements.length).toBeGreaterThan(0);
     });
 
-    it('should display instructor count', () => {
-      render(
+    it('should display instructor count', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -359,8 +359,8 @@ describe('ClassesPage', () => {
   });
 
   describe('Page Header', () => {
-    it('should render the page title', () => {
-      render(
+    it('should render the page title', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -373,8 +373,8 @@ describe('ClassesPage', () => {
   });
 
   describe('Filter Controls', () => {
-    it('should render Add New Class button', () => {
-      render(
+    it('should render Add New Class button', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -385,8 +385,8 @@ describe('ClassesPage', () => {
       expect(addButton).toBeInTheDocument();
     });
 
-    it('should render Manage Tags button', () => {
-      render(
+    it('should render Manage Tags button', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -398,7 +398,7 @@ describe('ClassesPage', () => {
     });
 
     it('should open Class Tags Management sheet when Manage Tags button is clicked', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -413,7 +413,7 @@ describe('ClassesPage', () => {
     });
 
     it('should close Class Tags Management sheet when close button is clicked', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -433,8 +433,8 @@ describe('ClassesPage', () => {
       expect(sheetTitles.elements()).toHaveLength(0);
     });
 
-    it('should render view toggle buttons', () => {
-      render(
+    it('should render view toggle buttons', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -449,8 +449,8 @@ describe('ClassesPage', () => {
       expect(monthlyButton).toBeInTheDocument();
     });
 
-    it('should render weekly view toggle button', () => {
-      render(
+    it('should render weekly view toggle button', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -461,8 +461,8 @@ describe('ClassesPage', () => {
       expect(weeklyButton).toBeInTheDocument();
     });
 
-    it('should render monthly view toggle button', () => {
-      render(
+    it('should render monthly view toggle button', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -476,7 +476,7 @@ describe('ClassesPage', () => {
 
   describe('View Switching', () => {
     it('should switch to weekly view when clicking weekly button', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -490,7 +490,7 @@ describe('ClassesPage', () => {
     });
 
     it('should switch to monthly view when clicking monthly button', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -504,7 +504,7 @@ describe('ClassesPage', () => {
     });
 
     it('should switch back to grid view after switching to weekly', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -524,8 +524,8 @@ describe('ClassesPage', () => {
   });
 
   describe('Class Cards', () => {
-    it('should render class cards with mock data', () => {
-      render(
+    it('should render class cards with mock data', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -536,8 +536,8 @@ describe('ClassesPage', () => {
       expect(classTitle).toBeInTheDocument();
     });
 
-    it('should display multiple class card titles', () => {
-      render(
+    it('should display multiple class card titles', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -550,8 +550,8 @@ describe('ClassesPage', () => {
       expect(intermediate).toBeInTheDocument();
     });
 
-    it('should display class descriptions', () => {
-      render(
+    it('should display class descriptions', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -562,8 +562,8 @@ describe('ClassesPage', () => {
       expect(description).toBeInTheDocument();
     });
 
-    it('should display class level badges', () => {
-      render(
+    it('should display class level badges', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -578,8 +578,8 @@ describe('ClassesPage', () => {
       expect(intermediateBadge).toBeInTheDocument();
     });
 
-    it('should display class type badges', () => {
-      render(
+    it('should display class type badges', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -592,8 +592,8 @@ describe('ClassesPage', () => {
       expect(womenBadge).toBeInTheDocument();
     });
 
-    it('should display class style badges', () => {
-      render(
+    it('should display class style badges', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -609,8 +609,8 @@ describe('ClassesPage', () => {
   });
 
   describe('Class Details', () => {
-    it('should display schedule information', () => {
-      render(
+    it('should display schedule information', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -623,8 +623,8 @@ describe('ClassesPage', () => {
       expect(scheduleTime).toBeInTheDocument();
     });
 
-    it('should display location information', () => {
-      render(
+    it('should display location information', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -637,8 +637,8 @@ describe('ClassesPage', () => {
       expect(locationValue).toBeInTheDocument();
     });
 
-    it('should display instructor information', () => {
-      render(
+    it('should display instructor information', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -653,8 +653,8 @@ describe('ClassesPage', () => {
       expect(instructorName).toBeInTheDocument();
     });
 
-    it('should display TBD when no instructor assigned', () => {
-      render(
+    it('should display TBD when no instructor assigned', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -668,8 +668,8 @@ describe('ClassesPage', () => {
   });
 
   describe('View Toggle', () => {
-    it('should have clickable view toggle buttons', () => {
-      render(
+    it('should have clickable view toggle buttons', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -686,8 +686,8 @@ describe('ClassesPage', () => {
   });
 
   describe('All Mock Classes', () => {
-    it('should render all 9 mock classes by checking class descriptions', () => {
-      render(
+    it('should render all 9 mock classes by checking class descriptions', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -712,8 +712,8 @@ describe('ClassesPage', () => {
       }
     });
 
-    it('should render instructor names', () => {
-      render(
+    it('should render instructor names', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -725,8 +725,8 @@ describe('ClassesPage', () => {
       expect(instructor).toBeInTheDocument();
     });
 
-    it('should render Kids Class', () => {
-      render(
+    it('should render Kids Class', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -737,8 +737,8 @@ describe('ClassesPage', () => {
       expect(kidsClass).toBeInTheDocument();
     });
 
-    it('should render Open Mat class', () => {
-      render(
+    it('should render Open Mat class', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -749,8 +749,8 @@ describe('ClassesPage', () => {
       expect(openMat).toBeInTheDocument();
     });
 
-    it('should render Competition Team class', () => {
-      render(
+    it('should render Competition Team class', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -761,8 +761,8 @@ describe('ClassesPage', () => {
       expect(competitionTeam).toBeInTheDocument();
     });
 
-    it('should render Women\'s BJJ class', () => {
-      render(
+    it('should render Women\'s BJJ class', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -775,8 +775,8 @@ describe('ClassesPage', () => {
   });
 
   describe('Edit Functionality', () => {
-    it('should render edit buttons on class cards', () => {
-      render(
+    it('should render edit buttons on class cards', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -789,7 +789,7 @@ describe('ClassesPage', () => {
     });
 
     it('should navigate to class detail page when edit button is clicked', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -814,8 +814,8 @@ describe('ClassesPage', () => {
       expect(mockPush.mock.calls[0]?.[0]).toMatch(/^\/dashboard\/classes\/\d+$/);
     });
 
-    it('should have edit buttons visible in grid view', () => {
-      render(
+    it('should have edit buttons visible in grid view', async () => {
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,
@@ -828,7 +828,7 @@ describe('ClassesPage', () => {
     });
 
     it('should have edit buttons visible in grid view after switching views', async () => {
-      render(
+      await render(
         <I18nWrapper>
           <ClassesPage />
         </I18nWrapper>,

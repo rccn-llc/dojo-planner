@@ -169,7 +169,7 @@ function EditScheduleInstanceModalContent({
       <div className="flex flex-1 flex-col space-y-4 overflow-y-auto py-4">
         <div className="rounded-lg border border-border bg-secondary/30 p-4">
           <div className="flex items-center gap-2 text-sm">
-            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <Calendar className="size-4 text-muted-foreground" />
             <span className="font-medium">{dayLabels[scheduleInstance.dayOfWeek]}</span>
             <span className="text-muted-foreground">•</span>
             <span className="text-muted-foreground">{formatDate(selectedDate)}</span>
@@ -355,7 +355,7 @@ function EditScheduleInstanceModalContent({
                 disabled={isLoading}
                 data-testid="delete-instance-button"
               >
-                <Trash2 className="mr-2 h-4 w-4" />
+                <Trash2 className="mr-2 size-4" />
                 {t('delete_instance_button')}
               </Button>
               <Button

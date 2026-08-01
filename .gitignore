@@ -13,6 +13,8 @@
 # testing
 /coverage
 /vitest-test-results
+# Failure screenshots written by vitest browser mode
+/.vitest-attachments
 
 # next.js
 /.next/

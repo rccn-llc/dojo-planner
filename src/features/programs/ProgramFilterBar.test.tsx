@@ -5,10 +5,10 @@ import { I18nWrapper } from '@/lib/test-utils';
 import { ProgramFilterBar } from './ProgramFilterBar';
 
 describe('ProgramFilterBar', () => {
-  it('renders search input', () => {
+  it('renders search input', async () => {
     const onFiltersChange = vi.fn();
 
-    render(
+    await render(
       <I18nWrapper>
         <ProgramFilterBar onFiltersChangeAction={onFiltersChange} />
       </I18nWrapper>,
@@ -19,10 +19,10 @@ describe('ProgramFilterBar', () => {
     expect(searchInput).toBeInTheDocument();
   });
 
-  it('renders status filter dropdown', () => {
+  it('renders status filter dropdown', async () => {
     const onFiltersChange = vi.fn();
 
-    render(
+    await render(
       <I18nWrapper>
         <ProgramFilterBar onFiltersChangeAction={onFiltersChange} />
       </I18nWrapper>,
@@ -36,7 +36,7 @@ describe('ProgramFilterBar', () => {
   it('calls onFiltersChangeAction when search input changes', async () => {
     const onFiltersChange = vi.fn();
 
-    render(
+    await render(
       <I18nWrapper>
         <ProgramFilterBar onFiltersChangeAction={onFiltersChange} />
       </I18nWrapper>,
@@ -55,7 +55,7 @@ describe('ProgramFilterBar', () => {
   it('calls onFiltersChangeAction when status filter changes', async () => {
     const onFiltersChange = vi.fn();
 
-    render(
+    await render(
       <I18nWrapper>
         <ProgramFilterBar onFiltersChangeAction={onFiltersChange} />
       </I18nWrapper>,
@@ -76,7 +76,7 @@ describe('ProgramFilterBar', () => {
   it('displays all status options when dropdown is opened', async () => {
     const onFiltersChange = vi.fn();
 
-    render(
+    await render(
       <I18nWrapper>
         <ProgramFilterBar onFiltersChangeAction={onFiltersChange} />
       </I18nWrapper>,
@@ -97,7 +97,7 @@ describe('ProgramFilterBar', () => {
   it('updates search value when typing', async () => {
     const onFiltersChange = vi.fn();
 
-    render(
+    await render(
       <I18nWrapper>
         <ProgramFilterBar onFiltersChangeAction={onFiltersChange} />
       </I18nWrapper>,
@@ -112,7 +112,7 @@ describe('ProgramFilterBar', () => {
   it('selects inactive status from dropdown', async () => {
     const onFiltersChange = vi.fn();
 
-    render(
+    await render(
       <I18nWrapper>
         <ProgramFilterBar onFiltersChangeAction={onFiltersChange} />
       </I18nWrapper>,
@@ -133,7 +133,7 @@ describe('ProgramFilterBar', () => {
   it('maintains search value when status changes', async () => {
     const onFiltersChange = vi.fn();
 
-    render(
+    await render(
       <I18nWrapper>
         <ProgramFilterBar onFiltersChangeAction={onFiltersChange} />
       </I18nWrapper>,

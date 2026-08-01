@@ -74,7 +74,7 @@ describe('Staff Page', () => {
   });
 
   it('renders staff table', async () => {
-    render(
+    await render(
       <StaffTable
         staffMembers={mockStaffMembers}
         onEditStaff={mockOnEditStaff}
@@ -89,7 +89,7 @@ describe('Staff Page', () => {
   });
 
   it('displays staff member names', async () => {
-    render(
+    await render(
       <StaffTable
         staffMembers={mockStaffMembers}
         onEditStaff={mockOnEditStaff}
@@ -106,7 +106,7 @@ describe('Staff Page', () => {
   });
 
   it('displays staff member emails', async () => {
-    render(
+    await render(
       <StaffTable
         staffMembers={mockStaffMembers}
         onEditStaff={mockOnEditStaff}
@@ -122,7 +122,7 @@ describe('Staff Page', () => {
   });
 
   it('displays staff status badges', async () => {
-    render(
+    await render(
       <StaffTable
         staffMembers={mockStaffMembers}
         onEditStaff={mockOnEditStaff}
@@ -137,7 +137,7 @@ describe('Staff Page', () => {
   });
 
   it('displays action buttons for each staff member', async () => {
-    render(
+    await render(
       <StaffTable
         staffMembers={mockStaffMembers}
         currentUserRole="org:admin"
@@ -159,7 +159,7 @@ describe('Staff Page', () => {
   });
 
   it('admin can edit and remove all staff members', async () => {
-    render(
+    await render(
       <StaffTable
         staffMembers={mockMixedRoleStaff}
         currentUserRole="org:admin"
@@ -182,7 +182,7 @@ describe('Staff Page', () => {
   });
 
   it('academy owner cannot edit or remove admin staff', async () => {
-    render(
+    await render(
       <StaffTable
         staffMembers={mockMixedRoleStaff}
         currentUserRole="org:academy_owner"
@@ -201,7 +201,7 @@ describe('Staff Page', () => {
   });
 
   it('academy owner can edit and remove non-admin staff', async () => {
-    render(
+    await render(
       <StaffTable
         staffMembers={mockMixedRoleStaff}
         currentUserRole="org:academy_owner"
@@ -220,7 +220,7 @@ describe('Staff Page', () => {
   });
 
   it('user cannot edit or remove themselves', async () => {
-    render(
+    await render(
       <StaffTable
         staffMembers={mockMixedRoleStaff}
         currentUserRole="org:admin"

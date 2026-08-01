@@ -167,7 +167,7 @@ export function CatalogCategoriesManagement({
                     <table className="w-full">
                       <thead>
                         <tr className="border-b border-border bg-secondary">
-                          <th className="w-[200px] px-6 py-3 text-left text-sm font-semibold text-foreground">{t('category_name_column')}</th>
+                          <th className="w-50 px-6 py-3 text-left text-sm font-semibold text-foreground">{t('category_name_column')}</th>
                           <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">{t('description_column')}</th>
                           <th className="w-[150px] px-6 py-3 text-right text-sm font-semibold text-foreground">{t('actions_column')}</th>
                         </tr>

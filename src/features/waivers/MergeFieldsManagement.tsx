@@ -56,9 +56,12 @@ export function MergeFieldsManagement({ open, onOpenChange }: MergeFieldsManagem
   }, []);
 
   useEffect(() => {
-    if (open) {
-      fetchMergeFields();
+    if (!open) {
+      return;
     }
+    void (async () => {
+      await fetchMergeFields();
+    })();
   }, [open, fetchMergeFields]);
 
   const filteredFields = useMemo(() => {
@@ -142,7 +145,7 @@ export function MergeFieldsManagement({ open, onOpenChange }: MergeFieldsManagem
                       <table className="w-full">
                         <thead>
                           <tr className="border-b border-border bg-secondary">
-                            <th className="w-[160px] px-6 py-3 text-left text-sm font-semibold text-foreground">{t('field_key_column')}</th>
+                            <th className="w-40 px-6 py-3 text-left text-sm font-semibold text-foreground">{t('field_key_column')}</th>
                             <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">{t('label_column')}</th>
                             <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">{t('default_value_column')}</th>
                             <th className="w-[150px] px-6 py-3 text-right text-sm font-semibold text-foreground">{t('actions_column')}</th>

@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { dedupeRequest } from '@/hooks/dedupeRequest';
 import { useOrganizationLocation } from '@/hooks/useOrganizationLocation';
 import { client } from '@/libs/Orpc';
 import { ORG_ROLE } from '@/types/Auth';
@@ -63,7 +64,12 @@ export function LocationSettingsPage({ userRole }: LocationSettingsPageProps = {
     setPaymentLoading(true);
     setPaymentError(null);
     try {
-      const data = await client.paymentSettings.getConfig();
+      // De-duped so React's development double-invoke of effects (StrictMode)
+      // issues one request instead of two. Only the in-flight request is
+      // shared — nothing is cached — so the post-save reload below still
+      // fetches the values that were just written.
+      const data = await dedupeRequest('paymentSettings:getConfig', async () =>
+        client.paymentSettings.getConfig());
       setPaymentConfig(data as PaymentConfigState);
     } catch (err) {
       setPaymentError(err instanceof Error ? err.message : 'Failed to load payment settings');
@@ -73,7 +79,9 @@ export function LocationSettingsPage({ userRole }: LocationSettingsPageProps = {
   }, [canViewPayment]);
 
   useEffect(() => {
-    loadPaymentConfig();
+    void (async () => {
+      await loadPaymentConfig();
+    })();
   }, [loadPaymentConfig]);
 
   const handleSaveLocation = async (data: LocationFormData) => {
@@ -155,7 +163,7 @@ export function LocationSettingsPage({ userRole }: LocationSettingsPageProps = {
             title="Edit location information"
             disabled={loading}
           >
-            <Edit className="h-4 w-4" />
+            <Edit className="size-4" />
           </Button>
         </div>
       </Card>
@@ -213,7 +221,7 @@ export function LocationSettingsPage({ userRole }: LocationSettingsPageProps = {
                 title="Edit IQPro credentials"
                 disabled={paymentLoading}
               >
-                <Edit className="h-4 w-4" />
+                <Edit className="size-4" />
               </Button>
             </div>
           )}

@@ -113,8 +113,8 @@ describe('AddClassModal', () => {
     vi.clearAllMocks();
   });
 
-  it('should not render dialog when isOpen is false', () => {
-    render(
+  it('should not render dialog when isOpen is false', async () => {
+    await render(
       <AddClassModal
         isOpen={false}
         onCloseAction={mockHandlers.onCloseAction}
@@ -131,8 +131,8 @@ describe('AddClassModal', () => {
     }
   });
 
-  it('should render dialog when isOpen is true', () => {
-    render(
+  it('should render dialog when isOpen is true', async () => {
+    await render(
       <AddClassModal
         isOpen={true}
         onCloseAction={mockHandlers.onCloseAction}
@@ -144,8 +144,8 @@ describe('AddClassModal', () => {
     expect(modal).toBeTruthy();
   });
 
-  it('should display dialog title', () => {
-    render(
+  it('should display dialog title', async () => {
+    await render(
       <AddClassModal
         isOpen={true}
         onCloseAction={mockHandlers.onCloseAction}
@@ -157,8 +157,8 @@ describe('AddClassModal', () => {
     expect(heading).toBeTruthy();
   });
 
-  it('should render cancel button for wizard navigation', () => {
-    render(
+  it('should render cancel button for wizard navigation', async () => {
+    await render(
       <AddClassModal
         isOpen={true}
         onCloseAction={mockHandlers.onCloseAction}
@@ -175,8 +175,8 @@ describe('AddClassModal', () => {
     }
   });
 
-  it('should have proper dialog structure', () => {
-    render(
+  it('should have proper dialog structure', async () => {
+    await render(
       <AddClassModal
         isOpen={true}
         onCloseAction={mockHandlers.onCloseAction}
@@ -197,7 +197,7 @@ describe('AddClassModal', () => {
   });
 
   it('should call onCloseAction when Cancel button is clicked', async () => {
-    render(
+    await render(
       <AddClassModal
         isOpen={true}
         onCloseAction={mockHandlers.onCloseAction}
@@ -221,8 +221,8 @@ describe('AddClassModal', () => {
     expect(true).toBe(true);
   });
 
-  it('should start with class basics step', () => {
-    render(
+  it('should start with class basics step', async () => {
+    await render(
       <AddClassModal
         isOpen={true}
         onCloseAction={mockHandlers.onCloseAction}
@@ -242,8 +242,8 @@ describe('AddClassModal', () => {
     }
   });
 
-  it('should display Next button on first step', () => {
-    render(
+  it('should display Next button on first step', async () => {
+    await render(
       <AddClassModal
         isOpen={true}
         onCloseAction={mockHandlers.onCloseAction}
@@ -259,8 +259,8 @@ describe('AddClassModal', () => {
     }
   });
 
-  it('should have Next button disabled when form is incomplete', () => {
-    render(
+  it('should have Next button disabled when form is incomplete', async () => {
+    await render(
       <AddClassModal
         isOpen={true}
         onCloseAction={mockHandlers.onCloseAction}

@@ -48,16 +48,16 @@ describe('MembershipContractTermsCard', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the card with title', () => {
-    render(<MembershipContractTermsCard {...defaultProps} />);
+  it('should render the card with title', async () => {
+    await render(<MembershipContractTermsCard {...defaultProps} />);
 
     const heading = page.getByText('Contract Terms');
 
     expect(heading).toBeTruthy();
   });
 
-  it('should render Edit button', () => {
-    render(<MembershipContractTermsCard {...defaultProps} />);
+  it('should render Edit button', async () => {
+    await render(<MembershipContractTermsCard {...defaultProps} />);
 
     const editButton = page.getByRole('button');
 
@@ -65,7 +65,7 @@ describe('MembershipContractTermsCard', () => {
   });
 
   it('should call onEdit when Edit button is clicked', async () => {
-    render(<MembershipContractTermsCard {...defaultProps} />);
+    await render(<MembershipContractTermsCard {...defaultProps} />);
 
     const editButton = page.getByRole('button');
     await userEvent.click(editButton);
@@ -73,8 +73,8 @@ describe('MembershipContractTermsCard', () => {
     expect(mockOnEdit).toHaveBeenCalledTimes(1);
   });
 
-  it('should render contract length label and value', () => {
-    render(<MembershipContractTermsCard {...defaultProps} />);
+  it('should render contract length label and value', async () => {
+    await render(<MembershipContractTermsCard {...defaultProps} />);
 
     const contractLengthLabel = page.getByText('Contract Length');
     const contractLengthValue = page.getByText('12 Months');
@@ -83,8 +83,8 @@ describe('MembershipContractTermsCard', () => {
     expect(contractLengthValue).toBeTruthy();
   });
 
-  it('should render Month-to-Month contract length', () => {
-    render(
+  it('should render Month-to-Month contract length', async () => {
+    await render(
       <MembershipContractTermsCard
         {...defaultProps}
         contractLength="month-to-month"
@@ -96,8 +96,8 @@ describe('MembershipContractTermsCard', () => {
     expect(contractLengthValue).toBeTruthy();
   });
 
-  it('should render auto-renewal label and value', () => {
-    render(<MembershipContractTermsCard {...defaultProps} />);
+  it('should render auto-renewal label and value', async () => {
+    await render(<MembershipContractTermsCard {...defaultProps} />);
 
     const autoRenewalLabel = page.getByText('Auto-Renewal');
     const autoRenewalValue = page.getByText('Month-to-Month after contract');
@@ -106,8 +106,8 @@ describe('MembershipContractTermsCard', () => {
     expect(autoRenewalValue).toBeTruthy();
   });
 
-  it('should render No auto-renewal option', () => {
-    render(
+  it('should render No auto-renewal option', async () => {
+    await render(
       <MembershipContractTermsCard
         {...defaultProps}
         autoRenewal="none"
@@ -119,8 +119,8 @@ describe('MembershipContractTermsCard', () => {
     expect(autoRenewalValue).toBeTruthy();
   });
 
-  it('should render Same term renewal option', () => {
-    render(
+  it('should render Same term renewal option', async () => {
+    await render(
       <MembershipContractTermsCard
         {...defaultProps}
         autoRenewal="same-term"
@@ -132,8 +132,8 @@ describe('MembershipContractTermsCard', () => {
     expect(autoRenewalValue).toBeTruthy();
   });
 
-  it('should NOT render Cancellation Fee (moved to Payments and Fees card)', () => {
-    render(<MembershipContractTermsCard {...defaultProps} />);
+  it('should NOT render Cancellation Fee (moved to Payments and Fees card)', async () => {
+    await render(<MembershipContractTermsCard {...defaultProps} />);
 
     const cancellationFeeLabels = Array.from(document.querySelectorAll('span')).filter(
       el => el.textContent === 'Cancellation Fee',
@@ -142,8 +142,8 @@ describe('MembershipContractTermsCard', () => {
     expect(cancellationFeeLabels.length).toBe(0);
   });
 
-  it('should NOT render Hold Limit (moved to Payments and Fees card)', () => {
-    render(<MembershipContractTermsCard {...defaultProps} />);
+  it('should NOT render Hold Limit (moved to Payments and Fees card)', async () => {
+    await render(<MembershipContractTermsCard {...defaultProps} />);
 
     const holdLimitLabels = Array.from(document.querySelectorAll('span')).filter(
       el => el.textContent === 'Hold Limit',
@@ -152,8 +152,8 @@ describe('MembershipContractTermsCard', () => {
     expect(holdLimitLabels.length).toBe(0);
   });
 
-  it('should NOT render Hold Fee (moved to Payments and Fees card)', () => {
-    render(<MembershipContractTermsCard {...defaultProps} />);
+  it('should NOT render Hold Fee (moved to Payments and Fees card)', async () => {
+    await render(<MembershipContractTermsCard {...defaultProps} />);
 
     const holdFeeLabels = Array.from(document.querySelectorAll('span')).filter(
       el => el.textContent === 'Hold Fee',
@@ -162,8 +162,8 @@ describe('MembershipContractTermsCard', () => {
     expect(holdFeeLabels.length).toBe(0);
   });
 
-  it('should render 3 Months contract length', () => {
-    render(
+  it('should render 3 Months contract length', async () => {
+    await render(
       <MembershipContractTermsCard
         {...defaultProps}
         contractLength="3-months"
@@ -175,8 +175,8 @@ describe('MembershipContractTermsCard', () => {
     expect(contractLengthValue).toBeTruthy();
   });
 
-  it('should render 6 Months contract length', () => {
-    render(
+  it('should render 6 Months contract length', async () => {
+    await render(
       <MembershipContractTermsCard
         {...defaultProps}
         contractLength="6-months"

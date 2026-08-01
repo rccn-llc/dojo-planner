@@ -66,24 +66,24 @@ function renderTable() {
 
 describe('Finances Table', () => {
   describe('Search and Filter Bar', () => {
-    it('should render search input', () => {
-      renderTable();
+    it('should render search input', async () => {
+      await renderTable();
 
       const searchInput = page.getByPlaceholder('Search transactions...');
 
       expect(searchInput).toBeInTheDocument();
     });
 
-    it('should render filter dropdowns', () => {
-      renderTable();
+    it('should render filter dropdowns', async () => {
+      await renderTable();
 
       const filterDropdowns = page.getByRole('combobox').elements();
 
       expect(filterDropdowns.length).toBe(2);
     });
 
-    it('should not render tab navigation', () => {
-      renderTable();
+    it('should not render tab navigation', async () => {
+      await renderTable();
 
       const allTab = page.getByRole('button', { name: /^All$/i }).elements();
       const membershipDuesTab = page.getByRole('button', { name: /^Membership Dues$/i }).elements();
@@ -93,7 +93,7 @@ describe('Finances Table', () => {
     });
 
     it('should allow typing in search input', async () => {
-      renderTable();
+      await renderTable();
 
       const searchInput = page.getByPlaceholder('Search transactions...');
       await userEvent.fill(searchInput.element() as HTMLInputElement, 'Merchandise');
@@ -104,7 +104,7 @@ describe('Finances Table', () => {
     });
 
     it('should filter transactions by search term', async () => {
-      renderTable();
+      await renderTable();
 
       const searchInput = page.getByPlaceholder('Search transactions...');
       await userEvent.fill(searchInput.element() as HTMLInputElement, 'Private');
@@ -116,7 +116,7 @@ describe('Finances Table', () => {
     });
 
     it('should show no results message when search has no matches', async () => {
-      renderTable();
+      await renderTable();
 
       const searchInput = page.getByPlaceholder('Search transactions...');
       await userEvent.fill(searchInput.element() as HTMLInputElement, 'NonexistentTransaction');
@@ -127,7 +127,7 @@ describe('Finances Table', () => {
 
   describe('Origin Filter', () => {
     it('should show origin filter options when clicked', async () => {
-      renderTable();
+      await renderTable();
 
       const originFilter = page.getByTestId('finances-origin-filter');
       await originFilter.click();
@@ -137,7 +137,7 @@ describe('Finances Table', () => {
     });
 
     it('should filter by origin when selecting from dropdown', async () => {
-      renderTable();
+      await renderTable();
 
       const originFilter = page.getByTestId('finances-origin-filter');
       await originFilter.click();
@@ -153,7 +153,7 @@ describe('Finances Table', () => {
 
   describe('Status Filter', () => {
     it('should show status filter options when clicked', async () => {
-      renderTable();
+      await renderTable();
 
       const statusFilter = page.getByTestId('finances-status-filter');
       await statusFilter.click();
@@ -164,7 +164,7 @@ describe('Finances Table', () => {
     });
 
     it('should filter by status when selecting from dropdown', async () => {
-      renderTable();
+      await renderTable();
 
       const statusFilter = page.getByTestId('finances-status-filter');
       await statusFilter.click();
@@ -179,8 +179,8 @@ describe('Finances Table', () => {
   });
 
   describe('Transactions Table', () => {
-    it('should render transactions table headers', () => {
-      renderTable();
+    it('should render transactions table headers', async () => {
+      await renderTable();
 
       const table = page.getByRole('table');
 
@@ -193,8 +193,8 @@ describe('Finances Table', () => {
       expect(table.getByRole('button', { name: 'Status', exact: true })).toBeInTheDocument();
     });
 
-    it('should render transaction data in table', () => {
-      renderTable();
+    it('should render transaction data in table', async () => {
+      await renderTable();
 
       const table = page.getByRole('table');
 
@@ -202,24 +202,24 @@ describe('Finances Table', () => {
       expect(table.getByRole('cell', { name: '$160.00' }).first()).toBeInTheDocument();
     });
 
-    it('should render member name in table', () => {
-      renderTable();
+    it('should render member name in table', async () => {
+      await renderTable();
 
       const table = page.getByRole('table');
 
       expect(table.getByText('John Smith').first()).toBeInTheDocument();
     });
 
-    it('should render status badges in table', () => {
-      renderTable();
+    it('should render status badges in table', async () => {
+      await renderTable();
 
       const table = page.getByRole('table');
 
       expect(table.getByText('Paid').first()).toBeInTheDocument();
     });
 
-    it('should render at least 10 transactions', () => {
-      renderTable();
+    it('should render at least 10 transactions', async () => {
+      await renderTable();
 
       const table = page.getByRole('table');
 
@@ -230,7 +230,7 @@ describe('Finances Table', () => {
 
   describe('Sorting', () => {
     it('should have sortable date column', async () => {
-      renderTable();
+      await renderTable();
 
       const dateHeader = page.getByRole('button', { name: /Date/i });
       await dateHeader.click();
@@ -241,7 +241,7 @@ describe('Finances Table', () => {
     });
 
     it('should have sortable amount column', async () => {
-      renderTable();
+      await renderTable();
 
       const amountHeader = page.getByRole('button', { name: /Amount/i });
       await amountHeader.click();
@@ -252,7 +252,7 @@ describe('Finances Table', () => {
     });
 
     it('should have sortable origin column', async () => {
-      renderTable();
+      await renderTable();
 
       const originHeader = page.getByRole('button', { name: /Origin/i });
       await originHeader.click();
@@ -263,7 +263,7 @@ describe('Finances Table', () => {
     });
 
     it('should have sortable method column', async () => {
-      renderTable();
+      await renderTable();
 
       const table = page.getByRole('table');
       const methodHeader = table.getByRole('button', { name: 'Method', exact: true });
@@ -273,7 +273,7 @@ describe('Finances Table', () => {
     });
 
     it('should have sortable transaction ID column', async () => {
-      renderTable();
+      await renderTable();
 
       const transactionIdHeader = page.getByRole('button', { name: /Transaction ID/i });
       await transactionIdHeader.click();
@@ -283,8 +283,8 @@ describe('Finances Table', () => {
       expect(table).toBeInTheDocument();
     });
 
-    it('should render member column header', () => {
-      renderTable();
+    it('should render member column header', async () => {
+      await renderTable();
 
       const table = page.getByRole('table');
 
@@ -292,7 +292,7 @@ describe('Finances Table', () => {
     });
 
     it('should have sortable status column', async () => {
-      renderTable();
+      await renderTable();
 
       const statusHeader = page.getByRole('button', { name: /Status/i });
       await statusHeader.click();
@@ -303,7 +303,7 @@ describe('Finances Table', () => {
     });
 
     it('should toggle sort direction when clicking same column twice', async () => {
-      renderTable();
+      await renderTable();
 
       const dateHeader = page.getByRole('button', { name: /Date/i });
       await dateHeader.click();
@@ -316,24 +316,24 @@ describe('Finances Table', () => {
   });
 
   describe('Pagination', () => {
-    it('should render pagination controls', () => {
-      renderTable();
+    it('should render pagination controls', async () => {
+      await renderTable();
 
       const paginationText = page.getByText(/Showing 1-10 of 27 entries/);
 
       expect(paginationText).toBeInTheDocument();
     });
 
-    it('should render previous button', () => {
-      renderTable();
+    it('should render previous button', async () => {
+      await renderTable();
 
       const previousButton = page.getByRole('button', { name: /Previous/i });
 
       expect(previousButton).toBeInTheDocument();
     });
 
-    it('should render next button', () => {
-      renderTable();
+    it('should render next button', async () => {
+      await renderTable();
 
       const nextButton = page.getByRole('button', { name: 'Next', exact: true });
 
@@ -341,7 +341,7 @@ describe('Finances Table', () => {
     });
 
     it('should navigate to next page when clicking next', async () => {
-      renderTable();
+      await renderTable();
 
       const nextButton = page.getByRole('button', { name: 'Next', exact: true });
       await nextButton.click();
@@ -352,7 +352,7 @@ describe('Finances Table', () => {
     });
 
     it('should reset page when filtering', async () => {
-      renderTable();
+      await renderTable();
 
       const nextButton = page.getByRole('button', { name: 'Next', exact: true });
       await nextButton.click();
@@ -366,7 +366,7 @@ describe('Finances Table', () => {
 
   describe('Empty and Loading States', () => {
     it('should show empty state message when no transactions match filter', async () => {
-      renderTable();
+      await renderTable();
 
       const searchInput = page.getByPlaceholder('Search transactions...');
       await userEvent.fill(searchInput.element() as HTMLInputElement, 'ZZZNoMatch');
@@ -377,7 +377,7 @@ describe('Finances Table', () => {
 
   describe('Search by different fields', () => {
     it('should filter by transaction ID', async () => {
-      renderTable();
+      await renderTable();
 
       const searchInput = page.getByPlaceholder('Search transactions...');
       await userEvent.fill(searchInput.element() as HTMLInputElement, 'TXNCASH001');
@@ -388,7 +388,7 @@ describe('Finances Table', () => {
     });
 
     it('should filter by member name', async () => {
-      renderTable();
+      await renderTable();
 
       const searchInput = page.getByPlaceholder('Search transactions...');
       await userEvent.fill(searchInput.element() as HTMLInputElement, 'Jane Doe');
@@ -399,7 +399,7 @@ describe('Finances Table', () => {
     });
 
     it('should filter by status', async () => {
-      renderTable();
+      await renderTable();
 
       const searchInput = page.getByPlaceholder('Search transactions...');
       await userEvent.fill(searchInput.element() as HTMLInputElement, 'declined');
@@ -410,7 +410,7 @@ describe('Finances Table', () => {
     });
 
     it('should filter by method', async () => {
-      renderTable();
+      await renderTable();
 
       const searchInput = page.getByPlaceholder('Search transactions...');
       await userEvent.fill(searchInput.element() as HTMLInputElement, 'ACH Transfer');
@@ -421,7 +421,7 @@ describe('Finances Table', () => {
     });
 
     it('should filter by amount', async () => {
-      renderTable();
+      await renderTable();
 
       const searchInput = page.getByPlaceholder('Search transactions...');
       await userEvent.fill(searchInput.element() as HTMLInputElement, '$50.00');
@@ -434,7 +434,7 @@ describe('Finances Table', () => {
 
   describe('Combined Filters', () => {
     it('should apply search and origin filter together', async () => {
-      renderTable();
+      await renderTable();
 
       const originFilter = page.getByTestId('finances-origin-filter');
       await originFilter.click();
@@ -451,16 +451,16 @@ describe('Finances Table', () => {
   });
 
   describe('Transaction Status Display', () => {
-    it('should display different status badges', () => {
-      renderTable();
+    it('should display different status badges', async () => {
+      await renderTable();
 
       const table = page.getByRole('table');
 
       expect(table.getByText('Paid').first()).toBeInTheDocument();
     });
 
-    it('should show declined status on page 1', () => {
-      renderTable();
+    it('should show declined status on page 1', async () => {
+      await renderTable();
 
       const table = page.getByRole('table');
 
@@ -469,16 +469,16 @@ describe('Finances Table', () => {
   });
 
   describe('Row Click Interaction', () => {
-    it('should have transaction rows with button role', () => {
-      renderTable();
+    it('should have transaction rows with button role', async () => {
+      await renderTable();
 
       const table = page.getByRole('table');
 
       expect(table).toBeInTheDocument();
     });
 
-    it('should display member names as clickable rows', () => {
-      renderTable();
+    it('should display member names as clickable rows', async () => {
+      await renderTable();
 
       const table = page.getByRole('table');
 
