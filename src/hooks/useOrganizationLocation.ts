@@ -24,6 +24,9 @@ let cached: { location: OrganizationLocation; timestamp: number } | null = null;
 // De-dupes concurrent first-loads: instances mounting in the same tick await
 // the same request rather than each issuing their own.
 let inFlight: Promise<OrganizationLocation> | null = null;
+// Identifies which request currently owns `inFlight`, so a settling request
+// only clears the slot when it has not already been superseded by a newer one.
+let activeToken: symbol | null = null;
 const subscribers = new Set<(location: OrganizationLocation) => void>();
 
 async function loadLocation(force: boolean): Promise<OrganizationLocation> {
@@ -34,21 +37,30 @@ async function loadLocation(force: boolean): Promise<OrganizationLocation> {
     return inFlight;
   }
 
+  // Identity token captured before the async body runs, so the cleanup below
+  // can tell "my request is still the current one" without referring to the
+  // promise variable while it is still being initialised.
+  const token = Symbol('getLocation');
+  activeToken = token;
+
   const request = (async () => {
-    const result = await client.organization.getLocation();
-    cached = { location: result.location, timestamp: Date.now() };
-    subscribers.forEach(notify => notify(result.location));
-    return result.location;
+    try {
+      const result = await client.organization.getLocation();
+      cached = { location: result.location, timestamp: Date.now() };
+      subscribers.forEach(notify => notify(result.location));
+      return result.location;
+    } finally {
+      // Clear the shared slot from inside the request itself so a rejected
+      // promise is never handed to a later caller by the `inFlight` fast path.
+      if (activeToken === token) {
+        inFlight = null;
+        activeToken = null;
+      }
+    }
   })();
 
   inFlight = request;
-  try {
-    return await request;
-  } finally {
-    if (inFlight === request) {
-      inFlight = null;
-    }
-  }
+  return await request;
 }
 
 export function useOrganizationLocation() {

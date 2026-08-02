@@ -26,14 +26,17 @@ const PROGRAM_LABELS: Record<string, string> = {
   'wrestling': 'Wrestling',
 };
 
-function getLevelVariant(level: ClassLevel): 'default' | 'secondary' | 'destructive' | 'outline' {
+// A skill level is not an error state, so 'destructive' (red — reserved for
+// failures and dangerous actions) is deliberately not used here. 'warning'
+// reads as "elevated intensity", which suits the top tier.
+function getLevelVariant(level: ClassLevel): 'default' | 'secondary' | 'warning' | 'outline' {
   switch (level) {
     case 'Beginner':
       return 'default';
     case 'Intermediate':
       return 'secondary';
     case 'Advanced':
-      return 'destructive';
+      return 'warning';
     case 'All Levels':
       return 'outline';
     default:

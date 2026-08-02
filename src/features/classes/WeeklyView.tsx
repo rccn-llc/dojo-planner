@@ -96,11 +96,11 @@ export function WeeklyView({ withFilters }: WeeklyViewProps = {}) {
     ? `${startMonth} ${weekStart.getDate()} - ${weekEnd.getDate()}`
     : `${startMonth} ${weekStart.getDate()} - ${endMonth} ${weekEnd.getDate()}`;
 
-  // Generate weekly events from filtered classes
+  // Generate weekly events from filtered classes. Always honour the filter
+  // result — an empty match must render an empty week, not fall back to every
+  // class (which made active filters look like they had been ignored).
   const classesToUse = useMemo(
-    () => filteredClassIds.size > 0
-      ? rawClasses.filter(c => filteredClassIds.has(c.id))
-      : rawClasses,
+    () => rawClasses.filter(c => filteredClassIds.has(c.id)),
     [rawClasses, filteredClassIds],
   );
   const weeklyClassEvents = useMemo(

@@ -146,6 +146,42 @@ vi.mock('@/hooks/useEventsCache', () => ({
 }));
 
 describe('WeeklyView', () => {
+  describe('Filter Results', () => {
+    // Scoped to the schedule table: the colour legend below the grid is always
+    // built from the unfiltered class list, so a bare page-level text query
+    // would match legend entries rather than calendar blocks.
+    it('should render an empty schedule when filters match no classes', async () => {
+      const screen = await render(
+        <I18nWrapper>
+          <WeeklyView withFilters={{ search: 'no-such-class-xyz', tag: 'all', instructor: 'all' }} />
+        </I18nWrapper>,
+      );
+
+      const grid = screen.container.querySelector('table');
+
+      await expect.element(page.getByText('Time')).toBeInTheDocument();
+
+      expect(grid?.textContent).not.toContain('BJJ Fundamentals I');
+      expect(grid?.textContent).not.toContain('BJJ Advanced');
+      expect(grid?.textContent).not.toContain('Kids Class');
+    });
+
+    it('should render only the classes matching an active filter', async () => {
+      const screen = await render(
+        <I18nWrapper>
+          <WeeklyView withFilters={{ search: 'Kids Class', tag: 'all', instructor: 'all' }} />
+        </I18nWrapper>,
+      );
+
+      await expect.element(page.getByText('Kids Class').first()).toBeInTheDocument();
+
+      const grid = screen.container.querySelector('table');
+
+      expect(grid?.textContent).toContain('Kids Class');
+      expect(grid?.textContent).not.toContain('BJJ Fundamentals I');
+    });
+  });
+
   describe('Page Header', () => {
     it('should render the page title', async () => {
       await render(
