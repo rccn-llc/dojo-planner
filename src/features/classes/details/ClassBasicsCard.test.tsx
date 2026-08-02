@@ -126,6 +126,16 @@ describe('ClassBasicsCard', () => {
     expect(descriptionLabel).toBeTruthy();
   });
 
+  it('should not render the Edit button when onEdit is not provided', async () => {
+    const { onEdit: _omitted, ...propsWithoutOnEdit } = defaultProps;
+
+    await render(<ClassBasicsCard {...propsWithoutOnEdit} />);
+
+    const buttons = page.getByRole('button').elements();
+
+    expect(buttons).toHaveLength(0);
+  });
+
   it('should render different level badges correctly', async () => {
     await render(<ClassBasicsCard {...defaultProps} level="Advanced" />);
 

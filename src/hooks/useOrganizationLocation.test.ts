@@ -66,6 +66,36 @@ describe('useOrganizationLocation', () => {
     expect(result.current.loading).toBe(false);
   });
 
+  // A failed request must not poison the shared cache: the next caller has to
+  // be able to issue a fresh request and succeed.
+  it('recovers on the next refetch after a failed request', async () => {
+    const { result } = await renderHook(() => useOrganizationLocation());
+
+    await vi.waitFor(() => {
+      expect(result.current).toBeTruthy();
+    });
+
+    // A forced refetch bypasses the shared cache, so this exercises a real
+    // request failure regardless of what earlier tests left cached.
+    mockGetLocation.mockRejectedValue(new Error('network down'));
+    await result.current.refetch();
+
+    await vi.waitFor(() => {
+      expect(result.current.error).toBe('network down');
+    });
+
+    const recovered = { ...LOCATION, address: '3 Recovery Rd' };
+    mockGetLocation.mockResolvedValue({ location: recovered });
+
+    await result.current.refetch();
+
+    await vi.waitFor(() => {
+      expect(result.current.location).toEqual(recovered);
+    });
+
+    expect(result.current.error).toBeNull();
+  });
+
   // The calendar renders one ClassEventHoverCard per event, each calling this
   // hook. Without a shared cache every event fires its own request — this is
   // what caused a flood of getLocation calls on the monthly view.
