@@ -1,6 +1,6 @@
 import type { TenantDb } from '@/libs/TenantDb';
 import { Buffer } from 'node:buffer';
-import { createDecipheriv } from 'node:crypto';
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { controlDb } from '@/libs/ControlDb';
 import { Env } from '@/libs/Env';
@@ -183,9 +183,82 @@ function defaultTenantRecord(orgId: string): TenantRecord | null {
 }
 
 /**
+ * Auto-register an organization against the CURRENT shared database.
+ *
+ * A Clerk organization can be created at any moment — self-serve signup, an
+ * admin in the Clerk dashboard, an E2E fixture — and none of those paths know
+ * about this app's tenant directory. Without auto-registration the dashboard is
+ * simply dead for a new organization until someone runs a script by hand.
+ *
+ * This mirrors what the app already does for the `organization` row itself,
+ * which several services create lazily by upsert.
+ *
+ * ── Why this is safe during the no-op phase ─────────────────────────────────
+ *
+ * Every organization currently resolves to one shared database, so registering
+ * a new one against that same database grants no access it did not already
+ * have — before this phase, an org simply used the shared connection directly.
+ *
+ * ── Why it must be REMOVED before tenants are split (phase A3/A4) ───────────
+ *
+ * Once organizations have their own databases, silently pointing an unknown org
+ * at the shared one would be a cross-tenant leak. From A3, provisioning becomes
+ * explicit (`provisionTenant.ts` creates a real Neon project) and a missing row
+ * must once again be a hard `TenantNotProvisionedError`.
+ *
+ * The `sharesOneDatabase` guard enforces exactly that: auto-registration is
+ * disabled the moment a distinct CONTROL_DATABASE_URL exists, which is the
+ * signal that the planes have been separated.
+ */
+async function autoRegisterTenant(orgId: string): Promise<TenantRecord | null> {
+  const sharesOneDatabase = !Env.CONTROL_DATABASE_URL
+    || Env.CONTROL_DATABASE_URL === Env.DATABASE_URL;
+
+  if (!sharesOneDatabase) {
+    // The planes are separate: provisioning is explicit from here on.
+    return null;
+  }
+
+  const keyHex = Env.CONTROL_PLANE_ENCRYPTION_KEY ?? Env.IQPRO_CONFIG_ENCRYPTION_KEY;
+  if (!keyHex) {
+    return null;
+  }
+
+  const connectionString = Env.DATABASE_URL;
+  const iv = randomBytes(IV_BYTES);
+  const cipher = createCipheriv(ALGORITHM, Buffer.from(keyHex, 'hex'), iv);
+  const ciphertext = Buffer.concat([cipher.update(connectionString, 'utf8'), cipher.final()]);
+  const encrypted = Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString('base64');
+
+  await controlDb
+    .insert(tenantSchema)
+    .values({
+      orgId,
+      displayName: null,
+      connectionStringEncrypted: encrypted,
+      region: 'shared',
+      status: TENANT_STATUS.ACTIVE,
+      schemaVersion: null,
+    })
+    // Concurrent first requests race here; last write wins and both proceed.
+    .onConflictDoNothing({ target: tenantSchema.orgId });
+
+  console.info('[Tenancy] auto-registered organization against the shared database', { orgId });
+
+  return {
+    orgId,
+    connectionString,
+    region: 'shared',
+    status: TENANT_STATUS.ACTIVE,
+    schemaVersion: null,
+  };
+}
+
+/**
  * Look up one organization's tenant record.
  *
- * @throws TenantNotProvisionedError when no active row exists.
+ * @throws TenantNotProvisionedError when no active row exists and the
+ *   organization cannot be auto-registered.
  * @throws TenantUnavailableError when the tenant is migrating or suspended.
  */
 export async function resolveTenant(orgId: string): Promise<TenantRecord> {
@@ -215,6 +288,14 @@ export async function resolveTenant(orgId: string): Promise<TenantRecord> {
   }
 
   if (!row) {
+    // A Clerk organization that this app has never seen. While all
+    // organizations share one database, register it rather than failing — see
+    // autoRegisterTenant for why this is safe now and must go in phase A3.
+    const registered = await autoRegisterTenant(orgId);
+    if (registered) {
+      cacheSet(orgId, registered);
+      return registered;
+    }
     throw new TenantNotProvisionedError(orgId);
   }
   if (row.status !== TENANT_STATUS.ACTIVE) {

@@ -1,9 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+type InsertedTenantRow = { connectionStringEncrypted: string };
+
 const findFirst = vi.fn();
+const onConflictDoNothing = vi.fn().mockResolvedValue(undefined);
+const values = vi.fn((_row: InsertedTenantRow) => ({ onConflictDoNothing }));
+const insert = vi.fn(() => ({ values }));
 
 vi.mock('@/libs/ControlDb', () => ({
-  controlDb: { query: { tenantSchema: { findFirst: (...args: unknown[]) => findFirst(...args) } } },
+  controlDb: {
+    query: { tenantSchema: { findFirst: (...args: unknown[]) => findFirst(...args) } },
+    insert: (...args: unknown[]) => insert(...(args as [])),
+  },
 }));
 
 const getTenantDb = vi.fn(() => ({ __handle: true }));
@@ -93,12 +101,17 @@ describe('tenantDirectoryService', () => {
       envValues.CONTROL_PLANE_ENCRYPTION_KEY = 'a'.repeat(64);
     });
 
-    it('throws TenantNotProvisionedError when no row exists', async () => {
+    it('throws TenantNotProvisionedError when no row exists and auto-registration is off', async () => {
+      // A distinct control database means the planes have been separated, so
+      // provisioning is explicit from that point on.
+      envValues.CONTROL_DATABASE_URL = 'postgres://control';
+      envValues.DATABASE_URL = 'postgres://tenant';
       findFirst.mockResolvedValue(undefined);
 
       await expect(service.resolveTenant('org_missing')).rejects.toThrow(
         service.TenantNotProvisionedError,
       );
+      expect(insert).not.toHaveBeenCalled();
     });
 
     it.each(['provisioning', 'migrating', 'suspended', 'archived'])(
@@ -136,6 +149,82 @@ describe('tenantDirectoryService', () => {
       findFirst.mockResolvedValue(tenantRow({ connectionStringEncrypted: 'AAAA' }));
 
       await expect(service.resolveTenant('org_a')).rejects.toThrow(/too short/);
+    });
+  });
+
+  describe('auto-registration', () => {
+    beforeEach(() => {
+      envValues.CONTROL_PLANE_ENCRYPTION_KEY = 'a'.repeat(64);
+      envValues.DATABASE_URL = 'postgres://shared';
+      // No CONTROL_DATABASE_URL: both planes still share one database.
+    });
+
+    it('registers an unknown organization against the shared database', async () => {
+      // A Clerk org can be created at any time — self-serve signup, the Clerk
+      // dashboard, an E2E fixture — and none of those know about this app's
+      // tenant directory. Failing here would leave the dashboard dead until
+      // someone ran a script by hand.
+      findFirst.mockResolvedValue(undefined);
+
+      const tenant = await service.resolveTenant('org_brand_new');
+
+      expect(tenant.orgId).toBe('org_brand_new');
+      expect(tenant.connectionString).toBe('postgres://shared');
+      expect(tenant.status).toBe('active');
+      expect(insert).toHaveBeenCalled();
+    });
+
+    it('writes a row that decrypts back to the shared connection string', async () => {
+      findFirst.mockResolvedValue(undefined);
+
+      await service.resolveTenant('org_brand_new');
+
+      const written = values.mock.calls[0]?.[0];
+
+      expect(written?.connectionStringEncrypted).toBeTruthy();
+
+      // Round-trip through the resolver's own decryption path: seed the row it
+      // just wrote and confirm it reads back.
+      service.resetTenantDirectoryCache();
+      findFirst.mockResolvedValue(tenantRow({
+        orgId: 'org_brand_new',
+        connectionStringEncrypted: written?.connectionStringEncrypted,
+      }));
+
+      const reread = await service.resolveTenant('org_brand_new');
+
+      expect(reread.connectionString).toBe('postgres://shared');
+    });
+
+    it('tolerates a concurrent insert (ON CONFLICT DO NOTHING)', async () => {
+      findFirst.mockResolvedValue(undefined);
+
+      await service.resolveTenant('org_brand_new');
+
+      expect(onConflictDoNothing).toHaveBeenCalled();
+    });
+
+    it('is DISABLED once the control plane is a separate database', async () => {
+      // The signal that tenants have been split out. From that point a missing
+      // row must fail loudly — silently pointing an unknown org at the shared
+      // database would be a cross-tenant leak.
+      envValues.CONTROL_DATABASE_URL = 'postgres://control';
+      findFirst.mockResolvedValue(undefined);
+
+      await expect(service.resolveTenant('org_brand_new')).rejects.toThrow(
+        service.TenantNotProvisionedError,
+      );
+      expect(insert).not.toHaveBeenCalled();
+    });
+
+    it('does not register when no encryption key is available', async () => {
+      delete envValues.CONTROL_PLANE_ENCRYPTION_KEY;
+      findFirst.mockResolvedValue(undefined);
+
+      await expect(service.resolveTenant('org_brand_new')).rejects.toThrow(
+        service.TenantNotProvisionedError,
+      );
+      expect(insert).not.toHaveBeenCalled();
     });
 
     it('turns a missing `tenant` table into an actionable deployment error', async () => {
