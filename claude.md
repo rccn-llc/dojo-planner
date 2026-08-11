@@ -1107,12 +1107,59 @@ npm run commit        # Interactive commit helper
 
 ### Performance conventions
 
-- **Migrations:** the schema is applied via the single hand-authored `migrations/0000_baseline.sql` (there is no `0000_snapshot.json`, so `npm run db:generate` would regenerate the whole schema — do NOT run it). To add/alter a table or index, edit BOTH `src/models/Schema.ts` (the Drizzle source of truth) AND `0000_baseline.sql` (append the DDL), keeping them in sync by hand, then run the DDL against Neon directly (`CREATE INDEX CONCURRENTLY IF NOT EXISTS …`) since the baseline is already applied there. Local dev picks up baseline changes only on a fresh `rm -rf local.db` + reseed.
+- **Migrations:** the schema is applied via the single hand-authored `migrations/0000_baseline.sql` (there is no `0000_snapshot.json`, so drizzle-kit would regenerate the whole schema — `npm run db:generate` is therefore **disabled** and exits non-zero with an explanation). To add/alter a table or index, edit BOTH `src/models/Schema.ts` (the Drizzle source of truth) AND `0000_baseline.sql` (append the DDL), keeping them in sync by hand, then run the DDL against Neon directly (`CREATE INDEX CONCURRENTLY IF NOT EXISTS …`) since the baseline is already applied there. Local dev picks up baseline changes only on a fresh `rm -rf local.db` + reseed. **Append control-plane / additive DDL at the END of the baseline** — edits to existing tables happen in the sections above, and a merge conflict in this file is silently catastrophic.
+- **Applying migrations:** `npm run db:migrate:tenants` (`src/scripts/migrateTenants.ts`) is the deploy-time migrator; it runs in the pipeline **before** the new version serves traffic and exits non-zero on any failure. It replaced a `runMigrations()` call in the root layout that ran during page render, swallowed errors, and raced across serverless instances. Local dev is unaffected — `npm run dev` still runs `db:migrate` via the `db-server:file` script. The migrator builds its own **raw** connection: `@/libs/DB` is a Proxy (see Multi-Tenancy) and drizzle's `migrate()` reaches into internals it does not forward.
 - **Index every hot filter/join column:** every table that is filtered or joined on `member_id`, `organization_id`, a status column, or ordered by `created_at` should have a matching (often composite) index. The member-scoped tables (`address`, `note`, `payment_method`) and `transaction (organization_id, created_at)` / `signed_waiver (organization_id, signed_at)` composites were added for exactly this.
 - **Don't load rows to count them:** use `count()` + `GROUP BY` (e.g. `getOrganizationWaiverTemplates` counts signed waivers with a grouped aggregate) rather than `db.select()`-ing full rows and counting in JS — signed waivers / catalog images carry base64 blobs.
 - **Keep base64 out of list queries:** `member.photoUrl` and catalog image `url`/`thumbnailUrl` are base64 data URLs. The members-LIST query returns `photoUrl: null` and the detail page loads the photo via `member.getById`; large lists are paginated client-side (members, transactions, catalog) so only a page of image-bearing rows is in the DOM.
 - **Parallelize independent awaits** with `Promise.all` (reports insights, `getCurrentPlan`'s DB + Clerk calls). **Dedupe per-request work** with React `cache()` (the dashboard subscription gate's org lookup + `hasActiveSubscription`).
 - **Code-split heavy client deps:** `recharts` (Dashboard + Reports charts) and `browser-image-compression` are loaded via `next/dynamic` / lazy `await import()` so they're not in initial route bundles. `next.config.ts` sets `experimental.optimizePackageImports` for `lucide-react`/`recharts`/`date-fns`. `reactCompiler: true` auto-memoizes, so manual `useMemo`/`useCallback`/`React.memo` are usually unnecessary.
+
+## Multi-Tenancy (tenant connection seam)
+
+The app is moving to **one Postgres database per Clerk organization**. Phase A1 landed the connection seam; **every organization currently still resolves to the same shared database**, so behaviour is unchanged. The seam exists so tenants can be split out one at a time later.
+
+### The two planes
+
+| Plane | Holds | Handle |
+|-------|-------|--------|
+| **Control** | `tenant`, `tenant_external_ref`, `platform_config`, and `organization`'s SaaS-billing columns | `controlDb` (`src/libs/ControlDb.ts`), `controlOrganizationDb()` (`src/libs/ControlPlaneReads.ts`) |
+| **Tenant** | Everything else — members, classes, transactions, waivers, and `organization`'s `location_*` / merchant-credential columns | `db` (`src/libs/DB.ts`) |
+
+The control plane must be readable **before** any tenant database can be opened, which is why the tenant directory cannot live inside a tenant database.
+
+### How `db` resolves
+
+`src/libs/DB.ts` exports a **Proxy**, not a connection. Every property access resolves the current request's tenant database from `AsyncLocalStorage` (`src/libs/TenantContext.ts`). This is what lets the ~20 service modules keep their unchanged `import { db } from '@/libs/DB'`.
+
+**Accessing `db` outside a tenant scope throws.** That is deliberate — a database access with no tenant must be loud, never a silent fall-back to a default connection.
+
+| File | Role |
+|------|------|
+| `src/libs/TenantContext.ts` | `runWithTenant` / `getTenantScope` / `requireTenantScope` / `enterTenantScope` |
+| `src/libs/TenantDb.ts` | Bounded LRU of `pg.Pool`s keyed by orgId (`TENANT_POOL_MAX`, default 12) |
+| `src/libs/ControlDb.ts` | Control-plane singleton, typed against `ControlSchema` only |
+| `src/libs/ControlPlaneReads.ts` | `organization` reads that must not require a tenant scope (the RSC access gate) |
+| `src/libs/WebhookTenantScope.ts` | Bootstrap scope for sessionless webhooks — the one place phase A2 changes |
+| `src/services/TenantDirectoryService.ts` | orgId → connection string, 60s TTL cache, typed errors |
+| `src/models/ControlSchema.ts` | `tenant` + `tenant_external_ref` |
+
+### Where scope is established
+
+- **RPC** (`rpc/[[...rest]]/route.ts`) — resolves `orgId` once, reuses it for rate limiting, wraps the handler in `runWithTenant`. `TenantNotProvisionedError` → 409, `TenantUnavailableError` → 503. Org-less requests deliberately run **without** a scope so `guardAuth()` returns its JSON 401.
+- **Webhooks** — bootstrap scope via `WebhookTenantScope`. IQPro payloads carry no org discriminator, so A2 will add a `tenant_external_ref` lookup that resolves the org *before* opening a connection.
+- **RSC** — nothing to do. The only render-path DB reads (`orgExists`, `hasActiveSubscription`) go through `controlOrganizationDb()`.
+
+### Writing new code
+
+- Services and routers need **no changes** — keep importing `db` normally.
+- A new script, cron, or background job **must** wrap its work in a tenant scope, or `db` will throw.
+- Never pass `db` to something that reaches into drizzle internals (e.g. `migrate()`); build a raw connection instead.
+- `DEFAULT_TENANT_DATABASE_URL` is a **non-production** escape hatch. `TenantDirectoryService` refuses to honour it when `NODE_ENV === 'production'` — without that guard a misconfigured deploy would route every tenant to one database. Covered by an explicit test.
+
+### Env
+
+`CONTROL_DATABASE_URL` (falls back to `DATABASE_URL`), `DEFAULT_TENANT_DATABASE_URL` (dev only), `CONTROL_PLANE_ENCRYPTION_KEY` (falls back to `IQPRO_CONFIG_ENCRYPTION_KEY`; separate because a connection string is a higher trust tier than a gateway id).
 
 ## CI/CD
 

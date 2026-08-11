@@ -17,6 +17,21 @@ vi.mock('@/libs/DB', () => ({
   },
 }));
 
+// `hasActiveSubscription` reads through the CONTROL plane rather than the
+// tenant-scoped `db` — it runs from the RSC-render access gate, which has no
+// tenant scope. Everything else in this service still uses `db`.
+const mockControlOrgFindFirst = vi.fn();
+
+vi.mock('@/libs/ControlPlaneReads', () => ({
+  controlOrganizationDb: () => ({
+    query: {
+      organizationSchema: {
+        findFirst: mockControlOrgFindFirst,
+      },
+    },
+  }),
+}));
+
 // Mock IQPro REST helpers
 vi.mock('@/libs/IQPro', () => ({
   iqproPost: vi.fn(),
@@ -56,8 +71,12 @@ vi.mock('drizzle-orm', () => ({
   eq: vi.fn((_col, val) => ({ _type: 'eq', value: val })),
 }));
 
-// Helper to mock findFirst with partial org data (avoids full schema type requirement)
-const mockFindFirst = () => vi.mocked(db.query.organizationSchema.findFirst) as ReturnType<typeof vi.fn>;
+// Helper to mock findFirst with partial org data (avoids full schema type requirement).
+// Reassignable because `hasActiveSubscription` reads through the control plane
+// while every other function here uses the tenant-scoped `db`; that one block
+// repoints this and the outer beforeEach restores the default.
+const tenantFindFirst = () => vi.mocked(db.query.organizationSchema.findFirst) as ReturnType<typeof vi.fn>;
+let mockFindFirst: () => ReturnType<typeof vi.fn> = tenantFindFirst;
 
 // Far-future period end (ms) so active/trial fixtures pass the expiry backstop
 // in hasActiveSubscription/getCurrentSubscription regardless of when tests run.
@@ -66,6 +85,9 @@ const FUTURE_PERIOD_END = 4_000_000_000_000; // ~2096
 describe('SaasSubscriptionService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Restore the default so the hasActiveSubscription block's override cannot
+    // leak into other suites.
+    mockFindFirst = tenantFindFirst;
   });
 
   async function setupModule() {
@@ -822,6 +844,13 @@ describe('SaasSubscriptionService', () => {
   // ===== hasActiveSubscription =====
 
   describe('hasActiveSubscription', () => {
+    // This function alone reads through the control plane (it is called from
+    // the RSC-render access gate, which has no tenant scope). Point the shared
+    // `mockFindFirst()` helper at that mock for the cases below.
+    beforeEach(() => {
+      mockFindFirst = () => mockControlOrgFindFirst;
+    });
+
     it('returns true for active IQPro subscription', async () => {
       const { service } = await setupModule();
 

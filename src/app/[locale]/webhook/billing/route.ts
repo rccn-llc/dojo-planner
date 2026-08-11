@@ -5,6 +5,8 @@ import { Env } from '@/libs/Env';
 import { auditLogger, logger } from '@/libs/Logger';
 import { getClientIP, isRateLimitingEnabled, webhookRateLimiter } from '@/libs/RateLimit';
 import { stripe } from '@/libs/Stripe';
+import { runWithTenant } from '@/libs/TenantContext';
+import { getBootstrapTenantDb, WEBHOOK_BOOTSTRAP_ORG_ID } from '@/libs/WebhookTenantScope';
 import { processWebhookEvent } from '@/services/BillingService';
 
 /**
@@ -76,7 +78,17 @@ export const POST = async (request: Request) => {
     return NextResponse.json({ error: 'Webhook Error' }, { status: 400 });
   }
 
-  await processWebhookEvent(event);
+  // Sessionless, like the IQPro webhook: Stripe identifies the account by
+  // customer id, not Clerk org. See WebhookTenantScope for why a bootstrap
+  // scope is correct during the no-op phase and what replaces it.
+  //
+  // This route becomes scope-free in phase A2: `organization` moves to the
+  // control plane, so `updateStripeSubscription` will target `controlDb`
+  // directly and need no tenant at all.
+  await runWithTenant(
+    { orgId: WEBHOOK_BOOTSTRAP_ORG_ID, db: getBootstrapTenantDb(), source: 'webhook' },
+    () => processWebhookEvent(event),
+  );
 
   return NextResponse.json({ received: true });
 };
