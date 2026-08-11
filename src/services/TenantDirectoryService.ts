@@ -127,6 +127,17 @@ const IV_BYTES = 12;
 const TAG_BYTES = 16;
 
 /**
+ * Marker stored in place of ciphertext when an organization was auto-registered
+ * without an encryption key available.
+ *
+ * It means "this tenant uses DATABASE_URL", never a real connection string, so
+ * nothing sensitive is stored unencrypted. It is only ever written, and only
+ * ever honoured, while all organizations share one database — see
+ * `autoRegisterTenant`.
+ */
+const SHARED_DATABASE_SENTINEL = '__shared_database__';
+
+/**
  * Decrypt a stored connection string.
  *
  * Mirrors `libs/Crypto.ts` byte-for-byte (same AES-256-GCM layout:
@@ -219,23 +230,33 @@ async function autoRegisterTenant(orgId: string): Promise<TenantRecord | null> {
     return null;
   }
 
-  const keyHex = Env.CONTROL_PLANE_ENCRYPTION_KEY ?? Env.IQPRO_CONFIG_ENCRYPTION_KEY;
-  if (!keyHex) {
-    return null;
-  }
-
   const connectionString = Env.DATABASE_URL;
-  const iv = randomBytes(IV_BYTES);
-  const cipher = createCipheriv(ALGORITHM, Buffer.from(keyHex, 'hex'), iv);
-  const ciphertext = Buffer.concat([cipher.update(connectionString, 'utf8'), cipher.final()]);
-  const encrypted = Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString('base64');
+  const keyHex = Env.CONTROL_PLANE_ENCRYPTION_KEY ?? Env.IQPRO_CONFIG_ENCRYPTION_KEY;
+
+  // Encrypt when a key is available, but do NOT require one. While every
+  // organization resolves to `DATABASE_URL`, the stored string is a value the
+  // process already holds in plaintext — encrypting it protects nothing, and
+  // demanding a key would make the app unusable in any environment that has
+  // not configured one (CI being the obvious case).
+  //
+  // The sentinel below is recognised by the read path. It cannot leak a real
+  // per-tenant connection string, because auto-registration is disabled the
+  // moment the planes are separated.
+  const stored = keyHex
+    ? (() => {
+        const iv = randomBytes(IV_BYTES);
+        const cipher = createCipheriv(ALGORITHM, Buffer.from(keyHex, 'hex'), iv);
+        const ciphertext = Buffer.concat([cipher.update(connectionString, 'utf8'), cipher.final()]);
+        return Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString('base64');
+      })()
+    : SHARED_DATABASE_SENTINEL;
 
   await controlDb
     .insert(tenantSchema)
     .values({
       orgId,
       displayName: null,
-      connectionStringEncrypted: encrypted,
+      connectionStringEncrypted: stored,
       region: 'shared',
       status: TENANT_STATUS.ACTIVE,
       schemaVersion: null,
@@ -306,7 +327,7 @@ export async function resolveTenant(orgId: string): Promise<TenantRecord> {
 
   const record: TenantRecord = {
     orgId: row.orgId,
-    connectionString: decryptConnectionString(row.connectionStringEncrypted),
+    connectionString: resolveConnectionString(row.connectionStringEncrypted),
     region: row.region,
     status: row.status,
     schemaVersion: row.schemaVersion,
@@ -314,6 +335,35 @@ export async function resolveTenant(orgId: string): Promise<TenantRecord> {
 
   cacheSet(orgId, record);
   return record;
+}
+
+/**
+ * Turn a stored `connection_string_enc` value into a usable connection string.
+ *
+ * Handles the sentinel written by key-less auto-registration, which means
+ * "this tenant uses DATABASE_URL". Honouring it is refused once the planes are
+ * separated: at that point a sentinel row is stale data from the shared-database
+ * era, and silently routing that organization to the control database would be
+ * a cross-tenant leak.
+ */
+function resolveConnectionString(stored: string): string {
+  if (stored !== SHARED_DATABASE_SENTINEL) {
+    return decryptConnectionString(stored);
+  }
+
+  const sharesOneDatabase = !Env.CONTROL_DATABASE_URL
+    || Env.CONTROL_DATABASE_URL === Env.DATABASE_URL;
+
+  if (!sharesOneDatabase) {
+    throw new Error(
+      '[Tenancy] A tenant row still carries the shared-database marker, but the '
+      + 'control plane is now a separate database. That row predates the split '
+      + 'and must be re-provisioned with a real connection string before this '
+      + 'organization can be served.',
+    );
+  }
+
+  return Env.DATABASE_URL;
 }
 
 /** Resolve an organization straight to a usable database handle. */

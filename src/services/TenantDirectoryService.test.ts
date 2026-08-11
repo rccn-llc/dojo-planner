@@ -77,6 +77,9 @@ describe('tenantDirectoryService', () => {
       // database — the exact cross-tenant leak this architecture prevents.
       envValues.NODE_ENV = 'production';
       envValues.DEFAULT_TENANT_DATABASE_URL = 'postgres://should-be-ignored';
+      // Separate planes so auto-registration cannot mask the assertion.
+      envValues.CONTROL_DATABASE_URL = 'postgres://control';
+      envValues.DATABASE_URL = 'postgres://tenant';
       findFirst.mockResolvedValue(undefined);
 
       await expect(service.resolveTenant('org_a')).rejects.toThrow(
@@ -87,6 +90,8 @@ describe('tenantDirectoryService', () => {
     });
 
     it('falls through to the directory when the hatch is unset', async () => {
+      envValues.CONTROL_DATABASE_URL = 'postgres://control';
+      envValues.DATABASE_URL = 'postgres://tenant';
       findFirst.mockResolvedValue(undefined);
 
       await expect(service.resolveTenant('org_a')).rejects.toThrow(
@@ -217,14 +222,48 @@ describe('tenantDirectoryService', () => {
       expect(insert).not.toHaveBeenCalled();
     });
 
-    it('does not register when no encryption key is available', async () => {
+    it('still registers when NO encryption key is configured', async () => {
+      // Regression guard: CI provides only CLERK_SECRET_KEY. Requiring a key
+      // here made auto-registration silently decline, so every E2E run failed
+      // with "No provisioned tenant database". While all orgs share one
+      // database the stored value is DATABASE_URL — something the process
+      // already holds in plaintext — so a key protects nothing.
       delete envValues.CONTROL_PLANE_ENCRYPTION_KEY;
+      delete envValues.IQPRO_CONFIG_ENCRYPTION_KEY;
       findFirst.mockResolvedValue(undefined);
 
-      await expect(service.resolveTenant('org_brand_new')).rejects.toThrow(
-        service.TenantNotProvisionedError,
+      const tenant = await service.resolveTenant('org_brand_new');
+
+      expect(tenant.connectionString).toBe('postgres://shared');
+      expect(insert).toHaveBeenCalled();
+      // Stores a marker, never a plaintext connection string.
+      expect(values.mock.calls[0]?.[0]?.connectionStringEncrypted).toBe('__shared_database__');
+    });
+
+    it('reads the sentinel back as DATABASE_URL', async () => {
+      delete envValues.CONTROL_PLANE_ENCRYPTION_KEY;
+      delete envValues.IQPRO_CONFIG_ENCRYPTION_KEY;
+      findFirst.mockResolvedValue(tenantRow({
+        connectionStringEncrypted: '__shared_database__',
+      }));
+
+      const tenant = await service.resolveTenant('org_a');
+
+      expect(tenant.connectionString).toBe('postgres://shared');
+    });
+
+    it('REFUSES a sentinel row once the planes are separated', async () => {
+      // Such a row predates the split. Silently routing that org to the control
+      // database would be a cross-tenant leak, so it must fail loudly and be
+      // re-provisioned with a real connection string.
+      envValues.CONTROL_DATABASE_URL = 'postgres://control';
+      findFirst.mockResolvedValue(tenantRow({
+        connectionStringEncrypted: '__shared_database__',
+      }));
+
+      await expect(service.resolveTenant('org_a')).rejects.toThrow(
+        /shared-database marker/,
       );
-      expect(insert).not.toHaveBeenCalled();
     });
 
     it('turns a missing `tenant` table into an actionable deployment error', async () => {
@@ -289,6 +328,9 @@ describe('tenantDirectoryService', () => {
     });
 
     it('propagates resolution failures rather than opening a connection', async () => {
+      // Separate planes: auto-registration is off, so a missing row is fatal.
+      envValues.CONTROL_DATABASE_URL = 'postgres://control';
+      envValues.DATABASE_URL = 'postgres://tenant';
       findFirst.mockResolvedValue(undefined);
 
       await expect(service.getDbForOrg('org_missing')).rejects.toThrow(
