@@ -11,9 +11,11 @@ import { eq } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 import { cache } from 'react';
 import { controlOrganizationDb } from '@/libs/ControlPlaneReads';
+import { enterTenantScope } from '@/libs/TenantContext';
 import { organizationSchema } from '@/models/Schema';
 import { getAcademyOwner } from '@/services/ClerkRolesService';
 import { hasActiveSubscription } from '@/services/SaasSubscriptionService';
+import { getDbForOrg } from '@/services/TenantDirectoryService';
 import { ORG_ROLE } from '@/types/Auth';
 import { isExemptOrg, isSuperAdmin } from '@/utils/SuperAdmins';
 
@@ -42,8 +44,39 @@ const orgExists = cache(async (orgId: string): Promise<boolean> => {
 const isSubscriptionActiveCached = cache(hasActiveSubscription);
 
 /**
- * Ensures the user belongs to an organization.
- * Redirects to organization selection if no organization is found.
+ * Resolve the organization's database and enter its scope, once per request.
+ *
+ * Deliberately non-fatal: a page that never touches tenant data (or reads only
+ * control-plane data, like the subscription gate) must still render for an
+ * organization that has no tenant row yet. If such a page DOES reach for `db`,
+ * the Proxy throws its own diagnostic error — which is the loud failure we
+ * want, rather than a redirect from here that would mask the cause.
+ */
+const establishTenantScope = cache(async (orgId: string): Promise<void> => {
+  try {
+    const tenantDb = await getDbForOrg(orgId);
+    enterTenantScope({ orgId, db: tenantDb, source: 'rsc' });
+  } catch (error) {
+    console.error('[Tenancy] Could not establish tenant scope for RSC render', {
+      orgId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+/**
+ * Ensures the user belongs to an organization, and establishes that
+ * organization's tenant database scope for the remainder of this request.
+ *
+ * Server pages and route handlers reach the database through services that
+ * import `db`, which is a tenant-resolving Proxy — without a scope, any such
+ * access throws. Unlike the RPC route there is no single wrapper to hook, so
+ * scope is established here: every server page that touches the database
+ * already calls this first, which makes it the natural seam.
+ *
+ * Uses `enterTenantScope` (AsyncLocalStorage's `enterWith`) rather than
+ * `runWithTenant`, because a page cannot wrap its own remaining execution in a
+ * callback. React's `cache()` makes it idempotent per request.
  *
  * @returns Promise containing orgId and has function for role checking
  * @throws Redirects to organization selection if no orgId
@@ -54,6 +87,8 @@ export const requireOrganization = async () => {
   if (!orgId) {
     redirect('/onboarding/organization-selection');
   }
+
+  await establishTenantScope(orgId);
 
   return { orgId, has };
 };

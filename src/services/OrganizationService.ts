@@ -1,10 +1,18 @@
 import type { IStripeSubscription } from '@/types/Subscription';
 import { eq } from 'drizzle-orm';
+import { controlOrganizationDb } from '@/libs/ControlPlaneReads';
 import { db } from '@/libs/DB';
 import { organizationSchema } from '@/models/Schema';
 
+// The `stripe*` columns on `organization` are CONTROL-plane data: they describe
+// the org's SaaS billing relationship with the platform, not any tenant's own
+// records. They are read from surfaces that have no tenant scope — server pages,
+// the Stripe webhook, and the public subscription endpoint — and must keep
+// working even when an org's own database is unreachable or unprovisioned.
+// Hence `controlOrganizationDb()` rather than the tenant-scoped `db`.
+
 export const getStripeCustomerId = (orgId: string) => {
-  return db.query.organizationSchema.findFirst({
+  return controlOrganizationDb().query.organizationSchema.findFirst({
     where: eq(organizationSchema.id, orgId),
     columns: { stripeCustomerId: true },
   });
@@ -14,7 +22,7 @@ export const upsertStripeCustomerId = (
   stripeCustomerId: string,
   orgId: string,
 ) => {
-  return db
+  return controlOrganizationDb()
     .insert(organizationSchema)
     .values({ id: orgId, stripeCustomerId })
     .onConflictDoUpdate({
@@ -26,7 +34,7 @@ export const upsertStripeCustomerId = (
 };
 
 export const getStripeSubscription = (orgId: string) => {
-  return db.query.organizationSchema.findFirst({
+  return controlOrganizationDb().query.organizationSchema.findFirst({
     where: eq(organizationSchema.id, orgId),
     columns: {
       stripeCustomerId: true,
@@ -42,7 +50,7 @@ export const updateStripeSubscription = (
   customerId: string,
   subscription: IStripeSubscription,
 ) => {
-  return db
+  return controlOrganizationDb()
     .update(organizationSchema)
     .set({
       stripeSubscriptionId: subscription.stripeSubscriptionId,
