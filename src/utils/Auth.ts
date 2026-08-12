@@ -114,6 +114,21 @@ const SUBSCRIPTION_EXEMPT_SEGMENTS = ['/subscription', '/subscription-expired'];
  * @param pathname The current request pathname (from the `x-pathname` header).
  */
 export const requireActiveSubscription = async (pathname: string): Promise<{ subscriptionActive: boolean }> => {
+  // Establish the tenant scope for the whole dashboard subtree.
+  //
+  // Hooking `requireOrganization` alone is not enough: it only covers pages
+  // that call it, and several server components (CustomStaffPage, RolesPage)
+  // call Clerk's `auth()` directly and then reach for a service. The dashboard
+  // LAYOUT, by contrast, renders before every dashboard page — so scoping here
+  // covers all of them regardless of how each page authenticates.
+  //
+  // Runs before the exempt-segment check below, because even the
+  // subscription-expired page renders inside this layout.
+  const { orgId: scopeOrgId } = await auth();
+  if (scopeOrgId) {
+    await establishTenantScope(scopeOrgId);
+  }
+
   // Never block the pages used to view/fix the subscription itself.
   if (SUBSCRIPTION_EXEMPT_SEGMENTS.some(seg => pathname.includes(seg))) {
     return { subscriptionActive: true };
