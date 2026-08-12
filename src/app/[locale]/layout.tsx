@@ -5,7 +5,6 @@ import { ThemeProvider } from 'next-themes';
 import { Inter } from 'next/font/google';
 import { notFound } from 'next/navigation';
 import { routing } from '@/libs/I18nRouting';
-import { runMigrations } from '@/libs/RunMigrations';
 import '@/styles/global.css';
 
 // Self-hosted Inter font via next/font (eliminates rsms.me external dependency for CSP)
@@ -72,10 +71,6 @@ export default async function RootLayout(props: {
   }
 
   setRequestLocale(locale);
-
-  // Run database migrations on app startup (production deployments only)
-  // Local development uses PGLite with automatic migrations via db-server
-  await runMigrations();
 
   return (
     <html lang={locale} suppressHydrationWarning className={inter.variable}>

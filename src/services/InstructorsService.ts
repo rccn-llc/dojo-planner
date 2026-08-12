@@ -15,6 +15,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/libs/DB';
 import { instructorProfileSchema } from '@/models/Schema';
 import { clerkApiRequest } from '@/services/ClerkRolesService';
+import { getDbForOrg } from '@/services/TenantDirectoryService';
 import { ORG_ROLE } from '@/types/Auth';
 
 export type Instructor = {
@@ -129,9 +130,19 @@ export async function upsertInstructorPhoto(
 /**
  * Returns a map of clerkUserId → override photoUrl for the org (for merging
  * into server-rendered staff lists).
+ *
+ * Resolves the tenant database EXPLICITLY rather than through the ambient `db`
+ * Proxy, because this is called during React Server Component render.
+ *
+ * A layout cannot establish an AsyncLocalStorage scope that reaches its
+ * children: React dispatches child renders from its own scheduling root, a
+ * context that never saw the layout's `enterWith()`. Ambient scope therefore
+ * works for RPC handlers and webhooks (one continuous async chain) but NOT for
+ * RSC. Server components must resolve their own handle.
  */
 export async function getInstructorPhotoOverrides(orgId: string): Promise<Map<string, string | null>> {
-  const rows = await db
+  const tenantDb = await getDbForOrg(orgId);
+  const rows = await tenantDb
     .select({ clerkUserId: instructorProfileSchema.clerkUserId, photoUrl: instructorProfileSchema.photoUrl })
     .from(instructorProfileSchema)
     .where(eq(instructorProfileSchema.organizationId, orgId));

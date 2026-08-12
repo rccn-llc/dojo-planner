@@ -5,6 +5,26 @@ export const Env = createEnv({
   server: {
     CLERK_SECRET_KEY: z.string().min(1),
     DATABASE_URL: z.string().min(1),
+    // ---- Multi-tenancy (see src/services/TenantDirectoryService.ts) ----
+    // The CONTROL database: holds the `tenant` directory, `tenant_external_ref`,
+    // `platform_config`, and the org row's SaaS-billing columns. Must be
+    // readable before any tenant database can be opened.
+    // Optional, falling back to DATABASE_URL, because during the no-op phase
+    // the control plane and the single shared tenant database are the same
+    // physical database. Once tenants are split out this should be set
+    // explicitly on every deployment.
+    CONTROL_DATABASE_URL: z.string().min(1).optional(),
+    // Local/dev single-tenant escape hatch: when set, EVERY org resolves to
+    // this connection string instead of consulting the `tenant` directory.
+    // TenantDirectoryService refuses to honour it when NODE_ENV === 'production'
+    // — without that guard a misconfigured production deploy would silently
+    // route every tenant to one database.
+    DEFAULT_TENANT_DATABASE_URL: z.string().min(1).optional(),
+    // AES-256-GCM key (32 raw bytes, hex-encoded) for `tenant.connection_string_enc`.
+    // Deliberately separate from IQPRO_CONFIG_ENCRYPTION_KEY: a database
+    // connection string is a different trust tier than a payment gateway id.
+    // Falls back to the IQPro key when unset so local dev keeps working.
+    CONTROL_PLANE_ENCRYPTION_KEY: z.string().regex(/^[0-9a-f]{64}$/i, 'must be 64 hex chars (32 bytes)').optional(),
     STRIPE_SECRET_KEY: z.string().min(1),
     STRIPE_WEBHOOK_SECRET: z.string().min(1),
     BILLING_PLAN_ENV: z.enum(['dev', 'test', 'prod']),
@@ -46,6 +66,9 @@ export const Env = createEnv({
   runtimeEnv: {
     CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
     DATABASE_URL: process.env.DATABASE_URL,
+    CONTROL_DATABASE_URL: process.env.CONTROL_DATABASE_URL,
+    DEFAULT_TENANT_DATABASE_URL: process.env.DEFAULT_TENANT_DATABASE_URL,
+    CONTROL_PLANE_ENCRYPTION_KEY: process.env.CONTROL_PLANE_ENCRYPTION_KEY,
     STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
     STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
     BILLING_PLAN_ENV: process.env.BILLING_PLAN_ENV,

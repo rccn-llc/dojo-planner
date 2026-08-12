@@ -13,6 +13,7 @@ import type { AuditContext } from '@/types/Audit';
 import type { OrgRole } from '@/types/Auth';
 import { auth } from '@clerk/nextjs/server';
 import { ORPCError } from '@orpc/server';
+import { getTenantScope } from '@/libs/TenantContext';
 import { ORG_ROLE } from '@/types/Auth';
 
 /**
@@ -68,6 +69,17 @@ export const guardAuth = async (): Promise<{
 
   if (!userId || !orgId) {
     throw new ORPCError('Unauthorized', { status: 401 });
+  }
+
+  // Fail-closed tenancy check. The RPC entry point selects the tenant database
+  // from its own `auth()` call; this guard re-derives the session org for
+  // authorization. Those two must agree — if they ever diverge, the request is
+  // about to read or write the wrong organization's database, so refuse rather
+  // than proceed. Authorization and connection-selection stay separate
+  // concerns; this assertion is the seam between them.
+  const scope = getTenantScope();
+  if (scope && scope.orgId !== orgId) {
+    throw new ORPCError('Forbidden', { status: 403 });
   }
 
   return { userId, orgId, has };

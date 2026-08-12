@@ -32,11 +32,13 @@
  */
 
 import type { SaasPlanId } from '../utils/SaasPlans';
-import { randomUUID } from 'node:crypto';
+import { Buffer } from 'node:buffer';
+import { createCipheriv, randomBytes, randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 
 import { Pool } from 'pg';
+import { TENANT_STATUS, tenantSchema } from '../models/ControlSchema';
 import {
   addressSchema,
   attendanceSchema,
@@ -2370,6 +2372,68 @@ function hasRealSaasPrereqs(): boolean {
   );
 }
 
+/**
+ * Register a `tenant` directory row for the seeded organization.
+ *
+ * Without this, `TenantDirectoryService.resolveTenant` finds no row and every
+ * request 409s — the seeded database would have data no request could reach.
+ *
+ * The connection string points at the SAME database being seeded, which is
+ * correct for the current phase: the control plane and the tenant plane are one
+ * physical database until organizations are split out. In phase A3
+ * `provisionTenant.ts` takes over, creating a real Neon project and storing its
+ * own encrypted connection string.
+ *
+ * Encrypted with the same AES-256-GCM layout `TenantDirectoryService` expects.
+ * Skipped when no key is configured — local dev usually relies on
+ * DEFAULT_TENANT_DATABASE_URL instead, which bypasses the directory entirely.
+ */
+async function provisionLocalTenant(orgId: string): Promise<void> {
+  const keyHex = process.env.CONTROL_PLANE_ENCRYPTION_KEY ?? process.env.IQPRO_CONFIG_ENCRYPTION_KEY;
+  const connectionString = process.env.DATABASE_URL;
+
+  if (!connectionString) {
+    return;
+  }
+
+  if (!keyHex) {
+    console.info(
+      '  ⏭️  Skipping tenant directory row (no CONTROL_PLANE_ENCRYPTION_KEY).\n'
+      + '      Set DEFAULT_TENANT_DATABASE_URL in .env for local dev, which\n'
+      + '      bypasses the directory lookup entirely.',
+    );
+    return;
+  }
+
+  console.info(`  🗂️  Registering tenant directory row for ${orgId}...`);
+
+  const key = Buffer.from(keyHex, 'hex');
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  const ciphertext = Buffer.concat([cipher.update(connectionString, 'utf8'), cipher.final()]);
+  const encrypted = Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString('base64');
+
+  await db
+    .insert(tenantSchema)
+    .values({
+      orgId,
+      displayName: 'Seeded local tenant',
+      connectionStringEncrypted: encrypted,
+      region: 'local',
+      status: TENANT_STATUS.ACTIVE,
+      schemaVersion: '0000_baseline',
+      schemaVersionAppliedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: tenantSchema.orgId,
+      set: {
+        connectionStringEncrypted: encrypted,
+        status: TENANT_STATUS.ACTIVE,
+        updatedAt: new Date(),
+      },
+    });
+}
+
 async function provisionSaasSubscription(orgId: string): Promise<void> {
   if (skipSaas) {
     console.info('  ⏭️  Skipping SaaS subscription (--skipSaas)');
@@ -2463,6 +2527,7 @@ async function main() {
         console.info(`  📝 Creating organization record for ${specificOrgId}...`);
         await db.insert(organizationSchema).values({ id: specificOrgId }).onConflictDoNothing();
       }
+      await provisionLocalTenant(specificOrgId);
       await provisionSaasSubscription(specificOrgId);
       organizations = [{ id: specificOrgId }];
     } else {

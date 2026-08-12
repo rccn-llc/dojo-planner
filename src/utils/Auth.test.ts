@@ -2,7 +2,6 @@ import { auth } from '@clerk/nextjs/server';
 
 import { redirect } from 'next/navigation';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { db } from '@/libs/DB';
 import { getAcademyOwner } from '@/services/ClerkRolesService';
 import { hasActiveSubscription } from '@/services/SaasSubscriptionService';
 import { isExemptOrg, isSuperAdmin } from '@/utils/SuperAdmins';
@@ -19,14 +18,20 @@ vi.mock('next/navigation', () => ({
   }),
 }));
 
-vi.mock('@/libs/DB', () => ({
-  db: {
+// `orgExists` reads the organization row through the CONTROL plane, not the
+// tenant-scoped `db`: it runs during RSC render where no tenant scope exists,
+// and the subscription gate must work even when the org's own database is
+// unreachable or unprovisioned.
+const mockControlOrgFindFirst = vi.fn();
+
+vi.mock('@/libs/ControlPlaneReads', () => ({
+  controlOrganizationDb: () => ({
     query: {
       organizationSchema: {
-        findFirst: vi.fn(),
+        findFirst: mockControlOrgFindFirst,
       },
     },
-  },
+  }),
 }));
 
 vi.mock('drizzle-orm', () => ({
@@ -52,7 +57,7 @@ vi.mock('@/utils/SuperAdmins', () => ({
 
 const mockAuth = vi.mocked(auth);
 const mockRedirect = vi.mocked(redirect);
-const mockFindFirst = vi.mocked(db.query.organizationSchema.findFirst);
+const mockFindFirst = mockControlOrgFindFirst;
 const mockGetAcademyOwner = vi.mocked(getAcademyOwner);
 const mockHasActiveSubscription = vi.mocked(hasActiveSubscription);
 const mockIsSuperAdmin = vi.mocked(isSuperAdmin);

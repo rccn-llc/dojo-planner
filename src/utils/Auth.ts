@@ -10,7 +10,7 @@ import { auth } from '@clerk/nextjs/server';
 import { eq } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 import { cache } from 'react';
-import { db } from '@/libs/DB';
+import { controlOrganizationDb } from '@/libs/ControlPlaneReads';
 import { organizationSchema } from '@/models/Schema';
 import { getAcademyOwner } from '@/services/ClerkRolesService';
 import { hasActiveSubscription } from '@/services/SaasSubscriptionService';
@@ -22,9 +22,13 @@ import { isExemptOrg, isSuperAdmin } from '@/utils/SuperAdmins';
  * `requireActiveSubscription` run in the same RSC render and both need to know
  * whether the org has a DB row; `cache()` collapses the repeated reads to one
  * per request.
+ *
+ * Reads through the CONTROL plane, not the tenant-scoped `db`: this runs during
+ * RSC render where no tenant scope exists, and the subscription gate must work
+ * even when an org's own database is unreachable or not yet provisioned.
  */
 const orgExists = cache(async (orgId: string): Promise<boolean> => {
-  const org = await db.query.organizationSchema.findFirst({
+  const org = await controlOrganizationDb().query.organizationSchema.findFirst({
     where: eq(organizationSchema.id, orgId),
     columns: { id: true },
   });
@@ -40,6 +44,19 @@ const isSubscriptionActiveCached = cache(hasActiveSubscription);
 /**
  * Ensures the user belongs to an organization.
  * Redirects to organization selection if no organization is found.
+ *
+ * ── Note on tenancy ─────────────────────────────────────────────────────────
+ *
+ * This deliberately does NOT establish an AsyncLocalStorage tenant scope.
+ * Ambient scope cannot work for React Server Components: React dispatches child
+ * renders from its own scheduling root, a context that never saw a parent's
+ * `enterWith()`, so a scope set in a layout or a page helper does not reach the
+ * components that actually query.
+ *
+ * Server components must therefore resolve their database EXPLICITLY, via
+ * `getDbForOrg(orgId)` — see `InstructorsService.getInstructorPhotoOverrides`
+ * for the pattern. Ambient scope remains correct for RPC handlers, webhooks,
+ * and scripts, where execution is one continuous async chain.
  *
  * @returns Promise containing orgId and has function for role checking
  * @throws Redirects to organization selection if no orgId

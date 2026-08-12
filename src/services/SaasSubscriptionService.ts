@@ -8,6 +8,7 @@
 import type { IQProConfig } from '@/libs/IQPro';
 import type { SaasPlanId } from '@/utils/SaasPlans';
 import { eq } from 'drizzle-orm';
+import { controlOrganizationDb } from '@/libs/ControlPlaneReads';
 import { db } from '@/libs/DB';
 import { getGatewayProcessors, iqproPost, iqproPut } from '@/libs/IQPro';
 import { logger } from '@/libs/Logger';
@@ -572,8 +573,14 @@ export async function getBillingHistory(
 
 // ===== Check if org has active subscription (for access enforcement) =====
 
+/**
+ * Reads through the CONTROL plane rather than the tenant-scoped `db`: this is
+ * called from `requireActiveSubscription` during React Server Component render,
+ * where no tenant scope exists, and the access gate must keep working even when
+ * the org's own database is unreachable or not yet provisioned.
+ */
 export async function hasActiveSubscription(orgId: string): Promise<boolean> {
-  const org = await db.query.organizationSchema.findFirst({
+  const org = await controlOrganizationDb().query.organizationSchema.findFirst({
     where: eq(organizationSchema.id, orgId),
     columns: {
       iqproSubscriptionStatus: true,

@@ -688,4 +688,46 @@ SET program_id = p.id
 FROM "program" p
 WHERE p.organization_id = mp.organization_id
   AND mp.program_id IS NULL
-  AND lower(p.name) = lower(mp.program);
+  AND lower(p.name) = lower(mp.program);--> statement-breakpoint
+-- =============================================================================
+-- CONTROL-PLANE TABLES (see src/models/ControlSchema.ts)
+-- =============================================================================
+--
+-- These belong to the CONTROL database — the shared database that must be
+-- readable before any tenant database can be opened. They are declared in the
+-- single baseline (rather than a second migration artifact) so the "one
+-- hand-authored baseline" invariant holds; as a result they are also created,
+-- empty and inert, inside every tenant database. That is harmless.
+--
+-- Appended at the END of this file deliberately: schema changes to existing
+-- tables (e.g. the provider-column rename in phase B1) edit the sections above,
+-- so keeping additive control-plane DDL down here avoids merge conflicts in a
+-- file where a bad merge is silently catastrophic.
+CREATE TABLE IF NOT EXISTS "tenant" (
+  "org_id" text PRIMARY KEY NOT NULL,
+  "display_name" text,
+  "connection_string_enc" text NOT NULL,
+  "region" text NOT NULL,
+  "neon_project_id" text,
+  "neon_branch_id" text,
+  "status" text DEFAULT 'provisioning' NOT NULL,
+  "square_merchant_id" text,
+  "schema_version" text,
+  "schema_version_applied_at" timestamp,
+  "created_at" timestamp DEFAULT now() NOT NULL,
+  "updated_at" timestamp DEFAULT now() NOT NULL
+);--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "tenant_status_idx" ON "tenant" USING btree ("status");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "tenant_region_idx" ON "tenant" USING btree ("region");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "tenant_square_merchant_idx" ON "tenant" USING btree ("square_merchant_id");--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "tenant_external_ref" (
+  "ref_type" text NOT NULL,
+  "ref_id" text NOT NULL,
+  "org_id" text NOT NULL,
+  "created_at" timestamp DEFAULT now() NOT NULL
+);--> statement-breakpoint
+-- One provider Sale can yield TWO transaction rows sharing one provider
+-- transaction id (the signup-fee split). Inserts must be ON CONFLICT DO NOTHING
+-- against this index or the second row throws inside a db.transaction.
+CREATE UNIQUE INDEX IF NOT EXISTS "tenant_external_ref_pk_idx" ON "tenant_external_ref" USING btree ("ref_type","ref_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "tenant_external_ref_org_idx" ON "tenant_external_ref" USING btree ("org_id");

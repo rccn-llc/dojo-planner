@@ -5,6 +5,8 @@ import { db } from '@/libs/DB';
 import { Env } from '@/libs/Env';
 import { logger } from '@/libs/Logger';
 import { getClientIP, isRateLimitingEnabled, webhookRateLimiter } from '@/libs/RateLimit';
+import { runWithTenant } from '@/libs/TenantContext';
+import { getBootstrapTenantDb, WEBHOOK_BOOTSTRAP_ORG_ID } from '@/libs/WebhookTenantScope';
 import { memberMembershipSchema, memberSchema, organizationSchema, transactionSchema } from '@/models/Schema';
 
 // Inline type to avoid top-level import from the optional @dojo-planner/iqpro-client package
@@ -71,7 +73,7 @@ export const POST = async (request: Request) => {
   }
 
   try {
-    await handleWebhookEvent(event);
+    await withWebhookTenantScope(() => handleWebhookEvent(event));
   } catch (error) {
     logger.error('[IQPro Webhook] Event processing error', { eventType: event.type, error });
     return NextResponse.json({ error: 'Processing error' }, { status: 500 });
@@ -79,6 +81,29 @@ export const POST = async (request: Request) => {
 
   return NextResponse.json({ received: true });
 };
+
+/**
+ * Establish a tenant scope for webhook processing.
+ *
+ * IQPro payloads carry no organization discriminator — the handlers below
+ * recover the org by reverse-lookup on a subscription or transaction id, which
+ * is itself a database read. That is circular once each org has its own
+ * database: you cannot query for the owner until you know which database to
+ * query.
+ *
+ * During the no-op phase every organization resolves to the same shared
+ * database, so a bootstrap scope is both correct and sufficient. Phase A2
+ * replaces this with a `tenant_external_ref` lookup that resolves the org from
+ * the external id BEFORE any tenant connection is opened, and the handlers then
+ * run inside that org's scope.
+ */
+async function withWebhookTenantScope<T>(fn: () => Promise<T>): Promise<T> {
+  const bootstrapDb = getBootstrapTenantDb();
+  return runWithTenant(
+    { orgId: WEBHOOK_BOOTSTRAP_ORG_ID, db: bootstrapDb, source: 'webhook' },
+    fn,
+  );
+}
 
 async function handleWebhookEvent(event: WebhookPayload): Promise<void> {
   logger.info('[IQPro Webhook] Processing event', { type: event.type, id: event.id });
