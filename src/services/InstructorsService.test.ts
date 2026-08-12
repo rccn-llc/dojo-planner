@@ -8,6 +8,18 @@ const dbMock = {
 
 vi.mock('@/libs/DB', () => ({ db: dbMock }));
 
+// `getInstructorPhotoOverrides` runs during React Server Component render,
+// where no ambient tenant scope exists (React dispatches child renders from its
+// own scheduling root, so a parent's `enterWith()` never reaches them). It must
+// therefore resolve its database EXPLICITLY. Mocking this proves it does — the
+// old implementation used the ambient `db` Proxy and passed its unit test while
+// throwing in production.
+const getDbForOrg = vi.fn(async () => dbMock);
+
+vi.mock('@/services/TenantDirectoryService', () => ({
+  getDbForOrg: (...args: unknown[]) => getDbForOrg(...(args as [])),
+}));
+
 vi.mock('@/models/Schema', () => ({
   instructorProfileSchema: {
     id: 'id',
@@ -192,5 +204,21 @@ describe('InstructorsService.getInstructorPhotoOverrides', () => {
     expect(result.get('u1')).toBe('data:image/png;base64,AAAA');
     expect(result.get('u2')).toBeNull();
     expect(result.size).toBe(2);
+  });
+
+  it('resolves its database explicitly for the org, not via ambient scope', async () => {
+    // REGRESSION GUARD. This is called from a server component, where ambient
+    // AsyncLocalStorage scope does not reach — React dispatches child renders
+    // from its own scheduling root. Relying on the `db` Proxy here threw
+    // "[Tenancy] No tenant scope" in production while unit tests passed,
+    // because they mocked the Proxy away.
+    dbMock.select.mockReturnValueOnce({
+      from: () => ({ where: () => Promise.resolve([]) }),
+    });
+
+    const { getInstructorPhotoOverrides } = await import('./InstructorsService');
+    await getInstructorPhotoOverrides('test-org-1');
+
+    expect(getDbForOrg).toHaveBeenCalledWith('test-org-1');
   });
 });

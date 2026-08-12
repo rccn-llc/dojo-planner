@@ -1148,11 +1148,12 @@ The control plane must be readable **before** any tenant database can be opened,
 
 - **RPC** (`rpc/[[...rest]]/route.ts`) — resolves `orgId` once, reuses it for rate limiting, wraps the handler in `runWithTenant`. `TenantNotProvisionedError` → 409, `TenantUnavailableError` → 503. Org-less requests deliberately run **without** a scope so `guardAuth()` returns its JSON 401.
 - **Webhooks** — bootstrap scope via `WebhookTenantScope`. IQPro payloads carry no org discriminator, so A2 will add a `tenant_external_ref` lookup that resolves the org *before* opening a connection.
-- **RSC** — nothing to do. The only render-path DB reads (`orgExists`, `hasActiveSubscription`) go through `controlOrganizationDb()`.
+- **RSC** — ⚠️ **ambient scope does NOT work here.** React dispatches child renders from its own scheduling root, a context that never saw a parent's `enterWith()`, so a scope set in a layout or page helper does not reach the component that actually queries. **Server components must resolve their database explicitly with `getDbForOrg(orgId)`** — see `InstructorsService.getInstructorPhotoOverrides`. Control-plane reads (`orgExists`, `hasActiveSubscription`) use `controlOrganizationDb()` and need no scope at all.
 
 ### Writing new code
 
-- Services and routers need **no changes** — keep importing `db` normally.
+- Services and routers called from **RPC handlers** need no changes — keep importing `db` normally.
+- A function that can be called during **server-component render** must take `orgId` and resolve its own handle via `getDbForOrg(orgId)`. Ambient `db` throws there. If a service is called from both RPC and RSC, resolving explicitly is safe in both.
 - A new script, cron, or background job **must** wrap its work in a tenant scope, or `db` will throw.
 - Never pass `db` to something that reaches into drizzle internals (e.g. `migrate()`); build a raw connection instead.
 - `DEFAULT_TENANT_DATABASE_URL` is a **non-production** escape hatch. `TenantDirectoryService` refuses to honour it when `NODE_ENV === 'production'` — without that guard a misconfigured deploy would route every tenant to one database. Covered by an explicit test.

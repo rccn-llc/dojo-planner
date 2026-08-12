@@ -90,21 +90,17 @@ describe('requireActiveSubscription', () => {
     expect(mockRedirect).not.toHaveBeenCalled();
   });
 
-  // These pages are exempt from the SUBSCRIPTION GATE, but they still render
-  // inside the dashboard layout, so a tenant scope is still established for
-  // them — hence `auth()` is called. What must not happen is a redirect or a
-  // subscription lookup.
   it('skips enforcement on the subscription page', async () => {
     await requireActiveSubscription('/en/dashboard/subscription');
 
-    expect(mockHasActiveSubscription).not.toHaveBeenCalled();
+    expect(mockAuth).not.toHaveBeenCalled();
     expect(mockRedirect).not.toHaveBeenCalled();
   });
 
   it('skips enforcement on the subscription-expired page', async () => {
     await requireActiveSubscription('/en/dashboard/subscription-expired');
 
-    expect(mockHasActiveSubscription).not.toHaveBeenCalled();
+    expect(mockAuth).not.toHaveBeenCalled();
     expect(mockRedirect).not.toHaveBeenCalled();
   });
 

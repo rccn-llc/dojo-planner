@@ -11,11 +11,9 @@ import { eq } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 import { cache } from 'react';
 import { controlOrganizationDb } from '@/libs/ControlPlaneReads';
-import { enterTenantScope } from '@/libs/TenantContext';
 import { organizationSchema } from '@/models/Schema';
 import { getAcademyOwner } from '@/services/ClerkRolesService';
 import { hasActiveSubscription } from '@/services/SaasSubscriptionService';
-import { getDbForOrg } from '@/services/TenantDirectoryService';
 import { ORG_ROLE } from '@/types/Auth';
 import { isExemptOrg, isSuperAdmin } from '@/utils/SuperAdmins';
 
@@ -44,39 +42,21 @@ const orgExists = cache(async (orgId: string): Promise<boolean> => {
 const isSubscriptionActiveCached = cache(hasActiveSubscription);
 
 /**
- * Resolve the organization's database and enter its scope, once per request.
+ * Ensures the user belongs to an organization.
+ * Redirects to organization selection if no organization is found.
  *
- * Deliberately non-fatal: a page that never touches tenant data (or reads only
- * control-plane data, like the subscription gate) must still render for an
- * organization that has no tenant row yet. If such a page DOES reach for `db`,
- * the Proxy throws its own diagnostic error — which is the loud failure we
- * want, rather than a redirect from here that would mask the cause.
- */
-const establishTenantScope = cache(async (orgId: string): Promise<void> => {
-  try {
-    const tenantDb = await getDbForOrg(orgId);
-    enterTenantScope({ orgId, db: tenantDb, source: 'rsc' });
-  } catch (error) {
-    console.error('[Tenancy] Could not establish tenant scope for RSC render', {
-      orgId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-});
-
-/**
- * Ensures the user belongs to an organization, and establishes that
- * organization's tenant database scope for the remainder of this request.
+ * ── Note on tenancy ─────────────────────────────────────────────────────────
  *
- * Server pages and route handlers reach the database through services that
- * import `db`, which is a tenant-resolving Proxy — without a scope, any such
- * access throws. Unlike the RPC route there is no single wrapper to hook, so
- * scope is established here: every server page that touches the database
- * already calls this first, which makes it the natural seam.
+ * This deliberately does NOT establish an AsyncLocalStorage tenant scope.
+ * Ambient scope cannot work for React Server Components: React dispatches child
+ * renders from its own scheduling root, a context that never saw a parent's
+ * `enterWith()`, so a scope set in a layout or a page helper does not reach the
+ * components that actually query.
  *
- * Uses `enterTenantScope` (AsyncLocalStorage's `enterWith`) rather than
- * `runWithTenant`, because a page cannot wrap its own remaining execution in a
- * callback. React's `cache()` makes it idempotent per request.
+ * Server components must therefore resolve their database EXPLICITLY, via
+ * `getDbForOrg(orgId)` — see `InstructorsService.getInstructorPhotoOverrides`
+ * for the pattern. Ambient scope remains correct for RPC handlers, webhooks,
+ * and scripts, where execution is one continuous async chain.
  *
  * @returns Promise containing orgId and has function for role checking
  * @throws Redirects to organization selection if no orgId
@@ -87,8 +67,6 @@ export const requireOrganization = async () => {
   if (!orgId) {
     redirect('/onboarding/organization-selection');
   }
-
-  await establishTenantScope(orgId);
 
   return { orgId, has };
 };
@@ -114,21 +92,6 @@ const SUBSCRIPTION_EXEMPT_SEGMENTS = ['/subscription', '/subscription-expired'];
  * @param pathname The current request pathname (from the `x-pathname` header).
  */
 export const requireActiveSubscription = async (pathname: string): Promise<{ subscriptionActive: boolean }> => {
-  // Establish the tenant scope for the whole dashboard subtree.
-  //
-  // Hooking `requireOrganization` alone is not enough: it only covers pages
-  // that call it, and several server components (CustomStaffPage, RolesPage)
-  // call Clerk's `auth()` directly and then reach for a service. The dashboard
-  // LAYOUT, by contrast, renders before every dashboard page — so scoping here
-  // covers all of them regardless of how each page authenticates.
-  //
-  // Runs before the exempt-segment check below, because even the
-  // subscription-expired page renders inside this layout.
-  const { orgId: scopeOrgId } = await auth();
-  if (scopeOrgId) {
-    await establishTenantScope(scopeOrgId);
-  }
-
   // Never block the pages used to view/fix the subscription itself.
   if (SUBSCRIPTION_EXEMPT_SEGMENTS.some(seg => pathname.includes(seg))) {
     return { subscriptionActive: true };
