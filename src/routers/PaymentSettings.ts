@@ -3,7 +3,7 @@ import { audit } from '@/services/AuditService';
 import {
   getIQProConfigForAdmin,
   updateIQProConfig,
-} from '@/services/IQProConfigService';
+} from '@/services/PaymentProviderConfigService';
 import { AUDIT_ACTION, AUDIT_ENTITY_TYPE } from '@/types/Audit';
 import { ORG_ROLE } from '@/types/Auth';
 import { UpdateIQProConfigValidation } from '@/validations/PaymentSettingsValidation';

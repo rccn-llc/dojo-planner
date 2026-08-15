@@ -24,7 +24,7 @@ vi.mock('@/services/MemberPaymentService', () => ({
 vi.mock('@/libs/IQPro', () => ({
   getTokenizationConfig: vi.fn(),
 }));
-vi.mock('@/services/IQProConfigService', () => ({
+vi.mock('@/services/PaymentProviderConfigService', () => ({
   resolveIQProConfig: vi.fn(),
 }));
 
@@ -64,7 +64,7 @@ function callHandler(handler: unknown, input?: unknown) {
 describe('Payment Router', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
-    const { resolveIQProConfig } = await import('@/services/IQProConfigService');
+    const { resolveIQProConfig } = await import('@/services/PaymentProviderConfigService');
     vi.mocked(resolveIQProConfig).mockResolvedValue(testConfig);
   });
 
@@ -294,7 +294,7 @@ describe('Payment Router', () => {
 
     it('should throw 503 when IQPro is not configured for the org', async () => {
       const { guardRole } = await import('./AuthGuards');
-      const { resolveIQProConfig } = await import('@/services/IQProConfigService');
+      const { resolveIQProConfig } = await import('@/services/PaymentProviderConfigService');
 
       vi.mocked(guardRole).mockResolvedValue(mockContext);
       vi.mocked(resolveIQProConfig).mockResolvedValue(null);

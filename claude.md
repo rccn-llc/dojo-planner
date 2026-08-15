@@ -157,9 +157,7 @@ docs/                      # Documentation
 | `/dashboard/subscription-expired` | `subscription-expired/page.tsx` | Subscription expired — re-subscribe prompt |
 | `/dashboard/preferences` | `preferences/page.tsx` | User preferences |
 | `/dashboard/security` | `security/page.tsx` | Security settings |
-| `/dashboard/location-settings` | `location-settings/page.tsx` | Per-org location settings (name, address, phone, email, tax rate) — backed by `organization.location*` columns |
-| `/dashboard/payment-settings` | `payment-settings/page.tsx` | Per-org IQPro merchant credentials (clientId, clientSecret, gatewayId). ADMIN-only |
-| `/dashboard/platform-settings` | `platform-settings/page.tsx` | Platform IQPro credentials for SaaS billing — backed by singleton `platform_config` row. Super-admin only |
+| `/dashboard/location-settings` | `location-settings/page.tsx` | Per-org location settings (name, address, phone, email, tax rate) — backed by `organization.location*` columns. **Also hosts the per-org IQPro merchant-credentials card** (clientId / clientSecret / gatewayId → `organization.iqpro_config_*`). There is NO `/dashboard/payment-settings` route and no `/dashboard/platform-settings` route; `PaymentSettingsForm` (`src/features/payment-settings/`) is rendered only here. Card is viewable by ADMIN + ACADEMY_OWNER, editable by ADMIN only (`PAYMENT_VIEW_ROLES` / `PAYMENT_EDIT_ROLES` in `LocationSettingsPage.tsx`); the `paymentSettings.updateConfig` endpoint enforces ADMIN server-side |
 
 ### Auth Routes
 
@@ -483,8 +481,8 @@ IQPro credentials are split across two scopes:
 
 | Field | Scope | Storage |
 |-------|-------|---------|
-| `clientId`, `clientSecret`, `gatewayId` | **per-org** (customer payments) | `organization.iqpro_config_*` columns. `clientSecret` is AES-256-GCM encrypted at rest. Set via the per-org Payment Settings page (ADMIN-only). |
-| `clientId`, `clientSecret`, `gatewayId` | **platform** (SaaS billing) | Singleton `platform_config` row (`id = 'singleton'` enforced by CHECK constraint). Encrypted. Set via Platform Settings (super-admin only). |
+| `clientId`, `clientSecret`, `gatewayId` | **per-org** (customer payments) | `organization.iqpro_config_*` columns. `clientSecret` is AES-256-GCM encrypted at rest. Set via the per-org IQPro card on the Location Settings page (viewable by ADMIN + ACADEMY_OWNER, editable by ADMIN). |
+| `clientId`, `clientSecret`, `gatewayId` | **platform** (SaaS billing) | Singleton `platform_config` row (`id = 'singleton'` enforced by CHECK constraint). Encrypted. **No admin UI** — the platform-settings page was removed. Set out-of-process via `src/scripts/backfillPlatformIQProConfig.ts`, or leave null and let the `IQPRO_*` env fallback supply them. |
 | `scope`, `oauthUrl`, `baseUrl`, `webhookSecret` | **platform-wide** | Env vars (`IQPRO_SCOPE`, `IQPRO_OAUTH_URL`, `IQPRO_BASE_URL`, `IQPRO_WEBHOOK_SECRET`). Same for every dojo. |
 
 Customer-facing flows resolve config via `resolveIQProConfig(orgId)`; SaaS-billing flows use `resolvePlatformIQProConfig()`. Both resolvers fall back to the legacy `IQPRO_CLIENT_ID/IQPRO_CLIENT_SECRET/IQPRO_GATEWAY_ID` env vars per field when the DB column is null, so single-tenant deployments keep working unchanged.
@@ -494,8 +492,8 @@ The webhook handler at `src/app/[locale]/webhook/iqpro/route.ts` does only DB wr
 **Migrating from env vars to DB-backed config:**
 
 1. Set `IQPRO_CONFIG_ENCRYPTION_KEY` (32 raw bytes, hex-encoded) on the deployment.
-2. For each org: ADMIN visits `/dashboard/payment-settings` and enters Client ID / Client Secret / Gateway ID (or run `src/scripts/backfillIQProConfig.ts --orgId=org_xxx` to copy the current env values into one org's DB row).
-3. For the platform's own SaaS-billing account: super admin visits `/dashboard/platform-settings` (or run `src/scripts/backfillPlatformIQProConfig.ts`).
+2. For each org: ADMIN visits `/dashboard/location-settings` and enters Client ID / Client Secret / Gateway ID in the IQPro card (or run `src/scripts/backfillIQProConfig.ts --orgId=org_xxx` to copy the current env values into one org's DB row).
+3. For the platform's own SaaS-billing account: run `src/scripts/backfillPlatformIQProConfig.ts` (there is no admin UI for this).
 4. Once every org and the platform have their values in the DB, the `IQPRO_CLIENT_ID` / `IQPRO_CLIENT_SECRET` / `IQPRO_GATEWAY_ID` env vars can be removed (keep `IQPRO_SCOPE` / `IQPRO_OAUTH_URL` / `IQPRO_BASE_URL` / `IQPRO_WEBHOOK_SECRET` — they're platform-wide).
 
 **OAuth token cache:** keyed by `clientId` (since `oauthUrl` and `scope` are global). Two orgs with different `clientId`s get two separate cached tokens — there's no cross-tenant leakage. Cap 100 entries; lazy eviction on access; oldest-by-expiry dropped on overflow.
@@ -781,8 +779,8 @@ await deleteUserWithOrganization();
 **Schema:** `src/models/Schema.ts`
 
 **Key Tables:**
-- `organization` - Multi-tenant orgs with Stripe IDs + platform SaaS subscription fields (saasProviderCustomerId, saasProviderSubscriptionId, saasProviderPlanId, saasBillingCycle, saasSubscriptionStatus, saasCurrentPeriodEnd, saasProviderPaymentMethodId, `saasResponsibleClerkUserId` — Clerk userId of the academy owner responsible for the SaaS subscription; set at subscribe time, durably links the IQPro SaaS customer to a Clerk identity and is required by the owner-aware access gate) + location settings (locationName, locationAddress, locationPhone, locationEmail — nullable, set via the location-settings page; `locationTaxRate` real defaulting to 0, applied to taxable transactions) + per-org IQPro merchant credentials (iqproConfigClientId, iqproConfigClientSecretEncrypted, iqproConfigGatewayId — set via Payment Settings; `clientSecret` AES-GCM encrypted at rest)
-- `platform_config` - Singleton row (`id = 'singleton'` enforced by CHECK constraint) holding the platform's own IQPro credentials used for SaaS billing (saasProviderClientId, saasProviderClientSecretEncrypted, saasProviderGatewayId). Set via Platform Settings (super admin only).
+- `organization` - Multi-tenant orgs with Stripe IDs + platform SaaS subscription fields (saasProviderCustomerId, saasProviderSubscriptionId, saasProviderPlanId, saasBillingCycle, saasSubscriptionStatus, saasCurrentPeriodEnd, saasProviderPaymentMethodId, `saasResponsibleClerkUserId` — Clerk userId of the academy owner responsible for the SaaS subscription; set at subscribe time, durably links the IQPro SaaS customer to a Clerk identity and is required by the owner-aware access gate) + location settings (locationName, locationAddress, locationPhone, locationEmail — nullable, set via the location-settings page; `locationTaxRate` real defaulting to 0, applied to taxable transactions) + per-org IQPro merchant credentials (iqproConfigClientId, iqproConfigClientSecretEncrypted, iqproConfigGatewayId — set via the IQPro card on the Location Settings page; `clientSecret` AES-GCM encrypted at rest)
+- `platform_config` - Singleton row (`id = 'singleton'` enforced by CHECK constraint) holding the platform's own IQPro credentials used for SaaS billing (saasProviderClientId, saasProviderClientSecretEncrypted, saasProviderGatewayId). Written only by `src/scripts/backfillPlatformIQProConfig.ts`; read by `resolvePlatformIQProConfig()` for SaaS billing. No admin UI.
 - `member` - Member records with dateOfBirth, optional `clerkUserId` for kiosk auth, optional `providerCustomerId`
 - `membership_plan` - Pricing tiers, including `frequency` (nullable: null = one-time / punchcard / trial; otherwise `Weekly` | `Monthly` | `Semi-Annual` | `Annual`), `cancellationFee` (real, default 0), `holdFeeAmount` (real, default 0), `holdFeeFrequency` (nullable: `one-time` | `Weekly` | `Monthly` | `Semi-Annual` | `Annual`), `holdLimitPerYear` (integer, nullable; null or 0 = unlimited; enforced server-side by `holdMembershipLifecycle` via a 12-month-window audit-log count)
 - `member_membership` - Member-plan associations with startDate, endDate, firstPaymentDate, nextPaymentDate, optional `providerSubscriptionId`, optional `providerHoldFeeSubscriptionId` (set when a recurring hold-fee subscription is created at hold time; cleared on reactivate/cancel)
@@ -1058,10 +1056,10 @@ IQPRO_CONFIG_ENCRYPTION_KEY  # 32 raw bytes, hex-encoded (64 chars). Required wh
 
 # These three are per-org / per-platform. Read at runtime from the
 # organization or platform_config row, with these env vars as a fallback for
-# orgs that haven't filled in Payment Settings yet (or for the platform's own
-# SaaS-billing IQPro account before super admin fills in Platform Settings).
-# Once you've migrated everything into the DB via Payment Settings + Platform
-# Settings, these env vars can be removed.
+# orgs that haven't filled in the IQPro card on Location Settings yet (or for the platform's own
+# SaaS-billing IQPro account before backfillPlatformIQProConfig.ts is run).
+# Once you've migrated everything into the DB via Location Settings +
+# backfillPlatformIQProConfig.ts, these env vars can be removed.
 IQPRO_CLIENT_ID
 IQPRO_CLIENT_SECRET
 IQPRO_GATEWAY_ID
@@ -1275,8 +1273,8 @@ AUDIT_ACTION.SAAS_SUBSCRIPTION_CANCEL;
 AUDIT_ACTION.ORGANIZATION_LOCATION_UPDATE;
 
 // IQPro merchant configuration
-AUDIT_ACTION.IQPRO_CONFIG_UPDATE; // per-org Payment Settings
-AUDIT_ACTION.PLATFORM_IQPRO_CONFIG_UPDATE; // platform Platform Settings (super admin)
+AUDIT_ACTION.IQPRO_CONFIG_UPDATE; // per-org IQPro card (Location Settings page)
+AUDIT_ACTION.PLATFORM_IQPRO_CONFIG_UPDATE; // declared but NOT emitted — its only emitter was the removed platform-settings router
 
 // Instructor operations
 AUDIT_ACTION.INSTRUCTOR_PHOTO_UPDATE; // in-app instructor headshot upload/clear

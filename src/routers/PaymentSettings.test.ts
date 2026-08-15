@@ -6,7 +6,7 @@ import { ORG_ROLE } from '@/types/Auth';
 vi.mock('@/libs/DB', () => ({ db: {} }));
 vi.mock('./AuthGuards', () => ({ guardRole: vi.fn() }));
 vi.mock('@/services/AuditService', () => ({ audit: vi.fn() }));
-vi.mock('@/services/IQProConfigService', () => ({
+vi.mock('@/services/PaymentProviderConfigService', () => ({
   getIQProConfigForAdmin: vi.fn(),
   updateIQProConfig: vi.fn(),
 }));
@@ -26,7 +26,7 @@ describe('PaymentSettings Router', () => {
   describe('getConfig', () => {
     it('admits ACADEMY_OWNER (and higher) and never returns the secret value', async () => {
       const { guardRole } = await import('./AuthGuards');
-      const { getIQProConfigForAdmin } = await import('@/services/IQProConfigService');
+      const { getIQProConfigForAdmin } = await import('@/services/PaymentProviderConfigService');
       vi.mocked(guardRole).mockResolvedValue(adminContext);
       vi.mocked(getIQProConfigForAdmin).mockResolvedValue({
         clientId: 'cid',
@@ -47,7 +47,7 @@ describe('PaymentSettings Router', () => {
   describe('updateConfig', () => {
     it('persists the config and emits a success audit with secret-redacted change diff', async () => {
       const { guardRole } = await import('./AuthGuards');
-      const { updateIQProConfig } = await import('@/services/IQProConfigService');
+      const { updateIQProConfig } = await import('@/services/PaymentProviderConfigService');
       const { audit } = await import('@/services/AuditService');
       vi.mocked(guardRole).mockResolvedValue(adminContext);
       vi.mocked(updateIQProConfig).mockResolvedValue({
@@ -76,7 +76,7 @@ describe('PaymentSettings Router', () => {
 
     it('treats blank clientSecret as "no change"', async () => {
       const { guardRole } = await import('./AuthGuards');
-      const { updateIQProConfig } = await import('@/services/IQProConfigService');
+      const { updateIQProConfig } = await import('@/services/PaymentProviderConfigService');
       vi.mocked(guardRole).mockResolvedValue(adminContext);
       vi.mocked(updateIQProConfig).mockResolvedValue({
         clientIdChanged: false,
@@ -98,7 +98,7 @@ describe('PaymentSettings Router', () => {
 
     it('emits failure audit and rethrows on service error', async () => {
       const { guardRole } = await import('./AuthGuards');
-      const { updateIQProConfig } = await import('@/services/IQProConfigService');
+      const { updateIQProConfig } = await import('@/services/PaymentProviderConfigService');
       const { audit } = await import('@/services/AuditService');
       vi.mocked(guardRole).mockResolvedValue(adminContext);
       vi.mocked(updateIQProConfig).mockRejectedValue(new Error('encryption key missing'));

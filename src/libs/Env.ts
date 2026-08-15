@@ -48,6 +48,24 @@ export const Env = createEnv({
     // Passed to IQPro as a paymentAdjustment of type "ServiceFee" (percentage,
     // not flatAmount — IQPro rejects flatAmount on ServiceFee adjustments).
     SERVICE_FEE_PCT: z.string().optional(),
+    // ---- Square (per-org alternative to IQPro; see types/PaymentProvider.ts) ----
+    // All optional: an org only reaches these when `payment_provider='square'`,
+    // and a missing value resolves to a null config — the same "not configured"
+    // signal the IQPro branch already returns.
+    //
+    // These are env-only in B2. B3 moves per-org credentials into the encrypted
+    // `organization.payment_provider_config_enc` blob, at which point these
+    // become the fallback for single-tenant deployments (mirroring IQPRO_*).
+    SQUARE_ACCESS_TOKEN: z.string().min(1).optional(),
+    SQUARE_LOCATION_ID: z.string().min(1).optional(),
+    // Also exposed to the browser as NEXT_PUBLIC_SQUARE_APPLICATION_ID — the Web
+    // Payments SDK needs it client-side. It is NOT a secret.
+    SQUARE_APPLICATION_ID: z.string().min(1).optional(),
+    SQUARE_WEBHOOK_SIGNATURE_KEY: z.string().min(1).optional(),
+    // An enum rather than a bare string on purpose: IQPro infers its
+    // environment by sniffing `baseUrl.includes('sandbox')`, which silently
+    // treats a typo'd URL as production. Square states its environment.
+    SQUARE_ENVIRONMENT: z.enum(['sandbox', 'production']).optional(),
     // Resend email service (optional - email sending disabled if not configured)
     RESEND_API_KEY: z.string().min(1).optional(),
     RESEND_FROM_EMAIL: z.string().email().optional(),
@@ -58,6 +76,10 @@ export const Env = createEnv({
     NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().min(1),
     NEXT_PUBLIC_BETTER_STACK_SOURCE_TOKEN: z.string().optional(),
     NEXT_PUBLIC_BETTER_STACK_INGESTING_HOST: z.string().optional(),
+    // Square's Web Payments SDK runs in the browser and needs the application
+    // id to initialise. Public by design — Square treats it as an identifier,
+    // not a credential. The access token stays server-only.
+    NEXT_PUBLIC_SQUARE_APPLICATION_ID: z.string().optional(),
   },
   shared: {
     NODE_ENV: z.enum(['test', 'development', 'production']).optional(),
@@ -83,6 +105,11 @@ export const Env = createEnv({
     IQPRO_WEBHOOK_SECRET: process.env.IQPRO_WEBHOOK_SECRET,
     IQPRO_CONFIG_ENCRYPTION_KEY: process.env.IQPRO_CONFIG_ENCRYPTION_KEY,
     SERVICE_FEE_PCT: process.env.SERVICE_FEE_PCT,
+    SQUARE_ACCESS_TOKEN: process.env.SQUARE_ACCESS_TOKEN,
+    SQUARE_LOCATION_ID: process.env.SQUARE_LOCATION_ID,
+    SQUARE_APPLICATION_ID: process.env.SQUARE_APPLICATION_ID,
+    SQUARE_WEBHOOK_SIGNATURE_KEY: process.env.SQUARE_WEBHOOK_SIGNATURE_KEY,
+    SQUARE_ENVIRONMENT: process.env.SQUARE_ENVIRONMENT,
     RESEND_API_KEY: process.env.RESEND_API_KEY,
     RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
@@ -92,6 +119,7 @@ export const Env = createEnv({
       process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
     NEXT_PUBLIC_BETTER_STACK_SOURCE_TOKEN: process.env.NEXT_PUBLIC_BETTER_STACK_SOURCE_TOKEN,
     NEXT_PUBLIC_BETTER_STACK_INGESTING_HOST: process.env.NEXT_PUBLIC_BETTER_STACK_INGESTING_HOST,
+    NEXT_PUBLIC_SQUARE_APPLICATION_ID: process.env.NEXT_PUBLIC_SQUARE_APPLICATION_ID,
     NODE_ENV: process.env.NODE_ENV,
   },
 });

@@ -1,5 +1,6 @@
 'use client';
 
+import type { ConfigSource } from '@/services/PaymentProviderConfigService';
 import { Edit } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useState } from 'react';
@@ -31,7 +32,7 @@ type PaymentConfigState = {
   clientId: string | null;
   gatewayId: string | null;
   hasSecret: boolean;
-  source: 'org' | 'env' | 'mixed' | 'platform';
+  source: ConfigSource;
 };
 
 export type LocationSettingsPageProps = {

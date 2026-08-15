@@ -1,5 +1,6 @@
 'use client';
 
+import type { ConfigSource } from '@/services/PaymentProviderConfigService';
 import { useState } from 'react';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -18,7 +19,7 @@ export type IQProConfigInitialData = {
   clientId: string | null;
   gatewayId: string | null;
   hasSecret: boolean;
-  source: 'org' | 'env' | 'mixed' | 'platform';
+  source: ConfigSource;
 };
 
 type Props = {
