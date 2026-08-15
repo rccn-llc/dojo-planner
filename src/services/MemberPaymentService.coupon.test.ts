@@ -28,7 +28,7 @@ vi.mock('drizzle-orm', () => ({
 }));
 
 vi.mock('@/models/Schema', () => ({
-  memberSchema: { id: 'id', iqproCustomerId: 'iqpro_customer_id' },
+  memberSchema: { id: 'id', providerCustomerId: 'provider_customer_id' },
   paymentMethodSchema: {},
   transactionSchema: {
     id: 'id',
@@ -186,7 +186,7 @@ describe('processMemberPayment — per-user coupon limit', () => {
       // 3+) member fetch (existing customer lookup). Use mockReturnValueOnce
       // (not a permanent mockReturnValue) so nothing leaks into later tests.
       .mockReturnValueOnce({
-        from: () => ({ where: () => ({ limit: () => Promise.resolve([{ iqproCustomerId: null }]) }) }),
+        from: () => ({ where: () => ({ limit: () => Promise.resolve([{ providerCustomerId: null }]) }) }),
       });
 
     // We don't run the full flow — the limit check should pass and then the

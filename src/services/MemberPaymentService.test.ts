@@ -28,10 +28,10 @@ vi.mock('drizzle-orm', () => ({
 }));
 
 vi.mock('@/models/Schema', () => ({
-  memberSchema: { id: 'id', iqproCustomerId: 'iqpro_customer_id' },
+  memberSchema: { id: 'id', providerCustomerId: 'provider_customer_id' },
   paymentMethodSchema: {
     memberId: 'member_id',
-    iqproPaymentMethodId: 'iqpro_payment_method_id',
+    providerPaymentMethodId: 'provider_payment_method_id',
     type: 'type',
     last4: 'last4',
     isDefault: 'is_default',
@@ -105,9 +105,9 @@ vi.mock('./EmailService', () => ({
 // ── DB mock helper ─────────────────────────────────────────────────────────
 //
 // The orchestrator's DB usage:
-// - select-from-where-limit (existing customer iqproCustomerId)
+// - select-from-where-limit (existing customer providerCustomerId)
 // - select-from-where-orderBy-limit (saved PM lookup, only on vaulted branch)
-// - update-set-where (set iqproCustomerId / membership fields)
+// - update-set-where (set providerCustomerId / membership fields)
 // - insert-values (payment method + transaction + coupon usage)
 
 // insertCalls stores whatever was passed to `db.insert(...).values(arg)`.
@@ -156,7 +156,7 @@ function defaultCouponRow(overrides: Partial<CouponRow> = {}): CouponRow {
 
 let dbState: {
   existingCustomerId: string | null;
-  savedPmRow: { iqproPaymentMethodId: string; type: string; last4: string | null } | null;
+  savedPmRow: { providerPaymentMethodId: string; type: string; last4: string | null } | null;
   couponRow: CouponRow | null;
   setCalls: Array<Record<string, unknown>>;
   insertCalls: InsertArg[];
@@ -166,7 +166,7 @@ let dbState: {
 
 function resetDbMock(opts: {
   existingCustomerId?: string | null;
-  savedPmRow?: { iqproPaymentMethodId: string; type: string; last4: string | null } | null;
+  savedPmRow?: { providerPaymentMethodId: string; type: string; last4: string | null } | null;
   couponRow?: CouponRow | null;
 } = {}) {
   dbState = {
@@ -184,7 +184,7 @@ function resetDbMock(opts: {
 
   // Each call to db.select() chooses a different chain based on its order:
   //   0..1. coupon validation (coupon row, then usage count) — only when couponRow set
-  //   next. customer lookup (limit 1) → [{ iqproCustomerId }]
+  //   next. customer lookup (limit 1) → [{ providerCustomerId }]
   //   then. saved PM lookup (orderBy + limit 1) → [savedPmRow]
   dbMocks.select.mockImplementation(() => {
     // Coupon-validation selects come first when a coupon is configured.
@@ -212,7 +212,7 @@ function resetDbMock(opts: {
           }),
           limit: vi.fn().mockResolvedValue(
             idx === 0
-              ? [{ iqproCustomerId: dbState.existingCustomerId }]
+              ? [{ providerCustomerId: dbState.existingCustomerId }]
               : [],
           ),
         }),
@@ -376,7 +376,7 @@ describe('processMemberPayment', () => {
     });
     const afterCall = Date.now();
 
-    const membershipSet = dbState.setCalls.find(s => s.iqproSubscriptionId === 'sub_42');
+    const membershipSet = dbState.setCalls.find(s => s.providerSubscriptionId === 'sub_42');
 
     expect(membershipSet).toBeDefined();
     expect(membershipSet?.firstPaymentDate).toBeInstanceOf(Date);
@@ -415,7 +415,7 @@ describe('processMemberPayment', () => {
       memberMembershipId: 'mm_1',
     });
 
-    const membershipSet = dbState.setCalls.find(s => s.iqproSubscriptionId === 'sub_42');
+    const membershipSet = dbState.setCalls.find(s => s.providerSubscriptionId === 'sub_42');
     const next = membershipSet?.nextPaymentDate as Date;
     const first = membershipSet?.firstPaymentDate as Date;
 
@@ -436,7 +436,7 @@ describe('processMemberPayment', () => {
       memberMembershipId: 'mm_1',
     });
 
-    const membershipSet = dbState.setCalls.find(s => s.iqproSubscriptionId === 'sub_42');
+    const membershipSet = dbState.setCalls.find(s => s.providerSubscriptionId === 'sub_42');
     const next = membershipSet?.nextPaymentDate as Date;
     const first = membershipSet?.firstPaymentDate as Date;
     const diffMs = next.getTime() - first.getTime();
@@ -456,7 +456,7 @@ describe('processMemberPayment', () => {
       memberMembershipId: 'mm_1',
     });
 
-    const membershipSet = dbState.setCalls.find(s => s.iqproSubscriptionId === 'sub_42');
+    const membershipSet = dbState.setCalls.find(s => s.providerSubscriptionId === 'sub_42');
     const next = membershipSet?.nextPaymentDate as Date;
     const first = membershipSet?.firstPaymentDate as Date;
     const monthsDiff = (next.getFullYear() - first.getFullYear()) * 12
@@ -484,10 +484,10 @@ describe('processMemberPayment', () => {
     });
 
     // The autopay db.update path is gated on memberMembershipId. Without it,
-    // no membership row gets `iqproSubscriptionId` / `nextPaymentDate` set —
+    // no membership row gets `providerSubscriptionId` / `nextPaymentDate` set —
     // which is the bug this whole fix is about. Test guards that callers
     // (the wizards) MUST pass memberMembershipId.
-    const membershipSet = dbState.setCalls.find(s => s.iqproSubscriptionId === 'sub_42');
+    const membershipSet = dbState.setCalls.find(s => s.providerSubscriptionId === 'sub_42');
 
     expect(membershipSet).toBeUndefined();
   });
@@ -524,11 +524,11 @@ describe('processMemberPayment', () => {
       testConfig,
       expect.objectContaining({
         amount: 103.75,
-        metadata: expect.objectContaining({ iqproSubscriptionId: 'sub_42' }),
+        metadata: expect.objectContaining({ providerSubscriptionId: 'sub_42' }),
       }),
     );
 
-    const membershipSet = dbState.setCalls.find(s => s.iqproSubscriptionId === 'sub_42');
+    const membershipSet = dbState.setCalls.find(s => s.providerSubscriptionId === 'sub_42');
 
     expect(membershipSet).toBeDefined();
     expect(membershipSet?.billingType).toBe('autopay');
@@ -555,7 +555,7 @@ describe('processMemberPayment', () => {
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/Subscription created but initial charge failed/);
 
-    const wroteAutopay = dbState.setCalls.some(s => s.billingType === 'autopay' || s.iqproSubscriptionId);
+    const wroteAutopay = dbState.setCalls.some(s => s.billingType === 'autopay' || s.providerSubscriptionId);
 
     expect(wroteAutopay).toBe(false);
 
@@ -563,9 +563,9 @@ describe('processMemberPayment', () => {
     // fee, two rows when present). Find the array containing the declined tx.
     const txInsertArray = dbState.insertCalls.find(
       (call): call is Array<Record<string, unknown>> =>
-        Array.isArray(call) && call.some(r => r.iqproTransactionId === 'tx_decline'),
+        Array.isArray(call) && call.some(r => r.providerTransactionId === 'tx_decline'),
     );
-    const txInsert = txInsertArray?.find(r => r.iqproTransactionId === 'tx_decline');
+    const txInsert = txInsertArray?.find(r => r.providerTransactionId === 'tx_decline');
 
     expect(txInsert?.status).toBe('declined');
   });
@@ -783,7 +783,7 @@ describe('processMemberPayment', () => {
 
   // ── Saved-PM (vaulted) branch ────────────────────────────────────────────
 
-  it('saved branch: missing iqproCustomerId returns friendly error', async () => {
+  it('saved branch: missing providerCustomerId returns friendly error', async () => {
     resetDbMock({ existingCustomerId: null });
     const { processMemberPayment } = await import('./MemberPaymentService');
 
@@ -810,7 +810,7 @@ describe('processMemberPayment', () => {
   it('saved branch: charges via vaulted=true, no createCustomer/createPaymentMethod', async () => {
     resetDbMock({
       existingCustomerId: 'cust_have',
-      savedPmRow: { iqproPaymentMethodId: 'pm_saved_1', type: 'card', last4: '4242' },
+      savedPmRow: { providerPaymentMethodId: 'pm_saved_1', type: 'card', last4: '4242' },
     });
     const { computeFeeBreakdown, getCustomerPaymentMethod } = await import('@/libs/IQPro');
     vi.mocked(getCustomerPaymentMethod).mockResolvedValueOnce({
@@ -981,7 +981,7 @@ describe('processMemberPayment', () => {
       expect(saleArgs.amount).toBe(grossAmount);
     });
 
-    it('autopay: writes TWO local tx rows sharing the same iqproTransactionId', async () => {
+    it('autopay: writes TWO local tx rows sharing the same providerTransactionId', async () => {
       const { computeFeeBreakdown } = await import('@/libs/IQPro');
       vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(feesWithSignup);
 
@@ -1008,8 +1008,8 @@ describe('processMemberPayment', () => {
 
       expect(membershipRow.amount).toBe(planRecurring);
       expect(signupRow.amount).toBe(planSignupFee);
-      expect(membershipRow.iqproTransactionId).toBe('tx_42');
-      expect(signupRow.iqproTransactionId).toBe('tx_42');
+      expect(membershipRow.providerTransactionId).toBe('tx_42');
+      expect(signupRow.providerTransactionId).toBe('tx_42');
       expect(signupRow.description).toContain('Sign-up fee');
       expect(signupRow.description).toContain('12 Month Commitment (Gold)');
     });
@@ -1247,8 +1247,8 @@ describe('chargeOneTimeFee (resilience — #237)', () => {
     const { chargeOneTimeFee } = await import('./MemberPaymentService');
     const result = await chargeOneTimeFee({
       config: testConfig,
-      iqproSubscriptionId: 'seed_sub_does_not_exist',
-      iqproCustomerId: 'seed_cus_1',
+      providerSubscriptionId: 'seed_sub_does_not_exist',
+      providerCustomerId: 'seed_cus_1',
       orgId: 'org-1',
       memberId: 'member-1',
       memberMembershipId: 'mm-1',
@@ -1266,8 +1266,8 @@ describe('chargeOneTimeFee (resilience — #237)', () => {
     const { chargeOneTimeFee } = await import('./MemberPaymentService');
     const result = await chargeOneTimeFee({
       config: testConfig,
-      iqproSubscriptionId: 'seed_sub_1',
-      iqproCustomerId: 'seed_cus_1',
+      providerSubscriptionId: 'seed_sub_1',
+      providerCustomerId: 'seed_cus_1',
       orgId: 'org-1',
       memberId: 'member-1',
       memberMembershipId: 'mm-1',
@@ -1290,8 +1290,8 @@ describe('chargeOneTimeFee (resilience — #237)', () => {
     const { chargeOneTimeFee } = await import('./MemberPaymentService');
     const result = await chargeOneTimeFee({
       config: testConfig,
-      iqproSubscriptionId: 'sub_real_1',
-      iqproCustomerId: 'cus_9',
+      providerSubscriptionId: 'sub_real_1',
+      providerCustomerId: 'cus_9',
       orgId: 'org-1',
       memberId: 'member-1',
       memberMembershipId: 'mm-1',

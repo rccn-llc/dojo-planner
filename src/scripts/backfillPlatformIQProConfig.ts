@@ -38,16 +38,16 @@ async function main() {
     .insert(platformConfigSchema)
     .values({
       id: 'singleton',
-      iqproSaasClientId: Env.IQPRO_CLIENT_ID,
-      iqproSaasClientSecretEncrypted: encrypted,
-      iqproSaasGatewayId: Env.IQPRO_GATEWAY_ID,
+      saasProviderClientId: Env.IQPRO_CLIENT_ID,
+      saasProviderClientSecretEncrypted: encrypted,
+      saasProviderGatewayId: Env.IQPRO_GATEWAY_ID,
     })
     .onConflictDoUpdate({
       target: platformConfigSchema.id,
       set: {
-        iqproSaasClientId: Env.IQPRO_CLIENT_ID,
-        iqproSaasClientSecretEncrypted: encrypted,
-        iqproSaasGatewayId: Env.IQPRO_GATEWAY_ID,
+        saasProviderClientId: Env.IQPRO_CLIENT_ID,
+        saasProviderClientSecretEncrypted: encrypted,
+        saasProviderGatewayId: Env.IQPRO_GATEWAY_ID,
       },
     });
 

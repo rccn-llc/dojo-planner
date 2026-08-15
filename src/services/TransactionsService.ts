@@ -81,7 +81,7 @@ export type TransactionDetailData = {
   status: string;
   paymentMethod: string | null;
   description: string | null;
-  iqproTransactionId: string | null;
+  providerTransactionId: string | null;
   processedAt: Date | null;
   createdAt: Date;
   // Membership details (nullable)
@@ -113,7 +113,7 @@ export async function getTransactionById(
       status: transactionSchema.status,
       paymentMethod: transactionSchema.paymentMethod,
       description: transactionSchema.description,
-      iqproTransactionId: transactionSchema.iqproTransactionId,
+      providerTransactionId: transactionSchema.providerTransactionId,
       processedAt: transactionSchema.processedAt,
       createdAt: transactionSchema.createdAt,
       membershipPlanName: membershipPlanSchema.name,

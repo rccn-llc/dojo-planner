@@ -70,7 +70,7 @@ export const ProcessPaymentValidation = z.object({
   // 'new' (default): create / reuse customer + register a fresh PM from
   // card/ACH fields, then charge.
   // 'saved': charge the member's existing IQPro vaulted payment method —
-  // server resolves customerId + paymentMethodId from member.iqproCustomerId
+  // server resolves customerId + paymentMethodId from member.providerCustomerId
   // and the local payment_method table (no IQPro IDs cross the wire).
   paymentMethodSource: z.enum(['new', 'saved']).optional().default('new'),
 

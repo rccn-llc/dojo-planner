@@ -101,7 +101,7 @@ export type AcademyOwner = {
  * who has fully accepted their invitation (has `public_user_data` with a
  * `user_id`), or `null` if no such owner exists.
  *
- * Used to durably link `organization.iqproCustomerId` to a Clerk identity at
+ * Used to durably link `organization.saasProviderCustomerId` to a Clerk identity at
  * subscribe time and to enforce the owner-aware dashboard access gate.
  */
 export async function getAcademyOwner(orgId: string): Promise<AcademyOwner | null> {

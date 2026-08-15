@@ -567,7 +567,7 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
               : (wizard.data.paymentMethod || 'card'),
             // 'saved' tells the server to charge HOH's existing IQPro PM
             // without re-collecting card data. The server resolves the
-            // customerId + paymentMethodId from member.iqproCustomerId and
+            // customerId + paymentMethodId from member.providerCustomerId and
             // the local payment_method table.
             paymentMethodSource: wizard.data.hohHasPaymentMethod ? 'saved' : 'new',
             billingType: 'autopay',

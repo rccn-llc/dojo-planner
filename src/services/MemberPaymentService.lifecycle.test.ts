@@ -142,15 +142,15 @@ describe('cancelMembershipLifecycle — records cancellation fee in billing hist
       lastName: 'Doe',
       email: 'jane@example.com',
       phone: null,
-      iqproCustomerId: null, // synthetic/no IQPro → live charge path is skipped
+      providerCustomerId: null, // synthetic/no IQPro → live charge path is skipped
     },
     membership: {
       id: 'mm-1',
       memberId: 'mem-1',
       membershipPlanId: 'plan-1',
       status: 'active',
-      iqproSubscriptionId: null,
-      iqproHoldFeeSubscriptionId: null,
+      providerSubscriptionId: null,
+      providerHoldFeeSubscriptionId: null,
     },
     plan: {
       id: 'plan-1',

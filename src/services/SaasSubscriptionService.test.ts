@@ -1,26 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { db } from '@/libs/DB';
 
-// Mock DB
-vi.mock('@/libs/DB', () => ({
-  db: {
-    query: {
-      organizationSchema: {
-        findFirst: vi.fn(),
-      },
-    },
-    update: vi.fn().mockReturnValue({
-      set: vi.fn().mockReturnValue({
-        where: vi.fn().mockResolvedValue(undefined),
-      }),
-    }),
-  },
-}));
-
-// `hasActiveSubscription` reads through the CONTROL plane rather than the
-// tenant-scoped `db` — it runs from the RSC-render access gate, which has no
-// tenant scope. Everything else in this service still uses `db`.
+// EVERY organization read and write in this service goes through the CONTROL
+// plane — the `saas_*` columns describe the platform's billing relationship
+// with an org, must survive that org's tenant database being unreachable, and
+// are read by the access gate during RSC render where no tenant scope exists.
+// There is deliberately no `@/libs/DB` mock here: if this service ever reaches
+// for the tenant-scoped `db` again, the Proxy throws "[Tenancy] No tenant
+// scope" and the test fails loudly rather than silently passing.
 const mockControlOrgFindFirst = vi.fn();
+const mockControlOrgWhere = vi.fn().mockResolvedValue(undefined);
+const mockControlOrgSet = vi.fn(() => ({ where: mockControlOrgWhere }));
+const mockControlOrgUpdate = vi.fn(() => ({ set: mockControlOrgSet }));
 
 vi.mock('@/libs/ControlPlaneReads', () => ({
   controlOrganizationDb: () => ({
@@ -29,6 +19,7 @@ vi.mock('@/libs/ControlPlaneReads', () => ({
         findFirst: mockControlOrgFindFirst,
       },
     },
+    update: mockControlOrgUpdate,
   }),
 }));
 
@@ -71,12 +62,10 @@ vi.mock('drizzle-orm', () => ({
   eq: vi.fn((_col, val) => ({ _type: 'eq', value: val })),
 }));
 
-// Helper to mock findFirst with partial org data (avoids full schema type requirement).
-// Reassignable because `hasActiveSubscription` reads through the control plane
-// while every other function here uses the tenant-scoped `db`; that one block
-// repoints this and the outer beforeEach restores the default.
-const tenantFindFirst = () => vi.mocked(db.query.organizationSchema.findFirst) as ReturnType<typeof vi.fn>;
-let mockFindFirst: () => ReturnType<typeof vi.fn> = tenantFindFirst;
+// Helper to mock findFirst with partial org data (avoids the full schema type
+// requirement). One handle now — every function in this service reads and
+// writes organizations through the control plane.
+const mockFindFirst = () => mockControlOrgFindFirst;
 
 // Far-future period end (ms) so active/trial fixtures pass the expiry backstop
 // in hasActiveSubscription/getCurrentSubscription regardless of when tests run.
@@ -85,18 +74,18 @@ const FUTURE_PERIOD_END = 4_000_000_000_000; // ~2096
 describe('SaasSubscriptionService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Restore the default so the hasActiveSubscription block's override cannot
-    // leak into other suites.
-    mockFindFirst = tenantFindFirst;
+    // vi.clearAllMocks() wipes return values too, so rebuild the update chain.
+    mockControlOrgWhere.mockResolvedValue(undefined);
+    mockControlOrgSet.mockReturnValue({ where: mockControlOrgWhere });
+    mockControlOrgUpdate.mockReturnValue({ set: mockControlOrgSet });
   });
 
   async function setupModule() {
     const iqpro = await import('@/libs/IQPro');
-    const { db } = await import('@/libs/DB');
     const service = await import('./SaasSubscriptionService');
     return {
       service,
-      db,
+      db: { update: mockControlOrgUpdate },
       iqproPost: vi.mocked(iqpro.iqproPost),
       iqproGet: vi.mocked(iqpro.iqproGet),
       iqproPut: vi.mocked(iqpro.iqproPut),
@@ -110,10 +99,10 @@ describe('SaasSubscriptionService', () => {
       const { service } = await setupModule();
 
       mockFindFirst().mockResolvedValue({
-        iqproSubscriptionPlanId: 'growth',
-        iqproSubscriptionStatus: 'active',
-        iqproBillingCycle: 'monthly',
-        iqproCurrentPeriodEnd: FUTURE_PERIOD_END,
+        saasProviderPlanId: 'growth',
+        saasSubscriptionStatus: 'active',
+        saasBillingCycle: 'monthly',
+        saasCurrentPeriodEnd: FUTURE_PERIOD_END,
       });
 
       const result = await service.getCurrentSubscription('test-org-123');
@@ -134,11 +123,11 @@ describe('SaasSubscriptionService', () => {
       const { service } = await setupModule();
 
       mockFindFirst().mockResolvedValue({
-        iqproSubscriptionPlanId: 'growth',
-        iqproSubscriptionStatus: 'active',
-        iqproBillingCycle: 'monthly',
-        iqproCurrentPeriodEnd: FUTURE_PERIOD_END,
-        iqproSaasResponsibleClerkUserId: 'user-owner-1',
+        saasProviderPlanId: 'growth',
+        saasSubscriptionStatus: 'active',
+        saasBillingCycle: 'monthly',
+        saasCurrentPeriodEnd: FUTURE_PERIOD_END,
+        saasResponsibleClerkUserId: 'user-owner-1',
       });
 
       const result = await service.getCurrentSubscription('test-org-123');
@@ -150,10 +139,10 @@ describe('SaasSubscriptionService', () => {
       const { service } = await setupModule();
 
       mockFindFirst().mockResolvedValue({
-        iqproSubscriptionPlanId: 'basic',
-        iqproSubscriptionStatus: 'trial',
-        iqproBillingCycle: 'annual',
-        iqproCurrentPeriodEnd: FUTURE_PERIOD_END,
+        saasProviderPlanId: 'basic',
+        saasSubscriptionStatus: 'trial',
+        saasBillingCycle: 'annual',
+        saasCurrentPeriodEnd: FUTURE_PERIOD_END,
       });
 
       const result = await service.getCurrentSubscription('test-org-123');
@@ -166,10 +155,10 @@ describe('SaasSubscriptionService', () => {
       const { service } = await setupModule();
 
       mockFindFirst().mockResolvedValue({
-        iqproSubscriptionPlanId: 'growth',
-        iqproSubscriptionStatus: 'active',
-        iqproBillingCycle: 'monthly',
-        iqproCurrentPeriodEnd: Date.now() - 10 * 24 * 60 * 60 * 1000, // expired beyond grace
+        saasProviderPlanId: 'growth',
+        saasSubscriptionStatus: 'active',
+        saasBillingCycle: 'monthly',
+        saasCurrentPeriodEnd: Date.now() - 10 * 24 * 60 * 60 * 1000, // expired beyond grace
       });
 
       const result = await service.getCurrentSubscription('test-org-123');
@@ -182,10 +171,10 @@ describe('SaasSubscriptionService', () => {
       const { service, db } = await setupModule();
 
       mockFindFirst().mockResolvedValue({
-        iqproSubscriptionPlanId: null,
-        iqproSubscriptionStatus: null,
-        iqproBillingCycle: null,
-        iqproCurrentPeriodEnd: null,
+        saasProviderPlanId: null,
+        saasSubscriptionStatus: null,
+        saasBillingCycle: null,
+        saasCurrentPeriodEnd: null,
       });
 
       const result = await service.getCurrentSubscription('test-org-123', 'aguilanegra');
@@ -209,10 +198,10 @@ describe('SaasSubscriptionService', () => {
       const { service } = await setupModule();
 
       mockFindFirst().mockResolvedValue({
-        iqproSubscriptionPlanId: 'growth',
-        iqproSubscriptionStatus: 'active',
-        iqproBillingCycle: 'monthly',
-        iqproCurrentPeriodEnd: FUTURE_PERIOD_END,
+        saasProviderPlanId: 'growth',
+        saasSubscriptionStatus: 'active',
+        saasBillingCycle: 'monthly',
+        saasCurrentPeriodEnd: FUTURE_PERIOD_END,
       });
 
       const result = await service.getCurrentSubscription('test-org-123', 'aguilanegra');
@@ -226,10 +215,10 @@ describe('SaasSubscriptionService', () => {
       const { service } = await setupModule();
 
       mockFindFirst().mockResolvedValue({
-        iqproSubscriptionPlanId: null,
-        iqproSubscriptionStatus: null,
-        iqproBillingCycle: null,
-        iqproCurrentPeriodEnd: null,
+        saasProviderPlanId: null,
+        saasSubscriptionStatus: null,
+        saasBillingCycle: null,
+        saasCurrentPeriodEnd: null,
       });
 
       const result = await service.getCurrentSubscription('test-org-123', 'regularuser');
@@ -250,10 +239,10 @@ describe('SaasSubscriptionService', () => {
       const { service } = await setupModule();
 
       mockFindFirst().mockResolvedValue({
-        iqproSubscriptionPlanId: null,
-        iqproSubscriptionStatus: null,
-        iqproBillingCycle: null,
-        iqproCurrentPeriodEnd: null,
+        saasProviderPlanId: null,
+        saasSubscriptionStatus: null,
+        saasBillingCycle: null,
+        saasCurrentPeriodEnd: null,
       });
 
       const result = await service.getCurrentSubscription('test-org-123');
@@ -267,10 +256,10 @@ describe('SaasSubscriptionService', () => {
       const { service } = await setupModule();
 
       mockFindFirst().mockResolvedValue({
-        iqproSubscriptionPlanId: 'basic',
-        iqproSubscriptionStatus: 'cancelled',
-        iqproBillingCycle: 'monthly',
-        iqproCurrentPeriodEnd: FUTURE_PERIOD_END,
+        saasProviderPlanId: 'basic',
+        saasSubscriptionStatus: 'cancelled',
+        saasBillingCycle: 'monthly',
+        saasCurrentPeriodEnd: FUTURE_PERIOD_END,
       });
 
       const result = await service.getCurrentSubscription('test-org-123');
@@ -283,10 +272,10 @@ describe('SaasSubscriptionService', () => {
       const { service } = await setupModule();
 
       mockFindFirst().mockResolvedValue({
-        iqproSubscriptionPlanId: 'basic',
-        iqproSubscriptionStatus: 'cancelled',
-        iqproBillingCycle: 'monthly',
-        iqproCurrentPeriodEnd: null,
+        saasProviderPlanId: 'basic',
+        saasSubscriptionStatus: 'cancelled',
+        saasBillingCycle: 'monthly',
+        saasCurrentPeriodEnd: null,
       });
 
       const result = await service.getCurrentSubscription('test-org-123', 'richardhoppes');
@@ -316,7 +305,7 @@ describe('SaasSubscriptionService', () => {
     it('creates customer, payment method, and subscription successfully', async () => {
       const { service, db, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({ iqproCustomerId: null });
+      mockFindFirst().mockResolvedValue({ saasProviderCustomerId: null });
 
       iqproPost
         // 1. customer create
@@ -398,7 +387,7 @@ describe('SaasSubscriptionService', () => {
     it('persists the responsible clerk user id when provided', async () => {
       const { service, db, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({ iqproCustomerId: 'existing-cust-001' });
+      mockFindFirst().mockResolvedValue({ saasProviderCustomerId: 'existing-cust-001' });
 
       iqproPost
         .mockResolvedValueOnce({ data: { customerPaymentMethodId: 'iqpro-pm-009' } })
@@ -417,19 +406,19 @@ describe('SaasSubscriptionService', () => {
       const updateResults = vi.mocked(db.update).mock.results;
       const setMock = updateResults[updateResults.length - 1]!.value.set as ReturnType<typeof vi.fn>;
       const persisted = setMock.mock.calls.find(
-        ([arg]) => arg && 'iqproSubscriptionStatus' in arg,
+        ([arg]) => arg && 'saasSubscriptionStatus' in arg,
       )?.[0];
 
       expect(persisted).toMatchObject({
-        iqproSubscriptionStatus: 'active',
-        iqproSaasResponsibleClerkUserId: 'user-owner-99',
+        saasSubscriptionStatus: 'active',
+        saasResponsibleClerkUserId: 'user-owner-99',
       });
     });
 
     it('reuses existing IQPro customer if already present', async () => {
       const { service, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({ iqproCustomerId: 'existing-cust-001' });
+      mockFindFirst().mockResolvedValue({ saasProviderCustomerId: 'existing-cust-001' });
 
       iqproPost
         // No customer call — straight to payment method
@@ -453,7 +442,7 @@ describe('SaasSubscriptionService', () => {
     it('returns error for unknown plan ID', async () => {
       const { service, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({ iqproCustomerId: 'existing-cust-001' });
+      mockFindFirst().mockResolvedValue({ saasProviderCustomerId: 'existing-cust-001' });
 
       iqproPost.mockResolvedValueOnce({ data: { customerPaymentMethodId: 'iqpro-pm-003' } });
 
@@ -465,7 +454,7 @@ describe('SaasSubscriptionService', () => {
     it('builds annual subscription with correct billingPeriodId and schedule', async () => {
       const { service, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({ iqproCustomerId: 'existing-cust-001' });
+      mockFindFirst().mockResolvedValue({ saasProviderCustomerId: 'existing-cust-001' });
 
       iqproPost
         .mockResolvedValueOnce({ data: { customerPaymentMethodId: 'iqpro-pm-004' } })
@@ -487,7 +476,7 @@ describe('SaasSubscriptionService', () => {
     it('falls back to cardNumber for maskedCard when token data not provided', async () => {
       const { service, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({ iqproCustomerId: 'existing-cust-001' });
+      mockFindFirst().mockResolvedValue({ saasProviderCustomerId: 'existing-cust-001' });
 
       iqproPost
         .mockResolvedValueOnce({ data: { customerPaymentMethodId: 'iqpro-pm-005' } })
@@ -511,7 +500,7 @@ describe('SaasSubscriptionService', () => {
     it('returns error when subscription POST throws', async () => {
       const { service, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({ iqproCustomerId: 'existing-cust-001' });
+      mockFindFirst().mockResolvedValue({ saasProviderCustomerId: 'existing-cust-001' });
 
       iqproPost
         .mockResolvedValueOnce({ data: { customerPaymentMethodId: 'iqpro-pm-006' } })
@@ -525,7 +514,7 @@ describe('SaasSubscriptionService', () => {
     it('extracts subscriptionId from response.data or response directly', async () => {
       const { service, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({ iqproCustomerId: 'existing-cust-001' });
+      mockFindFirst().mockResolvedValue({ saasProviderCustomerId: 'existing-cust-001' });
 
       iqproPost
         .mockResolvedValueOnce({ data: { customerPaymentMethodId: 'iqpro-pm-007' } })
@@ -541,7 +530,7 @@ describe('SaasSubscriptionService', () => {
     it('returns failure (and does not activate) when the immediate charge is declined', async () => {
       const { service, db, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({ iqproCustomerId: 'existing-cust-001' });
+      mockFindFirst().mockResolvedValue({ saasProviderCustomerId: 'existing-cust-001' });
 
       iqproPost
         .mockResolvedValueOnce({ data: { customerPaymentMethodId: 'iqpro-pm-dec' } })
@@ -557,7 +546,7 @@ describe('SaasSubscriptionService', () => {
       // The org must NOT be marked active: only the payment-method update should
       // have run (the activation update happens after a successful charge).
       const setCalls = vi.mocked(db.update).mock.results.flatMap(r => (r.value.set as ReturnType<typeof vi.fn>).mock.calls);
-      const activated = setCalls.some(([arg]) => arg && arg.iqproSubscriptionStatus === 'active');
+      const activated = setCalls.some(([arg]) => arg && arg.saasSubscriptionStatus === 'active');
 
       expect(activated).toBe(false);
     });
@@ -569,7 +558,7 @@ describe('SaasSubscriptionService', () => {
     it('updates subscription and DB with new plan details', async () => {
       const { service, db, iqproPut } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({ iqproSubscriptionId: 'iqpro-sub-001' });
+      mockFindFirst().mockResolvedValue({ saasProviderSubscriptionId: 'iqpro-sub-001' });
       iqproPut.mockResolvedValueOnce({});
 
       const result = await service.changePlan(testConfig, 'test-org-123', 'growth', 'monthly');
@@ -598,7 +587,7 @@ describe('SaasSubscriptionService', () => {
     it('returns error when no active subscription exists', async () => {
       const { service, iqproPut } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({ iqproSubscriptionId: null });
+      mockFindFirst().mockResolvedValue({ saasProviderSubscriptionId: null });
 
       const result = await service.changePlan(testConfig, 'test-org-123', 'growth', 'monthly');
 
@@ -621,7 +610,7 @@ describe('SaasSubscriptionService', () => {
     it('rejects a synthetic seed subscription without calling IQPro', async () => {
       const { service, iqproPut } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({ iqproSubscriptionId: 'seed_org_sub_abc' });
+      mockFindFirst().mockResolvedValue({ saasProviderSubscriptionId: 'seed_org_sub_abc' });
 
       const result = await service.changePlan(testConfig, 'test-org-123', 'growth', 'monthly');
 
@@ -633,7 +622,7 @@ describe('SaasSubscriptionService', () => {
     it('returns error for unknown plan ID', async () => {
       const { service } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({ iqproSubscriptionId: 'iqpro-sub-001' });
+      mockFindFirst().mockResolvedValue({ saasProviderSubscriptionId: 'iqpro-sub-001' });
 
       const result = await service.changePlan(testConfig, 'test-org-123', 'enterprise' as any, 'monthly');
 
@@ -643,7 +632,7 @@ describe('SaasSubscriptionService', () => {
     it('handles annual billing cycle correctly', async () => {
       const { service, iqproPut } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({ iqproSubscriptionId: 'iqpro-sub-001' });
+      mockFindFirst().mockResolvedValue({ saasProviderSubscriptionId: 'iqpro-sub-001' });
       iqproPut.mockResolvedValueOnce({});
 
       const result = await service.changePlan(testConfig, 'test-org-123', 'growth', 'annual');
@@ -659,7 +648,7 @@ describe('SaasSubscriptionService', () => {
     it('returns error when IQPro update fails', async () => {
       const { service, iqproPut } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({ iqproSubscriptionId: 'iqpro-sub-001' });
+      mockFindFirst().mockResolvedValue({ saasProviderSubscriptionId: 'iqpro-sub-001' });
       iqproPut.mockRejectedValue(new Error('Update failed'));
 
       const result = await service.changePlan(testConfig, 'test-org-123', 'growth', 'monthly');
@@ -674,7 +663,7 @@ describe('SaasSubscriptionService', () => {
     it('cancels IQPro subscription and updates DB status', async () => {
       const { service, db, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({ iqproSubscriptionId: 'iqpro-sub-001' });
+      mockFindFirst().mockResolvedValue({ saasProviderSubscriptionId: 'iqpro-sub-001' });
       iqproPost.mockResolvedValueOnce({});
 
       const result = await service.cancelSubscription(testConfig, 'test-org-123', false);
@@ -693,7 +682,7 @@ describe('SaasSubscriptionService', () => {
     it('cancels at end of billing period when endOfPeriod is true', async () => {
       const { service, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({ iqproSubscriptionId: 'iqpro-sub-001' });
+      mockFindFirst().mockResolvedValue({ saasProviderSubscriptionId: 'iqpro-sub-001' });
       iqproPost.mockResolvedValueOnce({});
 
       const result = await service.cancelSubscription(testConfig, 'test-org-123', true);
@@ -710,7 +699,7 @@ describe('SaasSubscriptionService', () => {
     it('rejects when no subscription ID exists, without calling IQPro or mutating state', async () => {
       const { service, db, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({ iqproSubscriptionId: null });
+      mockFindFirst().mockResolvedValue({ saasProviderSubscriptionId: null });
 
       const result = await service.cancelSubscription(testConfig, 'test-org-123', false);
 
@@ -723,7 +712,7 @@ describe('SaasSubscriptionService', () => {
     it('rejects a synthetic seed subscription without calling IQPro or mutating state', async () => {
       const { service, db, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({ iqproSubscriptionId: 'seed_org_sub_xyz' });
+      mockFindFirst().mockResolvedValue({ saasProviderSubscriptionId: 'seed_org_sub_xyz' });
 
       const result = await service.cancelSubscription(testConfig, 'test-org-123', false);
 
@@ -736,7 +725,7 @@ describe('SaasSubscriptionService', () => {
     it('returns error when IQPro cancel fails', async () => {
       const { service, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({ iqproSubscriptionId: 'iqpro-sub-001' });
+      mockFindFirst().mockResolvedValue({ saasProviderSubscriptionId: 'iqpro-sub-001' });
       iqproPost.mockRejectedValue(new Error('Cancel API error'));
 
       const result = await service.cancelSubscription(testConfig, 'test-org-123', false);
@@ -751,7 +740,7 @@ describe('SaasSubscriptionService', () => {
     it('searches transactions by the org customer id and maps them', async () => {
       const { service, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({ iqproCustomerId: 'iqpro-cust-001' });
+      mockFindFirst().mockResolvedValue({ saasProviderCustomerId: 'iqpro-cust-001' });
 
       iqproPost.mockResolvedValueOnce({
         data: {
@@ -781,7 +770,7 @@ describe('SaasSubscriptionService', () => {
     it('returns empty array when the org has no IQPro customer', async () => {
       const { service, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({ iqproCustomerId: null });
+      mockFindFirst().mockResolvedValue({ saasProviderCustomerId: null });
 
       const result = await service.getBillingHistory(testConfig, 'test-org-123');
 
@@ -802,7 +791,7 @@ describe('SaasSubscriptionService', () => {
     it('returns empty array when the search API call fails', async () => {
       const { service, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({ iqproCustomerId: 'iqpro-cust-001' });
+      mockFindFirst().mockResolvedValue({ saasProviderCustomerId: 'iqpro-cust-001' });
       iqproPost.mockRejectedValueOnce(new Error('API error'));
 
       const result = await service.getBillingHistory(testConfig, 'test-org-123');
@@ -813,7 +802,7 @@ describe('SaasSubscriptionService', () => {
     it('handles transactions without status or card gracefully', async () => {
       const { service, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({ iqproCustomerId: 'iqpro-cust-001' });
+      mockFindFirst().mockResolvedValue({ saasProviderCustomerId: 'iqpro-cust-001' });
       iqproPost.mockResolvedValueOnce({
         data: { results: [{ transactionId: 'tx-003', amount: 99 }] },
       });
@@ -828,7 +817,7 @@ describe('SaasSubscriptionService', () => {
     it('handles a response without the data wrapper', async () => {
       const { service, iqproPost } = await setupModule();
 
-      mockFindFirst().mockResolvedValue({ iqproCustomerId: 'iqpro-cust-001' });
+      mockFindFirst().mockResolvedValue({ saasProviderCustomerId: 'iqpro-cust-001' });
       iqproPost.mockResolvedValueOnce({
         results: [{ transactionId: 'tx-direct', status: 'Settled', amountCaptured: 125, createdDateTime: '2025-03-01', maskedCard: '555555******4444' }],
       });
@@ -844,18 +833,11 @@ describe('SaasSubscriptionService', () => {
   // ===== hasActiveSubscription =====
 
   describe('hasActiveSubscription', () => {
-    // This function alone reads through the control plane (it is called from
-    // the RSC-render access gate, which has no tenant scope). Point the shared
-    // `mockFindFirst()` helper at that mock for the cases below.
-    beforeEach(() => {
-      mockFindFirst = () => mockControlOrgFindFirst;
-    });
-
     it('returns true for active IQPro subscription', async () => {
       const { service } = await setupModule();
 
       mockFindFirst().mockResolvedValue({
-        iqproSubscriptionStatus: 'active',
+        saasSubscriptionStatus: 'active',
         stripeSubscriptionStatus: null,
       });
 
@@ -868,7 +850,7 @@ describe('SaasSubscriptionService', () => {
       const { service } = await setupModule();
 
       mockFindFirst().mockResolvedValue({
-        iqproSubscriptionStatus: 'trial',
+        saasSubscriptionStatus: 'trial',
         stripeSubscriptionStatus: null,
       });
 
@@ -881,7 +863,7 @@ describe('SaasSubscriptionService', () => {
       const { service } = await setupModule();
 
       mockFindFirst().mockResolvedValue({
-        iqproSubscriptionStatus: null,
+        saasSubscriptionStatus: null,
         stripeSubscriptionStatus: 'active',
       });
 
@@ -894,7 +876,7 @@ describe('SaasSubscriptionService', () => {
       const { service } = await setupModule();
 
       mockFindFirst().mockResolvedValue({
-        iqproSubscriptionStatus: 'cancelled',
+        saasSubscriptionStatus: 'cancelled',
         stripeSubscriptionStatus: null,
       });
 
@@ -917,7 +899,7 @@ describe('SaasSubscriptionService', () => {
       const { service } = await setupModule();
 
       mockFindFirst().mockResolvedValue({
-        iqproSubscriptionStatus: null,
+        saasSubscriptionStatus: null,
         stripeSubscriptionStatus: null,
       });
 
@@ -930,7 +912,7 @@ describe('SaasSubscriptionService', () => {
       const { service } = await setupModule();
 
       mockFindFirst().mockResolvedValue({
-        iqproSubscriptionStatus: 'cancelled',
+        saasSubscriptionStatus: 'cancelled',
         stripeSubscriptionStatus: 'past_due',
       });
 
@@ -947,8 +929,8 @@ describe('SaasSubscriptionService', () => {
       const { service } = await setupModule();
 
       mockFindFirst().mockResolvedValue({
-        iqproSubscriptionStatus: 'active',
-        iqproCurrentPeriodEnd: Date.now() + 10 * DAY_MS,
+        saasSubscriptionStatus: 'active',
+        saasCurrentPeriodEnd: Date.now() + 10 * DAY_MS,
         stripeSubscriptionStatus: null,
       });
 
@@ -959,8 +941,8 @@ describe('SaasSubscriptionService', () => {
       const { service } = await setupModule();
 
       mockFindFirst().mockResolvedValue({
-        iqproSubscriptionStatus: 'active',
-        iqproCurrentPeriodEnd: Date.now() - 10 * DAY_MS, // well past the 3-day grace
+        saasSubscriptionStatus: 'active',
+        saasCurrentPeriodEnd: Date.now() - 10 * DAY_MS, // well past the 3-day grace
         stripeSubscriptionStatus: null,
       });
 
@@ -971,8 +953,8 @@ describe('SaasSubscriptionService', () => {
       const { service } = await setupModule();
 
       mockFindFirst().mockResolvedValue({
-        iqproSubscriptionStatus: 'active',
-        iqproCurrentPeriodEnd: Date.now() - 1 * DAY_MS, // within 3-day grace
+        saasSubscriptionStatus: 'active',
+        saasCurrentPeriodEnd: Date.now() - 1 * DAY_MS, // within 3-day grace
         stripeSubscriptionStatus: null,
       });
 
@@ -983,8 +965,8 @@ describe('SaasSubscriptionService', () => {
       const { service } = await setupModule();
 
       mockFindFirst().mockResolvedValue({
-        iqproSubscriptionStatus: 'trial',
-        iqproCurrentPeriodEnd: Date.now() - 10 * DAY_MS,
+        saasSubscriptionStatus: 'trial',
+        saasCurrentPeriodEnd: Date.now() - 10 * DAY_MS,
         stripeSubscriptionStatus: null,
       });
 
@@ -995,8 +977,8 @@ describe('SaasSubscriptionService', () => {
       const { service } = await setupModule();
 
       mockFindFirst().mockResolvedValue({
-        iqproSubscriptionStatus: 'active',
-        iqproCurrentPeriodEnd: null,
+        saasSubscriptionStatus: 'active',
+        saasCurrentPeriodEnd: null,
         stripeSubscriptionStatus: null,
       });
 
