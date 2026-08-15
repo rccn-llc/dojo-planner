@@ -1,6 +1,5 @@
 const SUPER_ADMIN_USERNAMES = new Set([
   'aguilanegra',
-  'richardhoppes',
   'nhaloski',
   'rtoupin',
 ]);

@@ -278,7 +278,9 @@ describe('SaasSubscriptionService', () => {
         saasCurrentPeriodEnd: null,
       });
 
-      const result = await service.getCurrentSubscription('test-org-123', 'richardhoppes');
+      // Any name in SUPER_ADMIN_USERNAMES works — the behaviour under test is
+      // the auto-grant, not the specific person.
+      const result = await service.getCurrentSubscription('test-org-123', 'aguilanegra');
 
       expect(result.planId).toBe('basic');
       expect(result.status).toBe('active');

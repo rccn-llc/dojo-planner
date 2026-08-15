@@ -7,11 +7,11 @@
  *
  * Configuration is passed in as an `IQProConfig` object (one per organization
  * for customer payments, one platform-wide config for SaaS billing). The
- * resolver lives in `IQProConfigService` — keeping the lib free of DB imports
+ * resolver lives in `PaymentProviderConfigService` — keeping the lib free of DB imports
  * makes it trivial to mock and avoids circular dependencies.
  */
 
-import type { IQProConfig } from '@/services/IQProConfigService';
+import type { IQProConfig } from '@/services/PaymentProviderConfigService';
 import { Env } from './Env';
 import { logger } from './Logger';
 

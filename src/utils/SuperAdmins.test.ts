@@ -5,9 +5,15 @@ import { isExemptOrg, isSuperAdmin } from './SuperAdmins';
 describe('isSuperAdmin', () => {
   it('returns true for known super admin usernames', () => {
     expect(isSuperAdmin('aguilanegra')).toBe(true);
-    expect(isSuperAdmin('richardhoppes')).toBe(true);
     expect(isSuperAdmin('nhaloski')).toBe(true);
     expect(isSuperAdmin('rtoupin')).toBe(true);
+  });
+
+  it('returns false for richardhoppes (access revoked)', () => {
+    // Asserted explicitly rather than just dropped from the positive case, so
+    // re-adding the username has to be a deliberate edit to this test rather
+    // than something that silently starts passing.
+    expect(isSuperAdmin('richardhoppes')).toBe(false);
   });
 
   it('returns false for non-super-admin usernames', () => {

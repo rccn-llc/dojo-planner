@@ -7,7 +7,7 @@ vi.mock('@clerk/nextjs/server', () => ({ auth: vi.fn() }));
 vi.mock('./AuthGuards', () => ({ guardRole: vi.fn() }));
 vi.mock('@/services/AuditService', () => ({ audit: vi.fn() }));
 vi.mock('@/services/ClerkRolesService', () => ({ getAcademyOwner: vi.fn() }));
-vi.mock('@/services/IQProConfigService', () => ({ resolvePlatformIQProConfig: vi.fn() }));
+vi.mock('@/services/PaymentProviderConfigService', () => ({ resolvePlatformIQProConfig: vi.fn() }));
 vi.mock('@/services/SaasSubscriptionService', () => ({
   subscribe: vi.fn(),
   changePlan: vi.fn(),
@@ -60,7 +60,7 @@ describe('SaasSubscription Router', () => {
   describe('subscribeToPlan', () => {
     it('throws when no academy owner is assigned in Clerk', async () => {
       const { guardRole } = await import('./AuthGuards');
-      const { resolvePlatformIQProConfig } = await import('@/services/IQProConfigService');
+      const { resolvePlatformIQProConfig } = await import('@/services/PaymentProviderConfigService');
       const { getAcademyOwner } = await import('@/services/ClerkRolesService');
       const { subscribe } = await import('@/services/SaasSubscriptionService');
 
@@ -76,7 +76,7 @@ describe('SaasSubscription Router', () => {
 
     it('passes the resolved owner and billing email to subscribe()', async () => {
       const { guardRole } = await import('./AuthGuards');
-      const { resolvePlatformIQProConfig } = await import('@/services/IQProConfigService');
+      const { resolvePlatformIQProConfig } = await import('@/services/PaymentProviderConfigService');
       const { getAcademyOwner } = await import('@/services/ClerkRolesService');
       const { subscribe } = await import('@/services/SaasSubscriptionService');
 
@@ -101,7 +101,7 @@ describe('SaasSubscription Router', () => {
 
     it('falls back to the input email when the owner has no email', async () => {
       const { guardRole } = await import('./AuthGuards');
-      const { resolvePlatformIQProConfig } = await import('@/services/IQProConfigService');
+      const { resolvePlatformIQProConfig } = await import('@/services/PaymentProviderConfigService');
       const { getAcademyOwner } = await import('@/services/ClerkRolesService');
       const { subscribe } = await import('@/services/SaasSubscriptionService');
 

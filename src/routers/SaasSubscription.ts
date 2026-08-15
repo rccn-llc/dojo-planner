@@ -6,7 +6,7 @@ import { getTokenizationConfig } from '@/libs/IQPro';
 import { logger } from '@/libs/Logger';
 import { audit } from '@/services/AuditService';
 import { getAcademyOwner } from '@/services/ClerkRolesService';
-import { resolvePlatformIQProConfig } from '@/services/IQProConfigService';
+import { resolvePlatformIQProConfig } from '@/services/PaymentProviderConfigService';
 import {
   cancelSubscription,
   changePlan,

@@ -10,7 +10,7 @@ import { TENANT_STATUS, tenantSchema } from '@/models/ControlSchema';
 /**
  * Resolves a Clerk organization id to that organization's database.
  *
- * Caching mirrors `IQProConfigService` deliberately — bounded Map, 60s TTL,
+ * Caching mirrors `PaymentProviderConfigService` deliberately — bounded Map, 60s TTL,
  * FIFO eviction, explicit invalidation on write, reset hook for tests — so
  * there is one caching idiom in this codebase rather than two.
  *

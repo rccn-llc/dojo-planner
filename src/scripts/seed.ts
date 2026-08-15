@@ -2445,7 +2445,7 @@ async function provisionSaasSubscription(orgId: string): Promise<void> {
   // full app env validation.
   if (hasRealSaasPrereqs()) {
     try {
-      const { resolvePlatformIQProConfig } = await import('../services/IQProConfigService');
+      const { resolvePlatformIQProConfig } = await import('../services/PaymentProviderConfigService');
       const { getAcademyOwner } = await import('../services/ClerkRolesService');
       const { subscribe } = await import('../services/SaasSubscriptionService');
 
