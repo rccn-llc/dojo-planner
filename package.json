@@ -30,6 +30,7 @@
     "db:migrate:tenants": "tsx src/scripts/migrateTenants.ts",
     "db:register-tenants": "tsx src/scripts/registerTenants.ts",
     "db:check-tenants": "tsx src/scripts/checkTenantReadiness.ts",
+    "db:check-schema": "tsx src/scripts/checkSchemaSync.ts",
     "db:studio": "drizzle-kit studio",
     "storybook": "storybook dev -p 6006",
     "storybook:test": "vitest run --config .storybook/vitest.config.mts",

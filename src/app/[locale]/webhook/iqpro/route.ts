@@ -138,7 +138,7 @@ async function handlePaymentCompleted(data: Record<string, unknown>): Promise<vo
   await db
     .update(transactionSchema)
     .set({ status: 'paid', processedAt: new Date() })
-    .where(eq(transactionSchema.iqproTransactionId, transactionId));
+    .where(eq(transactionSchema.providerTransactionId, transactionId));
 
   logger.info('[IQPro Webhook] Payment completed', { transactionId });
 }
@@ -152,7 +152,7 @@ async function handlePaymentFailed(data: Record<string, unknown>): Promise<void>
   await db
     .update(transactionSchema)
     .set({ status: 'declined' })
-    .where(eq(transactionSchema.iqproTransactionId, transactionId));
+    .where(eq(transactionSchema.providerTransactionId, transactionId));
 
   logger.info('[IQPro Webhook] Payment failed', { transactionId });
 }
@@ -166,14 +166,14 @@ async function handleSubscriptionPaymentSucceeded(data: Record<string, unknown>)
   // Check if this is a SaaS org subscription first. Select the billing cycle in
   // the same query so we don't re-read the same org row below.
   const org = await db.query.organizationSchema.findFirst({
-    where: eq(organizationSchema.iqproSubscriptionId, subscriptionId),
-    columns: { id: true, iqproBillingCycle: true },
+    where: eq(organizationSchema.saasProviderSubscriptionId, subscriptionId),
+    columns: { id: true, saasBillingCycle: true },
   });
 
   if (org) {
     const now = new Date();
     // Estimate next period end based on billing cycle
-    const isAnnual = org.iqproBillingCycle === 'annual';
+    const isAnnual = org.saasBillingCycle === 'annual';
     const nextPeriodEnd = isAnnual
       ? new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000)
       : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -181,8 +181,8 @@ async function handleSubscriptionPaymentSucceeded(data: Record<string, unknown>)
     await db
       .update(organizationSchema)
       .set({
-        iqproSubscriptionStatus: 'active',
-        iqproCurrentPeriodEnd: nextPeriodEnd.getTime(),
+        saasSubscriptionStatus: 'active',
+        saasCurrentPeriodEnd: nextPeriodEnd.getTime(),
       })
       .where(eq(organizationSchema.id, org.id));
 
@@ -199,7 +199,7 @@ async function handleSubscriptionPaymentSucceeded(data: Record<string, unknown>)
   // mirror the membership status onto memberSchema.status (#138). Without
   // this, the member-detail UI keeps showing the old status.
   const membership = await db.query.memberMembershipSchema.findFirst({
-    where: eq(memberMembershipSchema.iqproSubscriptionId, subscriptionId),
+    where: eq(memberMembershipSchema.providerSubscriptionId, subscriptionId),
     columns: { memberId: true },
   });
 
@@ -209,7 +209,7 @@ async function handleSubscriptionPaymentSucceeded(data: Record<string, unknown>)
       status: 'active',
       ...(nextPaymentDate && { nextPaymentDate }),
     })
-    .where(eq(memberMembershipSchema.iqproSubscriptionId, subscriptionId));
+    .where(eq(memberMembershipSchema.providerSubscriptionId, subscriptionId));
 
   // Mirror onto member.status — only flip past_due → active. We deliberately
   // leave 'archived' / 'cancelled' / 'hold' / 'trial' alone so that a stray
@@ -236,14 +236,14 @@ async function handleSubscriptionPaymentFailed(data: Record<string, unknown>): P
 
   // Check if this is a SaaS org subscription first
   const org = await db.query.organizationSchema.findFirst({
-    where: eq(organizationSchema.iqproSubscriptionId, subscriptionId),
+    where: eq(organizationSchema.saasProviderSubscriptionId, subscriptionId),
     columns: { id: true },
   });
 
   if (org) {
     await db
       .update(organizationSchema)
-      .set({ iqproSubscriptionStatus: 'past_due' })
+      .set({ saasSubscriptionStatus: 'past_due' })
       .where(eq(organizationSchema.id, org.id));
 
     logger.info('[IQPro Webhook] SaaS subscription payment failed', { subscriptionId, orgId: org.id });
@@ -252,14 +252,14 @@ async function handleSubscriptionPaymentFailed(data: Record<string, unknown>): P
 
   // Fall back to member membership subscription
   const membership = await db.query.memberMembershipSchema.findFirst({
-    where: eq(memberMembershipSchema.iqproSubscriptionId, subscriptionId),
+    where: eq(memberMembershipSchema.providerSubscriptionId, subscriptionId),
     columns: { memberId: true },
   });
 
   await db
     .update(memberMembershipSchema)
     .set({ status: 'past_due' })
-    .where(eq(memberMembershipSchema.iqproSubscriptionId, subscriptionId));
+    .where(eq(memberMembershipSchema.providerSubscriptionId, subscriptionId));
 
   // Mirror onto member.status (#138). Only flip if the member is currently
   // 'active' or 'trial' — leaves archived / cancelled / hold rows alone so a
@@ -287,14 +287,14 @@ async function handleSubscriptionCancelled(data: Record<string, unknown>): Promi
 
   // Check if this is a SaaS org subscription first
   const org = await db.query.organizationSchema.findFirst({
-    where: eq(organizationSchema.iqproSubscriptionId, subscriptionId),
+    where: eq(organizationSchema.saasProviderSubscriptionId, subscriptionId),
     columns: { id: true },
   });
 
   if (org) {
     await db
       .update(organizationSchema)
-      .set({ iqproSubscriptionStatus: 'cancelled' })
+      .set({ saasSubscriptionStatus: 'cancelled' })
       .where(eq(organizationSchema.id, org.id));
 
     logger.info('[IQPro Webhook] SaaS subscription cancelled', { subscriptionId, orgId: org.id });
@@ -303,14 +303,14 @@ async function handleSubscriptionCancelled(data: Record<string, unknown>): Promi
 
   // Fall back to member membership subscription
   const membership = await db.query.memberMembershipSchema.findFirst({
-    where: eq(memberMembershipSchema.iqproSubscriptionId, subscriptionId),
+    where: eq(memberMembershipSchema.providerSubscriptionId, subscriptionId),
     columns: { memberId: true },
   });
 
   await db
     .update(memberMembershipSchema)
     .set({ status: 'cancelled' })
-    .where(eq(memberMembershipSchema.iqproSubscriptionId, subscriptionId));
+    .where(eq(memberMembershipSchema.providerSubscriptionId, subscriptionId));
 
   // Mirror onto member.status (#138) only if the cancelled membership was the
   // member's last active one. We don't want to cancel a member who still has

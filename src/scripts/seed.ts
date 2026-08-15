@@ -1316,11 +1316,11 @@ async function seedOrganization(organizationId: string) {
 
   // 7. Seed Members + member_memberships
   //
-  // Each member gets a synthetic iqproCustomerId so vaulted-charge code paths
+  // Each member gets a synthetic providerCustomerId so vaulted-charge code paths
   // that read it don't break in local/preview. Status maps directly to
   // member.status, while member_membership.status mirrors it (with cancelled
   // memberships getting an endDate and hold members getting an
-  // iqproHoldFeeSubscriptionId when their plan has a recurring hold fee).
+  // providerHoldFeeSubscriptionId when their plan has a recurring hold fee).
   console.info('  👥 Seeding members...');
   const memberIds: string[] = [];
   const memberJoinDates: Date[] = []; // index-aligned with membersData
@@ -1352,7 +1352,7 @@ async function seedOrganization(organizationId: string) {
       status: member.status,
       statusChangedAt,
       memberType: member.memberType,
-      iqproCustomerId: `seed_cus_${randomUUID()}`,
+      providerCustomerId: `seed_cus_${randomUUID()}`,
       clerkUserId: null,
     }).onConflictDoNothing();
 
@@ -1370,7 +1370,7 @@ async function seedOrganization(organizationId: string) {
         const membershipStatus = member.status === 'cancelled'
           ? 'cancelled'
           : member.status === 'hold' ? 'hold' : 'active';
-        // Recurring hold fee → seed an iqproHoldFeeSubscriptionId on hold
+        // Recurring hold fee → seed an providerHoldFeeSubscriptionId on hold
         // members whose plan has a recurring hold-fee cadence.
         const hasRecurringHoldFee = member.status === 'hold'
           && plan.holdFeeAmount > 0
@@ -1387,8 +1387,8 @@ async function seedOrganization(organizationId: string) {
           billingType: isAutopay ? 'autopay' : 'one-time',
           startDate: joinDate,
           endDate: member.status === 'cancelled' && statusChangedAt ? statusChangedAt : null,
-          iqproSubscriptionId: isAutopay ? `seed_sub_${randomUUID()}` : null,
-          iqproHoldFeeSubscriptionId: hasRecurringHoldFee ? `seed_hold_${randomUUID()}` : null,
+          providerSubscriptionId: isAutopay ? `seed_sub_${randomUUID()}` : null,
+          providerHoldFeeSubscriptionId: hasRecurringHoldFee ? `seed_hold_${randomUUID()}` : null,
         }).onConflictDoNothing();
       } else {
         memberMembershipIdByIndex.push(null);
@@ -1657,7 +1657,7 @@ async function seedOrganization(organizationId: string) {
 
   // 13. Seed Payment Methods
   //
-  // One PM per member with a synthetic iqproPaymentMethodId so the vaulted-
+  // One PM per member with a synthetic providerPaymentMethodId so the vaulted-
   // charge code paths have something to find. Last4 is a stable per-member
   // value used in transaction descriptions below. Family members share a
   // last4 with their HOH (since real-world they're billed to HOH's card).
@@ -1679,7 +1679,7 @@ async function seedOrganization(organizationId: string) {
       firstSix: isCard ? '424242' : null,
       last4,
       accountType: isCard ? null : 'Checking',
-      iqproPaymentMethodId: `seed_pm_${randomUUID()}`,
+      providerPaymentMethodId: `seed_pm_${randomUUID()}`,
       isDefault: true,
     }).onConflictDoNothing();
     paymentMethodCount++;
@@ -1781,7 +1781,7 @@ async function seedOrganization(organizationId: string) {
   console.info('  💰 Seeding transactions...');
   let transactionCount = 0;
 
-  // Helper to create a transaction. Accepts an optional iqproTransactionId
+  // Helper to create a transaction. Accepts an optional providerTransactionId
   // so the first-charge signup_fee + membership_payment rows can be linked
   // (mirrors the wizard, which writes one IQPro Sale → two local rows).
   async function createTransaction(values: {
@@ -1789,7 +1789,7 @@ async function seedOrganization(organizationId: string) {
     memberId: string;
     memberMembershipId?: string;
     eventRegistrationId?: string;
-    iqproTransactionId?: string;
+    providerTransactionId?: string;
     transactionType: string;
     amount: number;
     status: string;
@@ -1804,7 +1804,7 @@ async function seedOrganization(organizationId: string) {
       memberId: values.memberId,
       memberMembershipId: values.memberMembershipId ?? null,
       eventRegistrationId: values.eventRegistrationId ?? null,
-      iqproTransactionId: values.iqproTransactionId ?? null,
+      providerTransactionId: values.providerTransactionId ?? null,
       transactionType: values.transactionType,
       amount: values.amount,
       currency: 'USD',
@@ -1874,9 +1874,9 @@ async function seedOrganization(organizationId: string) {
     .filter((c): c is MemberTxConfig => c !== null);
 
   // Generate membership payment transactions. The first charge (signup fee +
-  // first month's membership payment) shares ONE iqproTransactionId — mirrors
+  // first month's membership payment) shares ONE providerTransactionId — mirrors
   // the wizard's "one IQPro Sale → two local tx rows" pattern. Each subsequent
-  // recurring cycle gets its own iqproTransactionId.
+  // recurring cycle gets its own providerTransactionId.
   for (const config of memberTxConfigs) {
     const memberId = memberIds[config.index]!;
     const mmId = memberMembershipIdByIndex[config.index] ?? undefined;
@@ -1893,7 +1893,7 @@ async function seedOrganization(organizationId: string) {
         organizationId,
         memberId,
         memberMembershipId: mmId,
-        iqproTransactionId: firstChargeIqproId,
+        providerTransactionId: firstChargeIqproId,
         transactionType: 'signup_fee',
         amount: config.signupFee,
         status: 'paid',
@@ -1939,9 +1939,9 @@ async function seedOrganization(organizationId: string) {
         : 'Monthly membership - Bank transfer';
 
       // First month: row 2 of the first-charge pair — shares the signup
-      // fee's iqproTransactionId. Subsequent months: each cycle is its own
+      // fee's providerTransactionId. Subsequent months: each cycle is its own
       // IQPro Sale, so each gets a fresh synthetic id.
-      const iqproTransactionId = mi === 0
+      const providerTransactionId = mi === 0
         ? firstChargeIqproId
         : `seed_tx_${randomUUID()}`;
 
@@ -1949,7 +1949,7 @@ async function seedOrganization(organizationId: string) {
         organizationId,
         memberId,
         memberMembershipId: mmId,
-        iqproTransactionId,
+        providerTransactionId,
         transactionType: 'membership_payment',
         amount: config.price,
         status,
@@ -2102,7 +2102,7 @@ async function seedOrganization(organizationId: string) {
         organizationId,
         memberId,
         memberMembershipId: mmId,
-        iqproTransactionId: `seed_tx_${randomUUID()}`,
+        providerTransactionId: `seed_tx_${randomUUID()}`,
         transactionType: 'cancellation_fee',
         amount: plan.cancellationFee,
         status: 'paid',
@@ -2119,7 +2119,7 @@ async function seedOrganization(organizationId: string) {
           organizationId,
           memberId,
           memberMembershipId: mmId,
-          iqproTransactionId: `seed_tx_${randomUUID()}`,
+          providerTransactionId: `seed_tx_${randomUUID()}`,
           transactionType: 'hold_fee',
           amount: plan.holdFeeAmount,
           status: 'paid',
@@ -2137,7 +2137,7 @@ async function seedOrganization(organizationId: string) {
             organizationId,
             memberId,
             memberMembershipId: mmId,
-            iqproTransactionId: `seed_tx_${randomUUID()}`,
+            providerTransactionId: `seed_tx_${randomUUID()}`,
             transactionType: 'hold_fee',
             amount: plan.holdFeeAmount,
             status: 'paid',
@@ -2487,7 +2487,7 @@ async function provisionSaasSubscription(orgId: string): Promise<void> {
   // pretending it's `active` (with fake IQPro IDs) would let change/cancel
   // masquerade as real billing. Instead we seed an honest, time-boxed `trial`
   // (which the access gate counts as active) with null IQPro IDs. A trial is
-  // NOT tied to a plan — `iqproSubscriptionPlanId`/`iqproBillingCycle` stay null
+  // NOT tied to a plan — `saasProviderPlanId`/`saasBillingCycle` stay null
   // so the dialog shows every plan as a fresh "Subscribe" rather than implying
   // a chosen plan. The only way to get a real `active` paid subscription is the
   // card-collecting subscribe flow. Period end is one month out, in
@@ -2497,14 +2497,14 @@ async function provisionSaasSubscription(orgId: string): Promise<void> {
   await db.update(organizationSchema)
     .set({
       stripeSubscriptionStatus: null,
-      iqproSubscriptionId: null,
-      iqproSubscriptionPlanId: null,
-      iqproSubscriptionStatus: 'trial',
-      iqproBillingCycle: null,
-      iqproCurrentPeriodEnd: trialEnd,
-      iqproCustomerId: null,
-      iqproPaymentMethodId: null,
-      iqproSaasResponsibleClerkUserId: ownerClerkIdArg ?? `seed_owner_user_${randomUUID()}`,
+      saasProviderSubscriptionId: null,
+      saasProviderPlanId: null,
+      saasSubscriptionStatus: 'trial',
+      saasBillingCycle: null,
+      saasCurrentPeriodEnd: trialEnd,
+      saasProviderCustomerId: null,
+      saasProviderPaymentMethodId: null,
+      saasResponsibleClerkUserId: ownerClerkIdArg ?? `seed_owner_user_${randomUUID()}`,
     })
     .where(eq(organizationSchema.id, orgId));
   console.info('  💳 Wrote synthetic SaaS trial (plan-agnostic, no real IQPro payment; subscribe via the app for a real paid plan)');

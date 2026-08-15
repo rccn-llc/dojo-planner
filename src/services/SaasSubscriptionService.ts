@@ -8,15 +8,26 @@
 import type { IQProConfig } from '@/libs/IQPro';
 import type { SaasPlanId } from '@/utils/SaasPlans';
 import { eq } from 'drizzle-orm';
+// Every organization read AND write in this file goes through the control
+// plane, not the tenant-scoped `db`. The `saas_*` columns describe the
+// platform's billing relationship with an organization, so they must remain
+// reachable when that org's own tenant database is unreachable or not yet
+// provisioned — and the access gate reads them during RSC render, where no
+// ambient tenant scope exists.
+//
+// A1 moved only `hasActiveSubscription`; the other five functions still wrote
+// through `db`. Harmless while both handles resolve to one physical database,
+// but split-brain the moment the planes separate: `subscribe()` would write
+// `saas_subscription_status='active'` to the tenant database while the gate
+// read control, saw null, and locked out a customer who had just paid.
 import { controlOrganizationDb } from '@/libs/ControlPlaneReads';
-import { db } from '@/libs/DB';
 import { getGatewayProcessors, iqproPost, iqproPut } from '@/libs/IQPro';
 import { logger } from '@/libs/Logger';
 import { organizationSchema } from '@/models/Schema';
 import { getPlanTotalPrice, getSaasPlan } from '@/utils/SaasPlans';
 import { isExemptOrg, isSuperAdmin } from '@/utils/SuperAdmins';
 
-// Grace window applied to `iqproCurrentPeriodEnd` before an otherwise-active
+// Grace window applied to `saasCurrentPeriodEnd` before an otherwise-active
 // subscription is treated as expired. Absorbs IQPro webhook lag so a paying
 // customer isn't locked out the instant a renewal webhook is late. Expiry is
 // normally driven by webhooks flipping the status; this is a time-based
@@ -108,30 +119,30 @@ export async function getCurrentSubscription(
   orgId: string,
   username?: string | null,
 ): Promise<CurrentSubscription> {
-  const org = await db.query.organizationSchema.findFirst({
+  const org = await controlOrganizationDb().query.organizationSchema.findFirst({
     where: eq(organizationSchema.id, orgId),
     columns: {
-      iqproSubscriptionPlanId: true,
-      iqproSubscriptionStatus: true,
-      iqproBillingCycle: true,
-      iqproCurrentPeriodEnd: true,
-      iqproSaasResponsibleClerkUserId: true,
+      saasProviderPlanId: true,
+      saasSubscriptionStatus: true,
+      saasBillingCycle: true,
+      saasCurrentPeriodEnd: true,
+      saasResponsibleClerkUserId: true,
     },
   });
 
-  const planId = org?.iqproSubscriptionPlanId as SaasPlanId | null;
-  const status = org?.iqproSubscriptionStatus ?? null;
-  const isActive = isSubscriptionActive(status, org?.iqproCurrentPeriodEnd);
+  const planId = org?.saasProviderPlanId as SaasPlanId | null;
+  const status = org?.saasSubscriptionStatus ?? null;
+  const isActive = isSubscriptionActive(status, org?.saasCurrentPeriodEnd);
   const superAdmin = isSuperAdmin(username) || isExemptOrg(orgId);
 
   // Super admin auto-grant: if no active plan, grant Basic for free
   if (superAdmin && !isActive) {
-    await db
+    await controlOrganizationDb()
       .update(organizationSchema)
       .set({
-        iqproSubscriptionPlanId: 'basic',
-        iqproSubscriptionStatus: 'active',
-        iqproBillingCycle: 'monthly',
+        saasProviderPlanId: 'basic',
+        saasSubscriptionStatus: 'active',
+        saasBillingCycle: 'monthly',
       })
       .where(eq(organizationSchema.id, orgId));
 
@@ -144,7 +155,7 @@ export async function getCurrentSubscription(
       currentPeriodEnd: null,
       isSuperAdmin: true,
       hasActiveSubscription: true,
-      responsibleClerkUserId: org?.iqproSaasResponsibleClerkUserId ?? null,
+      responsibleClerkUserId: org?.saasResponsibleClerkUserId ?? null,
     };
   }
 
@@ -154,11 +165,11 @@ export async function getCurrentSubscription(
     planId,
     planName: plan?.name ?? null,
     status,
-    billingCycle: org?.iqproBillingCycle ?? null,
-    currentPeriodEnd: org?.iqproCurrentPeriodEnd ?? null,
+    billingCycle: org?.saasBillingCycle ?? null,
+    currentPeriodEnd: org?.saasCurrentPeriodEnd ?? null,
     isSuperAdmin: superAdmin,
     hasActiveSubscription: isActive,
-    responsibleClerkUserId: org?.iqproSaasResponsibleClerkUserId ?? null,
+    responsibleClerkUserId: org?.saasResponsibleClerkUserId ?? null,
   };
 }
 
@@ -173,12 +184,12 @@ export async function subscribe(
 
   try {
     // Step 1: Get or create IQPro customer for the org
-    const existing = await db.query.organizationSchema.findFirst({
+    const existing = await controlOrganizationDb().query.organizationSchema.findFirst({
       where: eq(organizationSchema.id, params.orgId),
-      columns: { iqproCustomerId: true },
+      columns: { saasProviderCustomerId: true },
     });
 
-    let customerId = existing?.iqproCustomerId ?? null;
+    let customerId = existing?.saasProviderCustomerId ?? null;
 
     if (!customerId) {
       const customerRes = await iqproPost<{ data?: Record<string, unknown> }>(
@@ -198,9 +209,9 @@ export async function subscribe(
       const customerData = (customerRes.data ?? customerRes) as Record<string, unknown>;
       customerId = customerData.customerId as string;
 
-      await db
+      await controlOrganizationDb()
         .update(organizationSchema)
-        .set({ iqproCustomerId: customerId })
+        .set({ saasProviderCustomerId: customerId })
         .where(eq(organizationSchema.id, params.orgId));
 
       logger.info('[SaaS] Created org customer', { orgId: params.orgId, customerId });
@@ -226,9 +237,9 @@ export async function subscribe(
     const pm = (pmRes.data ?? pmRes) as Record<string, unknown>;
     const paymentMethodId = (pm.customerPaymentMethodId ?? pm.paymentMethodId ?? pm.customerPaymentId ?? '') as string;
 
-    await db
+    await controlOrganizationDb()
       .update(organizationSchema)
-      .set({ iqproPaymentMethodId: paymentMethodId })
+      .set({ saasProviderPaymentMethodId: paymentMethodId })
       .where(eq(organizationSchema.id, params.orgId));
 
     logger.info('[SaaS] Payment method registered', { orgId: params.orgId, paymentMethodId });
@@ -380,16 +391,16 @@ export async function subscribe(
       ? new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000)
       : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-    await db
+    await controlOrganizationDb()
       .update(organizationSchema)
       .set({
-        iqproSubscriptionId: subscriptionId,
-        iqproSubscriptionPlanId: params.planId,
-        iqproBillingCycle: params.billingCycle,
-        iqproSubscriptionStatus: 'active',
-        iqproCurrentPeriodEnd: nextPeriodEnd.getTime(),
+        saasProviderSubscriptionId: subscriptionId,
+        saasProviderPlanId: params.planId,
+        saasBillingCycle: params.billingCycle,
+        saasSubscriptionStatus: 'active',
+        saasCurrentPeriodEnd: nextPeriodEnd.getTime(),
         ...(params.responsibleClerkUserId && {
-          iqproSaasResponsibleClerkUserId: params.responsibleClerkUserId,
+          saasResponsibleClerkUserId: params.responsibleClerkUserId,
         }),
       })
       .where(eq(organizationSchema.id, params.orgId));
@@ -416,12 +427,12 @@ export async function changePlan(
   const gatewayId = config.gatewayId;
 
   try {
-    const org = await db.query.organizationSchema.findFirst({
+    const org = await controlOrganizationDb().query.organizationSchema.findFirst({
       where: eq(organizationSchema.id, orgId),
-      columns: { iqproSubscriptionId: true },
+      columns: { saasProviderSubscriptionId: true },
     });
 
-    if (!isRealSubscriptionId(org?.iqproSubscriptionId)) {
+    if (!isRealSubscriptionId(org?.saasProviderSubscriptionId)) {
       return { success: false, error: NO_PAID_SUBSCRIPTION_ERROR };
     }
 
@@ -434,7 +445,7 @@ export async function changePlan(
 
     await iqproPut(
       config,
-      `/api/gateway/${gatewayId}/subscription/${org.iqproSubscriptionId}`,
+      `/api/gateway/${gatewayId}/subscription/${org.saasProviderSubscriptionId}`,
       {
         name: `Dojo Planner ${plan.name} Plan`,
         lineItems: [{
@@ -448,11 +459,11 @@ export async function changePlan(
       },
     );
 
-    await db
+    await controlOrganizationDb()
       .update(organizationSchema)
       .set({
-        iqproSubscriptionPlanId: newPlanId,
-        iqproBillingCycle: newBillingCycle,
+        saasProviderPlanId: newPlanId,
+        saasBillingCycle: newBillingCycle,
       })
       .where(eq(organizationSchema.id, orgId));
 
@@ -475,14 +486,14 @@ export async function cancelSubscription(
   endOfPeriod: boolean,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const org = await db.query.organizationSchema.findFirst({
+    const org = await controlOrganizationDb().query.organizationSchema.findFirst({
       where: eq(organizationSchema.id, orgId),
-      columns: { iqproSubscriptionId: true },
+      columns: { saasProviderSubscriptionId: true },
     });
 
     // No real IQPro subscription (null id or a synthetic seed placeholder):
     // there's nothing to cancel and we must not silently flip local status.
-    if (!isRealSubscriptionId(org?.iqproSubscriptionId)) {
+    if (!isRealSubscriptionId(org?.saasProviderSubscriptionId)) {
       return { success: false, error: NO_PAID_SUBSCRIPTION_ERROR };
     }
 
@@ -491,7 +502,7 @@ export async function cancelSubscription(
       const gatewayId = config.gatewayId;
       await iqproPost(
         config,
-        `/api/gateway/${gatewayId}/subscription/${org.iqproSubscriptionId}/cancel`,
+        `/api/gateway/${gatewayId}/subscription/${org.saasProviderSubscriptionId}/cancel`,
         {
           cancel: {
             now: !endOfPeriod,
@@ -501,9 +512,9 @@ export async function cancelSubscription(
       );
     }
 
-    await db
+    await controlOrganizationDb()
       .update(organizationSchema)
-      .set({ iqproSubscriptionStatus: 'cancelled' })
+      .set({ saasSubscriptionStatus: 'cancelled' })
       .where(eq(organizationSchema.id, orgId));
 
     logger.info('[SaaS] Subscription cancelled', { orgId, endOfPeriod });
@@ -523,16 +534,16 @@ export async function getBillingHistory(
   config: IQProConfig | null,
   orgId: string,
 ): Promise<BillingHistoryItem[]> {
-  const org = await db.query.organizationSchema.findFirst({
+  const org = await controlOrganizationDb().query.organizationSchema.findFirst({
     where: eq(organizationSchema.id, orgId),
-    columns: { iqproCustomerId: true },
+    columns: { saasProviderCustomerId: true },
   });
 
   // SaaS charges (the immediate first-period Sale + IQPro's scheduled renewals)
   // are all tied to the org's IQPro customer. Since they are org-level they
   // aren't recorded in the member-scoped `transaction` table, so we read them
   // back from IQPro by searching transactions for this customer.
-  if (!org?.iqproCustomerId || !config) {
+  if (!org?.saasProviderCustomerId || !config) {
     return [];
   }
 
@@ -542,7 +553,7 @@ export async function getBillingHistory(
       config,
       `/api/gateway/${gatewayId}/transaction/search`,
       {
-        customerId: { operator: 'Equal', value: org.iqproCustomerId },
+        customerId: { operator: 'Equal', value: org.saasProviderCustomerId },
         limit: 100,
         offset: 0,
         sortColumn: 'CreatedDateTime',
@@ -583,8 +594,8 @@ export async function hasActiveSubscription(orgId: string): Promise<boolean> {
   const org = await controlOrganizationDb().query.organizationSchema.findFirst({
     where: eq(organizationSchema.id, orgId),
     columns: {
-      iqproSubscriptionStatus: true,
-      iqproCurrentPeriodEnd: true,
+      saasSubscriptionStatus: true,
+      saasCurrentPeriodEnd: true,
       stripeSubscriptionStatus: true,
     },
   });
@@ -595,7 +606,7 @@ export async function hasActiveSubscription(orgId: string): Promise<boolean> {
 
   // Check IQPro subscription first, including a time-based expiry backstop so a
   // missed renewal webhook doesn't keep an expired org active indefinitely.
-  if (isSubscriptionActive(org.iqproSubscriptionStatus, org.iqproCurrentPeriodEnd)) {
+  if (isSubscriptionActive(org.saasSubscriptionStatus, org.saasCurrentPeriodEnd)) {
     return true;
   }
 

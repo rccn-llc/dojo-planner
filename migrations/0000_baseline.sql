@@ -316,8 +316,8 @@ CREATE TABLE "member_membership" (
 	"end_date" timestamp,
 	"first_payment_date" timestamp,
 	"next_payment_date" timestamp,
-	"iqpro_subscription_id" text,
-	"iqpro_hold_fee_subscription_id" text,
+	"provider_subscription_id" text,
+	"provider_hold_fee_subscription_id" text,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
@@ -337,7 +337,7 @@ CREATE TABLE "member" (
 	"last_accessed_at" timestamp,
 	"status" text DEFAULT 'active' NOT NULL,
 	"status_changed_at" timestamp,
-	"iqpro_customer_id" text,
+	"provider_customer_id" text,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
@@ -399,30 +399,33 @@ CREATE TABLE "organization" (
 	"stripe_subscription_price_id" text,
 	"stripe_subscription_status" text,
 	"stripe_subscription_current_period_end" bigint,
-	"iqpro_customer_id" text,
-	"iqpro_subscription_id" text,
-	"iqpro_subscription_plan_id" text,
-	"iqpro_billing_cycle" text,
-	"iqpro_subscription_status" text,
-	"iqpro_current_period_end" bigint,
-	"iqpro_payment_method_id" text,
-	"iqpro_saas_responsible_clerk_user_id" text,
+	"saas_provider_customer_id" text,
+	"saas_provider_subscription_id" text,
+	"saas_provider_plan_id" text,
+	"saas_billing_cycle" text,
+	"saas_subscription_status" text,
+	"saas_current_period_end" bigint,
+	"saas_provider_payment_method_id" text,
+	"saas_responsible_clerk_user_id" text,
 	"location_address" text,
 	"location_phone" text,
 	"location_email" text,
 	"location_tax_rate" real DEFAULT 0 NOT NULL,
+	"payment_provider" text DEFAULT 'iqpro' NOT NULL,
+	"payment_provider_config_enc" text,
 	"iqpro_config_client_id" text,
 	"iqpro_config_client_secret_enc" text,
 	"iqpro_config_gateway_id" text,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
-	"created_at" timestamp DEFAULT now() NOT NULL
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "organization_payment_provider_check" CHECK ("payment_provider" IN ('iqpro','square'))
 );
 --> statement-breakpoint
 CREATE TABLE "platform_config" (
 	"id" text PRIMARY KEY NOT NULL DEFAULT 'singleton',
-	"iqpro_saas_client_id" text,
-	"iqpro_saas_client_secret_enc" text,
-	"iqpro_saas_gateway_id" text,
+	"saas_provider_client_id" text,
+	"saas_provider_client_secret_enc" text,
+	"saas_provider_gateway_id" text,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "platform_config_singleton" CHECK ("id" = 'singleton')
 );
@@ -431,7 +434,7 @@ CREATE TABLE "payment_method" (
 	"id" text PRIMARY KEY NOT NULL,
 	"member_id" text NOT NULL,
 	"stripe_payment_method_id" text,
-	"iqpro_payment_method_id" text,
+	"provider_payment_method_id" text,
 	"type" text NOT NULL,
 	"first_six" text,
 	"last4" text,
@@ -503,7 +506,7 @@ CREATE TABLE "transaction" (
 	"member_membership_id" text,
 	"event_registration_id" text,
 	"stripe_payment_intent_id" text,
-	"iqpro_transaction_id" text,
+	"provider_transaction_id" text,
 	"transaction_type" text NOT NULL,
 	"amount" real NOT NULL,
 	"currency" text DEFAULT 'USD' NOT NULL,
@@ -640,12 +643,12 @@ CREATE INDEX "member_org_idx" ON "member" USING btree ("organization_id");--> st
 CREATE INDEX "member_org_status_idx" ON "member" USING btree ("organization_id","status");--> statement-breakpoint
 CREATE INDEX "member_org_email_idx" ON "member" USING btree ("organization_id","email");--> statement-breakpoint
 CREATE UNIQUE INDEX "member_clerk_user_idx" ON "member" USING btree ("clerk_user_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "member_iqpro_customer_idx" ON "member" USING btree ("iqpro_customer_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "member_provider_customer_idx" ON "member" USING btree ("provider_customer_id");--> statement-breakpoint
 CREATE INDEX "membership_plan_org_idx" ON "membership_plan" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "membership_plan_program_idx" ON "membership_plan" USING btree ("program_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "membership_plan_org_slug_idx" ON "membership_plan" USING btree ("organization_id","slug");--> statement-breakpoint
 CREATE UNIQUE INDEX "stripe_customer_id_idx" ON "organization" USING btree ("stripe_customer_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "iqpro_customer_id_idx" ON "organization" USING btree ("iqpro_customer_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "saas_provider_customer_id_idx" ON "organization" USING btree ("saas_provider_customer_id");--> statement-breakpoint
 CREATE INDEX "program_org_idx" ON "program" USING btree ("organization_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "program_org_slug_idx" ON "program" USING btree ("organization_id","slug");--> statement-breakpoint
 CREATE INDEX "signed_waiver_org_idx" ON "signed_waiver" USING btree ("organization_id");--> statement-breakpoint

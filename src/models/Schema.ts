@@ -1,4 +1,6 @@
+import type { PaymentProvider } from '@/types/PaymentProvider';
 import { bigint, boolean, index, integer, pgTable, primaryKey, real, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import { PAYMENT_PROVIDER } from '@/types/PaymentProvider';
 
 // This file defines the structure of your database tables using the Drizzle ORM.
 
@@ -30,27 +32,46 @@ export const organizationSchema = pgTable(
       'stripe_subscription_current_period_end',
       { mode: 'number' },
     ),
-    // IQPro SaaS subscription fields
-    iqproCustomerId: text('iqpro_customer_id'),
-    iqproSubscriptionId: text('iqpro_subscription_id'),
-    iqproSubscriptionPlanId: text('iqpro_subscription_plan_id'),
-    iqproBillingCycle: text('iqpro_billing_cycle'),
-    iqproSubscriptionStatus: text('iqpro_subscription_status'),
-    iqproCurrentPeriodEnd: bigint(
-      'iqpro_current_period_end',
+    // ---- Platform SaaS subscription (dojo-planner charging this org) ----
+    // CONTROL-plane columns: read by the access gate during RSC render, and
+    // must keep working when the org's own tenant database is unreachable.
+    // Named `saas_*` to distinguish them from the member-payment columns below
+    // — `organization.iqpro_customer_id` and `member.iqpro_customer_id` used to
+    // share a name while meaning entirely different things.
+    // This path is IQPro-only and is NOT affected by `paymentProvider`.
+    saasProviderCustomerId: text('saas_provider_customer_id'),
+    saasProviderSubscriptionId: text('saas_provider_subscription_id'),
+    saasProviderPlanId: text('saas_provider_plan_id'),
+    saasBillingCycle: text('saas_billing_cycle'),
+    saasSubscriptionStatus: text('saas_subscription_status'),
+    saasCurrentPeriodEnd: bigint(
+      'saas_current_period_end',
       { mode: 'number' },
     ),
-    iqproPaymentMethodId: text('iqpro_payment_method_id'),
+    saasProviderPaymentMethodId: text('saas_provider_payment_method_id'),
     // Clerk userId of the academy owner responsible for the SaaS subscription.
-    // Durably links organization.iqproCustomerId to a Clerk identity; set at
-    // subscribe time. The owner-aware access gate requires this person to still
-    // exist in Clerk as an academy_owner.
-    iqproSaasResponsibleClerkUserId: text('iqpro_saas_responsible_clerk_user_id'),
+    // Durably links organization.saasProviderCustomerId to a Clerk identity;
+    // set at subscribe time. The owner-aware access gate requires this person
+    // to still exist in Clerk as an academy_owner.
+    saasResponsibleClerkUserId: text('saas_responsible_clerk_user_id'),
     locationAddress: text('location_address'),
     locationPhone: text('location_phone'),
     locationEmail: text('location_email'),
     locationTaxRate: real('location_tax_rate').default(0).notNull(),
-    // Per-org IQPro merchant credentials (override of IQPRO_* env vars)
+    // ---- Member payments (this org charging its own members) ----
+    // Which processor handles memberships, lifecycle fees, events, and the
+    // kiosk store for this organization. Values are constrained by a CHECK in
+    // the baseline DDL; keep in step with src/types/PaymentProvider.ts.
+    paymentProvider: text('payment_provider')
+      .$type<PaymentProvider>()
+      .notNull()
+      .default(PAYMENT_PROVIDER.IQPRO),
+    // Encrypted per-provider merchant credentials. Populated in phase B3, when
+    // the provider abstraction stops taking an IQPro-shaped config; until then
+    // the `iqpro_config_*` columns below remain the live source.
+    paymentProviderConfigEncrypted: text('payment_provider_config_enc'),
+    // Per-org IQPro merchant credentials (override of IQPRO_* env vars).
+    // Superseded by paymentProviderConfigEncrypted in B3.
     iqproConfigClientId: text('iqpro_config_client_id'),
     iqproConfigClientSecretEncrypted: text('iqpro_config_client_secret_enc'),
     iqproConfigGatewayId: text('iqpro_config_gateway_id'),
@@ -62,7 +83,7 @@ export const organizationSchema = pgTable(
   },
   table => [
     uniqueIndex('stripe_customer_id_idx').on(table.stripeCustomerId),
-    uniqueIndex('iqpro_customer_id_idx').on(table.iqproCustomerId),
+    uniqueIndex('saas_provider_customer_id_idx').on(table.saasProviderCustomerId),
   ],
 );
 
@@ -71,9 +92,9 @@ export const organizationSchema = pgTable(
 // The CHECK constraint id = 'singleton' enforces a single row.
 export const platformConfigSchema = pgTable('platform_config', {
   id: text('id').primaryKey().default('singleton'),
-  iqproSaasClientId: text('iqpro_saas_client_id'),
-  iqproSaasClientSecretEncrypted: text('iqpro_saas_client_secret_enc'),
-  iqproSaasGatewayId: text('iqpro_saas_gateway_id'),
+  saasProviderClientId: text('saas_provider_client_id'),
+  saasProviderClientSecretEncrypted: text('saas_provider_client_secret_enc'),
+  saasProviderGatewayId: text('saas_provider_gateway_id'),
   updatedAt: timestamp('updated_at', { mode: 'date' })
     .defaultNow()
     .$onUpdate(() => new Date())
@@ -194,7 +215,7 @@ export const memberSchema = pgTable(
       .$onUpdate(() => new Date()),
     status: text('status').notNull().default('active'), // active, hold, trial, cancelled, past_due
     statusChangedAt: timestamp('status_changed_at', { mode: 'date' }),
-    iqproCustomerId: text('iqpro_customer_id'), // IQPro payment processor customer ID
+    providerCustomerId: text('provider_customer_id'), // Payment-processor customer ID (IQPro or Square, per organization.payment_provider)
     createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { mode: 'date' })
       .defaultNow()
@@ -206,7 +227,7 @@ export const memberSchema = pgTable(
     index('member_org_status_idx').on(table.organizationId, table.status),
     index('member_org_email_idx').on(table.organizationId, table.email),
     uniqueIndex('member_clerk_user_idx').on(table.clerkUserId),
-    uniqueIndex('member_iqpro_customer_idx').on(table.iqproCustomerId),
+    uniqueIndex('member_provider_customer_idx').on(table.providerCustomerId),
   ],
 );
 
@@ -259,8 +280,8 @@ export const memberMembershipSchema = pgTable(
     endDate: timestamp('end_date', { mode: 'date' }), // null if ongoing
     firstPaymentDate: timestamp('first_payment_date', { mode: 'date' }), // When the first payment was made
     nextPaymentDate: timestamp('next_payment_date', { mode: 'date' }), // When the next payment is due (for autopay)
-    iqproSubscriptionId: text('iqpro_subscription_id'), // IQPro recurring subscription ID
-    iqproHoldFeeSubscriptionId: text('iqpro_hold_fee_subscription_id'), // IQPro subscription billing the recurring hold fee while on hold
+    providerSubscriptionId: text('provider_subscription_id'), // Recurring subscription ID at the org's payment provider
+    providerHoldFeeSubscriptionId: text('provider_hold_fee_subscription_id'), // Subscription billing the recurring hold fee while on hold
     createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { mode: 'date' })
       .defaultNow()
@@ -442,7 +463,7 @@ export const paymentMethodSchema = pgTable('payment_method', {
   id: text('id').primaryKey(),
   memberId: text('member_id').references(() => memberSchema.id).notNull(),
   stripePaymentMethodId: text('stripe_payment_method_id'),
-  iqproPaymentMethodId: text('iqpro_payment_method_id'), // IQPro payment method ID
+  providerPaymentMethodId: text('provider_payment_method_id'), // Payment method ID at the org's payment provider
   type: text('type').notNull(),
   firstSix: text('first_six'), // Card BIN — first 6 digits, for the BIN(6)+last4 masked display. Null for ACH.
   last4: text('last4'),
@@ -966,7 +987,7 @@ export const transactionSchema = pgTable(
     memberMembershipId: text('member_membership_id').references(() => memberMembershipSchema.id),
     eventRegistrationId: text('event_registration_id').references(() => eventRegistrationSchema.id),
     stripePaymentIntentId: text('stripe_payment_intent_id'),
-    iqproTransactionId: text('iqpro_transaction_id'), // IQPro transaction ID
+    providerTransactionId: text('provider_transaction_id'), // Transaction ID at the org's payment provider
     transactionType: text('transaction_type').notNull(), // 'membership_payment', 'event_registration', 'signup_fee', 'refund', 'adjustment'
     amount: real('amount').notNull(),
     currency: text('currency').notNull().default('USD'),

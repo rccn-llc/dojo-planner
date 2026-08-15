@@ -170,9 +170,9 @@ describe('IQProConfigService', () => {
     it('uses DB values when present and tags source as "platform"', async () => {
       const { encryptSecret } = await import('@/libs/Crypto');
       platformFindFirst.mockResolvedValueOnce({
-        iqproSaasClientId: 'saas-client',
-        iqproSaasClientSecretEncrypted: encryptSecret('saas-secret'),
-        iqproSaasGatewayId: 'saas-gateway',
+        saasProviderClientId: 'saas-client',
+        saasProviderClientSecretEncrypted: encryptSecret('saas-secret'),
+        saasProviderGatewayId: 'saas-gateway',
       });
       const { resolvePlatformIQProConfig } = await import('./IQProConfigService');
       const config = await resolvePlatformIQProConfig();

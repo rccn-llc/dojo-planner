@@ -264,15 +264,15 @@ export async function resolvePlatformIQProConfig(): Promise<IQProConfig | null> 
   const row = await db.query.platformConfigSchema.findFirst({
     where: eq(platformConfigSchema.id, PLATFORM_CONFIG_ID),
     columns: {
-      iqproSaasClientId: true,
-      iqproSaasClientSecretEncrypted: true,
-      iqproSaasGatewayId: true,
+      saasProviderClientId: true,
+      saasProviderClientSecretEncrypted: true,
+      saasProviderGatewayId: true,
     },
   });
 
-  const dbClientId = row?.iqproSaasClientId ?? null;
-  const dbSecret = decryptOrNull(row?.iqproSaasClientSecretEncrypted);
-  const dbGatewayId = row?.iqproSaasGatewayId ?? null;
+  const dbClientId = row?.saasProviderClientId ?? null;
+  const dbSecret = decryptOrNull(row?.saasProviderClientSecretEncrypted);
+  const dbGatewayId = row?.saasProviderGatewayId ?? null;
   const dbHasAnyField = Boolean(dbClientId || dbSecret || dbGatewayId);
 
   const config = buildConfig({ clientId: dbClientId, clientSecret: dbSecret, gatewayId: dbGatewayId }, dbHasAnyField);
@@ -289,16 +289,16 @@ export async function getPlatformConfigForAdmin(): Promise<IQProConfigPublic> {
   const row = await db.query.platformConfigSchema.findFirst({
     where: eq(platformConfigSchema.id, PLATFORM_CONFIG_ID),
     columns: {
-      iqproSaasClientId: true,
-      iqproSaasClientSecretEncrypted: true,
-      iqproSaasGatewayId: true,
+      saasProviderClientId: true,
+      saasProviderClientSecretEncrypted: true,
+      saasProviderGatewayId: true,
     },
   });
 
   const dbHasAnyField = Boolean(
-    row?.iqproSaasClientId || row?.iqproSaasClientSecretEncrypted || row?.iqproSaasGatewayId,
+    row?.saasProviderClientId || row?.saasProviderClientSecretEncrypted || row?.saasProviderGatewayId,
   );
-  const dbCount = [row?.iqproSaasClientId, row?.iqproSaasClientSecretEncrypted, row?.iqproSaasGatewayId].filter(Boolean).length;
+  const dbCount = [row?.saasProviderClientId, row?.saasProviderClientSecretEncrypted, row?.saasProviderGatewayId].filter(Boolean).length;
 
   let source: IQProConfigPublic['source'];
   if (!dbHasAnyField) {
@@ -310,9 +310,9 @@ export async function getPlatformConfigForAdmin(): Promise<IQProConfigPublic> {
   }
 
   return {
-    clientId: row?.iqproSaasClientId ?? Env.IQPRO_CLIENT_ID ?? null,
-    gatewayId: row?.iqproSaasGatewayId ?? Env.IQPRO_GATEWAY_ID ?? null,
-    hasSecret: Boolean(row?.iqproSaasClientSecretEncrypted) || Boolean(Env.IQPRO_CLIENT_SECRET),
+    clientId: row?.saasProviderClientId ?? Env.IQPRO_CLIENT_ID ?? null,
+    gatewayId: row?.saasProviderGatewayId ?? Env.IQPRO_GATEWAY_ID ?? null,
+    hasSecret: Boolean(row?.saasProviderClientSecretEncrypted) || Boolean(Env.IQPRO_CLIENT_SECRET),
     source,
   };
 }
@@ -323,24 +323,24 @@ export async function updatePlatformConfig(
   const existing = await db.query.platformConfigSchema.findFirst({
     where: eq(platformConfigSchema.id, PLATFORM_CONFIG_ID),
     columns: {
-      iqproSaasClientId: true,
-      iqproSaasClientSecretEncrypted: true,
-      iqproSaasGatewayId: true,
+      saasProviderClientId: true,
+      saasProviderClientSecretEncrypted: true,
+      saasProviderGatewayId: true,
     },
   });
 
   const diff: IQProConfigUpdateDiff = {
-    clientIdChanged: existing?.iqproSaasClientId !== input.clientId,
+    clientIdChanged: existing?.saasProviderClientId !== input.clientId,
     clientSecretChanged: input.clientSecret != null && input.clientSecret !== '',
-    gatewayIdChanged: existing?.iqproSaasGatewayId !== input.gatewayId,
+    gatewayIdChanged: existing?.saasProviderGatewayId !== input.gatewayId,
   };
 
   const set: Partial<typeof platformConfigSchema.$inferInsert> = {
-    iqproSaasClientId: input.clientId,
-    iqproSaasGatewayId: input.gatewayId,
+    saasProviderClientId: input.clientId,
+    saasProviderGatewayId: input.gatewayId,
   };
   if (diff.clientSecretChanged && input.clientSecret) {
-    set.iqproSaasClientSecretEncrypted = encryptSecret(input.clientSecret);
+    set.saasProviderClientSecretEncrypted = encryptSecret(input.clientSecret);
   }
 
   await db
