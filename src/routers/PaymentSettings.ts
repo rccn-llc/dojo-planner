@@ -1,7 +1,8 @@
-import { os } from '@orpc/server';
+import { ORPCError, os } from '@orpc/server';
 import { audit } from '@/services/AuditService';
 import {
   getIQProConfigForAdmin,
+  MissingClientSecretError,
   updateIQProConfig,
 } from '@/services/PaymentProviderConfigService';
 import { AUDIT_ACTION, AUDIT_ENTITY_TYPE } from '@/types/Audit';
@@ -52,6 +53,11 @@ export const updateConfig = os
           error: error instanceof Error ? error.message : 'Unknown error',
         },
       );
+      // A first-time save with no secret is a client mistake, not a server
+      // fault — surface it as a 400 so the form can say what to fix.
+      if (error instanceof MissingClientSecretError) {
+        throw new ORPCError(error.message, { status: 400 });
+      }
       throw error;
     }
   });
