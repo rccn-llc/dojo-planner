@@ -109,6 +109,21 @@ export type IQProConfigPublic = {
   source: ConfigSource;
 };
 
+/**
+ * Thrown when a save would produce credentials with no client secret.
+ *
+ * Happens on the FIRST save for an org: there is no stored blob to merge with,
+ * so an omitted secret leaves nothing to preserve. Typed (rather than a bare
+ * Error) so the router maps it to a 400 with an actionable message — an
+ * untyped throw becomes an opaque 500.
+ */
+export class MissingClientSecretError extends Error {
+  constructor() {
+    super('A client secret is required the first time IQPro credentials are saved for this organization.');
+    this.name = 'MissingClientSecretError';
+  }
+}
+
 export type UpdateIQProConfigInput = {
   clientId: string;
   clientSecret?: string;
@@ -434,7 +449,7 @@ export async function updateIQProConfig(
   // the blob wholesale would silently blank it.
   const clientSecret = secretProvided ? input.clientSecret! : existing?.clientSecret;
   if (!clientSecret) {
-    throw new Error('A client secret is required the first time IQPro credentials are saved.');
+    throw new MissingClientSecretError();
   }
 
   const set: Partial<typeof organizationSchema.$inferInsert> = {
