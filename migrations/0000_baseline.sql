@@ -413,12 +413,10 @@ CREATE TABLE "organization" (
 	"location_tax_rate" real DEFAULT 0 NOT NULL,
 	"payment_provider" text DEFAULT 'iqpro' NOT NULL,
 	"payment_provider_config_enc" text,
-	"iqpro_config_client_id" text,
-	"iqpro_config_client_secret_enc" text,
-	"iqpro_config_gateway_id" text,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
-	CONSTRAINT "organization_payment_provider_check" CHECK ("payment_provider" IN ('iqpro','square'))
+	CONSTRAINT "organization_payment_provider_check" CHECK ("payment_provider" IN ('iqpro','square')),
+	CONSTRAINT "organization_location_tax_rate_check" CHECK ("location_tax_rate" >= 0 AND "location_tax_rate" <= 100)
 );
 --> statement-breakpoint
 CREATE TABLE "platform_config" (

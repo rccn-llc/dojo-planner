@@ -11,29 +11,23 @@
  * 5. Persist results to the database
  */
 
+import type { PaymentProviderConfig } from './PaymentProviderConfigService';
+
 import type {
   FeeBreakdown,
   SubscriptionFrequency,
   TransactionBillingAddress,
   TransactionLineItem,
 } from './PaymentProviderService';
-
 import type { AppliedCoupon, BillingType, PaymentMethod } from '@/hooks/useAddMemberWizard';
 import type { IQProConfig } from '@/libs/IQPro';
 import { randomUUID } from 'node:crypto';
 
 import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
-import { z } from 'zod';
 import { db } from '@/libs/DB';
 import {
-  assertTransactionApproved,
-  buildServiceFeeAdjustment,
-  computeFeeBreakdown,
   getCustomerPaymentMethod,
   getGatewayProcessors,
-  iqproGet,
-  iqproPost,
-  iqproPut,
 } from '@/libs/IQPro';
 import { logger } from '@/libs/Logger';
 import { auditEventSchema, couponSchema, couponUsageSchema, memberMembershipSchema, memberSchema, membershipPlanSchema, paymentMethodSchema, transactionSchema } from '@/models/Schema';
@@ -42,6 +36,26 @@ import { computeNextPaymentDate, normalizeFrequency } from '@/utils/PaymentSched
 import { sendPaymentReceiptEmail } from './EmailService';
 import { getOrganizationTaxRate } from './OrganizationService';
 import { getPaymentProvider } from './PaymentProviderService';
+
+/**
+ * Narrow a provider config to IQPro for the two lib helpers this orchestrator
+ * still calls directly — `getGatewayProcessors` (processor-id lookup) and
+ * `getCustomerPaymentMethod` (vaulted-PM fee preview). Both are IQPro gateway
+ * concepts with no Square equivalent.
+ *
+ * B4 folds these into the provider interface. Until then this throws rather
+ * than silently proceeding, so a Square org can never reach an IQPro gateway
+ * call — the same guarantee `requireIQPro` gives inside the provider itself.
+ */
+function requireIQProConfig(config: PaymentProviderConfig): IQProConfig {
+  if (config.provider !== 'iqpro') {
+    throw new TypeError(
+      `Expected an IQPro config on the payment path but got "${config.provider}". This IQPro-specific step has no ${config.provider} equivalent yet.`,
+    );
+  }
+  const { provider: _provider, ...iqpro } = config;
+  return iqpro;
+}
 
 // ===== Public types =====
 
@@ -165,7 +179,7 @@ export type RegisterPaymentMethodResult = {
 // ===== Main orchestration function =====
 
 export async function processMemberPayment(
-  config: IQProConfig,
+  config: PaymentProviderConfig,
   params: ProcessMemberPaymentParams,
 ): Promise<ProcessMemberPaymentResult> {
   // Coupon revalidation — NEVER trust the client's `appliedCoupon` payload for
@@ -200,7 +214,7 @@ export async function processMemberPayment(
     params = { ...params, appliedCoupon: validated.coupon };
   }
 
-  const provider = await getPaymentProvider();
+  const provider = await getPaymentProvider(config);
   const paymentMethodSource = params.paymentMethodSource ?? 'new';
   const isTaxable = !!params.isTaxable;
   const vaulted = paymentMethodSource === 'saved';
@@ -271,7 +285,7 @@ export async function processMemberPayment(
       // Fetch the BIN (for card) or achToken (for ACH) from IQPro so
       // /calculatefees has a valid identifier. The endpoint requires exactly
       // one of token or creditCardBin.
-      const remoteInfo = await getCustomerPaymentMethod(config, customerId, paymentMethodId);
+      const remoteInfo = await getCustomerPaymentMethod(requireIQProConfig(config), customerId, paymentMethodId);
       if (remoteInfo) {
         if (remoteInfo.type === 'card' && remoteInfo.firstSix) {
           feeBin = remoteInfo.firstSix;
@@ -377,7 +391,9 @@ export async function processMemberPayment(
     }
 
     // ── Step 2: Calculate authoritative fees (kiosk shape) ──────────
-    const processors = await getGatewayProcessors(config);
+    // Processor lookup is IQPro-specific; a provider whose fee API needs no
+    // processor id simply ignores the value we pass through.
+    const processors = await getGatewayProcessors(requireIQProConfig(config));
     const processorId = effectivePaymentMethod === 'card'
       ? processors.cardProcessorId
       : processors.achProcessorId;
@@ -394,17 +410,19 @@ export async function processMemberPayment(
 
     const taxStatePct = isTaxable ? await getOrganizationTaxRate(params.organizationId) : 0;
 
-    const feeBreakdown: FeeBreakdown = await computeFeeBreakdown(
-      config,
+    // Provider-quoted where the provider can quote it. `feeQuote.provenance`
+    // records which figures the provider actually attested to — on IQPro the
+    // service fee is provider-computed but tax is local arithmetic, because
+    // IQPro exposes no tax API. See `FeeProvenance`.
+    const feeQuote = await provider.computeFees(config, {
       baseAmount,
       isTaxable,
       taxStatePct,
-      {
-        processorId,
-        ...(feeToken && { token: feeToken }),
-        ...(!feeToken && feeBin && { creditCardBin: feeBin }),
-      },
-    );
+      processorId,
+      ...(feeToken && { token: feeToken }),
+      ...(!feeToken && feeBin && { creditCardBin: feeBin }),
+    });
+    const feeBreakdown: FeeBreakdown = feeQuote;
 
     const taxState = params.memberAddress?.state ?? 'N/A';
     const billingAddress: TransactionBillingAddress = {
@@ -495,10 +513,10 @@ export async function processMemberPayment(
 // ===== Register payment method only (no charge) =====
 
 export async function registerPaymentMethod(
-  config: IQProConfig,
+  config: PaymentProviderConfig,
   params: RegisterPaymentMethodParams,
 ): Promise<RegisterPaymentMethodResult> {
-  const provider = await getPaymentProvider();
+  const provider = await getPaymentProvider(config);
 
   try {
     // Step 1: Get or create customer (scoped to the caller's org for tenant safety)
@@ -706,7 +724,7 @@ function fireReceiptEmail(args: {
 }
 
 type AutopayParams = {
-  config: IQProConfig;
+  config: PaymentProviderConfig;
   provider: Awaited<ReturnType<typeof getPaymentProvider>>;
   params: ProcessMemberPaymentParams;
   customerId: string;
@@ -911,7 +929,7 @@ async function handleAutopay(args: AutopayParams): Promise<ProcessMemberPaymentR
 }
 
 type OneTimeParams = {
-  config: IQProConfig;
+  config: PaymentProviderConfig;
   provider: Awaited<ReturnType<typeof getPaymentProvider>>;
   params: ProcessMemberPaymentParams;
   customerId: string;
@@ -1475,26 +1493,6 @@ export type LifecycleResult = {
 };
 
 /**
- * Shape of the IQPro subscription-lookup response we depend on for resolving a
- * vaulted payment method. All fields are optional/lenient — IQPro may omit any
- * of them — but parsing once (instead of a chain of `as Record<string,unknown>`
- * casts) means a real shape change surfaces as a parse result we can reason
- * about rather than a silent `undefined` charged on a fallback BIN (#WS4).
- */
-const IQProSubscriptionResponseSchema = z.object({
-  customer: z.object({ customerId: z.string().optional() }).partial().optional(),
-  paymentMethod: z.object({
-    customerPaymentMethod: z.object({
-      paymentMethodId: z.string().optional(),
-      card: z.object({
-        maskedNumber: z.string().optional(),
-        maskedCard: z.string().optional(),
-      }).partial().optional(),
-    }).partial().optional(),
-  }).partial().optional(),
-}).partial();
-
-/**
  * Charge a one-time fee against an existing IQPro subscription's vaulted
  * payment method. Mirrors the kiosk's cancellation-fee Sale payload byte-for-
  * byte. Used for cancellation fees and one-time hold fees.
@@ -1504,7 +1502,7 @@ const IQProSubscriptionResponseSchema = z.object({
  * fatal or whether the cancel/hold should continue anyway.
  */
 export async function chargeOneTimeFee(args: {
-  config: IQProConfig;
+  config: PaymentProviderConfig;
   providerSubscriptionId: string;
   providerCustomerId: string;
   orgId: string;
@@ -1516,125 +1514,42 @@ export async function chargeOneTimeFee(args: {
   caption: string;
 }): Promise<LifecycleResult> {
   const { config, providerSubscriptionId, providerCustomerId, orgId, memberId, memberMembershipId, amount, transactionType, description, caption } = args;
-  const gatewayId = config.gatewayId;
-  const baseAmount = Math.round(amount * 100) / 100;
 
-  if (baseAmount <= 0) {
+  const provider = await getPaymentProvider(config);
+  const charge = await provider.chargeOneTimeFee(config, {
+    providerSubscriptionId,
+    providerCustomerId,
+    amount,
+    description,
+    caption,
+  });
+
+  if (!charge.success) {
+    return { success: false, error: charge.error };
+  }
+  // Zero-amount fee: nothing charged, nothing to record.
+  if (!charge.transactionId && !charge.amountCharged) {
     return { success: true, amountCharged: 0 };
   }
 
-  // Everything below talks to IQPro. Any failure here (including the initial
-  // subscription fetch against a synthetic/seed subscription id, the processor
-  // lookup, or the fee calculation) must be returned as a best-effort error
-  // rather than thrown — a fee-charge failure should degrade to a partial
-  // success in the caller, never a 500 (#237). Previously only the final
-  // charge POST was wrapped, so the earlier iqproGet threw straight through.
-  try {
-    // Pull the subscription so we can resolve customerId + payment-method id
-    // exactly the way the kiosk does. IQPro lets us reference the saved PM
-    // by customerPaymentMethodId on the Sale payload.
-    const subRes = await iqproGet<{ data?: Record<string, unknown> }>(
-      config,
-      `/api/gateway/${gatewayId}/subscription/${providerSubscriptionId}`,
-    );
-    const sub = IQProSubscriptionResponseSchema.parse(subRes.data ?? subRes);
-    const custPM = sub.paymentMethod?.customerPaymentMethod;
-    const customerId = sub.customer?.customerId ?? providerCustomerId;
-    const pmId = custPM?.paymentMethodId ?? '';
+  const now = new Date();
+  await db.insert(transactionSchema).values({
+    id: randomUUID(),
+    organizationId: orgId,
+    memberId,
+    memberMembershipId,
+    transactionType,
+    amount: charge.amountCharged ?? 0,
+    status: 'paid',
+    paymentMethod: charge.paymentMethodName ?? 'card',
+    description,
+    providerTransactionId: charge.transactionId ?? '',
+    processedAt: now,
+    createdAt: now,
+    updatedAt: now,
+  });
 
-    if (!pmId) {
-      return {
-        success: false,
-        error: 'No saved payment method on the existing subscription. Cannot charge fee.',
-      };
-    }
-
-    const paymentMethodName: 'card' | 'ach' = custPM?.card ? 'card' : 'ach';
-
-    // /calculatefees needs processorId + BIN for cards. Fall back to '400000'
-    // for the test BIN when the vault doesn't expose one — matches kiosk.
-    const { cardProcessorId, achProcessorId } = await getGatewayProcessors(config);
-    const processorId = paymentMethodName === 'card' ? cardProcessorId : achProcessorId;
-    if (!processorId) {
-      return { success: false, error: `No ${paymentMethodName} processor configured` };
-    }
-    const cardInfo = custPM?.card;
-    const maskedNumber = cardInfo?.maskedNumber ?? cardInfo?.maskedCard ?? '';
-    const bin = maskedNumber && maskedNumber.length >= 6 ? maskedNumber.slice(0, 6) : '400000';
-
-    // Cancellation / hold fees are NOT taxable (per Basys guidance on non-store charges).
-    const serverFees = await computeFeeBreakdown(config, baseAmount, /* isTaxable */ false, /* taxStatePct */ 0, {
-      processorId,
-      creditCardBin: paymentMethodName === 'card' ? bin : undefined,
-    });
-    const paymentAdjustments: Array<Record<string, unknown>> = [buildServiceFeeAdjustment(serverFees)];
-
-    const feeTxPayload = {
-      type: 'Sale',
-      remit: {
-        baseAmount: serverFees.baseAmount,
-        taxAmount: serverFees.taxAmount,
-        isTaxExempt: serverFees.taxAmount <= 0,
-        currencyCode: 'USD',
-        addTaxToTotal: true,
-        paymentAdjustments,
-      },
-      paymentMethod: {
-        customer: {
-          customerId,
-          customerPaymentMethodId: pmId,
-        },
-      },
-      lineItems: [
-        {
-          name: caption,
-          description,
-          quantity: 1,
-          unitPrice: baseAmount,
-          discount: 0,
-          freightAmount: 0,
-          unitOfMeasureId: 1,
-          localTaxPercent: 0,
-          nationalTaxPercent: 0,
-        },
-      ],
-      caption,
-    };
-
-    const txRes = await iqproPost<{ data?: Record<string, unknown> }>(
-      config,
-      `/api/gateway/${gatewayId}/transaction`,
-      feeTxPayload,
-    );
-    const txRaw = txRes.data ?? txRes;
-    const txData = ((txRaw as Record<string, unknown>).transaction ?? txRaw) as Record<string, unknown>;
-    assertTransactionApproved(txData);
-
-    const txId = (txData.transactionId ?? txData.id ?? '') as string;
-    const now = new Date();
-
-    await db.insert(transactionSchema).values({
-      id: randomUUID(),
-      organizationId: orgId,
-      memberId,
-      memberMembershipId,
-      transactionType,
-      amount: serverFees.amount,
-      status: 'paid',
-      paymentMethod: paymentMethodName,
-      description,
-      providerTransactionId: txId,
-      processedAt: now,
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    return { success: true, amountCharged: serverFees.amount, transactionId: txId };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    logger.error('[MemberPayment] One-time fee charge failed', { transactionType, error: message });
-    return { success: false, error: message };
-  }
+  return { success: true, amountCharged: charge.amountCharged ?? 0, transactionId: charge.transactionId };
 }
 
 /**
@@ -1643,28 +1558,12 @@ export async function chargeOneTimeFee(args: {
  * than thrown so the local DB cleanup can still proceed.
  */
 export async function cancelIQProSubscription(
-  config: IQProConfig,
+  config: PaymentProviderConfig,
   providerSubscriptionId: string,
   opts?: { endOfBillingPeriod?: boolean },
 ): Promise<{ success: boolean; error?: string }> {
-  const gatewayId = config.gatewayId;
-  try {
-    await iqproPost(
-      config,
-      `/api/gateway/${gatewayId}/subscription/${providerSubscriptionId}/cancel`,
-      {
-        cancel: {
-          now: !opts?.endOfBillingPeriod,
-          endOfBillingPeriod: !!opts?.endOfBillingPeriod,
-        },
-      },
-    );
-    return { success: true };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    logger.error('[MemberPayment] IQPro subscription cancel failed', { providerSubscriptionId, error: message });
-    return { success: false, error: message };
-  }
+  const provider = await getPaymentProvider(config);
+  return provider.cancelSubscription(config, providerSubscriptionId, opts);
 }
 
 /**
@@ -1674,41 +1573,12 @@ export async function cancelIQProSubscription(
  * payload exactly so we don't drift between the two apps.
  */
 export async function setSubscriptionAutoRenewal(
-  config: IQProConfig,
+  config: PaymentProviderConfig,
   providerSubscriptionId: string,
   isAutoRenewed: boolean,
 ): Promise<{ success: boolean; error?: string }> {
-  const gatewayId = config.gatewayId;
-  const subPath = `/api/gateway/${gatewayId}/subscription/${providerSubscriptionId}`;
-  try {
-    const subRes = await iqproGet<{ data?: Record<string, unknown> }>(config, subPath);
-    const sub = (subRes.data ?? subRes) as Record<string, unknown>;
-    const recurrence = sub.recurrence as Record<string, unknown> | undefined;
-
-    const putPayload: Record<string, unknown> = {
-      name: sub.name,
-      prefix: sub.prefix,
-    };
-    if (recurrence) {
-      putPayload.recurrence = {
-        termStartDate: recurrence.termStartDate,
-        billingStartDate: recurrence.billingStartDate,
-        isAutoRenewed,
-        allowProration: recurrence.allowProration,
-        trialLengthInDays: recurrence.trialLengthInDays,
-        invoiceLengthInDays: recurrence.invoiceLengthInDays,
-        billingPeriodId: (recurrence.billingPeriod as Record<string, unknown> | undefined)?.billingPeriodId,
-        schedule: recurrence.schedule,
-      };
-    }
-
-    await iqproPut(config, subPath, putPayload);
-    return { success: true };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    logger.error('[MemberPayment] IQPro subscription update failed', { providerSubscriptionId, isAutoRenewed, error: message });
-    return { success: false, error: message };
-  }
+  const provider = await getPaymentProvider(config);
+  return provider.setSubscriptionAutoRenewal(config, providerSubscriptionId, isAutoRenewed);
 }
 
 /**
@@ -1746,7 +1616,7 @@ export type CancelMembershipResult = {
  * what happened.
  */
 export async function cancelMembershipLifecycle(args: {
-  config: IQProConfig | null;
+  config: PaymentProviderConfig | null;
   ctx: LifecycleContext;
   waiveFee: boolean;
 }): Promise<CancelMembershipResult> {
@@ -1930,7 +1800,7 @@ async function countRecentHolds(memberMembershipId: string, organizationId: stri
  *  4) Set membership.status='hold' and member.status='hold'.
  */
 export async function holdMembershipLifecycle(args: {
-  config: IQProConfig | null;
+  config: PaymentProviderConfig | null;
   ctx: LifecycleContext;
 }): Promise<HoldMembershipResult> {
   const { config, ctx } = args;
@@ -1987,18 +1857,15 @@ export async function holdMembershipLifecycle(args: {
       const subFrequency = holdFeeFrequencyToSubscriptionFrequency(feeFrequency);
       if (subFrequency) {
         try {
-          const subRes = await iqproGet<{ data?: Record<string, unknown> }>(
+          const provider = await getPaymentProvider(config);
+          const saved = await provider.getSubscriptionPaymentMethod(
             config,
-            `/api/gateway/${config.gatewayId}/subscription/${ctx.membership.providerSubscriptionId}`,
+            ctx.membership.providerSubscriptionId,
           );
-          const sub = (subRes.data ?? subRes) as Record<string, unknown>;
-          const subPM = sub.paymentMethod as Record<string, unknown> | undefined;
-          const custPM = subPM?.customerPaymentMethod as Record<string, unknown> | undefined;
-          const pmId = (custPM?.paymentMethodId ?? '') as string;
-          const customerId = ((sub.customer as Record<string, unknown> | undefined)?.customerId ?? ctx.member.providerCustomerId) as string;
+          const pmId = saved?.paymentMethodId ?? '';
+          const customerId = saved?.customerId || (ctx.member.providerCustomerId ?? '');
 
           if (pmId) {
-            const provider = await getPaymentProvider();
             const subResult = await provider.createSubscription(config, {
               customerId,
               paymentMethodId: pmId,
@@ -2070,7 +1937,7 @@ export async function holdMembershipLifecycle(args: {
  *  3) Set membership.status='active' and member.status='active'.
  */
 export async function reactivateMembershipLifecycle(args: {
-  config: IQProConfig | null;
+  config: PaymentProviderConfig | null;
   ctx: LifecycleContext;
 }): Promise<{ success: boolean; error?: string }> {
   const { config, ctx } = args;

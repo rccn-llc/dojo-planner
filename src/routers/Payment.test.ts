@@ -25,7 +25,10 @@ vi.mock('@/libs/IQPro', () => ({
   getTokenizationConfig: vi.fn(),
 }));
 vi.mock('@/services/PaymentProviderConfigService', () => ({
+  // Tokenization is IQPro-only (TokenEx iframe); the payment paths take the
+  // provider-aware union.
   resolveIQProConfig: vi.fn(),
+  resolvePaymentProviderConfig: vi.fn(),
 }));
 
 const testConfig = {
@@ -37,6 +40,9 @@ const testConfig = {
   baseUrl: 'https://sandbox.api.basyspro.com',
   source: 'env' as const,
 };
+
+/** The same credentials tagged with the discriminant, as the union resolver returns them. */
+const providerConfig = { ...testConfig, provider: 'iqpro' as const };
 
 const mockContext: AuditContext = {
   userId: 'test-user-123',
@@ -64,8 +70,9 @@ function callHandler(handler: unknown, input?: unknown) {
 describe('Payment Router', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
-    const { resolveIQProConfig } = await import('@/services/PaymentProviderConfigService');
+    const { resolveIQProConfig, resolvePaymentProviderConfig } = await import('@/services/PaymentProviderConfigService');
     vi.mocked(resolveIQProConfig).mockResolvedValue(testConfig);
+    vi.mocked(resolvePaymentProviderConfig).mockResolvedValue(providerConfig);
   });
 
   describe('processPayment', () => {
@@ -87,7 +94,7 @@ describe('Payment Router', () => {
       const result = await callHandler(processPayment, baseInput);
 
       expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
-      expect(processMemberPayment).toHaveBeenCalledWith(testConfig, {
+      expect(processMemberPayment).toHaveBeenCalledWith(providerConfig, {
         organizationId: 'test-org-456',
         ...baseInput,
       });
@@ -363,7 +370,7 @@ describe('Payment Router', () => {
       const result = await callHandler(registerPaymentMethod, registerInput);
 
       expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
-      expect(registerService).toHaveBeenCalledWith(testConfig, {
+      expect(registerService).toHaveBeenCalledWith(providerConfig, {
         organizationId: 'test-org-456',
         ...registerInput,
       });

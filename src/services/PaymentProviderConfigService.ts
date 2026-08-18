@@ -36,8 +36,8 @@
  * Secrets are encrypted at rest with AES-256-GCM (see `Crypto.ts`).
  */
 
-import type { PaymentProvider } from '@/types/PaymentProvider';
 import { eq } from 'drizzle-orm';
+import { z } from 'zod';
 import { controlOrganizationDb } from '@/libs/ControlPlaneReads';
 import { decryptSecret, encryptSecret } from '@/libs/Crypto';
 import { db } from '@/libs/DB';
@@ -207,6 +207,77 @@ function decryptOrNull(enc: string | null | undefined): string | null {
   }
 }
 
+// ---------- the credential blob ----------
+
+/**
+ * Per-provider credential sets, as stored inside
+ * `organization.payment_provider_config_enc`.
+ *
+ * The whole object is JSON-serialised and AES-GCM encrypted as ONE value, so
+ * adding a provider means adding a branch here rather than a column pair per
+ * credential — which is what the three `iqpro_config_*` columns would have
+ * become, once per provider.
+ */
+const StoredIQProCredentialsSchema = z.object({
+  clientId: z.string().min(1),
+  clientSecret: z.string().min(1),
+  gatewayId: z.string().min(1),
+});
+
+const StoredSquareCredentialsSchema = z.object({
+  accessToken: z.string().min(1),
+  locationId: z.string().min(1),
+  applicationId: z.string().min(1),
+  environment: z.enum(['sandbox', 'production']),
+  webhookSignatureKey: z.string().min(1),
+});
+
+const StoredProviderConfigSchema = z.discriminatedUnion('provider', [
+  z.object({ provider: z.literal(PAYMENT_PROVIDER.IQPRO), credentials: StoredIQProCredentialsSchema }),
+  z.object({ provider: z.literal(PAYMENT_PROVIDER.SQUARE), credentials: StoredSquareCredentialsSchema }),
+]);
+
+export type StoredProviderConfig = z.infer<typeof StoredProviderConfigSchema>;
+
+/**
+ * Decrypt and parse the credential blob.
+ *
+ * A decrypt failure rethrows (same reasoning as `decryptOrNull`: a bad or
+ * rotated key must hard-fail the payment path, never silently fall back to env
+ * credentials belonging to a different merchant). A *parse* failure is
+ * different — the ciphertext was readable but the shape is wrong, which means
+ * corrupt or partially-written data. That also throws rather than falling
+ * back, for the same reason.
+ */
+function readConfigBlob(enc: string | null | undefined): StoredProviderConfig | null {
+  if (!enc) {
+    return null;
+  }
+  let json: string;
+  try {
+    json = decryptSecret(enc);
+  } catch (err) {
+    logger.error('[PaymentProviderConfig] failed to decrypt credential blob', {
+      error: err instanceof Error ? err.message : 'unknown',
+    });
+    throw new Error('Failed to decrypt stored payment provider credentials');
+  }
+
+  const parsed = StoredProviderConfigSchema.safeParse(JSON.parse(json));
+  if (!parsed.success) {
+    logger.error('[PaymentProviderConfig] credential blob failed schema validation', {
+      issues: parsed.error.issues.map(i => i.path.join('.')),
+    });
+    throw new Error('Stored payment provider credentials are malformed');
+  }
+  return parsed.data;
+}
+
+/** Encrypt a credential set for storage. */
+export function writeConfigBlob(config: StoredProviderConfig): string {
+  return encryptSecret(JSON.stringify(config));
+}
+
 // ---------- per-org (customer flow) ----------
 
 export async function resolveIQProConfig(orgId: string): Promise<IQProConfig | null> {
@@ -217,19 +288,23 @@ export async function resolveIQProConfig(orgId: string): Promise<IQProConfig | n
 
   const row = await db.query.organizationSchema.findFirst({
     where: eq(organizationSchema.id, orgId),
-    columns: {
-      iqproConfigClientId: true,
-      iqproConfigClientSecretEncrypted: true,
-      iqproConfigGatewayId: true,
-    },
+    columns: { paymentProviderConfigEncrypted: true },
   });
 
-  const dbClientId = row?.iqproConfigClientId ?? null;
-  const dbSecret = decryptOrNull(row?.iqproConfigClientSecretEncrypted);
-  const dbGatewayId = row?.iqproConfigGatewayId ?? null;
-  const dbHasAnyField = Boolean(dbClientId || dbSecret || dbGatewayId);
+  // The blob is the only DB source. An org that has never saved credentials
+  // falls through to the IQPRO_* env vars, which is how single-tenant
+  // deployments have always worked.
+  const blob = readConfigBlob(row?.paymentProviderConfigEncrypted);
+  const stored = blob?.provider === PAYMENT_PROVIDER.IQPRO ? blob.credentials : null;
 
-  const config = buildConfig({ clientId: dbClientId, clientSecret: dbSecret, gatewayId: dbGatewayId }, dbHasAnyField);
+  const config = buildConfig(
+    {
+      clientId: stored?.clientId ?? null,
+      clientSecret: stored?.clientSecret ?? null,
+      gatewayId: stored?.gatewayId ?? null,
+    },
+    Boolean(stored),
+  );
   if (config) {
     cacheSetOrg(orgId, config);
   }
@@ -237,26 +312,32 @@ export async function resolveIQProConfig(orgId: string): Promise<IQProConfig | n
 }
 
 /**
- * Provider-aware resolver. Reads `organization.payment_provider` and returns
- * the matching branch of the union.
+ * Provider-aware resolver: reads `organization.payment_provider` and returns
+ * the matching branch of the union. This is what every payment path uses, so
+ * the org's provider choice governs which merchant account gets charged.
  *
- * Deliberately has NO consumers yet — B3 is where `IPaymentProvider` stops
- * taking `IQProConfig` and starts switching on `.provider`. Adding it now keeps
- * B2 additive: nothing that compiles today changes behaviour.
- *
- * The Square branch resolves from `SQUARE_*` env vars only. The per-org
- * credential columns do not exist yet (`payment_provider_config_enc` is empty
- * until B3), so an org set to `square` with no env vars configured gets `null`
- * — the same "not configured" signal the IQPro branch already returns, which
- * callers already handle by disabling payment features.
+ * Credentials come from the encrypted blob, falling back to env vars per
+ * provider — so a single-tenant deployment that has only ever set `IQPRO_*` /
+ * `SQUARE_*` keeps working with no DB row at all.
  */
 export async function resolvePaymentProviderConfig(
   orgId: string,
 ): Promise<PaymentProviderConfig | null> {
-  const provider = await resolveProviderForOrg(orgId);
+  const row = await db.query.organizationSchema.findFirst({
+    where: eq(organizationSchema.id, orgId),
+    columns: { paymentProvider: true, paymentProviderConfigEncrypted: true },
+  });
+  const provider = row?.paymentProvider ?? PAYMENT_PROVIDER.IQPRO;
 
   if (provider === PAYMENT_PROVIDER.SQUARE) {
-    return resolveSquareConfigFromEnv();
+    const blob = readConfigBlob(row?.paymentProviderConfigEncrypted);
+    // Guard against a blob whose provider disagrees with the column: trusting
+    // the wrong one would charge the wrong merchant. The column wins, and a
+    // mismatched blob is treated as absent.
+    const stored = blob?.provider === PAYMENT_PROVIDER.SQUARE ? blob.credentials : null;
+    return stored
+      ? { provider: PAYMENT_PROVIDER.SQUARE, ...stored, source: 'org' }
+      : resolveSquareConfigFromEnv();
   }
 
   const iqpro = await resolveIQProConfig(orgId);
@@ -267,20 +348,7 @@ export async function resolvePaymentProviderConfig(
   return { provider: PAYMENT_PROVIDER.IQPRO, ...credentials, source };
 }
 
-/** Reads the discriminator. Defaults to IQPro when the org row is missing. */
-async function resolveProviderForOrg(orgId: string): Promise<PaymentProvider> {
-  const row = await db.query.organizationSchema.findFirst({
-    where: eq(organizationSchema.id, orgId),
-    columns: { paymentProvider: true },
-  });
-  return row?.paymentProvider ?? PAYMENT_PROVIDER.IQPRO;
-}
-
-/**
- * Square credentials from env. Not cached: there is no DB round-trip to
- * absorb, and caching would only add an invalidation path to maintain for a
- * branch B3 is about to replace with the encrypted per-org blob.
- */
+/** Square credentials from env — the fallback when no blob is stored. */
 function resolveSquareConfigFromEnv(): PaymentProviderConfig | null {
   const accessToken = Env.SQUARE_ACCESS_TOKEN ?? null;
   const locationId = Env.SQUARE_LOCATION_ID ?? null;
@@ -318,32 +386,21 @@ export function invalidatePaymentProviderConfig(orgId: string): void {
 export async function getIQProConfigForAdmin(orgId: string): Promise<IQProConfigPublic> {
   const row = await db.query.organizationSchema.findFirst({
     where: eq(organizationSchema.id, orgId),
-    columns: {
-      iqproConfigClientId: true,
-      iqproConfigClientSecretEncrypted: true,
-      iqproConfigGatewayId: true,
-    },
+    columns: { paymentProviderConfigEncrypted: true },
   });
 
-  const dbHasAnyField = Boolean(
-    row?.iqproConfigClientId || row?.iqproConfigClientSecretEncrypted || row?.iqproConfigGatewayId,
-  );
-  const dbCount = [row?.iqproConfigClientId, row?.iqproConfigClientSecretEncrypted, row?.iqproConfigGatewayId].filter(Boolean).length;
+  const blob = readConfigBlob(row?.paymentProviderConfigEncrypted);
+  const stored = blob?.provider === PAYMENT_PROVIDER.IQPRO ? blob.credentials : null;
 
-  let source: IQProConfigPublic['source'];
-  if (!dbHasAnyField) {
-    source = 'env';
-  } else if (dbCount === 3) {
-    source = 'org';
-  } else {
-    source = 'mixed';
-  }
-
+  // The blob is all-or-nothing (its schema requires all three credentials), so
+  // there is no longer a partially-populated state. 'mixed' therefore cannot
+  // occur for the org scope; it remains in ConfigSource for the platform
+  // resolver, which still reads three independent columns.
   return {
-    clientId: row?.iqproConfigClientId ?? Env.IQPRO_CLIENT_ID ?? null,
-    gatewayId: row?.iqproConfigGatewayId ?? Env.IQPRO_GATEWAY_ID ?? null,
-    hasSecret: Boolean(row?.iqproConfigClientSecretEncrypted) || Boolean(Env.IQPRO_CLIENT_SECRET),
-    source,
+    clientId: stored?.clientId ?? Env.IQPRO_CLIENT_ID ?? null,
+    gatewayId: stored?.gatewayId ?? Env.IQPRO_GATEWAY_ID ?? null,
+    hasSecret: Boolean(stored?.clientSecret) || Boolean(Env.IQPRO_CLIENT_SECRET),
+    source: stored ? 'org' : 'env',
   };
 }
 
@@ -357,28 +414,36 @@ export async function updateIQProConfig(
   orgId: string,
   input: UpdateIQProConfigInput,
 ): Promise<IQProConfigUpdateDiff> {
-  const existing = await db.query.organizationSchema.findFirst({
+  const existingRow = await db.query.organizationSchema.findFirst({
     where: eq(organizationSchema.id, orgId),
-    columns: {
-      iqproConfigClientId: true,
-      iqproConfigClientSecretEncrypted: true,
-      iqproConfigGatewayId: true,
-    },
+    columns: { paymentProviderConfigEncrypted: true },
   });
+  const existingBlob = readConfigBlob(existingRow?.paymentProviderConfigEncrypted);
+  const existing = existingBlob?.provider === PAYMENT_PROVIDER.IQPRO ? existingBlob.credentials : null;
 
+  const secretProvided = input.clientSecret != null && input.clientSecret !== '';
   const diff: IQProConfigUpdateDiff = {
-    clientIdChanged: existing?.iqproConfigClientId !== input.clientId,
-    clientSecretChanged: input.clientSecret != null && input.clientSecret !== '',
-    gatewayIdChanged: existing?.iqproConfigGatewayId !== input.gatewayId,
+    clientIdChanged: existing?.clientId !== input.clientId,
+    clientSecretChanged: secretProvided,
+    gatewayIdChanged: existing?.gatewayId !== input.gatewayId,
   };
+
+  // The blob is a single value, so an update is a MERGE, not an overwrite:
+  // the settings form lets an admin change the client/gateway id without
+  // re-typing the secret (it is never sent back to the browser), and writing
+  // the blob wholesale would silently blank it.
+  const clientSecret = secretProvided ? input.clientSecret! : existing?.clientSecret;
+  if (!clientSecret) {
+    throw new Error('A client secret is required the first time IQPro credentials are saved.');
+  }
 
   const set: Partial<typeof organizationSchema.$inferInsert> = {
-    iqproConfigClientId: input.clientId,
-    iqproConfigGatewayId: input.gatewayId,
+    paymentProvider: PAYMENT_PROVIDER.IQPRO,
+    paymentProviderConfigEncrypted: writeConfigBlob({
+      provider: PAYMENT_PROVIDER.IQPRO,
+      credentials: { clientId: input.clientId, clientSecret, gatewayId: input.gatewayId },
+    }),
   };
-  if (diff.clientSecretChanged && input.clientSecret) {
-    set.iqproConfigClientSecretEncrypted = encryptSecret(input.clientSecret);
-  }
 
   await db
     .insert(organizationSchema)
@@ -388,7 +453,7 @@ export async function updateIQProConfig(
       set,
     });
 
-  perOrgCache.delete(orgId);
+  invalidatePaymentProviderConfig(orgId);
   return diff;
 }
 

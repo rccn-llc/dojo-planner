@@ -6,7 +6,7 @@ import { audit } from '@/services/AuditService';
 import { sendMemberConfirmationEmail } from '@/services/EmailService';
 import { cancelMembershipLifecycle, getLifecycleContext, HoldLimitReachedError, holdMembershipLifecycle, reactivateMembershipLifecycle } from '@/services/MemberPaymentService';
 import { addMemberMembership, changeMemberMembership, createMember, deleteMemberPaymentMethod, getAllMembershipPlans, getFamilyMembers, getHeadOfHouseholdMembers, getHOHForFamilyMember, getMemberById, getMemberPaymentMethods, getMembershipPlans, getMemberTransactions, linkFamilyMember, MemberNotFoundError, MemberOnHoldError, removeFully, setPrimaryPaymentMethod as setPrimaryPaymentMethodService, unlinkFamilyMember, updateMember, updateMemberContactInfo, updateMemberPhoto, updateMemberStatus } from '@/services/MembersService';
-import { resolveIQProConfig } from '@/services/PaymentProviderConfigService';
+import { resolvePaymentProviderConfig } from '@/services/PaymentProviderConfigService';
 import { generatePdfFilename } from '@/services/WaiverPdfService';
 import { generateWaiverPdfBuffer } from '@/services/WaiverPdfService.server';
 import { AUDIT_ACTION, AUDIT_ENTITY_TYPE } from '@/types/Audit';
@@ -211,10 +211,10 @@ export const cancelMembership = os
         throw new ORPCError('Membership not found', { status: 404 });
       }
 
-      const iqproConfig = await resolveIQProConfig(context.orgId);
+      const paymentConfig = await resolvePaymentProviderConfig(context.orgId);
 
       const result = await cancelMembershipLifecycle({
-        config: iqproConfig,
+        config: paymentConfig,
         ctx,
         waiveFee: input.waiveFee,
       });
@@ -264,9 +264,9 @@ export const holdMembership = os
         throw new ORPCError('Membership not found', { status: 404 });
       }
 
-      const iqproConfig = await resolveIQProConfig(context.orgId);
+      const paymentConfig = await resolvePaymentProviderConfig(context.orgId);
 
-      const result = await holdMembershipLifecycle({ config: iqproConfig, ctx });
+      const result = await holdMembershipLifecycle({ config: paymentConfig, ctx });
 
       await audit(context, AUDIT_ACTION.MEMBERSHIP_HOLD, AUDIT_ENTITY_TYPE.MEMBERSHIP, {
         entityId: input.memberMembershipId,
@@ -318,9 +318,9 @@ export const reactivateMembership = os
         throw new ORPCError('Membership not found', { status: 404 });
       }
 
-      const iqproConfig = await resolveIQProConfig(context.orgId);
+      const paymentConfig = await resolvePaymentProviderConfig(context.orgId);
 
-      await reactivateMembershipLifecycle({ config: iqproConfig, ctx });
+      await reactivateMembershipLifecycle({ config: paymentConfig, ctx });
 
       await audit(context, AUDIT_ACTION.MEMBERSHIP_REACTIVATE, AUDIT_ENTITY_TYPE.MEMBERSHIP, {
         entityId: input.memberMembershipId,

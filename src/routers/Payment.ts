@@ -5,14 +5,32 @@ import { getTokenizationConfig } from '@/libs/IQPro';
 import { logger } from '@/libs/Logger';
 import { audit } from '@/services/AuditService';
 import { processMemberPayment, registerPaymentMethod as registerPaymentMethodService } from '@/services/MemberPaymentService';
-import { resolveIQProConfig } from '@/services/PaymentProviderConfigService';
+import { resolveIQProConfig, resolvePaymentProviderConfig } from '@/services/PaymentProviderConfigService';
 import { AUDIT_ACTION, AUDIT_ENTITY_TYPE } from '@/types/Audit';
 import { ORG_ROLE } from '@/types/Auth';
 import { ProcessPaymentValidation, RegisterPaymentMethodValidation } from '@/validations/PaymentValidation';
 
 import { guardRole } from './AuthGuards';
 
+/**
+ * The org's payment config, whichever provider it uses. This is what makes the
+ * per-org provider choice real: everything downstream switches on
+ * `config.provider`.
+ */
 async function requirePerOrgConfig(orgId: string) {
+  const config = await resolvePaymentProviderConfig(orgId);
+  if (!config) {
+    throw new ORPCError('Payment processing is not configured for this organization. Set merchant credentials in Payment Settings.', { status: 503 });
+  }
+  return config;
+}
+
+/**
+ * IQPro-only config, for the TokenEx iframe. Card tokenization is inherently
+ * provider-specific — Square uses its own Web Payments SDK — so a Square org
+ * gets a clear error here until B6 builds the Square tokenization path.
+ */
+async function requireIQProOnlyConfig(orgId: string) {
   const config = await resolveIQProConfig(orgId);
   if (!config) {
     throw new ORPCError('Payment processing is not configured for this organization. Set IQPro credentials in Payment Settings.', { status: 503 });
@@ -24,7 +42,7 @@ export const getTokenizationIframeConfig = os
   .input(z.object({ origin: z.string().url() }))
   .handler(async ({ input }) => {
     const context = await guardRole(ORG_ROLE.FRONT_DESK);
-    const config = await requirePerOrgConfig(context.orgId);
+    const config = await requireIQProOnlyConfig(context.orgId);
 
     try {
       return await getTokenizationConfig(config, input.origin);

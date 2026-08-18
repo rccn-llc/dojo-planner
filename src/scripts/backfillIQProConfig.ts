@@ -15,9 +15,10 @@
 
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
-import { encryptSecret } from '@/libs/Crypto';
 import { Env } from '@/libs/Env';
 import { organizationSchema } from '@/models/Schema';
+import { writeConfigBlob } from '@/services/PaymentProviderConfigService';
+import { PAYMENT_PROVIDER } from '@/types/PaymentProvider';
 
 async function main() {
   const orgIdArg = process.argv.find(a => a.startsWith('--orgId='));
@@ -39,9 +40,17 @@ async function main() {
   const pool = new Pool({ connectionString: Env.DATABASE_URL });
   const db = drizzle(pool);
 
-  const encrypted = encryptSecret(Env.IQPRO_CLIENT_SECRET);
+  // One encrypted blob rather than three columns (B3).
+  const encrypted = writeConfigBlob({
+    provider: PAYMENT_PROVIDER.IQPRO,
+    credentials: {
+      clientId: Env.IQPRO_CLIENT_ID,
+      clientSecret: Env.IQPRO_CLIENT_SECRET,
+      gatewayId: Env.IQPRO_GATEWAY_ID,
+    },
+  });
 
-  // Upsert: keep the row if it exists, only updating the IQPro config columns.
+  // Upsert: keep the row if it exists, only updating the payment config.
   const { eq } = await import('drizzle-orm');
   const existing = await db.select().from(organizationSchema).where(eq(organizationSchema.id, orgId)).limit(1);
   if (existing.length === 0) {
@@ -52,9 +61,8 @@ async function main() {
   await db
     .update(organizationSchema)
     .set({
-      iqproConfigClientId: Env.IQPRO_CLIENT_ID,
-      iqproConfigClientSecretEncrypted: encrypted,
-      iqproConfigGatewayId: Env.IQPRO_GATEWAY_ID,
+      paymentProvider: PAYMENT_PROVIDER.IQPRO,
+      paymentProviderConfigEncrypted: encrypted,
     })
     .where(eq(organizationSchema.id, orgId));
 

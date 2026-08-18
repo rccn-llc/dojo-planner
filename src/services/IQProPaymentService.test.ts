@@ -24,6 +24,7 @@ vi.mock('@/libs/Logger', () => ({
 }));
 
 const testConfig = {
+  provider: 'iqpro' as const,
   clientId: 'test-client-id',
   clientSecret: 'test-client-secret',
   gatewayId: 'test-gateway-001',
@@ -32,6 +33,13 @@ const testConfig = {
   baseUrl: 'https://sandbox.api.basyspro.com',
   source: 'env' as const,
 };
+
+/**
+ * What the IQPro transport receives: the provider narrows the union at its
+ * boundary and strips the `provider` discriminant, so `libs/IQPro` helpers see
+ * the plain `IQProConfig` they always did.
+ */
+const { provider: _provider, ...transportConfig } = testConfig;
 
 describe('IQProPaymentProvider', () => {
   beforeEach(() => {
@@ -81,7 +89,7 @@ describe('IQProPaymentProvider', () => {
       expect(result).toEqual({ customerId: 'cust_123', billingAddressId: 'addr_billing_1' });
 
       expect(iqproPost).toHaveBeenCalledWith(
-        testConfig,
+        transportConfig,
         '/api/gateway/test-gateway-001/customer',
         expect.objectContaining({
           name: 'Jane Doe',
@@ -104,7 +112,7 @@ describe('IQProPaymentProvider', () => {
         }),
       );
 
-      expect(iqproGet).toHaveBeenCalledWith(testConfig, '/api/gateway/test-gateway-001/customer/cust_123');
+      expect(iqproGet).toHaveBeenCalledWith(transportConfig, '/api/gateway/test-gateway-001/customer/cust_123');
     });
 
     it('skips the GET when no address is supplied', async () => {
@@ -144,7 +152,7 @@ describe('IQProPaymentProvider', () => {
       expect(result.last4).toBe('4242');
 
       expect(iqproPost).toHaveBeenCalledWith(
-        testConfig,
+        transportConfig,
         '/api/gateway/test-gateway-001/customer/cust_123/payment',
         {
           card: {
@@ -174,7 +182,7 @@ describe('IQProPaymentProvider', () => {
       expect(result.paymentMethodId).toBe('pm_ach_1');
       expect(result.achToken).toBe('ach-tok-xyz');
 
-      expect(tokenizeAch).toHaveBeenCalledWith(testConfig, {
+      expect(tokenizeAch).toHaveBeenCalledWith(transportConfig, {
         accountNumber: '987654321',
         routingNumber: '021000021',
         secCode: 'PPD',
@@ -182,7 +190,7 @@ describe('IQProPaymentProvider', () => {
       });
 
       expect(iqproPost).toHaveBeenCalledWith(
-        testConfig,
+        transportConfig,
         '/api/gateway/test-gateway-001/customer/cust_123/payment',
         {
           ach: {

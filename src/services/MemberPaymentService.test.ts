@@ -65,6 +65,7 @@ vi.mock('@/libs/IQPro', () => ({
 }));
 
 const testConfig = {
+  provider: 'iqpro' as const,
   clientId: 'test-client-id',
   clientSecret: 'test-client-secret',
   gatewayId: 'test-gateway-001',
@@ -82,11 +83,38 @@ vi.mock('@/libs/Logger', () => ({
   logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
 }));
 
+/**
+ * What `libs/IQPro` helpers receive: the `provider` discriminant is stripped
+ * when the union is narrowed for an IQPro-specific call.
+ */
+const { provider: _iqproProvider, ...transportConfig } = testConfig;
+
 const mockProvider = {
   createCustomer: vi.fn(),
   createPaymentMethod: vi.fn(),
   processPayment: vi.fn(),
   createSubscription: vi.fn(),
+  // Fees now route through the provider. Delegate to the mocked
+  // `computeFeeBreakdown` so the existing fee assertions below still describe
+  // what IQPro is asked for, and tag the provenance the IQPro provider reports:
+  // its service fee is API-quoted, its tax is local arithmetic.
+  computeFees: vi.fn(async (config: any, params: any) => {
+    const { computeFeeBreakdown } = await import('@/libs/IQPro');
+    // Mirror the real provider: narrow the union (dropping `provider`) before
+    // touching the IQPro transport, so assertions below see the same config
+    // shape production does.
+    const { provider: _p, ...iqpro } = config;
+    const breakdown = await (computeFeeBreakdown as any)(iqpro, params.baseAmount, params.isTaxable, params.taxStatePct, {
+      processorId: params.processorId,
+      ...(params.token ? { token: params.token } : {}),
+      ...(params.creditCardBin ? { creditCardBin: params.creditCardBin } : {}),
+    });
+    return { ...breakdown, provenance: { tax: 'local', serviceFee: 'provider' } };
+  }),
+  chargeOneTimeFee: vi.fn(),
+  cancelSubscription: vi.fn().mockResolvedValue({ success: true }),
+  setSubscriptionAutoRenewal: vi.fn().mockResolvedValue({ success: true }),
+  getSubscriptionPaymentMethod: vi.fn().mockResolvedValue(null),
 };
 
 vi.mock('./PaymentProviderService', async () => {
@@ -335,7 +363,7 @@ describe('processMemberPayment', () => {
 
     // Memberships are non-taxable by default; taxStatePct passed as 0
     expect(computeFeeBreakdown).toHaveBeenCalledWith(
-      testConfig,
+      transportConfig,
       100,
       false,
       0,
@@ -640,7 +668,7 @@ describe('processMemberPayment', () => {
       appliedCoupon: { id: 'cpn_1', code: 'SAVE25', type: 'Fixed Amount', amount: '999', description: '$25 off' },
     });
 
-    expect(computeFeeBreakdown).toHaveBeenCalledWith(testConfig, 75, false, 0, expect.any(Object));
+    expect(computeFeeBreakdown).toHaveBeenCalledWith(transportConfig, 75, false, 0, expect.any(Object));
   });
 
   it('Percentage coupon: discount applied before fee calc (from DB, not client)', async () => {
@@ -655,7 +683,7 @@ describe('processMemberPayment', () => {
       appliedCoupon: { id: 'cpn_2', code: 'TEN_PCT', type: 'Percentage', amount: '99', description: '10% off' },
     });
 
-    expect(computeFeeBreakdown).toHaveBeenCalledWith(testConfig, 90, false, 0, expect.any(Object));
+    expect(computeFeeBreakdown).toHaveBeenCalledWith(transportConfig, 90, false, 0, expect.any(Object));
   });
 
   it('rejects a coupon that is not found in the org (no cross-tenant/invalid redemption)', async () => {
@@ -748,7 +776,7 @@ describe('processMemberPayment', () => {
     await processMemberPayment(testConfig, { ...baseParams, isTaxable: true });
 
     // taxStatePct (3.75 from getOrganizationTaxRate mock) is threaded through as 3rd arg
-    expect(computeFeeBreakdown).toHaveBeenCalledWith(testConfig, 100, true, 3.75, expect.any(Object));
+    expect(computeFeeBreakdown).toHaveBeenCalledWith(transportConfig, 100, true, 3.75, expect.any(Object));
     expect(mockProvider.processPayment).toHaveBeenCalledWith(
       testConfig,
       expect.objectContaining({ isTaxable: true }),
@@ -765,7 +793,7 @@ describe('processMemberPayment', () => {
     await processMemberPayment(testConfig, { ...baseParams, isTaxable: true });
 
     expect(getOrganizationTaxRate).toHaveBeenCalledWith('org_x');
-    expect(computeFeeBreakdown).toHaveBeenCalledWith(testConfig, 100, true, 5.25, expect.any(Object));
+    expect(computeFeeBreakdown).toHaveBeenCalledWith(transportConfig, 100, true, 5.25, expect.any(Object));
   });
 
   it('isTaxable: false — does not call getOrganizationTaxRate', async () => {
@@ -778,7 +806,7 @@ describe('processMemberPayment', () => {
     await processMemberPayment(testConfig, { ...baseParams, isTaxable: false });
 
     expect(getOrganizationTaxRate).not.toHaveBeenCalled();
-    expect(computeFeeBreakdown).toHaveBeenCalledWith(testConfig, 100, false, 0, expect.any(Object));
+    expect(computeFeeBreakdown).toHaveBeenCalledWith(transportConfig, 100, false, 0, expect.any(Object));
   });
 
   // ── Saved-PM (vaulted) branch ────────────────────────────────────────────
@@ -826,9 +854,9 @@ describe('processMemberPayment', () => {
     expect(result.success).toBe(true);
     expect(mockProvider.createCustomer).not.toHaveBeenCalled();
     expect(mockProvider.createPaymentMethod).not.toHaveBeenCalled();
-    expect(getCustomerPaymentMethod).toHaveBeenCalledWith(testConfig, 'cust_have', 'pm_saved_1');
+    expect(getCustomerPaymentMethod).toHaveBeenCalledWith(transportConfig, 'cust_have', 'pm_saved_1');
     expect(computeFeeBreakdown).toHaveBeenCalledWith(
-      testConfig,
+      transportConfig,
       100,
       false,
       0,
@@ -1234,8 +1262,17 @@ describe('computeNextPaymentDate', () => {
 });
 
 describe('chargeOneTimeFee (resilience — #237)', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    // The IQPro half of this now lives in `IQProPaymentService`, so route the
+    // mock provider at the REAL implementation for these cases. Stubbing
+    // `chargeOneTimeFee` with a canned result would assert nothing about the
+    // resilience behaviour these tests exist to pin (#237, #WS4).
+    const { IQProPaymentProvider } = await import('./IQProPaymentService');
+    const real = new IQProPaymentProvider();
+    mockProvider.chargeOneTimeFee.mockImplementation(
+      (config: any, params: any) => real.chargeOneTimeFee(config, params),
+    );
   });
 
   it('returns a captured error (never throws) when the subscription fetch fails', async () => {
