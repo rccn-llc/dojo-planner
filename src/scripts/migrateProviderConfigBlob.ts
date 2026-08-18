@@ -31,13 +31,95 @@
  *   npx tsx src/scripts/migrateProviderConfigBlob.ts [--dry-run] [--reverse]
  */
 
+import { Buffer } from 'node:buffer';
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import process from 'node:process';
 import { sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
-import { decryptSecret, encryptSecret } from '@/libs/Crypto';
-import { Env } from '@/libs/Env';
-import { writeConfigBlob } from '@/services/PaymentProviderConfigService';
-import { PAYMENT_PROVIDER } from '@/types/PaymentProvider';
+import { PAYMENT_PROVIDER } from '../types/PaymentProvider';
+
+/**
+ * ── Why this script is self-contained ───────────────────────────────────────
+ *
+ * It deliberately does NOT import `@/libs/Env`, `@/libs/Crypto`, or
+ * `PaymentProviderConfigService`. `Env` validates the WHOLE application
+ * environment at import time — Clerk, Stripe, BILLING_PLAN_ENV, the public
+ * keys — and an operator pointing this at a remote database has no reason to
+ * hold any of that. Requiring it turned a two-variable job into a full app
+ * config. Same reasoning as `registerTenants.ts`.
+ *
+ * The AES-256-GCM format below is byte-identical to `libs/Crypto.ts`:
+ * base64( iv(12) || authTag(16) || ciphertext ). Keep them in step.
+ */
+
+/** Load `.env.local` then `.env` into process.env, without overriding a real env var. */
+function loadDotEnv(): void {
+  for (const file of ['.env.local', '.env']) {
+    const full = path.join(process.cwd(), file);
+    if (!existsSync(full)) {
+      continue;
+    }
+    for (const rawLine of readFileSync(full, 'utf8').split('\n')) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('#')) {
+        continue;
+      }
+      const eq = line.indexOf('=');
+      if (eq === -1) {
+        continue;
+      }
+      const key = line.slice(0, eq).trim();
+      if (process.env[key] !== undefined) {
+        continue;
+      }
+      let value = line.slice(eq + 1).trim();
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith('\'') && value.endsWith('\''))) {
+        value = value.slice(1, -1);
+      }
+      process.env[key] = value;
+    }
+  }
+}
+
+const ALGORITHM = 'aes-256-gcm';
+const IV_BYTES = 12;
+const TAG_BYTES = 16;
+
+function loadKey(): Buffer {
+  const hex = process.env.IQPRO_CONFIG_ENCRYPTION_KEY;
+  if (!hex) {
+    throw new Error('IQPRO_CONFIG_ENCRYPTION_KEY is not set; cannot encrypt or decrypt merchant secrets');
+  }
+  if (!/^[0-9a-f]{64}$/i.test(hex)) {
+    throw new Error('IQPRO_CONFIG_ENCRYPTION_KEY must be 64 hex chars (32 bytes)');
+  }
+  return Buffer.from(hex, 'hex');
+}
+
+function encryptSecret(plaintext: string): string {
+  const iv = randomBytes(IV_BYTES);
+  const cipher = createCipheriv(ALGORITHM, loadKey(), iv);
+  const enc = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  return Buffer.concat([iv, cipher.getAuthTag(), enc]).toString('base64');
+}
+
+function decryptSecret(ciphertextB64: string): string {
+  const raw = Buffer.from(ciphertextB64, 'base64');
+  if (raw.length <= IV_BYTES + TAG_BYTES) {
+    throw new Error('Ciphertext is too short to be valid');
+  }
+  const decipher = createDecipheriv(ALGORITHM, loadKey(), raw.subarray(0, IV_BYTES));
+  decipher.setAuthTag(raw.subarray(IV_BYTES, IV_BYTES + TAG_BYTES));
+  return Buffer.concat([decipher.update(raw.subarray(IV_BYTES + TAG_BYTES)), decipher.final()]).toString('utf8');
+}
+
+/** Mirrors `writeConfigBlob` in PaymentProviderConfigService. */
+function writeConfigBlob(config: { provider: string; credentials: Record<string, string> }): string {
+  return encryptSecret(JSON.stringify(config));
+}
 
 type LegacyRow = {
   id: string;
@@ -102,19 +184,21 @@ async function runReverse(db: ReturnType<typeof drizzle>, dryRun: boolean): Prom
 }
 
 async function main() {
+  loadDotEnv();
+
   const dryRun = process.argv.includes('--dry-run');
   const reverse = process.argv.includes('--reverse');
 
-  if (!Env.DATABASE_URL) {
+  if (!process.env.DATABASE_URL) {
     console.error('DATABASE_URL must be set.');
     process.exit(1);
   }
-  if (!Env.IQPRO_CONFIG_ENCRYPTION_KEY) {
+  if (!process.env.IQPRO_CONFIG_ENCRYPTION_KEY) {
     console.error('IQPRO_CONFIG_ENCRYPTION_KEY must be set — the blob is encrypted with it.');
     process.exit(1);
   }
 
-  const pool = new Pool({ connectionString: Env.DATABASE_URL, max: 1 });
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
   const db = drizzle(pool);
 
   try {
