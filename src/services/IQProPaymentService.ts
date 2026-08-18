@@ -13,21 +13,79 @@
  * `dojo-planner-kiosk/src/app/api/payment/{process,membership}/route.ts`.
  */
 
+import type { PaymentProviderConfig } from './PaymentProviderConfigService';
+
 import type {
+  ChargeFeeResult,
+  ChargeOneTimeFeeParams,
+  ComputeFeesParams,
   CreateCustomerParams,
   CreateCustomerResult,
   CreatePaymentMethodParams,
   CreatePaymentMethodResult,
   CreateSubscriptionParams,
+  FeeQuote,
   IPaymentProvider,
+  LifecycleActionResult,
   PaymentResult,
   ProcessPaymentParams,
+  SubscriptionPaymentMethod,
   SubscriptionResult,
 } from './PaymentProviderService';
-
 import type { IQProConfig } from '@/libs/IQPro';
-import { getGatewayProcessors, iqproGet, iqproPost, tokenizeAch } from '@/libs/IQPro';
+import { z } from 'zod';
+import {
+  assertTransactionApproved,
+  buildServiceFeeAdjustment,
+  computeFeeBreakdown,
+  getGatewayProcessors,
+  iqproGet,
+  iqproPost,
+  iqproPut,
+  tokenizeAch,
+} from '@/libs/IQPro';
 import { logger } from '@/libs/Logger';
+import { PAYMENT_PROVIDER } from '@/types/PaymentProvider';
+
+/**
+ * Narrow the union at the provider boundary.
+ *
+ * The interface hands every implementation a `PaymentProviderConfig`; this
+ * class only knows how to talk to IQPro. Routing a Square org's config here
+ * would charge the wrong merchant account, so it is a hard failure rather
+ * than a best-effort attempt.
+ *
+ * Everything below this call keeps using `IQProConfig` unchanged.
+ */
+function requireIQPro(config: PaymentProviderConfig): IQProConfig {
+  if (config.provider !== PAYMENT_PROVIDER.IQPRO) {
+    throw new TypeError(
+      `IQProPaymentProvider received a "${config.provider}" config. This is a routing bug — the factory should have returned that provider's implementation.`,
+    );
+  }
+  const { provider: _provider, ...iqpro } = config;
+  return iqpro;
+}
+
+/**
+ * Shape of the IQPro subscription-lookup response we depend on for resolving a
+ * vaulted payment method. All fields are optional/lenient — IQPro may omit any
+ * of them — but parsing once (instead of a chain of `as Record<string,unknown>`
+ * casts) means a real shape change surfaces as a parse result we can reason
+ * about rather than a silent `undefined` charged on a fallback BIN (#WS4).
+ */
+const IQProSubscriptionResponseSchema = z.object({
+  customer: z.object({ customerId: z.string().optional() }).partial().optional(),
+  paymentMethod: z.object({
+    customerPaymentMethod: z.object({
+      paymentMethodId: z.string().optional(),
+      card: z.object({
+        maskedNumber: z.string().optional(),
+        maskedCard: z.string().optional(),
+      }).partial().optional(),
+    }).partial().optional(),
+  }).partial().optional(),
+}).partial();
 
 /** Strip a phone string to digits only, max 10 characters (IQPro limit). */
 function sanitizePhone(phone?: string): string | undefined {
@@ -49,7 +107,8 @@ function normalizeCountry(country?: string): string {
 }
 
 export class IQProPaymentProvider implements IPaymentProvider {
-  async createCustomer(config: IQProConfig, params: CreateCustomerParams): Promise<CreateCustomerResult> {
+  async createCustomer(providerConfig: PaymentProviderConfig, params: CreateCustomerParams): Promise<CreateCustomerResult> {
+    const config = requireIQPro(providerConfig);
     const gatewayId = config.gatewayId;
 
     logger.info('[IQPro] Creating customer', { memberId: params.memberId });
@@ -101,7 +160,8 @@ export class IQProPaymentProvider implements IPaymentProvider {
     return { customerId, billingAddressId };
   }
 
-  async createPaymentMethod(config: IQProConfig, params: CreatePaymentMethodParams): Promise<CreatePaymentMethodResult> {
+  async createPaymentMethod(providerConfig: PaymentProviderConfig, params: CreatePaymentMethodParams): Promise<CreatePaymentMethodResult> {
+    const config = requireIQPro(providerConfig);
     const gatewayId = config.gatewayId;
 
     logger.info('[IQPro] Creating payment method', {
@@ -209,7 +269,8 @@ export class IQProPaymentProvider implements IPaymentProvider {
     };
   }
 
-  async processPayment(config: IQProConfig, params: ProcessPaymentParams): Promise<PaymentResult> {
+  async processPayment(providerConfig: PaymentProviderConfig, params: ProcessPaymentParams): Promise<PaymentResult> {
+    const config = requireIQPro(providerConfig);
     const gatewayId = config.gatewayId;
     const isAch = !!params.ach;
     const vaulted = !!params.vaulted;
@@ -406,7 +467,8 @@ export class IQProPaymentProvider implements IPaymentProvider {
     }
   }
 
-  async createSubscription(config: IQProConfig, params: CreateSubscriptionParams): Promise<SubscriptionResult> {
+  async createSubscription(providerConfig: PaymentProviderConfig, params: CreateSubscriptionParams): Promise<SubscriptionResult> {
+    const config = requireIQPro(providerConfig);
     const gatewayId = config.gatewayId;
     const processors = await getGatewayProcessors(config);
 
@@ -558,5 +620,253 @@ export class IQProPaymentProvider implements IPaymentProvider {
         error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
+  }
+
+  // ===== Fees =====
+
+  /**
+   * IQPro quotes the service fee via `/transaction/calculatefees` but has no
+   * tax API, so tax stays local arithmetic over the org's configured rate.
+   * The returned provenance says exactly that — see `FeeProvenance`.
+   */
+  async computeFees(config: PaymentProviderConfig, params: ComputeFeesParams): Promise<FeeQuote> {
+    const iqpro = requireIQPro(config);
+    const breakdown = await computeFeeBreakdown(
+      iqpro,
+      params.baseAmount,
+      params.isTaxable,
+      params.taxStatePct,
+      {
+        processorId: params.processorId,
+        creditCardBin: params.creditCardBin,
+        token: params.token,
+      },
+    );
+    return { ...breakdown, provenance: { tax: 'local', serviceFee: 'provider' } };
+  }
+
+  // ===== Subscription lifecycle =====
+
+  /**
+   * Charge a one-time fee against the payment method saved on an existing
+   * subscription. Payload mirrors the kiosk's cancellation-fee Sale
+   * byte-for-byte; `MemberPaymentService.payloads.test.ts` pins it.
+   *
+   * Every IQPro call here is inside the try — a failure anywhere (including
+   * the initial subscription fetch against a synthetic/seed id, the processor
+   * lookup, or the fee calculation) must degrade to a returned error rather
+   * than throw, so a fee-charge failure is a partial success in the caller and
+   * never a 500 (#237).
+   */
+  async chargeOneTimeFee(config: PaymentProviderConfig, params: ChargeOneTimeFeeParams): Promise<ChargeFeeResult> {
+    const iqpro = requireIQPro(config);
+    const gatewayId = iqpro.gatewayId;
+    const baseAmount = Math.round(params.amount * 100) / 100;
+
+    if (baseAmount <= 0) {
+      return { success: true, amountCharged: 0 };
+    }
+
+    try {
+      const resolved = await this.getSubscriptionPaymentMethod(config, params.providerSubscriptionId);
+      if (!resolved?.paymentMethodId) {
+        return {
+          success: false,
+          error: 'No saved payment method on the existing subscription. Cannot charge fee.',
+        };
+      }
+
+      const customerId = resolved.customerId || params.providerCustomerId;
+      const { paymentMethodId: pmId, paymentMethodName } = resolved;
+
+      // /calculatefees needs processorId + BIN for cards. Fall back to '400000'
+      // for the test BIN when the vault doesn't expose one — matches kiosk.
+      const { cardProcessorId, achProcessorId } = await getGatewayProcessors(iqpro);
+      const processorId = paymentMethodName === 'card' ? cardProcessorId : achProcessorId;
+      if (!processorId) {
+        return { success: false, error: `No ${paymentMethodName} processor configured` };
+      }
+
+      // Cancellation / hold fees are NOT taxable (per Basys guidance on non-store charges).
+      const serverFees = await this.computeFees(config, {
+        baseAmount,
+        isTaxable: false,
+        taxStatePct: 0,
+        processorId,
+        creditCardBin: paymentMethodName === 'card' ? resolved.cardBin : undefined,
+      });
+      const paymentAdjustments: Array<Record<string, unknown>> = [buildServiceFeeAdjustment(serverFees)];
+
+      const feeTxPayload = {
+        type: 'Sale',
+        remit: {
+          baseAmount: serverFees.baseAmount,
+          taxAmount: serverFees.taxAmount,
+          isTaxExempt: serverFees.taxAmount <= 0,
+          currencyCode: 'USD',
+          addTaxToTotal: true,
+          paymentAdjustments,
+        },
+        paymentMethod: {
+          customer: {
+            customerId,
+            customerPaymentMethodId: pmId,
+          },
+        },
+        lineItems: [
+          {
+            name: params.caption,
+            description: params.description,
+            quantity: 1,
+            unitPrice: baseAmount,
+            discount: 0,
+            freightAmount: 0,
+            unitOfMeasureId: 1,
+            localTaxPercent: 0,
+            nationalTaxPercent: 0,
+          },
+        ],
+        caption: params.caption,
+      };
+
+      const txRes = await iqproPost<{ data?: Record<string, unknown> }>(
+        iqpro,
+        `/api/gateway/${gatewayId}/transaction`,
+        feeTxPayload,
+      );
+      const txRaw = txRes.data ?? txRes;
+      const txData = ((txRaw as Record<string, unknown>).transaction ?? txRaw) as Record<string, unknown>;
+      assertTransactionApproved(txData);
+
+      const transactionId = (txData.transactionId ?? txData.id ?? '') as string;
+
+      return {
+        success: true,
+        amountCharged: serverFees.amount,
+        transactionId,
+        paymentMethodName,
+        feeBreakdown: serverFees,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      logger.error('[IQPro] One-time fee charge failed', {
+        providerSubscriptionId: params.providerSubscriptionId,
+        error: message,
+      });
+      return { success: false, error: message };
+    }
+  }
+
+  /**
+   * Cancel via the dedicated cancel endpoint. Idempotent from the caller's
+   * perspective — failures are logged and returned rather than thrown so the
+   * local DB cleanup can still proceed.
+   */
+  async cancelSubscription(
+    config: PaymentProviderConfig,
+    subscriptionId: string,
+    opts?: { endOfBillingPeriod?: boolean },
+  ): Promise<LifecycleActionResult> {
+    const iqpro = requireIQPro(config);
+    try {
+      await iqproPost(
+        iqpro,
+        `/api/gateway/${iqpro.gatewayId}/subscription/${subscriptionId}/cancel`,
+        {
+          cancel: {
+            now: !opts?.endOfBillingPeriod,
+            endOfBillingPeriod: !!opts?.endOfBillingPeriod,
+          },
+        },
+      );
+      return { success: true };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      logger.error('[IQPro] Subscription cancel failed', { subscriptionId, error: message });
+      return { success: false, error: message };
+    }
+  }
+
+  /**
+   * Toggle auto-renewal: pause (false) when placing a member on hold, resume
+   * (true) on reactivation. Mirrors the kiosk's PUT recurrence payload exactly
+   * so the two apps don't drift.
+   *
+   * Note `billingPeriodId` is lifted out of the nested `billingPeriod` object —
+   * IQPro returns it nested on GET and expects it flat on PUT.
+   */
+  async setSubscriptionAutoRenewal(
+    config: PaymentProviderConfig,
+    subscriptionId: string,
+    isAutoRenewed: boolean,
+  ): Promise<LifecycleActionResult> {
+    const iqpro = requireIQPro(config);
+    const subPath = `/api/gateway/${iqpro.gatewayId}/subscription/${subscriptionId}`;
+    try {
+      const subRes = await iqproGet<{ data?: Record<string, unknown> }>(iqpro, subPath);
+      const sub = (subRes.data ?? subRes) as Record<string, unknown>;
+      const recurrence = sub.recurrence as Record<string, unknown> | undefined;
+
+      const putPayload: Record<string, unknown> = {
+        name: sub.name,
+        prefix: sub.prefix,
+      };
+      if (recurrence) {
+        putPayload.recurrence = {
+          termStartDate: recurrence.termStartDate,
+          billingStartDate: recurrence.billingStartDate,
+          isAutoRenewed,
+          allowProration: recurrence.allowProration,
+          trialLengthInDays: recurrence.trialLengthInDays,
+          invoiceLengthInDays: recurrence.invoiceLengthInDays,
+          billingPeriodId: (recurrence.billingPeriod as Record<string, unknown> | undefined)?.billingPeriodId,
+          schedule: recurrence.schedule,
+        };
+      }
+
+      await iqproPut(iqpro, subPath, putPayload);
+      return { success: true };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      logger.error('[IQPro] Subscription update failed', { subscriptionId, isAutoRenewed, error: message });
+      return { success: false, error: message };
+    }
+  }
+
+  /**
+   * Resolve the saved payment method on a subscription. IQPro lets us
+   * reference it by `customerPaymentMethodId` on a later Sale.
+   *
+   * Returns null (rather than throwing) when the subscription can't be read,
+   * so callers on the lifecycle path degrade rather than 500.
+   */
+  async getSubscriptionPaymentMethod(
+    config: PaymentProviderConfig,
+    subscriptionId: string,
+  ): Promise<(SubscriptionPaymentMethod & { cardBin?: string }) | null> {
+    const iqpro = requireIQPro(config);
+    const subRes = await iqproGet<{ data?: Record<string, unknown> }>(
+      iqpro,
+      `/api/gateway/${iqpro.gatewayId}/subscription/${subscriptionId}`,
+    );
+    const sub = IQProSubscriptionResponseSchema.parse(subRes.data ?? subRes);
+    const custPM = sub.paymentMethod?.customerPaymentMethod;
+    const paymentMethodId = custPM?.paymentMethodId ?? '';
+
+    if (!paymentMethodId) {
+      return null;
+    }
+
+    const paymentMethodName: 'card' | 'ach' = custPM?.card ? 'card' : 'ach';
+    const cardInfo = custPM?.card;
+    const maskedNumber = cardInfo?.maskedNumber ?? cardInfo?.maskedCard ?? '';
+    const cardBin = maskedNumber && maskedNumber.length >= 6 ? maskedNumber.slice(0, 6) : '400000';
+
+    return {
+      customerId: sub.customer?.customerId ?? '',
+      paymentMethodId,
+      paymentMethodName,
+      cardBin,
+    };
   }
 }

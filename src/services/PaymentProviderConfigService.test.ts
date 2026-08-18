@@ -93,12 +93,13 @@ describe('PaymentProviderConfigService', () => {
       expect(config?.source).toBe('env');
     });
 
-    it('prefers DB values over env on a per-field basis', async () => {
+    it('prefers the stored blob over env', async () => {
       const { encryptSecret } = await import('@/libs/Crypto');
       orgFindFirst.mockResolvedValueOnce({
-        iqproConfigClientId: 'org-client',
-        iqproConfigClientSecretEncrypted: encryptSecret('org-secret'),
-        iqproConfigGatewayId: 'org-gateway',
+        paymentProviderConfigEncrypted: encryptSecret(JSON.stringify({
+          provider: 'iqpro',
+          credentials: { clientId: 'org-client', clientSecret: 'org-secret', gatewayId: 'org-gateway' },
+        })),
       });
       const { resolveIQProConfig } = await import('./PaymentProviderConfigService');
       const config = await resolveIQProConfig('org_x');
@@ -109,16 +110,41 @@ describe('PaymentProviderConfigService', () => {
       expect(config?.source).toBe('org');
     });
 
-    it('tags source as "mixed" when only some fields come from DB', async () => {
+    it('ignores a blob belonging to a DIFFERENT provider and falls back to env', async () => {
+      // Defensive: a Square blob on an org resolving IQPro credentials must not
+      // be read as IQPro credentials. Guards against charging the wrong
+      // merchant if the discriminator column and blob ever disagree.
+      const { encryptSecret } = await import('@/libs/Crypto');
       orgFindFirst.mockResolvedValueOnce({
-        iqproConfigClientId: 'org-client',
+        paymentProviderConfigEncrypted: encryptSecret(JSON.stringify({
+          provider: 'square',
+          credentials: {
+            accessToken: 'sq-token',
+            locationId: 'sq-loc',
+            applicationId: 'sq-app',
+            environment: 'sandbox',
+            webhookSignatureKey: 'sq-sig',
+          },
+        })),
       });
       const { resolveIQProConfig } = await import('./PaymentProviderConfigService');
       const config = await resolveIQProConfig('org_x');
 
-      expect(config?.source).toBe('mixed');
-      expect(config?.clientId).toBe('org-client');
-      expect(config?.clientSecret).toBe('env-client-secret');
+      expect(config?.clientId).toBe('env-client-id');
+      expect(config?.source).toBe('env');
+    });
+
+    it('throws on a structurally invalid blob rather than falling back', async () => {
+      // Readable ciphertext but the wrong shape means corrupt or
+      // partially-written data. Falling back to env here could silently charge
+      // a different merchant, so it is a hard failure.
+      const { encryptSecret } = await import('@/libs/Crypto');
+      orgFindFirst.mockResolvedValueOnce({
+        paymentProviderConfigEncrypted: encryptSecret(JSON.stringify({ provider: 'iqpro', credentials: { clientId: 'only-this' } })),
+      });
+      const { resolveIQProConfig } = await import('./PaymentProviderConfigService');
+
+      await expect(resolveIQProConfig('org_x')).rejects.toThrow(/malformed/i);
     });
 
     it('caches the resolved config (second call does not hit the DB)', async () => {
@@ -146,9 +172,10 @@ describe('PaymentProviderConfigService', () => {
     it('never returns the secret value, only hasSecret', async () => {
       const { encryptSecret } = await import('@/libs/Crypto');
       orgFindFirst.mockResolvedValueOnce({
-        iqproConfigClientId: 'org-client',
-        iqproConfigClientSecretEncrypted: encryptSecret('super-secret'),
-        iqproConfigGatewayId: 'org-gateway',
+        paymentProviderConfigEncrypted: encryptSecret(JSON.stringify({
+          provider: 'iqpro',
+          credentials: { clientId: 'org-client', clientSecret: 'super-secret', gatewayId: 'org-gateway' },
+        })),
       });
       const { getIQProConfigForAdmin } = await import('./PaymentProviderConfigService');
       const projection = await getIQProConfigForAdmin('org_x');
@@ -160,26 +187,51 @@ describe('PaymentProviderConfigService', () => {
   });
 
   describe('updateIQProConfig', () => {
-    it('encrypts the secret before persisting', async () => {
+    it('encrypts the credentials before persisting', async () => {
       orgFindFirst.mockResolvedValueOnce({});
       const { updateIQProConfig } = await import('./PaymentProviderConfigService');
       await updateIQProConfig('org_x', { clientId: 'c', clientSecret: 'shhh', gatewayId: 'g' });
 
       const payload = insertValues.mock.calls[0]?.[0] as Record<string, unknown>;
+      const blob = payload.paymentProviderConfigEncrypted as string;
 
-      expect(payload.iqproConfigClientSecretEncrypted).toBeTypeOf('string');
-      expect(payload.iqproConfigClientSecretEncrypted).not.toBe('shhh');
+      expect(blob).toBeTypeOf('string');
+      expect(blob).not.toContain('shhh');
+      expect(payload.paymentProvider).toBe('iqpro');
     });
 
-    it('does NOT touch the secret column when clientSecret is blank/omitted', async () => {
-      orgFindFirst.mockResolvedValueOnce({ iqproConfigClientId: 'old' });
+    it('PRESERVES the stored secret when clientSecret is blank/omitted', async () => {
+      // The settings form never sends the secret back to the browser, so an
+      // admin editing only the client/gateway id submits it blank. Because the
+      // blob is a single value, an overwrite would silently blank the secret
+      // and break the org's payments — so the update MERGES.
+      const { encryptSecret, decryptSecret } = await import('@/libs/Crypto');
+      orgFindFirst.mockResolvedValueOnce({
+        paymentProviderConfigEncrypted: encryptSecret(JSON.stringify({
+          provider: 'iqpro',
+          credentials: { clientId: 'old', clientSecret: 'keep-me', gatewayId: 'old-gw' },
+        })),
+      });
       const { updateIQProConfig } = await import('./PaymentProviderConfigService');
       const diff = await updateIQProConfig('org_x', { clientId: 'new', gatewayId: 'g' });
 
       const payload = insertValues.mock.calls[0]?.[0] as Record<string, unknown>;
+      const stored = JSON.parse(decryptSecret(payload.paymentProviderConfigEncrypted as string));
 
-      expect(payload).not.toHaveProperty('iqproConfigClientSecretEncrypted');
+      expect(stored.credentials.clientSecret).toBe('keep-me');
+      expect(stored.credentials.clientId).toBe('new');
       expect(diff.clientSecretChanged).toBe(false);
+    });
+
+    it('refuses the first save when no secret is supplied', async () => {
+      // No stored blob to merge with, so there is nothing to preserve — better
+      // a clear error than writing credentials that cannot authenticate.
+      orgFindFirst.mockResolvedValueOnce({});
+      const { updateIQProConfig } = await import('./PaymentProviderConfigService');
+
+      await expect(updateIQProConfig('org_x', { clientId: 'c', gatewayId: 'g' }))
+        .rejects
+        .toThrow(/client secret is required/i);
     });
 
     it('reports clientSecretChanged=true when a new secret is provided', async () => {
@@ -434,14 +486,12 @@ describe('PaymentProviderConfigService', () => {
     // back to env credentials, which would charge a different merchant account.
     it('throws rather than falling back to env credentials', async () => {
       orgFindFirst.mockResolvedValueOnce({
-        iqproConfigClientId: 'db-client',
-        iqproConfigClientSecretEncrypted: 'not-valid-ciphertext',
-        iqproConfigGatewayId: 'db-gateway',
+        paymentProviderConfigEncrypted: 'not-valid-ciphertext',
       });
       const { resolveIQProConfig } = await import('./PaymentProviderConfigService');
 
       await expect(resolveIQProConfig('org_bad')).rejects.toThrow(
-        /Failed to decrypt stored IQPro client secret/,
+        /Failed to decrypt stored payment provider credentials/,
       );
     });
 

@@ -66,15 +66,14 @@ export const organizationSchema = pgTable(
       .$type<PaymentProvider>()
       .notNull()
       .default(PAYMENT_PROVIDER.IQPRO),
-    // Encrypted per-provider merchant credentials. Populated in phase B3, when
-    // the provider abstraction stops taking an IQPro-shaped config; until then
-    // the `iqpro_config_*` columns below remain the live source.
+    // Encrypted per-provider merchant credentials: ONE AES-GCM blob holding
+    // `{ provider, credentials }` (see StoredProviderConfig in
+    // PaymentProviderConfigService). Replaced the three `iqpro_config_*`
+    // columns in B3 — a column pair per credential per provider does not
+    // scale, and the blob keeps a provider's credential set atomic.
+    // Null means "never configured": the resolver falls back to IQPRO_* /
+    // SQUARE_* env vars, which is how single-tenant deployments work.
     paymentProviderConfigEncrypted: text('payment_provider_config_enc'),
-    // Per-org IQPro merchant credentials (override of IQPRO_* env vars).
-    // Superseded by paymentProviderConfigEncrypted in B3.
-    iqproConfigClientId: text('iqpro_config_client_id'),
-    iqproConfigClientSecretEncrypted: text('iqpro_config_client_secret_enc'),
-    iqproConfigGatewayId: text('iqpro_config_gateway_id'),
     updatedAt: timestamp('updated_at', { mode: 'date' })
       .defaultNow()
       .$onUpdate(() => new Date())

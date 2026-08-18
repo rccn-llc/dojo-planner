@@ -70,6 +70,7 @@ vi.mock('@/libs/IQPro', () => ({
 }));
 
 const testConfig = {
+  provider: 'iqpro' as const,
   clientId: 'test-client-id',
   clientSecret: 'test-client-secret',
   gatewayId: 'test-gateway-001',
@@ -92,6 +93,27 @@ const mockProvider = {
   createPaymentMethod: vi.fn(),
   processPayment: vi.fn(),
   createSubscription: vi.fn(),
+  // Fees now route through the provider. Delegate to the mocked
+  // `computeFeeBreakdown` so the existing fee assertions below still describe
+  // what IQPro is asked for, and tag the provenance the IQPro provider reports:
+  // its service fee is API-quoted, its tax is local arithmetic.
+  computeFees: vi.fn(async (config: any, params: any) => {
+    const { computeFeeBreakdown } = await import('@/libs/IQPro');
+    // Mirror the real provider: narrow the union (dropping `provider`) before
+    // touching the IQPro transport, so assertions below see the same config
+    // shape production does.
+    const { provider: _p, ...iqpro } = config;
+    const breakdown = await (computeFeeBreakdown as any)(iqpro, params.baseAmount, params.isTaxable, params.taxStatePct, {
+      processorId: params.processorId,
+      ...(params.token ? { token: params.token } : {}),
+      ...(params.creditCardBin ? { creditCardBin: params.creditCardBin } : {}),
+    });
+    return { ...breakdown, provenance: { tax: 'local', serviceFee: 'provider' } };
+  }),
+  chargeOneTimeFee: vi.fn(),
+  cancelSubscription: vi.fn().mockResolvedValue({ success: true }),
+  setSubscriptionAutoRenewal: vi.fn().mockResolvedValue({ success: true }),
+  getSubscriptionPaymentMethod: vi.fn().mockResolvedValue(null),
 };
 
 vi.mock('./PaymentProviderService', async () => {

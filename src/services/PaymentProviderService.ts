@@ -1,13 +1,22 @@
 /**
  * Payment provider abstraction layer.
  *
- * Defines a provider-agnostic interface for member payment operations.
- * Currently IQPro is the active provider. Stripe can be added by
- * implementing `IPaymentProvider` and updating `getPaymentProvider()`.
+ * Defines a provider-agnostic interface for member payment operations. Each
+ * organization picks its provider via `organization.payment_provider`; the
+ * choice governs EVERY member-facing charge that org takes — memberships,
+ * lifecycle fees, events, and the kiosk store. Platform SaaS billing is
+ * separate and IQPro-only (see `resolvePlatformIQProConfig`).
+ *
+ * IQPro is the only implementation today. Square arrives in B4: implement
+ * `IPaymentProvider`, then add its branch to `getPaymentProvider()` — the
+ * exhaustiveness check there turns a missing branch into a compile error
+ * rather than a runtime surprise.
  */
 
 import type { BillingType, PaymentMethod } from '@/hooks/useAddMemberWizard';
-import type { IQProConfig } from '@/libs/IQPro';
+import type { PaymentProviderConfig } from '@/services/PaymentProviderConfigService';
+import type { PaymentProvider } from '@/types/PaymentProvider';
+import { PAYMENT_PROVIDER } from '@/types/PaymentProvider';
 
 // ===== Provider-agnostic types =====
 
@@ -63,12 +72,11 @@ export type CreatePaymentMethodResult = {
 };
 
 /**
- * Server-authoritative fee breakdown produced by `computeFeeBreakdown` in
- * libs/IQPro.ts. Tax is computed locally from the org's per-tenant tax rate
- * (organization.location_tax_rate, taxable transactions only); service fee is
- * computed by IQPro's /calculatefees endpoint. Passed into `processPayment`
- * and `createSubscription` so the `remit` block + Tax / ServiceFee
- * paymentAdjustments reconcile exactly with what IQPro will charge.
+ * Fee breakdown passed into `processPayment` / `createSubscription` so the
+ * provider's charge reconciles exactly with what was quoted.
+ *
+ * See `FeeProvenance` for which of these numbers the provider actually
+ * attested to — it is NOT all of them on every provider.
  */
 export type FeeBreakdown = {
   baseAmount: number;
@@ -77,6 +85,50 @@ export type FeeBreakdown = {
   serviceFeeAmount: number;
   serviceFeePct: number;
   amount: number;
+};
+
+/**
+ * Where each money figure in a `FeeBreakdown` came from.
+ *
+ * The standing rule for this codebase is that every tax and fee amount shown,
+ * persisted, or reported should be the value the provider's API returned — not
+ * one this app calculated — so displayed, charged, and settled figures cannot
+ * drift. **IQPro cannot fully satisfy that rule**, and pretending otherwise
+ * would be worse than saying so:
+ *
+ * | Provider | tax | serviceFee |
+ * |---|---|---|
+ * | IQPro | `local` — no tax API exists; computed as `base × rate` in `computeFeeBreakdown` | `provider` — `/transaction/calculatefees` |
+ * | Square (B4) | `provider` — `POST /v2/orders/calculate` | `provider` — same call |
+ *
+ * Recording this alongside the amounts means an audit can tell which figures
+ * are provider-attested and which are ours, instead of having to infer it from
+ * which provider the org happened to be on at the time.
+ */
+export type FeeProvenance = {
+  tax: 'provider' | 'local';
+  serviceFee: 'provider' | 'local';
+};
+
+/** A fee breakdown together with the provenance of its figures. */
+export type FeeQuote = FeeBreakdown & { provenance: FeeProvenance };
+
+export type ComputeFeesParams = {
+  baseAmount: number;
+  isTaxable: boolean;
+  /**
+   * The org's tax rate. Used only by providers whose tax is `local`; a
+   * provider that computes tax itself ignores this and reports
+   * `provenance.tax === 'provider'`.
+   */
+  taxStatePct: number;
+  /**
+   * Gateway processor id. Required by IQPro's /calculatefees; resolve it via
+   * `getGatewayProcessors` and pick card vs ACH before calling.
+   */
+  processorId: string;
+  creditCardBin?: string;
+  token?: string;
 };
 
 export type TransactionLineItem = {
@@ -213,34 +265,135 @@ export type SubscriptionResult = {
   error?: string;
 };
 
+// ===== Lifecycle types =====
+
+/** Result of a best-effort one-time fee charge (cancellation / hold fee). */
+export type ChargeFeeResult = {
+  success: boolean;
+  /** Total captured, inclusive of fees. Absent when nothing was charged. */
+  amountCharged?: number;
+  transactionId?: string;
+  /** Set when the charge could not proceed. Callers degrade, never throw. */
+  error?: string;
+  /** Card vs bank, resolved from the saved payment method. */
+  paymentMethodName?: 'card' | 'ach';
+  feeBreakdown?: FeeQuote;
+};
+
+export type ChargeOneTimeFeeParams = {
+  providerSubscriptionId: string;
+  providerCustomerId: string;
+  amount: number;
+  description: string;
+  caption: string;
+};
+
+/** A saved payment method resolved from an existing subscription. */
+export type SubscriptionPaymentMethod = {
+  customerId: string;
+  paymentMethodId: string;
+  paymentMethodName: 'card' | 'ach';
+};
+
+export type LifecycleActionResult = { success: boolean; error?: string };
+
 // ===== Provider interface =====
 //
-// Each method receives an `IQProConfig` so the provider can target the right
-// merchant gateway for the call (per-org for customer payments, platform for
-// SaaS billing). Resolved by the caller and passed in.
+// Every method takes the org's resolved `PaymentProviderConfig`, so the
+// implementation targets the right merchant account. The config is a
+// discriminated union — an implementation narrows it at its own boundary and
+// rejects a config belonging to a different provider.
+//
+// The four lifecycle methods below were previously raw IQPro calls inlined in
+// MemberPaymentService, bypassing this interface entirely. That meant a Square
+// org's hold/cancel would have charged the platform's IQPro merchant. They are
+// on the interface now so that cannot happen.
 
 export type IPaymentProvider = {
-  createCustomer: (config: IQProConfig, params: CreateCustomerParams) => Promise<CreateCustomerResult>;
-  createPaymentMethod: (config: IQProConfig, params: CreatePaymentMethodParams) => Promise<CreatePaymentMethodResult>;
-  processPayment: (config: IQProConfig, params: ProcessPaymentParams) => Promise<PaymentResult>;
-  createSubscription: (config: IQProConfig, params: CreateSubscriptionParams) => Promise<SubscriptionResult>;
+  createCustomer: (config: PaymentProviderConfig, params: CreateCustomerParams) => Promise<CreateCustomerResult>;
+  createPaymentMethod: (config: PaymentProviderConfig, params: CreatePaymentMethodParams) => Promise<CreatePaymentMethodResult>;
+  processPayment: (config: PaymentProviderConfig, params: ProcessPaymentParams) => Promise<PaymentResult>;
+  createSubscription: (config: PaymentProviderConfig, params: CreateSubscriptionParams) => Promise<SubscriptionResult>;
+
+  /** Server-authoritative fee quote. See `FeeProvenance`. */
+  computeFees: (config: PaymentProviderConfig, params: ComputeFeesParams) => Promise<FeeQuote>;
+
+  /**
+   * Charge a one-time fee against the payment method saved on an existing
+   * subscription. Best-effort: returns `success: false` rather than throwing,
+   * so a failed fee degrades to a partial success instead of a 500 (#237).
+   */
+  chargeOneTimeFee: (config: PaymentProviderConfig, params: ChargeOneTimeFeeParams) => Promise<ChargeFeeResult>;
+
+  /** Cancel a subscription. Errors are returned so local cleanup proceeds. */
+  cancelSubscription: (
+    config: PaymentProviderConfig,
+    subscriptionId: string,
+    opts?: { endOfBillingPeriod?: boolean },
+  ) => Promise<LifecycleActionResult>;
+
+  /** Pause (false) or resume (true) a subscription's auto-renewal. */
+  setSubscriptionAutoRenewal: (
+    config: PaymentProviderConfig,
+    subscriptionId: string,
+    isAutoRenewed: boolean,
+  ) => Promise<LifecycleActionResult>;
+
+  /**
+   * Resolve the saved payment method on a subscription. Used when creating a
+   * recurring hold-fee subscription against the member's existing card.
+   * Returns null when the subscription or its payment method can't be read.
+   */
+  getSubscriptionPaymentMethod: (
+    config: PaymentProviderConfig,
+    subscriptionId: string,
+  ) => Promise<SubscriptionPaymentMethod | null>;
 };
 
 // ===== Factory =====
 
-let cachedProvider: IPaymentProvider | null = null;
+/**
+ * Cached per provider, not globally. A single shared slot could only ever hold
+ * one implementation, so an org on Square would be served whichever provider
+ * happened to be constructed first.
+ */
+const providerCache = new Map<PaymentProvider, IPaymentProvider>();
 
-export async function getPaymentProvider(): Promise<IPaymentProvider> {
-  if (!cachedProvider) {
-    const { IQProPaymentProvider } = await import('./IQProPaymentService');
-    cachedProvider = new IQProPaymentProvider();
+export async function getPaymentProvider(config: PaymentProviderConfig): Promise<IPaymentProvider> {
+  const cached = providerCache.get(config.provider);
+  if (cached) {
+    return cached;
   }
-  return cachedProvider;
+
+  let provider: IPaymentProvider;
+  switch (config.provider) {
+    case PAYMENT_PROVIDER.IQPRO: {
+      const { IQProPaymentProvider } = await import('./IQProPaymentService');
+      provider = new IQProPaymentProvider();
+      break;
+    }
+    // B4 adds `case PAYMENT_PROVIDER.SQUARE`. Until then the exhaustiveness
+    // check below makes a Square org fail loudly at its first charge rather
+    // than silently falling through to IQPro and billing the wrong merchant.
+    default:
+      throw new UnsupportedProviderError(config.provider);
+  }
+
+  providerCache.set(config.provider, provider);
+  return provider;
 }
 
-// Exported for testing – reset cached provider
+/** Thrown when an org selects a provider that has no implementation yet. */
+export class UnsupportedProviderError extends Error {
+  constructor(provider: string) {
+    super(`Payment provider "${provider}" is selected for this organization but is not implemented yet.`);
+    this.name = 'UnsupportedProviderError';
+  }
+}
+
+// Exported for testing – reset cached providers
 export function resetPaymentProvider(): void {
-  cachedProvider = null;
+  providerCache.clear();
 }
 
 // Re-export billing types for convenience
