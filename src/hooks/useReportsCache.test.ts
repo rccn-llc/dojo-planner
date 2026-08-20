@@ -1,6 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
 import { renderHook } from 'vitest-browser-react';
 import { useReportCurrentValues, useReportDetail } from './useReportsCache';
+
+// These hooks read the active org themselves so their caches can be keyed by
+// it; without this mock the real Clerk module is imported and the browser-mode
+// suite dies on `process is not defined`.
+const mockUseOrganization = vi.fn(() => ({ organization: { id: 'org_test' } }));
+vi.mock('@clerk/nextjs', () => ({
+  useOrganization: () => mockUseOrganization(),
+}));
 
 describe('useReportCurrentValues hook', () => {
   describe('basic functionality', () => {
