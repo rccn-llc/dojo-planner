@@ -1,10 +1,10 @@
 import { auth } from '@clerk/nextjs/server';
 import { RPCHandler } from '@orpc/server/fetch';
-import { auditLogger } from '@/libs/Logger';
+import { auditLogger, logger } from '@/libs/Logger';
 import { getClientIP, isRateLimitingEnabled, rpcRateLimiter, unauthenticatedRateLimiter } from '@/libs/RateLimit';
 import { runWithTenant } from '@/libs/TenantContext';
 import { router } from '@/routers';
-import { getDbForOrg, TenantNotProvisionedError, TenantUnavailableError } from '@/services/TenantDirectoryService';
+import { getDbForOrg, TenantNotMigratedError, TenantNotProvisionedError, TenantUnavailableError } from '@/services/TenantDirectoryService';
 import { deriveRpcPrefix } from './rpcPrefix';
 
 const handler = new RPCHandler(router);
@@ -96,6 +96,17 @@ async function handleRequest(request: Request) {
     if (error instanceof TenantUnavailableError) {
       return Response.json({ error: 'Organization temporarily unavailable' }, { status: 503 });
     }
+    if (error instanceof TenantNotMigratedError) {
+      logger.error('[RPC] Tenant not migrated for split mode', { orgId, error: error.message });
+      return Response.json({ error: 'Organization not provisioned for split tenancy' }, { status: 409 });
+    }
+    // Anything else is unexpected. Log it: an unlogged rethrow surfaces as a
+    // bare 500 with no explanation, which is how a tenancy misconfiguration
+    // can look identical to an application bug.
+    logger.error('[RPC] Failed to resolve tenant database', {
+      orgId,
+      error: error instanceof Error ? error.message : String(error),
+    });
     throw error;
   }
 
