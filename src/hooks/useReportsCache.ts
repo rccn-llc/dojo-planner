@@ -1,4 +1,5 @@
 import type { ReportChartData, ReportCurrentValues, ReportRange } from '@/services/ReportsService';
+import { useOrganization } from '@clerk/nextjs';
 import { useCallback, useEffect, useReducer } from 'react';
 import { client } from '@/libs/Orpc';
 import { dedupeRequest } from './dedupeRequest';
@@ -16,7 +17,10 @@ type CurrentValuesAction
     | { type: 'SET_ERROR'; payload: string };
 
 const CACHE_DURATION = 5 * 60 * 1000;
-let currentValuesCache: { data: ReportCurrentValues; timestamp: number } | null = null;
+// KEYED BY ORGANIZATION. `client.reports.*` take no org argument — the server
+// derives it from the Clerk session — so a TTL-only check served the previous
+// org's report figures after a switch.
+let currentValuesCache: { organizationId: string; data: ReportCurrentValues; timestamp: number } | null = null;
 
 function currentValuesReducer(state: CurrentValuesState, action: CurrentValuesAction): CurrentValuesState {
   switch (action.type) {
@@ -32,6 +36,9 @@ function currentValuesReducer(state: CurrentValuesState, action: CurrentValuesAc
 }
 
 export const useReportCurrentValues = () => {
+  const { organization } = useOrganization();
+  const organizationId = organization?.id;
+
   const [state, dispatch] = useReducer(currentValuesReducer, {
     data: null,
     loading: true,
@@ -39,16 +46,19 @@ export const useReportCurrentValues = () => {
   });
 
   const fetch = useCallback(async () => {
+    if (!organizationId) {
+      return;
+    }
     try {
       dispatch({ type: 'LOADING_START' });
 
-      if (currentValuesCache && (Date.now() - currentValuesCache.timestamp) < CACHE_DURATION) {
+      if (currentValuesCache && currentValuesCache.organizationId === organizationId && (Date.now() - currentValuesCache.timestamp) < CACHE_DURATION) {
         dispatch({ type: 'SET_DATA', payload: currentValuesCache.data });
         return;
       }
 
       const result = await client.reports.currentValues() as ReportCurrentValues;
-      currentValuesCache = { data: result, timestamp: Date.now() };
+      currentValuesCache = { organizationId, data: result, timestamp: Date.now() };
       dispatch({ type: 'SET_DATA', payload: result });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to fetch report data';
@@ -58,7 +68,7 @@ export const useReportCurrentValues = () => {
         dispatch({ type: 'SET_ERROR', payload: message });
       }
     }
-  }, []);
+  }, [organizationId]);
 
   useEffect(() => {
     fetch();
@@ -98,6 +108,9 @@ function reportDetailReducer(state: ReportDetailState, action: ReportDetailActio
 }
 
 export const useReportDetail = (reportType: string | null, range?: ReportRange) => {
+  const { organization } = useOrganization();
+  const organizationId = organization?.id;
+
   const [state, dispatch] = useReducer(reportDetailReducer, {
     chartData: null,
     insights: [],
@@ -119,7 +132,7 @@ export const useReportDetail = (reportType: string | null, range?: ReportRange) 
         // for the same report share a request while a different report or
         // range still fetches its own.
         const { chartData, insights } = await dedupeRequest(
-          `reports.detail:${reportType}:${range ?? ''}`,
+          `reports.detail:${organizationId}:${reportType}:${range ?? ''}`,
           async () => {
             const [fetchedChart, fetchedInsights] = await Promise.all([
               client.reports.chartData({
@@ -150,7 +163,7 @@ export const useReportDetail = (reportType: string | null, range?: ReportRange) 
       cancelled = true;
     };
     // `range` is part of the cache key — switching it re-fetches.
-  }, [reportType, range]);
+  }, [reportType, range, organizationId]);
 
   return {
     chartData: state.chartData,
@@ -159,3 +172,8 @@ export const useReportDetail = (reportType: string | null, range?: ReportRange) 
     error: state.error,
   };
 };
+
+/** Drop cached report values. Used by the org-change guard. */
+export function invalidateReportsCache(): void {
+  currentValuesCache = null;
+}

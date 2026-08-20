@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { dedupeRequest } from '@/hooks/dedupeRequest';
+import { useOrgChangeReset } from '@/hooks/useOrgChangeReset';
 import { client } from '@/libs/Orpc';
 import { AppSidebar } from './AppSidebar';
 import { AppSidebarHeader } from './AppSidebarHeader';
@@ -20,6 +21,11 @@ type DashboardLayoutClientProps = {
 };
 
 export function DashboardLayoutClient({ children, defaultOpen, subscriptionActive, userRole }: DashboardLayoutClientProps) {
+  // Mounted once for the whole dashboard: drops every client-side cache when
+  // the active org changes, so a switch cannot leave one tenant's data on
+  // screen under another tenant's name.
+  useOrgChangeReset();
+
   const pathname = usePathname();
   const router = useRouter();
 

@@ -1,9 +1,15 @@
 import type { TransactionData } from '@/services/TransactionsService';
+import { useOrganization } from '@clerk/nextjs';
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { client } from '@/libs/Orpc';
 import { clearInFlight, dedupeRequest } from './dedupeRequest';
 
+// KEYED BY ORGANIZATION. `client.transactions.list()` takes no arguments — the
+// server derives the org from the Clerk session — so the same call returns
+// different data after a switch. A TTL-only check served the previous org's
+// transactions for the full duration.
 type CacheEntry = {
+  organizationId: string;
   data: TransactionData[];
   timestamp: number;
 };
@@ -37,6 +43,12 @@ function cacheReducer(state: CacheState, action: CacheAction): CacheState {
 }
 
 export const useTransactionsCache = () => {
+  // Read the org here rather than as a parameter: every caller wants "the
+  // current org's transactions", and an argument a caller can forget to pass
+  // is exactly how this cache went stale across a switch.
+  const { organization } = useOrganization();
+  const organizationId = organization?.id;
+
   const [state, dispatch] = useReducer(cacheReducer, {
     transactions: [],
     loading: true,
@@ -46,20 +58,24 @@ export const useTransactionsCache = () => {
   const revalidateRef = useRef<(() => Promise<void>) | undefined>(undefined);
 
   const fetchTransactions = useCallback(async () => {
+    if (!organizationId) {
+      dispatch({ type: 'SET_DATA', payload: [] });
+      return;
+    }
     try {
       dispatch({ type: 'LOADING_START' });
 
-      if (cacheStore && (Date.now() - cacheStore.timestamp) < CACHE_DURATION) {
+      if (cacheStore && cacheStore.organizationId === organizationId && (Date.now() - cacheStore.timestamp) < CACHE_DURATION) {
         dispatch({ type: 'SET_DATA', payload: cacheStore.data });
         return;
       }
 
       // Several components can mount this hook in the same tick; without
       // de-duping, each one fires its own request against the cold cache.
-      const result = await dedupeRequest(`transactions:${'global'}`, async () => client.transactions.list());
+      const result = await dedupeRequest(`transactions:${organizationId}`, async () => client.transactions.list());
       const transactions = (result.transactions ?? []) as TransactionData[];
 
-      cacheStore = { data: transactions, timestamp: Date.now() };
+      cacheStore = { organizationId, data: transactions, timestamp: Date.now() };
       dispatch({ type: 'SET_DATA', payload: transactions });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to fetch transactions';
@@ -69,7 +85,7 @@ export const useTransactionsCache = () => {
         dispatch({ type: 'SET_ERROR', payload: message });
       }
     }
-  }, []);
+  }, [organizationId]);
 
   const revalidate = useCallback(async () => {
     cacheStore = null;
