@@ -36,6 +36,7 @@ import { computeNextPaymentDate, normalizeFrequency } from '@/utils/PaymentSched
 import { sendPaymentReceiptEmail } from './EmailService';
 import { getOrganizationTaxRate } from './OrganizationService';
 import { getPaymentProvider } from './PaymentProviderService';
+import { recordExternalRef, REF_TYPE } from './TenantExternalRefService';
 
 /**
  * Narrow a provider config to IQPro for the two lib helpers this orchestrator
@@ -340,6 +341,8 @@ export async function processMemberPayment(
           .set({ providerCustomerId: resolvedCustomerId })
           .where(eq(memberSchema.id, params.memberId));
 
+        await recordExternalRef(REF_TYPE.PROVIDER_CUSTOMER, resolvedCustomerId, params.organizationId);
+
         logger.info('[MemberPayment] Created customer', {
           customerId: resolvedCustomerId,
           billingAddressId,
@@ -547,6 +550,8 @@ export async function registerPaymentMethod(
         .update(memberSchema)
         .set({ providerCustomerId: customerId })
         .where(eq(memberSchema.id, params.memberId));
+
+      await recordExternalRef(REF_TYPE.PROVIDER_CUSTOMER, customerId, params.organizationId);
 
       logger.info('[MemberPayment] Created customer for payment method registration', { customerId });
     }
@@ -894,6 +899,17 @@ async function handleAutopay(args: AutopayParams): Promise<ProcessMemberPaymentR
     }
   });
 
+  // Map the provider ids to this org so a sessionless webhook can find its
+  // way home once each org has its own database. Written AFTER the commit and
+  // best-effort, like the coupon redemption below — the payment has already
+  // succeeded and must not be undone by bookkeeping.
+  await Promise.all([
+    recordExternalRef(REF_TYPE.PROVIDER_SUBSCRIPTION, subResult.subscriptionId, params.organizationId),
+    // Both txRows share ONE provider transaction id; the insert is
+    // ON CONFLICT DO NOTHING, so the second is a harmless no-op.
+    recordExternalRef(REF_TYPE.PROVIDER_TRANSACTION, initialCharge.transactionId, params.organizationId),
+  ]);
+
   // Record coupon redemption AFTER the charge has approved. Failures here are
   // logged but never thrown — payment already succeeded.
   await recordCouponRedemption({
@@ -1030,6 +1046,10 @@ async function handleOneTimePayment(args: OneTimeParams): Promise<ProcessMemberP
   } else {
     await db.insert(transactionSchema).values(txRows);
   }
+
+  // Map the provider transaction to this org for webhook routing. Both txRows
+  // share ONE provider id; ON CONFLICT DO NOTHING makes the second a no-op.
+  await recordExternalRef(REF_TYPE.PROVIDER_TRANSACTION, payResult.transactionId, params.organizationId);
 
   // Record coupon redemption only on approved transactions. Declined or
   // pending payments must not consume usage — if the user retries and the

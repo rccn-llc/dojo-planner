@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { controlOrganizationDb } from '@/libs/ControlPlaneReads';
 import { db } from '@/libs/DB';
 import { organizationSchema } from '@/models/Schema';
+import { recordExternalRef, REF_TYPE } from '@/services/TenantExternalRefService';
 
 // The `stripe*` columns on `organization` are CONTROL-plane data: they describe
 // the org's SaaS billing relationship with the platform, not any tenant's own
@@ -18,11 +19,11 @@ export const getStripeCustomerId = (orgId: string) => {
   });
 };
 
-export const upsertStripeCustomerId = (
+export const upsertStripeCustomerId = async (
   stripeCustomerId: string,
   orgId: string,
 ) => {
-  return controlOrganizationDb()
+  await controlOrganizationDb()
     .insert(organizationSchema)
     .values({ id: orgId, stripeCustomerId })
     .onConflictDoUpdate({
@@ -31,6 +32,10 @@ export const upsertStripeCustomerId = (
         stripeCustomerId,
       },
     });
+
+  // Route Stripe webhooks for this customer back to the org once each org has
+  // its own database. Best-effort — never fail the upsert over bookkeeping.
+  await recordExternalRef(REF_TYPE.STRIPE_CUSTOMER, stripeCustomerId, orgId);
 };
 
 export const getStripeSubscription = (orgId: string) => {

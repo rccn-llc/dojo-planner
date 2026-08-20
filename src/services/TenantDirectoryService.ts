@@ -4,6 +4,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { controlDb } from '@/libs/ControlDb';
 import { Env } from '@/libs/Env';
+import { sharesTenantDatabase } from '@/libs/TenancyMode';
 import { getTenantDb, invalidateTenantPool } from '@/libs/TenantDb';
 import { TENANT_STATUS, tenantSchema } from '@/models/ControlSchema';
 
@@ -38,6 +39,26 @@ export class TenantNotProvisionedError extends Error {
   constructor(orgId: string) {
     super(`No provisioned tenant database for organization ${orgId}`);
     this.name = 'TenantNotProvisionedError';
+  }
+}
+
+/**
+ * A tenant row predates the split: it still carries the shared-database
+ * sentinel, so there is no real per-org connection string to open. → 409.
+ *
+ * Typed rather than a bare Error because the RPC layer maps only known tenancy
+ * errors; an untyped throw became an unexplained 500 with nothing logged, which
+ * is the opposite of the loud failure this mode is supposed to produce.
+ */
+export class TenantNotMigratedError extends Error {
+  constructor() {
+    super(
+      '[Tenancy] A tenant row still carries the shared-database marker, but '
+      + 'TENANCY_MODE is "split". That row predates the split and must be '
+      + 're-provisioned with a real connection string before this '
+      + 'organization can be served.',
+    );
+    this.name = 'TenantNotMigratedError';
   }
 }
 
@@ -138,6 +159,19 @@ const TAG_BYTES = 16;
 const SHARED_DATABASE_SENTINEL = '__shared_database__';
 
 /**
+ * `region` value marking a row that points at the shared database rather than a
+ * real per-tenant one. Written by auto-registration and `registerTenants.ts`.
+ *
+ * This is the DURABLE marker. The ciphertext is not: when an encryption key is
+ * configured, auto-registration stores an encryption of DATABASE_URL, which at
+ * read time is indistinguishable from a legitimate per-tenant connection
+ * string. Relying on the sentinel alone therefore let split mode decrypt those
+ * rows and route every organization to the same database — silently, which is
+ * the exact cross-tenant leak this architecture exists to prevent.
+ */
+const SHARED_REGION = 'shared';
+
+/**
  * Decrypt a stored connection string.
  *
  * Mirrors `libs/Crypto.ts` byte-for-byte (same AES-256-GCM layout:
@@ -217,13 +251,14 @@ function defaultTenantRecord(orgId: string): TenantRecord | null {
  * explicit (`provisionTenant.ts` creates a real Neon project) and a missing row
  * must once again be a hard `TenantNotProvisionedError`.
  *
- * The `sharesOneDatabase` guard enforces exactly that: auto-registration is
- * disabled the moment a distinct CONTROL_DATABASE_URL exists, which is the
- * signal that the planes have been separated.
+ * The mode guard enforces exactly that: auto-registration is disabled the
+ * moment TENANCY_MODE is 'split', which is the explicit signal that the planes
+ * have been separated. It is deliberately NOT derived from the connection
+ * strings — during a staged rollout CONTROL_DATABASE_URL is populated and
+ * migrated while the deployment still serves traffic in 'shared' mode.
  */
 async function autoRegisterTenant(orgId: string): Promise<TenantRecord | null> {
-  const sharesOneDatabase = !Env.CONTROL_DATABASE_URL
-    || Env.CONTROL_DATABASE_URL === Env.DATABASE_URL;
+  const sharesOneDatabase = sharesTenantDatabase();
 
   if (!sharesOneDatabase) {
     // The planes are separate: provisioning is explicit from here on.
@@ -257,7 +292,7 @@ async function autoRegisterTenant(orgId: string): Promise<TenantRecord | null> {
       orgId,
       displayName: null,
       connectionStringEncrypted: stored,
-      region: 'shared',
+      region: SHARED_REGION,
       status: TENANT_STATUS.ACTIVE,
       schemaVersion: null,
     })
@@ -269,7 +304,7 @@ async function autoRegisterTenant(orgId: string): Promise<TenantRecord | null> {
   return {
     orgId,
     connectionString,
-    region: 'shared',
+    region: SHARED_REGION,
     status: TENANT_STATUS.ACTIVE,
     schemaVersion: null,
   };
@@ -319,6 +354,12 @@ export async function resolveTenant(orgId: string): Promise<TenantRecord> {
     }
     throw new TenantNotProvisionedError(orgId);
   }
+  // A shared-database row cannot be served once the planes are separated,
+  // whether or not its connection string happens to be encrypted.
+  if (!sharesTenantDatabase() && row.region === SHARED_REGION) {
+    throw new TenantNotMigratedError();
+  }
+
   if (row.status !== TENANT_STATUS.ACTIVE) {
     // Not cached: a migrating tenant flips back to active shortly, and caching
     // the failure would extend the outage by up to the TTL.
@@ -351,16 +392,8 @@ function resolveConnectionString(stored: string): string {
     return decryptConnectionString(stored);
   }
 
-  const sharesOneDatabase = !Env.CONTROL_DATABASE_URL
-    || Env.CONTROL_DATABASE_URL === Env.DATABASE_URL;
-
-  if (!sharesOneDatabase) {
-    throw new Error(
-      '[Tenancy] A tenant row still carries the shared-database marker, but the '
-      + 'control plane is now a separate database. That row predates the split '
-      + 'and must be re-provisioned with a real connection string before this '
-      + 'organization can be served.',
-    );
+  if (!sharesTenantDatabase()) {
+    throw new TenantNotMigratedError();
   }
 
   return Env.DATABASE_URL;

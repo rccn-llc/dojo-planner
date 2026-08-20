@@ -28,23 +28,31 @@ function controlConnectionString(): string {
   return Env.CONTROL_DATABASE_URL ?? Env.DATABASE_URL;
 }
 
-/**
- * Whether the control plane currently shares a database with tenant data.
- * True during the no-op phase; false once `CONTROL_DATABASE_URL` points
- * somewhere of its own.
- */
-function sharesTenantDatabase(): boolean {
-  return !Env.CONTROL_DATABASE_URL || Env.CONTROL_DATABASE_URL === Env.DATABASE_URL;
-}
-
 const globalForControlPool = globalThis as unknown as { controlPool?: Pool };
+
+/**
+ * Whether this pool physically shares a server with the tenant pool.
+ *
+ * Deliberately compares CONNECTION STRINGS, not TENANCY_MODE. Pool sizing is a
+ * property of the socket, not of the routing policy: during a staged rollout
+ * the mode can be 'split' while both planes still address the same database
+ * (and, locally, the same pglite-server — which accepts exactly ONE connection,
+ * so a second is refused as `read ECONNRESET` mid-query).
+ *
+ * Getting this wrong is not a subtle failure. It presents as every tenant
+ * lookup dying on a connection reset.
+ */
+function sharesPhysicalDatabase(): boolean {
+  return controlConnectionString() === Env.DATABASE_URL;
+}
 
 function createControlPool(): Pool {
   const pool = new Pool({
     connectionString: controlConnectionString(),
-    // 1 while the control plane shares the tenant database — pglite-server
-    // allows a single connection, and a tenant pool is already holding one.
-    max: sharesTenantDatabase() ? 1 : 2,
+    // 1 while the control plane shares the tenant database's server —
+    // pglite-server allows a single connection, and a tenant pool already
+    // holds it.
+    max: sharesPhysicalDatabase() ? 1 : 2,
   });
 
   pool.on('error', (error) => {

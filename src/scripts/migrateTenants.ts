@@ -49,6 +49,7 @@ type MigrationResult = {
 
 /** Label used while every organization shares one database. */
 const SHARED_DATABASE_LABEL = '(shared database)';
+const CONTROL_DATABASE_LABEL = '(control plane)';
 
 function parseArgs(): { dryRun: boolean } {
   return { dryRun: process.argv.includes('--dry-run') };
@@ -57,15 +58,40 @@ function parseArgs(): { dryRun: boolean } {
 /**
  * Targets to migrate.
  *
- * Phase A3 replaces this with a control-plane query over `tenant`. Keeping the
- * shape (an array of targets) means the loop below does not change.
+ * ── The control plane is a target too ───────────────────────────────────────
+ *
+ * It was previously omitted entirely, so a deployment that set
+ * CONTROL_DATABASE_URL got an UNMIGRATED control database — no `tenant` table,
+ * no `platform_config`, no `organization`. The first request would then fail on
+ * a missing relation, and only at runtime.
+ *
+ * Both planes share `0000_baseline.sql`: every table exists in both, and each
+ * plane simply ignores the ones it does not own. That keeps one migration
+ * artifact rather than two divergent ones, which is what makes provisioning a
+ * new tenant a copy of the same baseline.
+ *
+ * Phase A3 extends the tenant half of this with a control-plane query over
+ * `tenant`. Keeping the shape (an array of targets) means the loop below does
+ * not change.
  */
-function resolveTargets(): TenantTarget[] {
+export function resolveTargets(): TenantTarget[] {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     throw new Error('DATABASE_URL is not set');
   }
-  return [{ orgId: SHARED_DATABASE_LABEL, connectionString }];
+
+  const targets: TenantTarget[] = [
+    { orgId: SHARED_DATABASE_LABEL, connectionString },
+  ];
+
+  // Migrate the control plane FIRST when it is a distinct database: the tenant
+  // directory lives there, and A3's fan-out will read it to discover the rest.
+  const controlConnectionString = process.env.CONTROL_DATABASE_URL;
+  if (controlConnectionString && controlConnectionString !== connectionString) {
+    targets.unshift({ orgId: CONTROL_DATABASE_LABEL, connectionString: controlConnectionString });
+  }
+
+  return targets;
 }
 
 /**
@@ -136,7 +162,19 @@ async function main(): Promise<void> {
   console.info(`\n[migrateTenants] all ${results.length} target(s) migrated`);
 }
 
-main().catch((error) => {
-  console.error('[migrateTenants] fatal', error);
-  process.exit(1);
-});
+/**
+ * Only run when invoked as a script.
+ *
+ * `resolveTargets` is exported for tests, and importing this module used to
+ * execute `main()` as a side effect — which called `process.exit(1)` when it
+ * could not reach a database. Vitest surfaced that as an unhandled rejection
+ * that could have masked a real failure elsewhere in the run.
+ */
+const isDirectRun = process.argv[1]?.includes('migrateTenants');
+
+if (isDirectRun) {
+  main().catch((error) => {
+    console.error('[migrateTenants] fatal', error);
+    process.exit(1);
+  });
+}

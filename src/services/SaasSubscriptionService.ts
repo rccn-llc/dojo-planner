@@ -24,6 +24,7 @@ import { controlOrganizationDb } from '@/libs/ControlPlaneReads';
 import { getGatewayProcessors, iqproPost, iqproPut } from '@/libs/IQPro';
 import { logger } from '@/libs/Logger';
 import { organizationSchema } from '@/models/Schema';
+import { recordExternalRef, REF_TYPE } from '@/services/TenantExternalRefService';
 import { getPlanTotalPrice, getSaasPlan } from '@/utils/SaasPlans';
 import { isExemptOrg, isSuperAdmin } from '@/utils/SuperAdmins';
 
@@ -213,6 +214,8 @@ export async function subscribe(
         .update(organizationSchema)
         .set({ saasProviderCustomerId: customerId })
         .where(eq(organizationSchema.id, params.orgId));
+
+      await recordExternalRef(REF_TYPE.PROVIDER_CUSTOMER, customerId, params.orgId);
 
       logger.info('[SaaS] Created org customer', { orgId: params.orgId, customerId });
     }
@@ -404,6 +407,9 @@ export async function subscribe(
         }),
       })
       .where(eq(organizationSchema.id, params.orgId));
+
+    // Route future SaaS-billing webhooks for this subscription back to the org.
+    await recordExternalRef(REF_TYPE.SAAS_SUBSCRIPTION, subscriptionId, params.orgId);
 
     logger.info('[SaaS] Subscription created', { orgId: params.orgId, subscriptionId });
     return { success: true };

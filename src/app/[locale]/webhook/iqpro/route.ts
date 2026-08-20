@@ -1,13 +1,18 @@
+import type { RefType } from '@/services/TenantExternalRefService';
 import { and, eq, ne } from 'drizzle-orm';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
+import { controlOrganizationDb } from '@/libs/ControlPlaneReads';
 import { db } from '@/libs/DB';
 import { Env } from '@/libs/Env';
 import { logger } from '@/libs/Logger';
 import { getClientIP, isRateLimitingEnabled, webhookRateLimiter } from '@/libs/RateLimit';
-import { runWithTenant } from '@/libs/TenantContext';
+import { sharesTenantDatabase } from '@/libs/TenancyMode';
+import { requireTenantScope, runWithTenant } from '@/libs/TenantContext';
 import { getBootstrapTenantDb, WEBHOOK_BOOTSTRAP_ORG_ID } from '@/libs/WebhookTenantScope';
 import { memberMembershipSchema, memberSchema, organizationSchema, transactionSchema } from '@/models/Schema';
+import { getDbForOrg } from '@/services/TenantDirectoryService';
+import { REF_TYPE, resolveOrgByExternalRef } from '@/services/TenantExternalRefService';
 
 // Inline type to avoid top-level import from the optional @dojo-planner/iqpro-client package
 type WebhookPayload = { type: string; id?: string; data: Record<string, unknown> };
@@ -91,11 +96,15 @@ export const POST = async (request: Request) => {
  * database: you cannot query for the owner until you know which database to
  * query.
  *
- * During the no-op phase every organization resolves to the same shared
- * database, so a bootstrap scope is both correct and sufficient. Phase A2
- * replaces this with a `tenant_external_ref` lookup that resolves the org from
- * the external id BEFORE any tenant connection is opened, and the handlers then
- * run inside that org's scope.
+ * A2 breaks the circularity: `tenant_external_ref` lives in the CONTROL plane,
+ * which is always reachable without a tenant scope, so the org is resolved from
+ * the external id BEFORE any tenant connection is opened.
+ *
+ * `withResolvedTenantScope` is the path that matters. The bootstrap scope
+ * remains only as a fallback for events whose id was minted before refs were
+ * written — in `shared` mode that still reaches the right rows, and in `split`
+ * mode it is where an unroutable event surfaces as a loud warning rather than a
+ * silent no-op.
  */
 async function withWebhookTenantScope<T>(fn: () => Promise<T>): Promise<T> {
   const bootstrapDb = getBootstrapTenantDb();
@@ -103,6 +112,44 @@ async function withWebhookTenantScope<T>(fn: () => Promise<T>): Promise<T> {
     { orgId: WEBHOOK_BOOTSTRAP_ORG_ID, db: bootstrapDb, source: 'webhook' },
     fn,
   );
+}
+
+/**
+ * Run `fn` inside the scope of the org that owns `refId`.
+ *
+ * Returns false when the ref is unknown, so the caller can decide whether that
+ * is benign (an event for an object we never recorded) or a problem.
+ *
+ * ⚠️ Falling back to the bootstrap scope in `split` mode would be the silent
+ * failure this whole phase exists to remove: the handler would run against the
+ * CONTROL database, every tenant-table UPDATE would match zero rows, and a
+ * payment would be captured at the gateway while the member's status never
+ * changed — with nothing logged. So an unresolved ref logs loudly instead.
+ */
+async function withResolvedTenantScope(
+  refType: RefType,
+  refId: string,
+  fn: () => Promise<void>,
+): Promise<boolean> {
+  const orgId = await resolveOrgByExternalRef(refType, refId);
+
+  if (!orgId) {
+    if (sharesTenantDatabase()) {
+      // One physical database: the bootstrap scope reaches the same rows the
+      // handler would have read anyway, so behaviour is unchanged.
+      await fn();
+      return true;
+    }
+    logger.error('[IQPro Webhook] No tenant mapping for external id — event NOT processed', {
+      refType,
+      refId,
+    });
+    return false;
+  }
+
+  const tenantDb = await getDbForOrg(orgId);
+  await runWithTenant({ orgId, db: tenantDb, source: 'webhook' }, fn);
+  return true;
 }
 
 async function handleWebhookEvent(event: WebhookPayload): Promise<void> {
@@ -135,12 +182,20 @@ async function handlePaymentCompleted(data: Record<string, unknown>): Promise<vo
     return;
   }
 
-  await db
-    .update(transactionSchema)
-    .set({ status: 'paid', processedAt: new Date() })
-    .where(eq(transactionSchema.providerTransactionId, transactionId));
+  await withResolvedTenantScope(REF_TYPE.PROVIDER_TRANSACTION, transactionId, async () => {
+    const orgId = requireTenantScope().orgId;
+    await db
+      .update(transactionSchema)
+      .set({ status: 'paid', processedAt: new Date() })
+      // Org predicate added with the scope: a provider id is unique per
+      // merchant, not globally, so keying on it alone could cross tenants.
+      .where(and(
+        eq(transactionSchema.providerTransactionId, transactionId),
+        eq(transactionSchema.organizationId, orgId),
+      ));
 
-  logger.info('[IQPro Webhook] Payment completed', { transactionId });
+    logger.info('[IQPro Webhook] Payment completed', { transactionId, orgId });
+  });
 }
 
 async function handlePaymentFailed(data: Record<string, unknown>): Promise<void> {
@@ -149,12 +204,18 @@ async function handlePaymentFailed(data: Record<string, unknown>): Promise<void>
     return;
   }
 
-  await db
-    .update(transactionSchema)
-    .set({ status: 'declined' })
-    .where(eq(transactionSchema.providerTransactionId, transactionId));
+  await withResolvedTenantScope(REF_TYPE.PROVIDER_TRANSACTION, transactionId, async () => {
+    const orgId = requireTenantScope().orgId;
+    await db
+      .update(transactionSchema)
+      .set({ status: 'declined' })
+      .where(and(
+        eq(transactionSchema.providerTransactionId, transactionId),
+        eq(transactionSchema.organizationId, orgId),
+      ));
 
-  logger.info('[IQPro Webhook] Payment failed', { transactionId });
+    logger.info('[IQPro Webhook] Payment failed', { transactionId, orgId });
+  });
 }
 
 async function handleSubscriptionPaymentSucceeded(data: Record<string, unknown>): Promise<void> {
@@ -165,7 +226,10 @@ async function handleSubscriptionPaymentSucceeded(data: Record<string, unknown>)
 
   // Check if this is a SaaS org subscription first. Select the billing cycle in
   // the same query so we don't re-read the same org row below.
-  const org = await db.query.organizationSchema.findFirst({
+  // saas_* columns are CONTROL-plane. Reading them through the tenant handle
+  // worked only while both planes were one database; post-split it would query
+  // the wrong database entirely.
+  const org = await controlOrganizationDb().query.organizationSchema.findFirst({
     where: eq(organizationSchema.saasProviderSubscriptionId, subscriptionId),
     columns: { id: true, saasBillingCycle: true },
   });
@@ -178,7 +242,7 @@ async function handleSubscriptionPaymentSucceeded(data: Record<string, unknown>)
       ? new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000)
       : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-    await db
+    await controlOrganizationDb()
       .update(organizationSchema)
       .set({
         saasSubscriptionStatus: 'active',
@@ -198,34 +262,36 @@ async function handleSubscriptionPaymentSucceeded(data: Record<string, unknown>)
   // Look up the member that owns this membership BEFORE the update so we can
   // mirror the membership status onto memberSchema.status (#138). Without
   // this, the member-detail UI keeps showing the old status.
-  const membership = await db.query.memberMembershipSchema.findFirst({
-    where: eq(memberMembershipSchema.providerSubscriptionId, subscriptionId),
-    columns: { memberId: true },
-  });
+  await withResolvedTenantScope(REF_TYPE.PROVIDER_SUBSCRIPTION, subscriptionId, async () => {
+    const membership = await db.query.memberMembershipSchema.findFirst({
+      where: eq(memberMembershipSchema.providerSubscriptionId, subscriptionId),
+      columns: { memberId: true },
+    });
 
-  await db
-    .update(memberMembershipSchema)
-    .set({
-      status: 'active',
-      ...(nextPaymentDate && { nextPaymentDate }),
-    })
-    .where(eq(memberMembershipSchema.providerSubscriptionId, subscriptionId));
-
-  // Mirror onto member.status — only flip past_due → active. We deliberately
-  // leave 'archived' / 'cancelled' / 'hold' / 'trial' alone so that a stray
-  // payment-success webhook doesn't reactivate a member the operator
-  // explicitly archived or put on hold.
-  if (membership?.memberId) {
     await db
-      .update(memberSchema)
-      .set({ status: 'active', statusChangedAt: new Date() })
-      .where(and(
-        eq(memberSchema.id, membership.memberId),
-        eq(memberSchema.status, 'past_due'),
-      ));
-  }
+      .update(memberMembershipSchema)
+      .set({
+        status: 'active',
+        ...(nextPaymentDate && { nextPaymentDate }),
+      })
+      .where(eq(memberMembershipSchema.providerSubscriptionId, subscriptionId));
 
-  logger.info('[IQPro Webhook] Subscription payment succeeded', { subscriptionId });
+    // Mirror onto member.status — only flip past_due → active. We deliberately
+    // leave 'archived' / 'cancelled' / 'hold' / 'trial' alone so that a stray
+    // payment-success webhook doesn't reactivate a member the operator
+    // explicitly archived or put on hold.
+    if (membership?.memberId) {
+      await db
+        .update(memberSchema)
+        .set({ status: 'active', statusChangedAt: new Date() })
+        .where(and(
+          eq(memberSchema.id, membership.memberId),
+          eq(memberSchema.status, 'past_due'),
+        ));
+    }
+
+    logger.info('[IQPro Webhook] Subscription payment succeeded', { subscriptionId });
+  });
 }
 
 async function handleSubscriptionPaymentFailed(data: Record<string, unknown>): Promise<void> {
@@ -235,13 +301,13 @@ async function handleSubscriptionPaymentFailed(data: Record<string, unknown>): P
   }
 
   // Check if this is a SaaS org subscription first
-  const org = await db.query.organizationSchema.findFirst({
+  const org = await controlOrganizationDb().query.organizationSchema.findFirst({
     where: eq(organizationSchema.saasProviderSubscriptionId, subscriptionId),
     columns: { id: true },
   });
 
   if (org) {
-    await db
+    await controlOrganizationDb()
       .update(organizationSchema)
       .set({ saasSubscriptionStatus: 'past_due' })
       .where(eq(organizationSchema.id, org.id));
@@ -251,32 +317,34 @@ async function handleSubscriptionPaymentFailed(data: Record<string, unknown>): P
   }
 
   // Fall back to member membership subscription
-  const membership = await db.query.memberMembershipSchema.findFirst({
-    where: eq(memberMembershipSchema.providerSubscriptionId, subscriptionId),
-    columns: { memberId: true },
-  });
+  await withResolvedTenantScope(REF_TYPE.PROVIDER_SUBSCRIPTION, subscriptionId, async () => {
+    const membership = await db.query.memberMembershipSchema.findFirst({
+      where: eq(memberMembershipSchema.providerSubscriptionId, subscriptionId),
+      columns: { memberId: true },
+    });
 
-  await db
-    .update(memberMembershipSchema)
-    .set({ status: 'past_due' })
-    .where(eq(memberMembershipSchema.providerSubscriptionId, subscriptionId));
-
-  // Mirror onto member.status (#138). Only flip if the member is currently
-  // 'active' or 'trial' — leaves archived / cancelled / hold rows alone so a
-  // stray webhook can't escalate a member the operator already finalised.
-  if (membership?.memberId) {
     await db
-      .update(memberSchema)
-      .set({ status: 'past_due', statusChangedAt: new Date() })
-      .where(and(
-        eq(memberSchema.id, membership.memberId),
-        ne(memberSchema.status, 'archived'),
-        ne(memberSchema.status, 'cancelled'),
-        ne(memberSchema.status, 'hold'),
-      ));
-  }
+      .update(memberMembershipSchema)
+      .set({ status: 'past_due' })
+      .where(eq(memberMembershipSchema.providerSubscriptionId, subscriptionId));
 
-  logger.info('[IQPro Webhook] Subscription payment failed', { subscriptionId });
+    // Mirror onto member.status (#138). Only flip if the member is currently
+    // 'active' or 'trial' — leaves archived / cancelled / hold rows alone so a
+    // stray webhook can't escalate a member the operator already finalised.
+    if (membership?.memberId) {
+      await db
+        .update(memberSchema)
+        .set({ status: 'past_due', statusChangedAt: new Date() })
+        .where(and(
+          eq(memberSchema.id, membership.memberId),
+          ne(memberSchema.status, 'archived'),
+          ne(memberSchema.status, 'cancelled'),
+          ne(memberSchema.status, 'hold'),
+        ));
+    }
+
+    logger.info('[IQPro Webhook] Subscription payment failed', { subscriptionId });
+  });
 }
 
 async function handleSubscriptionCancelled(data: Record<string, unknown>): Promise<void> {
@@ -286,13 +354,13 @@ async function handleSubscriptionCancelled(data: Record<string, unknown>): Promi
   }
 
   // Check if this is a SaaS org subscription first
-  const org = await db.query.organizationSchema.findFirst({
+  const org = await controlOrganizationDb().query.organizationSchema.findFirst({
     where: eq(organizationSchema.saasProviderSubscriptionId, subscriptionId),
     columns: { id: true },
   });
 
   if (org) {
-    await db
+    await controlOrganizationDb()
       .update(organizationSchema)
       .set({ saasSubscriptionStatus: 'cancelled' })
       .where(eq(organizationSchema.id, org.id));
@@ -302,37 +370,39 @@ async function handleSubscriptionCancelled(data: Record<string, unknown>): Promi
   }
 
   // Fall back to member membership subscription
-  const membership = await db.query.memberMembershipSchema.findFirst({
-    where: eq(memberMembershipSchema.providerSubscriptionId, subscriptionId),
-    columns: { memberId: true },
-  });
-
-  await db
-    .update(memberMembershipSchema)
-    .set({ status: 'cancelled' })
-    .where(eq(memberMembershipSchema.providerSubscriptionId, subscriptionId));
-
-  // Mirror onto member.status (#138) only if the cancelled membership was the
-  // member's last active one. We don't want to cancel a member who still has
-  // a different active membership in the same org.
-  if (membership?.memberId) {
-    const activeOther = await db.query.memberMembershipSchema.findFirst({
-      where: and(
-        eq(memberMembershipSchema.memberId, membership.memberId),
-        eq(memberMembershipSchema.status, 'active'),
-      ),
-      columns: { id: true },
+  await withResolvedTenantScope(REF_TYPE.PROVIDER_SUBSCRIPTION, subscriptionId, async () => {
+    const membership = await db.query.memberMembershipSchema.findFirst({
+      where: eq(memberMembershipSchema.providerSubscriptionId, subscriptionId),
+      columns: { memberId: true },
     });
-    if (!activeOther) {
-      await db
-        .update(memberSchema)
-        .set({ status: 'cancelled', statusChangedAt: new Date() })
-        .where(and(
-          eq(memberSchema.id, membership.memberId),
-          ne(memberSchema.status, 'archived'),
-        ));
-    }
-  }
 
-  logger.info('[IQPro Webhook] Subscription cancelled', { subscriptionId });
+    await db
+      .update(memberMembershipSchema)
+      .set({ status: 'cancelled' })
+      .where(eq(memberMembershipSchema.providerSubscriptionId, subscriptionId));
+
+    // Mirror onto member.status (#138) only if the cancelled membership was the
+    // member's last active one. We don't want to cancel a member who still has
+    // a different active membership in the same org.
+    if (membership?.memberId) {
+      const activeOther = await db.query.memberMembershipSchema.findFirst({
+        where: and(
+          eq(memberMembershipSchema.memberId, membership.memberId),
+          eq(memberMembershipSchema.status, 'active'),
+        ),
+        columns: { id: true },
+      });
+      if (!activeOther) {
+        await db
+          .update(memberSchema)
+          .set({ status: 'cancelled', statusChangedAt: new Date() })
+          .where(and(
+            eq(memberSchema.id, membership.memberId),
+            ne(memberSchema.status, 'archived'),
+          ));
+      }
+    }
+
+    logger.info('[IQPro Webhook] Subscription cancelled', { subscriptionId });
+  });
 }

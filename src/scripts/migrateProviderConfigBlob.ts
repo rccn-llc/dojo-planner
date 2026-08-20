@@ -88,7 +88,17 @@ const ALGORITHM = 'aes-256-gcm';
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
 
+/**
+ * Parsed once and reused. The key is constant for the script's lifetime, so
+ * re-reading and re-parsing the env var per row is wasted work — this script
+ * can touch every organization in the database.
+ */
+let cachedKey: Buffer | null = null;
+
 function loadKey(): Buffer {
+  if (cachedKey) {
+    return cachedKey;
+  }
   const hex = process.env.IQPRO_CONFIG_ENCRYPTION_KEY;
   if (!hex) {
     throw new Error('IQPRO_CONFIG_ENCRYPTION_KEY is not set; cannot encrypt or decrypt merchant secrets');
@@ -96,7 +106,8 @@ function loadKey(): Buffer {
   if (!/^[0-9a-f]{64}$/i.test(hex)) {
     throw new Error('IQPRO_CONFIG_ENCRYPTION_KEY must be 64 hex chars (32 bytes)');
   }
-  return Buffer.from(hex, 'hex');
+  cachedKey = Buffer.from(hex, 'hex');
+  return cachedKey;
 }
 
 function encryptSecret(plaintext: string): string {
@@ -163,13 +174,27 @@ async function runReverse(db: ReturnType<typeof drizzle>, dryRun: boolean): Prom
     }
 
     const { clientId, clientSecret, gatewayId } = blob.credentials;
+
+    // The forward path validates all three fields before writing; the reverse
+    // path must too. Without this, a partially-formed blob reaches
+    // `encryptSecret(undefined!)` and writes the ciphertext of the STRING
+    // "undefined" into iqpro_config_client_secret_enc — a credential that looks
+    // valid, decrypts cleanly, and fails only when the gateway rejects it.
+    if (!clientId || !clientSecret || !gatewayId) {
+      console.warn(
+        `  org ${row.id}: blob is missing required IQPro credentials (clientId=${!!clientId} clientSecret=${!!clientSecret} gatewayId=${!!gatewayId}) — skipping.`,
+      );
+      unsupported++;
+      continue;
+    }
+
     if (dryRun) {
       console.warn(`  org ${row.id}: would restore (clientId=${clientId}, gatewayId=${gatewayId})`);
     } else {
       await db.execute(sql`
         UPDATE "organization"
         SET "iqpro_config_client_id" = ${clientId},
-            "iqpro_config_client_secret_enc" = ${encryptSecret(clientSecret!)},
+            "iqpro_config_client_secret_enc" = ${encryptSecret(clientSecret)},
             "iqpro_config_gateway_id" = ${gatewayId}
         WHERE id = ${row.id}
       `);

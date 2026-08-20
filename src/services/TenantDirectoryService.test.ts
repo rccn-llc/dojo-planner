@@ -80,6 +80,10 @@ describe('tenantDirectoryService', () => {
       // Separate planes so auto-registration cannot mask the assertion.
       envValues.CONTROL_DATABASE_URL = 'postgres://control';
       envValues.DATABASE_URL = 'postgres://tenant';
+      // The split is now EXPLICIT: distinct connection strings alone no longer
+      // separate the planes, so that a deployment can populate and migrate the
+      // control database while still serving traffic in shared mode.
+      envValues.TENANCY_MODE = 'split';
       findFirst.mockResolvedValue(undefined);
 
       await expect(service.resolveTenant('org_a')).rejects.toThrow(
@@ -92,6 +96,10 @@ describe('tenantDirectoryService', () => {
     it('falls through to the directory when the hatch is unset', async () => {
       envValues.CONTROL_DATABASE_URL = 'postgres://control';
       envValues.DATABASE_URL = 'postgres://tenant';
+      // The split is now EXPLICIT: distinct connection strings alone no longer
+      // separate the planes, so that a deployment can populate and migrate the
+      // control database while still serving traffic in shared mode.
+      envValues.TENANCY_MODE = 'split';
       findFirst.mockResolvedValue(undefined);
 
       await expect(service.resolveTenant('org_a')).rejects.toThrow(
@@ -111,6 +119,10 @@ describe('tenantDirectoryService', () => {
       // provisioning is explicit from that point on.
       envValues.CONTROL_DATABASE_URL = 'postgres://control';
       envValues.DATABASE_URL = 'postgres://tenant';
+      // The split is now EXPLICIT: distinct connection strings alone no longer
+      // separate the planes, so that a deployment can populate and migrate the
+      // control database while still serving traffic in shared mode.
+      envValues.TENANCY_MODE = 'split';
       findFirst.mockResolvedValue(undefined);
 
       await expect(service.resolveTenant('org_missing')).rejects.toThrow(
@@ -214,6 +226,7 @@ describe('tenantDirectoryService', () => {
       // row must fail loudly — silently pointing an unknown org at the shared
       // database would be a cross-tenant leak.
       envValues.CONTROL_DATABASE_URL = 'postgres://control';
+      envValues.TENANCY_MODE = 'split';
       findFirst.mockResolvedValue(undefined);
 
       await expect(service.resolveTenant('org_brand_new')).rejects.toThrow(
@@ -257,12 +270,17 @@ describe('tenantDirectoryService', () => {
       // database would be a cross-tenant leak, so it must fail loudly and be
       // re-provisioned with a real connection string.
       envValues.CONTROL_DATABASE_URL = 'postgres://control';
+      envValues.TENANCY_MODE = 'split';
       findFirst.mockResolvedValue(tenantRow({
         connectionStringEncrypted: '__shared_database__',
       }));
 
+      // Typed, not a bare Error: the RPC layer maps known tenancy errors to
+      // clear statuses and logs them. An untyped throw fell through to a bare
+      // 500 with nothing logged — the opposite of the loud failure split mode
+      // is supposed to produce.
       await expect(service.resolveTenant('org_a')).rejects.toThrow(
-        /shared-database marker/,
+        service.TenantNotMigratedError,
       );
     });
 
@@ -331,12 +349,86 @@ describe('tenantDirectoryService', () => {
       // Separate planes: auto-registration is off, so a missing row is fatal.
       envValues.CONTROL_DATABASE_URL = 'postgres://control';
       envValues.DATABASE_URL = 'postgres://tenant';
+      // The split is now EXPLICIT: distinct connection strings alone no longer
+      // separate the planes, so that a deployment can populate and migrate the
+      // control database while still serving traffic in shared mode.
+      envValues.TENANCY_MODE = 'split';
       findFirst.mockResolvedValue(undefined);
 
       await expect(service.getDbForOrg('org_missing')).rejects.toThrow(
         service.TenantNotProvisionedError,
       );
       expect(getTenantDb).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('tenancy mode is explicit, not derived', () => {
+    // The regression this guards: five behaviours used to flip off the implicit
+    // comparison `CONTROL_DATABASE_URL !== DATABASE_URL` — auto-registration,
+    // sentinel handling, control-pool sizing, webhook routing, and resolution.
+    // Setting one variable flipped all five at once, and one of them (the webhook
+    // bootstrap) fails SILENTLY, turning payment status updates into no-ops.
+    //
+    // Decoupling them is what lets a deployment populate and migrate the control
+    // database, verify it, and only then flip the mode.
+    it('stays in shared mode when CONTROL_DATABASE_URL is distinct but the mode is unset', async () => {
+      envValues.CONTROL_DATABASE_URL = 'postgres://control';
+      envValues.DATABASE_URL = 'postgres://tenant';
+      delete envValues.TENANCY_MODE;
+      findFirst.mockResolvedValue(undefined);
+
+      // Auto-registration is a shared-mode-only behaviour, so it proves the mode.
+      const record = await service.resolveTenant('org_staged');
+
+      expect(record.connectionString).toBe('postgres://tenant');
+      expect(insert).toHaveBeenCalled();
+    });
+
+    it('separates the planes when the mode says so, regardless of the URLs', async () => {
+      // Same connection string on both sides — during a staged rollout the flag
+      // is what matters, not whether the strings happen to differ.
+      envValues.CONTROL_DATABASE_URL = 'postgres://same';
+      envValues.DATABASE_URL = 'postgres://same';
+      envValues.TENANCY_MODE = 'split';
+      findFirst.mockResolvedValue(undefined);
+
+      await expect(service.resolveTenant('org_split')).rejects.toThrow(
+        service.TenantNotProvisionedError,
+      );
+    });
+  });
+
+  describe('shared-database rows in split mode', () => {
+    it('REFUSES an ENCRYPTED shared row, not just the sentinel', async () => {
+      // The leak this closes: auto-registration encrypts DATABASE_URL when a
+      // key is configured, so the stored ciphertext is indistinguishable from a
+      // real per-tenant connection string. Split mode decrypted it happily and
+      // routed every org to the same database — with no error at all. `region`
+      // is the durable marker; the ciphertext is not.
+      envValues.CONTROL_DATABASE_URL = 'postgres://control';
+      envValues.TENANCY_MODE = 'split';
+      findFirst.mockResolvedValue(tenantRow({
+        region: 'shared',
+        connectionStringEncrypted: 'ciphertext-that-decrypts-to-DATABASE_URL',
+      }));
+
+      await expect(service.resolveTenant('org_a')).rejects.toThrow(
+        service.TenantNotMigratedError,
+      );
+    });
+
+    it('does NOT reject a real per-tenant row for being shared', async () => {
+      // The contrast case. A provisioned row must get PAST the region guard —
+      // it then fails on decryption here only because this fixture's ciphertext
+      // is not real, which is a different error and proves the guard let it by.
+      envValues.CONTROL_DATABASE_URL = 'postgres://control';
+      envValues.TENANCY_MODE = 'split';
+      envValues.CONTROL_PLANE_ENCRYPTION_KEY = 'a'.repeat(64);
+      findFirst.mockResolvedValue(tenantRow({ region: 'aws-us-east-1' }));
+
+      await expect(service.resolveTenant('org_a')).rejects.not.toThrow(
+        service.TenantNotMigratedError,
+      );
     });
   });
 });
