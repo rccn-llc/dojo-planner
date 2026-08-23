@@ -1,4 +1,21 @@
+import { Buffer } from 'node:buffer';
+import { createCipheriv, randomBytes } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const TEST_KEY_HEX = 'a'.repeat(64);
+
+/**
+ * Produce REAL ciphertext the service can decrypt. The previous versions of
+ * these tests used placeholder strings, which meant they could never exercise
+ * the check that actually matters — the one that inspects the decrypted
+ * connection string.
+ */
+function encryptConnectionString(plaintext: string): string {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', Buffer.from(TEST_KEY_HEX, 'hex'), iv);
+  const enc = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  return Buffer.concat([iv, cipher.getAuthTag(), enc]).toString('base64');
+}
 
 type InsertedTenantRow = { connectionStringEncrypted: string };
 
@@ -28,6 +45,21 @@ const envValues: Record<string, string | undefined> = {};
 vi.mock('@/libs/Env', () => ({
   Env: new Proxy({}, { get: (_target, prop: string) => envValues[prop] }),
 }));
+
+// TenantCrypto reads process.env directly (it is shared with ops scripts that
+// must not pull in the validated Env). Point its key lookup at the same
+// `envValues` store so tests keep ONE source of truth for env state; the real
+// encrypt/decrypt are left untouched so the round trip is genuinely exercised.
+vi.mock('@/libs/TenantCrypto', async () => {
+  const actual = await vi.importActual<typeof import('@/libs/TenantCrypto')>('@/libs/TenantCrypto');
+  return {
+    ...actual,
+    tenantEncryptionKey: () => {
+      const hex = envValues.CONTROL_PLANE_ENCRYPTION_KEY ?? envValues.IQPRO_CONFIG_ENCRYPTION_KEY;
+      return hex ? Buffer.from(hex, 'hex') : null;
+    },
+  };
+});
 
 /** A tenant row as the control plane would return it. */
 function tenantRow(overrides: Record<string, unknown> = {}) {
@@ -399,17 +431,22 @@ describe('tenantDirectoryService', () => {
   });
 
   describe('shared-database rows in split mode', () => {
-    it('REFUSES an ENCRYPTED shared row, not just the sentinel', async () => {
-      // The leak this closes: auto-registration encrypts DATABASE_URL when a
-      // key is configured, so the stored ciphertext is indistinguishable from a
-      // real per-tenant connection string. Split mode decrypted it happily and
-      // routed every org to the same database — with no error at all. `region`
-      // is the durable marker; the ciphertext is not.
+    beforeEach(() => {
       envValues.CONTROL_DATABASE_URL = 'postgres://control';
+      envValues.DATABASE_URL = 'postgres://shared-tenant';
       envValues.TENANCY_MODE = 'split';
+      envValues.CONTROL_PLANE_ENCRYPTION_KEY = TEST_KEY_HEX;
+    });
+
+    it('REFUSES a row whose connection string IS the shared database', async () => {
+      // The A2 hole. `registerTenants.ts` encrypts DATABASE_URL as every
+      // tenant's connection string and labels the row with a plausible real
+      // region ('aws-us-east-1'), so a region-based guard waves it through.
+      // The ciphertext decrypts cleanly and every org lands on one database —
+      // silently. Checking the DECRYPTED string is what closes it.
       findFirst.mockResolvedValue(tenantRow({
-        region: 'shared',
-        connectionStringEncrypted: 'ciphertext-that-decrypts-to-DATABASE_URL',
+        region: 'aws-us-east-1',
+        connectionStringEncrypted: encryptConnectionString('postgres://shared-tenant'),
       }));
 
       await expect(service.resolveTenant('org_a')).rejects.toThrow(
@@ -417,18 +454,53 @@ describe('tenantDirectoryService', () => {
       );
     });
 
-    it('does NOT reject a real per-tenant row for being shared', async () => {
-      // The contrast case. A provisioned row must get PAST the region guard —
-      // it then fails on decryption here only because this fixture's ciphertext
-      // is not real, which is a different error and proves the guard let it by.
-      envValues.CONTROL_DATABASE_URL = 'postgres://control';
-      envValues.TENANCY_MODE = 'split';
-      envValues.CONTROL_PLANE_ENCRYPTION_KEY = 'a'.repeat(64);
-      findFirst.mockResolvedValue(tenantRow({ region: 'aws-us-east-1' }));
+    it('REFUSES a row pointing at the CONTROL database', async () => {
+      findFirst.mockResolvedValue(tenantRow({
+        region: 'aws-us-east-1',
+        connectionStringEncrypted: encryptConnectionString('postgres://control'),
+      }));
 
-      await expect(service.resolveTenant('org_a')).rejects.not.toThrow(
+      await expect(service.resolveTenant('org_a')).rejects.toThrow(
         service.TenantNotMigratedError,
       );
+    });
+
+    it('REFUSES a shared-era region label even when the string differs', async () => {
+      // Belt and braces: a row that was never re-provisioned.
+      findFirst.mockResolvedValue(tenantRow({
+        region: 'local',
+        connectionStringEncrypted: encryptConnectionString('postgres://somewhere-else'),
+      }));
+
+      await expect(service.resolveTenant('org_a')).rejects.toThrow(
+        service.TenantNotMigratedError,
+      );
+    });
+
+    it('SERVES a genuinely provisioned per-tenant row', async () => {
+      // The contrast case: its own database, a real region. Must resolve.
+      findFirst.mockResolvedValue(tenantRow({
+        region: 'aws-us-east-1',
+        connectionStringEncrypted: encryptConnectionString('postgres://org-a-own-db'),
+      }));
+
+      await expect(service.resolveTenant('org_a')).resolves.toMatchObject({
+        connectionString: 'postgres://org-a-own-db',
+        region: 'aws-us-east-1',
+      });
+    });
+
+    it('still serves a shared row in SHARED mode', async () => {
+      // The guard must not fire before the flip — this is the no-op criterion.
+      envValues.TENANCY_MODE = 'shared';
+      findFirst.mockResolvedValue(tenantRow({
+        region: 'shared',
+        connectionStringEncrypted: encryptConnectionString('postgres://shared-tenant'),
+      }));
+
+      await expect(service.resolveTenant('org_a')).resolves.toMatchObject({
+        connectionString: 'postgres://shared-tenant',
+      });
     });
   });
 });

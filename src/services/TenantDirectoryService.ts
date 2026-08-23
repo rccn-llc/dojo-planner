@@ -1,10 +1,13 @@
 import type { TenantDb } from '@/libs/TenantDb';
-import { Buffer } from 'node:buffer';
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { controlDb } from '@/libs/ControlDb';
 import { Env } from '@/libs/Env';
 import { sharesTenantDatabase } from '@/libs/TenancyMode';
+import {
+  decryptConnectionString as decryptStored,
+  encryptConnectionString as encryptStored,
+  tenantEncryptionKey,
+} from '@/libs/TenantCrypto';
 import { getTenantDb, invalidateTenantPool } from '@/libs/TenantDb';
 import { TENANT_STATUS, tenantSchema } from '@/models/ControlSchema';
 
@@ -143,10 +146,6 @@ export function resetTenantDirectoryCache(orgId?: string): void {
 
 // ---------- decryption ----------
 
-const ALGORITHM = 'aes-256-gcm';
-const IV_BYTES = 12;
-const TAG_BYTES = 16;
-
 /**
  * Marker stored in place of ciphertext when an organization was auto-registered
  * without an encryption key available.
@@ -159,45 +158,35 @@ const TAG_BYTES = 16;
 const SHARED_DATABASE_SENTINEL = '__shared_database__';
 
 /**
- * `region` value marking a row that points at the shared database rather than a
- * real per-tenant one. Written by auto-registration and `registerTenants.ts`.
+ * `region` values used by the writers that point a row at the shared database.
  *
- * This is the DURABLE marker. The ciphertext is not: when an encryption key is
- * configured, auto-registration stores an encryption of DATABASE_URL, which at
- * read time is indistinguishable from a legitimate per-tenant connection
- * string. Relying on the sentinel alone therefore let split mode decrypt those
- * rows and route every organization to the same database — silently, which is
- * the exact cross-tenant leak this architecture exists to prevent.
+ * ⚠️ These are a CHEAP FIRST FILTER, not the guarantee. A2 shipped a guard that
+ * trusted `region` alone, and it did not hold: the three writers disagree —
+ * `autoRegisterTenant` writes 'shared', `registerTenants.ts` defaults to
+ * 'aws-us-east-1', and `seed.ts` writes 'local'. So the rows the production
+ * backfill actually created sailed straight past it.
+ *
+ * The real check is `assertNotSharedDatabase` below, which inspects the
+ * DECRYPTED connection string. A label can be wrong; where the string actually
+ * points cannot.
  */
-const SHARED_REGION = 'shared';
+const SHARED_REGIONS = new Set(['shared', 'local']);
 
 /**
  * Decrypt a stored connection string.
  *
- * Mirrors `libs/Crypto.ts` byte-for-byte (same AES-256-GCM layout:
- * base64(iv || authTag || ciphertext)) but reads a DIFFERENT key: a database
- * connection string is a higher trust tier than a payment gateway id, so the
- * two secret domains are kept under separate keys. Falls back to the IQPro key
- * when `CONTROL_PLANE_ENCRYPTION_KEY` is unset so local dev keeps working.
+ * Wraps the shared helper to keep the "no key configured" case as a clear,
+ * actionable error on the read path — where a missing key is always fatal,
+ * unlike in `autoRegisterTenant`, which degrades to a sentinel.
  */
 function decryptConnectionString(ciphertextB64: string): string {
-  const hex = Env.CONTROL_PLANE_ENCRYPTION_KEY ?? Env.IQPRO_CONFIG_ENCRYPTION_KEY;
-  if (!hex) {
+  const key = tenantEncryptionKey();
+  if (!key) {
     throw new Error(
       'CONTROL_PLANE_ENCRYPTION_KEY is not set; cannot decrypt tenant connection strings',
     );
   }
-  const key = Buffer.from(hex, 'hex');
-  const buf = Buffer.from(ciphertextB64, 'base64');
-  if (buf.length < IV_BYTES + TAG_BYTES + 1) {
-    throw new Error('encrypted connection string is too short');
-  }
-  const iv = buf.subarray(0, IV_BYTES);
-  const tag = buf.subarray(IV_BYTES, IV_BYTES + TAG_BYTES);
-  const ciphertext = buf.subarray(IV_BYTES + TAG_BYTES);
-  const decipher = createDecipheriv(ALGORITHM, key, iv);
-  decipher.setAuthTag(tag);
-  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
+  return decryptStored(ciphertextB64, key);
 }
 
 // ---------- resolution ----------
@@ -266,7 +255,7 @@ async function autoRegisterTenant(orgId: string): Promise<TenantRecord | null> {
   }
 
   const connectionString = Env.DATABASE_URL;
-  const keyHex = Env.CONTROL_PLANE_ENCRYPTION_KEY ?? Env.IQPRO_CONFIG_ENCRYPTION_KEY;
+  const key = tenantEncryptionKey();
 
   // Encrypt when a key is available, but do NOT require one. While every
   // organization resolves to `DATABASE_URL`, the stored string is a value the
@@ -277,13 +266,8 @@ async function autoRegisterTenant(orgId: string): Promise<TenantRecord | null> {
   // The sentinel below is recognised by the read path. It cannot leak a real
   // per-tenant connection string, because auto-registration is disabled the
   // moment the planes are separated.
-  const stored = keyHex
-    ? (() => {
-        const iv = randomBytes(IV_BYTES);
-        const cipher = createCipheriv(ALGORITHM, Buffer.from(keyHex, 'hex'), iv);
-        const ciphertext = Buffer.concat([cipher.update(connectionString, 'utf8'), cipher.final()]);
-        return Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString('base64');
-      })()
+  const stored = key
+    ? encryptStored(connectionString, key)
     : SHARED_DATABASE_SENTINEL;
 
   await controlDb
@@ -292,7 +276,7 @@ async function autoRegisterTenant(orgId: string): Promise<TenantRecord | null> {
       orgId,
       displayName: null,
       connectionStringEncrypted: stored,
-      region: SHARED_REGION,
+      region: 'shared',
       status: TENANT_STATUS.ACTIVE,
       schemaVersion: null,
     })
@@ -304,7 +288,7 @@ async function autoRegisterTenant(orgId: string): Promise<TenantRecord | null> {
   return {
     orgId,
     connectionString,
-    region: SHARED_REGION,
+    region: 'shared',
     status: TENANT_STATUS.ACTIVE,
     schemaVersion: null,
   };
@@ -354,21 +338,21 @@ export async function resolveTenant(orgId: string): Promise<TenantRecord> {
     }
     throw new TenantNotProvisionedError(orgId);
   }
-  // A shared-database row cannot be served once the planes are separated,
-  // whether or not its connection string happens to be encrypted.
-  if (!sharesTenantDatabase() && row.region === SHARED_REGION) {
-    throw new TenantNotMigratedError();
-  }
-
   if (row.status !== TENANT_STATUS.ACTIVE) {
     // Not cached: a migrating tenant flips back to active shortly, and caching
     // the failure would extend the outage by up to the TTL.
     throw new TenantUnavailableError(orgId, row.status);
   }
 
+  const connectionString = resolveConnectionString(row.connectionStringEncrypted);
+
+  // Structural check, AFTER decryption: does this row actually point somewhere
+  // of its own? A region label cannot answer that; the string itself can.
+  assertNotSharedDatabase(connectionString, row.region);
+
   const record: TenantRecord = {
     orgId: row.orgId,
-    connectionString: resolveConnectionString(row.connectionStringEncrypted),
+    connectionString,
     region: row.region,
     status: row.status,
     schemaVersion: row.schemaVersion,
@@ -376,6 +360,35 @@ export async function resolveTenant(orgId: string): Promise<TenantRecord> {
 
   cacheSet(orgId, record);
   return record;
+}
+
+/**
+ * Refuse a row that does not point at a database of its own.
+ *
+ * Split mode means one database per organization. A row whose connection string
+ * resolves to the SHARED database is not a provisioned tenant — it is leftover
+ * data from the shared-database era, and serving it routes that organization
+ * into everyone else's data.
+ *
+ * Checks the decrypted string rather than the `region` label because the label
+ * is written inconsistently by three different code paths (see SHARED_REGIONS)
+ * and is trivially wrong. `registerTenants.ts` in particular writes a plausible
+ * real region onto rows that all share one connection string.
+ */
+function assertNotSharedDatabase(connectionString: string, region: string): void {
+  if (sharesTenantDatabase()) {
+    return;
+  }
+
+  if (connectionString === Env.DATABASE_URL || connectionString === Env.CONTROL_DATABASE_URL) {
+    throw new TenantNotMigratedError();
+  }
+
+  // Belt and braces: a row still carrying a shared-era region label has not
+  // been re-provisioned even if its string happens to differ.
+  if (SHARED_REGIONS.has(region)) {
+    throw new TenantNotMigratedError();
+  }
 }
 
 /**

@@ -27,13 +27,12 @@
  * everything else untouched.
  */
 
-import { Buffer } from 'node:buffer';
-import { createCipheriv, randomBytes } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
+import { encryptConnectionString, tenantEncryptionKey } from '../libs/TenantCrypto';
 import { TENANT_STATUS, tenantSchema } from '../models/ControlSchema';
 import { organizationSchema } from '../models/Schema';
 
@@ -87,25 +86,32 @@ function parseArgs(): { dryRun: boolean; region: string } {
   };
 }
 
-/** Mirrors libs/Crypto.ts: base64(iv(12) || authTag(16) || ciphertext). */
-function encrypt(plaintext: string, keyHex: string): string {
-  const key = Buffer.from(keyHex, 'hex');
-  if (key.length !== 32) {
-    throw new Error(
-      `Encryption key must be 32 bytes (64 hex chars); got ${key.length} bytes. `
-      + 'Generate one with: openssl rand -hex 32',
-    );
-  }
-  const iv = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', key, iv);
-  const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
-  return Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString('base64');
-}
-
 async function main(): Promise<void> {
   loadEnvFiles();
 
   const { dryRun, region } = parseArgs();
+
+  // ⚠️ REFUSE TO RUN ONCE THE PLANES ARE SEPARATE.
+  //
+  // This script encrypts ONE connection string as EVERY tenant's. That is
+  // correct while all orgs share a database and catastrophic afterwards: it
+  // would overwrite each org's real per-tenant string with the shared one and
+  // force status='active', routing every organization into everyone else's
+  // data. The rows would look legitimate — plausible region, ciphertext that
+  // decrypts cleanly — which is exactly why this has to be blocked here rather
+  // than detected later.
+  //
+  // Reads process.env directly, like the rest of this script: an ops script
+  // targeting a remote database must not require a full validated app env.
+  if ((process.env.TENANCY_MODE ?? 'shared') !== 'shared') {
+    throw new Error(
+      '[registerTenants] TENANCY_MODE is not "shared". This script assigns the '
+      + 'SAME connection string to every organization and would destroy real '
+      + 'per-tenant provisioning.\n'
+      + 'To provision an organization once the planes are split, use:\n'
+      + '  npx tsx src/scripts/provisionTenant.ts --orgId=org_xxx',
+    );
+  }
 
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
@@ -128,8 +134,8 @@ async function main(): Promise<void> {
   })();
   console.info(`[registerTenants] target: ${target}`);
 
-  const keyHex = process.env.CONTROL_PLANE_ENCRYPTION_KEY ?? process.env.IQPRO_CONFIG_ENCRYPTION_KEY;
-  if (!keyHex) {
+  const key = tenantEncryptionKey();
+  if (!key) {
     throw new Error(
       'No encryption key. Set CONTROL_PLANE_ENCRYPTION_KEY (preferred) or '
       + 'IQPRO_CONFIG_ENCRYPTION_KEY.\n'
@@ -196,7 +202,7 @@ async function main(): Promise<void> {
 
     for (const org of orgs) {
       // A fresh IV per row: never reuse an IV with the same key under GCM.
-      const encrypted = encrypt(connectionString, keyHex);
+      const encrypted = encryptConnectionString(connectionString, key);
 
       await db
         .insert(tenantSchema)
