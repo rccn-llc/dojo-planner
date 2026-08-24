@@ -21,11 +21,11 @@
  */
 
 import { Buffer } from 'node:buffer';
-import { createDecipheriv } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { Pool } from 'pg';
+import { decryptConnectionString } from '../libs/TenantCrypto';
 
 /**
  * Decrypt exactly as TenantDirectoryService does — same AES-256-GCM layout,
@@ -37,14 +37,7 @@ import { Pool } from 'pg';
  * until traffic hits it.
  */
 function tryDecrypt(ciphertextB64: string, keyHex: string): string {
-  const key = Buffer.from(keyHex, 'hex');
-  const buf = Buffer.from(ciphertextB64, 'base64');
-  if (buf.length < 12 + 16 + 1) {
-    throw new Error('ciphertext too short');
-  }
-  const decipher = createDecipheriv('aes-256-gcm', key, buf.subarray(0, 12));
-  decipher.setAuthTag(buf.subarray(12, 28));
-  return Buffer.concat([decipher.update(buf.subarray(28)), decipher.final()]).toString('utf8');
+  return decryptConnectionString(ciphertextB64, Buffer.from(keyHex, 'hex'));
 }
 
 /** Load .env.local then .env; values already in the environment win. */
@@ -102,7 +95,22 @@ async function main(): Promise<void> {
   const target = describeTarget(connectionString);
   console.info(`[check] target: ${target}\n`);
 
+  // TWO planes, two pools. `organization` is tenant-plane and `tenant` is
+  // control-plane, so the old single-connection LEFT JOIN between them is
+  // impossible once the databases separate — and worse, it would not error:
+  // the baseline creates both tables in BOTH databases, so the join silently
+  // reports every org as unregistered. The set difference is computed in
+  // application code instead.
+  const controlConnectionString = process.env.CONTROL_DATABASE_URL ?? connectionString;
+  const planesAreSeparate = controlConnectionString !== connectionString;
+  if (planesAreSeparate) {
+    console.info(`[check] control plane: ${describeTarget(controlConnectionString)}`);
+  }
+
   const pool = new Pool({ connectionString, max: 1 });
+  const controlPool = planesAreSeparate
+    ? new Pool({ connectionString: controlConnectionString, max: 1 })
+    : pool;
   const problems: string[] = [];
 
   try {
@@ -124,6 +132,22 @@ async function main(): Promise<void> {
       });
 
     const present = new Set(tables.rows.map(row => row.table_name));
+
+    // Control tables must exist in the CONTROL database, which is a different
+    // one post-split. Checking them in the tenant database would pass on the
+    // inert copies the baseline leaves there.
+    if (planesAreSeparate) {
+      const controlTables = await controlPool.query<{ table_name: string }>(
+        `select table_name from information_schema.tables
+         where table_schema = 'public'
+           and table_name in ('tenant', 'tenant_external_ref')`,
+      );
+      present.delete('tenant');
+      present.delete('tenant_external_ref');
+      for (const row of controlTables.rows) {
+        present.add(row.table_name);
+      }
+    }
     const mark = (ok: boolean) => (ok ? 'OK  ' : 'MISS');
 
     console.info('Schema:');
@@ -148,7 +172,7 @@ async function main(): Promise<void> {
 
     if (present.has('organization') && present.has('tenant')) {
       const orgCount = await pool.query<{ n: number }>('select count(*)::int as n from organization');
-      const tenantCount = await pool.query<{ n: number; active: number }>(
+      const tenantCount = await controlPool.query<{ n: number; active: number }>(
         `select count(*)::int as n,
                 count(*) filter (where status = 'active')::int as active
          from tenant`,
@@ -158,12 +182,11 @@ async function main(): Promise<void> {
       console.info(`  organizations : ${orgCount.rows[0]?.n ?? 0}`);
       console.info(`  tenant rows   : ${tenantCount.rows[0]?.n ?? 0} (${tenantCount.rows[0]?.active ?? 0} active)`);
 
-      const unregistered = await pool.query<{ id: string }>(
-        `select o.id from organization o
-         left join tenant t on t.org_id = o.id
-         where t.org_id is null
-         order by o.id`,
-      );
+      // Set difference in application code — see the two-pool note above.
+      const allOrgs = await pool.query<{ id: string }>('select id from organization order by id');
+      const allTenants = await controlPool.query<{ id: string }>('select org_id as id from tenant');
+      const registered = new Set(allTenants.rows.map(r => r.id));
+      const unregistered = { rows: allOrgs.rows.filter(r => !registered.has(r.id)) };
 
       if (unregistered.rows.length > 0) {
         console.info(`\n  ${unregistered.rows.length} organization(s) with NO tenant row:`);
@@ -184,8 +207,8 @@ async function main(): Promise<void> {
       // written under a different key looks identical here and fails only when
       // real traffic arrives.
       const keyHex = process.env.CONTROL_PLANE_ENCRYPTION_KEY ?? process.env.IQPRO_CONFIG_ENCRYPTION_KEY;
-      const rows = await pool.query<{ id: string; enc: string }>(
-        'select org_id as id, connection_string_enc as enc from tenant order by org_id',
+      const rows = await controlPool.query<{ id: string; enc: string; region: string }>(
+        'select org_id as id, connection_string_enc as enc, region from tenant order by org_id',
       );
 
       if (rows.rows.length > 0) {
@@ -211,6 +234,55 @@ async function main(): Promise<void> {
           }
           if (failed.length === 0) {
             console.info(`  OK    all ${rows.rows.length} row(s) decrypt with this key`);
+
+            // ── Isolation, the checks that actually matter before a flip ──
+            //
+            // A row can decrypt cleanly, carry a plausible region, and STILL
+            // point at the shared database — that is precisely what
+            // `registerTenants` produces, and it is invisible to every check
+            // above. Inspect where the strings actually point.
+            const decrypted = new Map<string, string>();
+            for (const row of rows.rows) {
+              decrypted.set(row.id, tryDecrypt(row.enc, keyHex));
+            }
+
+            const pointsAtShared = [...decrypted.entries()]
+              .filter(([, conn]) => conn === connectionString || conn === controlConnectionString)
+              .map(([id]) => id);
+
+            const byConnection = new Map<string, string[]>();
+            for (const [id, conn] of decrypted) {
+              byConnection.set(conn, [...(byConnection.get(conn) ?? []), id]);
+            }
+            const shared = [...byConnection.values()].filter(ids => ids.length > 1);
+
+            console.info('\nIsolation:');
+            if (pointsAtShared.length === 0 && shared.length === 0) {
+              console.info('  OK    every tenant has its own database');
+            }
+
+            if (pointsAtShared.length > 0) {
+              console.info(`  FAIL  ${pointsAtShared.length} row(s) point at the SHARED or CONTROL database`);
+              for (const id of pointsAtShared.slice(0, 5)) {
+                console.info(`          ${id}`);
+              }
+              problems.push(
+                `${pointsAtShared.length} tenant row(s) resolve to the shared or control\n`
+                + '     database rather than one of their own. In split mode these are\n'
+                + '     REFUSED (409). Provision them: npm run db:provision-tenant --orgId=...',
+              );
+            }
+
+            for (const ids of shared) {
+              console.info(`  FAIL  ${ids.length} orgs share one database: ${ids.join(', ')}`);
+            }
+            if (shared.length > 0) {
+              problems.push(
+                `${shared.length} group(s) of organizations share a single database.\n`
+                + '     That is the cross-tenant exposure this migration exists to remove —\n'
+                + '     no region label reveals it, only the connection strings do.',
+              );
+            }
           } else {
             console.info(`  FAIL  ${failed.length} of ${rows.rows.length} row(s) do NOT decrypt`);
             for (const id of failed.slice(0, 5)) {
@@ -226,7 +298,7 @@ async function main(): Promise<void> {
         }
       }
 
-      const inactive = await pool.query<{ id: string; status: string }>(
+      const inactive = await controlPool.query<{ id: string; status: string }>(
         `select org_id as id, status from tenant where status <> 'active' order by org_id`,
       );
       if (inactive.rows.length > 0) {

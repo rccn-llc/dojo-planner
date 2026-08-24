@@ -33,11 +33,12 @@
 
 import type { SaasPlanId } from '../utils/SaasPlans';
 import { Buffer } from 'node:buffer';
-import { createCipheriv, randomBytes, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 
 import { Pool } from 'pg';
+import { encryptConnectionString } from '../libs/TenantCrypto';
 import { TENANT_STATUS, tenantSchema } from '../models/ControlSchema';
 import {
   addressSchema,
@@ -112,6 +113,28 @@ const pool = new Pool({
   max: 1,
 });
 const db = drizzle({ client: pool });
+
+/**
+ * Control-plane handle for `tenant` and the `organization.saas_*` columns.
+ *
+ * Without this, the synthetic-trial path wrote SaaS columns through the tenant
+ * handle while the REAL path (`subscribe()`, which uses `controlOrganizationDb`)
+ * wrote them control-side. Harmless while both resolve to one database, but the
+ * moment CONTROL_DATABASE_URL diverges — which happens BEFORE TENANCY_MODE
+ * flips, since ControlPool keys off the URL — a seeded org's trial would land
+ * in the tenant database while `hasActiveSubscription` reads the control one,
+ * and every seeded org would silently fail the access gate.
+ *
+ * Falls back to the same pool when the planes share a database, so local
+ * seeding still opens exactly ONE connection (pglite-server allows one).
+ */
+const controlConnectionString = process.env.CONTROL_DATABASE_URL ?? connectionString;
+const controlPool = controlConnectionString === connectionString
+  ? pool
+  : new Pool({ connectionString: controlConnectionString, max: 1 });
+const controlDb = controlConnectionString === connectionString
+  ? db
+  : drizzle({ client: controlPool });
 
 // =============================================================================
 // SEED DATA
@@ -2407,13 +2430,9 @@ async function provisionLocalTenant(orgId: string): Promise<void> {
 
   console.info(`  🗂️  Registering tenant directory row for ${orgId}...`);
 
-  const key = Buffer.from(keyHex, 'hex');
-  const iv = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', key, iv);
-  const ciphertext = Buffer.concat([cipher.update(connectionString, 'utf8'), cipher.final()]);
-  const encrypted = Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString('base64');
+  const encrypted = encryptConnectionString(connectionString, Buffer.from(keyHex, 'hex'));
 
-  await db
+  await controlDb
     .insert(tenantSchema)
     .values({
       orgId,
@@ -2494,7 +2513,7 @@ async function provisionSaasSubscription(orgId: string): Promise<void> {
   // MILLISECONDS to match subscribe() and the IQPro webhook (and the expiry
   // backstop in hasActiveSubscription).
   const trialEnd = Date.now() + 30 * 24 * 60 * 60 * 1000;
-  await db.update(organizationSchema)
+  await controlDb.update(organizationSchema)
     .set({
       stripeSubscriptionStatus: null,
       saasProviderSubscriptionId: null,

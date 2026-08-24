@@ -17,11 +17,17 @@
  * that single database. Behaviour is equivalent to the old `npm run db:migrate`.
  *
  * ── Phase A3 (later) ────────────────────────────────────────────────────────
- * Reads `tenant` rows with status='active' from the control plane and loops,
- * taking a pg advisory lock per tenant, connecting on each one's DIRECT
+ * A4 WILL read `tenant` rows with status='active' from the control plane and
+ * loop, taking a pg advisory lock per tenant, connecting on each one's DIRECT
  * (non-pooled) URI — DDL under PgBouncer transaction pooling is unreliable —
  * and recording `schema_version` on success. The per-tenant result table and
  * non-zero exit below are already shaped for that.
+ *
+ * ⚠️ NONE of that happens yet. Today `resolveTargets` returns the control plane
+ * plus the shared database, and `migrateOne` writes nothing back to `tenant`.
+ * `provisionTenant.ts` is currently the only writer of `schema_version`, which
+ * it sets for the one tenant it provisions. Read this paragraph as a design
+ * note, not as a description of current behaviour.
  *
  * Usage:
  *   npx tsx src/scripts/migrateTenants.ts [--dry-run]

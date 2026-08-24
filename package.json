@@ -29,6 +29,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:migrate:tenants": "tsx src/scripts/migrateTenants.ts",
     "db:register-tenants": "tsx src/scripts/registerTenants.ts",
+    "db:provision-tenant": "tsx src/scripts/provisionTenant.ts",
     "db:check-tenants": "tsx src/scripts/checkTenantReadiness.ts",
     "db:check-schema": "tsx src/scripts/checkSchemaSync.ts",
     "db:studio": "drizzle-kit studio",
