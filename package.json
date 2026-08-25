@@ -37,7 +37,10 @@
     "storybook:test": "vitest run --config .storybook/vitest.config.mts",
     "build-storybook": "storybook build",
     "stripe:listen": "stripe listen --forward-to localhost:3000/webhook/billing",
-    "stripe:setup-price": "dotenv -c -- tsx ./scripts/createStripePrice.ts"
+    "stripe:setup-price": "dotenv -c -- tsx ./scripts/createStripePrice.ts",
+    "db:measure-tenant": "tsx src/scripts/measureTenant.ts",
+    "db:copy-tenant": "tsx src/scripts/copyTenantData.ts",
+    "db:verify-copy": "tsx src/scripts/verifyTenantCopy.ts"
   },
   "dependencies": {
     "@clerk/backend": "^2.33.6",
