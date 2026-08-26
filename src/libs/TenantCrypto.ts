@@ -3,6 +3,17 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import process from 'node:process';
 
 /**
+ * Marks a `tenant` row that is NOT cut over — it is served from the shared
+ * database. Stored in place of ciphertext.
+ *
+ * Lives here rather than in TenantDirectoryService because ops scripts
+ * (registerTenants, checkTenantReadiness) need it, and that service imports
+ * `Env`, whose strict validation demands Clerk/Stripe keys an ops script
+ * targeting a remote database has no reason to hold.
+ */
+export const SHARED_DATABASE_SENTINEL = '__shared_database__';
+
+/**
  * AES-256-GCM for tenant connection strings.
  *
  * ── Why this is separate from `libs/Crypto.ts` ──────────────────────────────

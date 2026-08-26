@@ -2,10 +2,10 @@ import type { TenantDb } from '@/libs/TenantDb';
 import { eq } from 'drizzle-orm';
 import { controlDb } from '@/libs/ControlDb';
 import { Env } from '@/libs/Env';
-import { sharesTenantDatabase } from '@/libs/TenancyMode';
 import {
   decryptConnectionString as decryptStored,
   encryptConnectionString as encryptStored,
+  SHARED_DATABASE_SENTINEL,
   tenantEncryptionKey,
 } from '@/libs/TenantCrypto';
 import { getTenantDb, invalidateTenantPool } from '@/libs/TenantDb';
@@ -42,26 +42,6 @@ export class TenantNotProvisionedError extends Error {
   constructor(orgId: string) {
     super(`No provisioned tenant database for organization ${orgId}`);
     this.name = 'TenantNotProvisionedError';
-  }
-}
-
-/**
- * A tenant row predates the split: it still carries the shared-database
- * sentinel, so there is no real per-org connection string to open. → 409.
- *
- * Typed rather than a bare Error because the RPC layer maps only known tenancy
- * errors; an untyped throw became an unexplained 500 with nothing logged, which
- * is the opposite of the loud failure this mode is supposed to produce.
- */
-export class TenantNotMigratedError extends Error {
-  constructor() {
-    super(
-      '[Tenancy] A tenant row still carries the shared-database marker, but '
-      + 'TENANCY_MODE is "split". That row predates the split and must be '
-      + 're-provisioned with a real connection string before this '
-      + 'organization can be served.',
-    );
-    this.name = 'TenantNotMigratedError';
   }
 }
 
@@ -155,7 +135,6 @@ export function resetTenantDirectoryCache(orgId?: string): void {
  * ever honoured, while all organizations share one database — see
  * `autoRegisterTenant`.
  */
-const SHARED_DATABASE_SENTINEL = '__shared_database__';
 
 /**
  * `region` values used by the writers that point a row at the shared database.
@@ -166,7 +145,7 @@ const SHARED_DATABASE_SENTINEL = '__shared_database__';
  * 'aws-us-east-1', and `seed.ts` writes 'local'. So the rows the production
  * backfill actually created sailed straight past it.
  *
- * The real check is `assertNotSharedDatabase` below, which inspects the
+ * The real check is `pointsAtSharedDatabase` below, which inspects the
  * DECRYPTED connection string. A label can be wrong; where the string actually
  * points cannot.
  */
@@ -240,20 +219,24 @@ function defaultTenantRecord(orgId: string): TenantRecord | null {
  * explicit (`provisionTenant.ts` creates a real Neon project) and a missing row
  * must once again be a hard `TenantNotProvisionedError`.
  *
- * The mode guard enforces exactly that: auto-registration is disabled the
- * moment TENANCY_MODE is 'split', which is the explicit signal that the planes
- * have been separated. It is deliberately NOT derived from the connection
- * strings — during a staged rollout CONTROL_DATABASE_URL is populated and
- * migrated while the deployment still serves traffic in 'shared' mode.
+ * ⚠️ That guard is DEFERRED to A7, when source rows are deleted after a soak.
+ * Until then, registering a brand-new org against the shared database is
+ * correct: it has no data, nothing to migrate, and is indistinguishable from
+ * any other org that has not been cut over. A global mode flag cannot express
+ * this — under one, the first cutover made every NEW org 409 until an operator
+ * intervened.
  */
 async function autoRegisterTenant(orgId: string): Promise<TenantRecord | null> {
-  const sharesOneDatabase = sharesTenantDatabase();
-
-  if (!sharesOneDatabase) {
-    // The planes are separate: provisioning is explicit from here on.
-    return null;
-  }
-
+  // Registers against the SHARED database, deliberately.
+  //
+  // A new Clerk organization has no data yet and nothing to migrate, so the
+  // shared database is the correct home for it until someone cuts it over. It
+  // is then indistinguishable from any other not-yet-migrated org.
+  //
+  // This used to bail out whenever TENANCY_MODE was 'split', which meant that
+  // once ANY organization had been cut over, every newly created organization
+  // 409'd until an operator ran a script by hand. With a per-org split signal
+  // there is no such mode, and no such cliff.
   const connectionString = Env.DATABASE_URL;
   const key = tenantEncryptionKey();
 
@@ -344,11 +327,9 @@ export async function resolveTenant(orgId: string): Promise<TenantRecord> {
     throw new TenantUnavailableError(orgId, row.status);
   }
 
-  const connectionString = resolveConnectionString(row.connectionStringEncrypted);
-
-  // Structural check, AFTER decryption: does this row actually point somewhere
-  // of its own? A region label cannot answer that; the string itself can.
-  assertNotSharedDatabase(connectionString, row.region);
+  // Resolves to this org's OWN database once it has been cut over, and to the
+  // shared database until then. Per-org, so organizations move one at a time.
+  const connectionString = resolveConnectionString(row.connectionStringEncrypted, row.region);
 
   const record: TenantRecord = {
     orgId: row.orgId,
@@ -375,20 +356,37 @@ export async function resolveTenant(orgId: string): Promise<TenantRecord> {
  * and is trivially wrong. `registerTenants.ts` in particular writes a plausible
  * real region onto rows that all share one connection string.
  */
-function assertNotSharedDatabase(connectionString: string, region: string): void {
-  if (sharesTenantDatabase()) {
-    return;
-  }
-
+/**
+ * Whether a tenant row still points at the shared database.
+ *
+ * ── This is the split signal, and it is PER-ORG ─────────────────────────────
+ *
+ * A5 retired the global `TENANCY_MODE` from this decision. That flag made
+ * "one organization at a time" impossible: flipping it to `split` made EVERY
+ * organization not yet cut over fail with 409, because their rows still
+ * pointed at the shared database. Migrating fifty dojos then meant one
+ * simultaneous all-or-nothing switch with a single rollback point.
+ *
+ * The row already carries everything needed to decide. An organization is
+ * "split" precisely when its own connection string names a database that is
+ * neither the shared one nor the control plane. So cut-over orgs resolve to
+ * their own databases while every other org keeps resolving to the shared one,
+ * with no coordinated flag flip and no window where both apps must agree.
+ *
+ * ⚠️ The decision is made on the DECRYPTED CONNECTION STRING, never on
+ * `region`. A2 shipped a guard that trusted the label and it silently failed:
+ * `registerTenants` writes 'aws-us-east-1', which no shared-region set
+ * contains, so production rows pointing straight at the shared database sailed
+ * through. A label can be wrong; where the string actually points cannot.
+ */
+function pointsAtSharedDatabase(connectionString: string, region: string): boolean {
   if (connectionString === Env.DATABASE_URL || connectionString === Env.CONTROL_DATABASE_URL) {
-    throw new TenantNotMigratedError();
+    return true;
   }
 
-  // Belt and braces: a row still carrying a shared-era region label has not
-  // been re-provisioned even if its string happens to differ.
-  if (SHARED_REGIONS.has(region)) {
-    throw new TenantNotMigratedError();
-  }
+  // Cheap secondary filter only — see the SHARED_REGIONS note above for why
+  // this can never be the primary check.
+  return SHARED_REGIONS.has(region);
 }
 
 /**
@@ -400,20 +398,48 @@ function assertNotSharedDatabase(connectionString: string, region: string): void
  * era, and silently routing that organization to the control database would be
  * a cross-tenant leak.
  */
-function resolveConnectionString(stored: string): string {
-  if (stored !== SHARED_DATABASE_SENTINEL) {
-    return decryptConnectionString(stored);
+/**
+ * The connection string for a tenant row, or the shared database when the row
+ * has not been cut over yet.
+ *
+ * Returning the shared string for a not-yet-migrated org is the whole point of
+ * the per-org model: those organizations keep working, untouched, while others
+ * move one at a time.
+ */
+function resolveConnectionString(stored: string, region: string): string {
+  if (stored === SHARED_DATABASE_SENTINEL) {
+    return Env.DATABASE_URL;
   }
 
-  if (!sharesTenantDatabase()) {
-    throw new TenantNotMigratedError();
-  }
+  const decrypted = decryptConnectionString(stored);
 
-  return Env.DATABASE_URL;
+  // A row whose string still names the shared database is not yet cut over.
+  // Serve it from there rather than refusing — refusing is what forced the
+  // all-or-nothing flip this replaced.
+  return pointsAtSharedDatabase(decrypted, region) ? Env.DATABASE_URL : decrypted;
 }
 
 /** Resolve an organization straight to a usable database handle. */
+/**
+ * Host of a connection string, for logging. NEVER the credentials.
+ *
+ * If an org is served from the wrong database the symptom is empty reads and
+ * successful-looking writes — silent divergence with nothing in the logs to
+ * catch it. One host per resolution is the cheapest possible detector.
+ */
+export function connectionHost(connectionString: string): string {
+  try {
+    return new URL(connectionString).host || 'unknown';
+  } catch {
+    // Never let a logging concern break a database resolution.
+    return 'unparseable';
+  }
+}
+
 export async function getDbForOrg(orgId: string): Promise<TenantDb> {
   const tenant = await resolveTenant(orgId);
+
+  console.info('[Tenancy] resolved', { orgId, dbHost: connectionHost(tenant.connectionString) });
+
   return getTenantDb(orgId, tenant.connectionString);
 }

@@ -41,7 +41,7 @@ import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { Pool } from 'pg';
-import { encryptConnectionString, tenantEncryptionKey } from '../libs/TenantCrypto';
+import { decryptConnectionString, encryptConnectionString, SHARED_DATABASE_SENTINEL, tenantEncryptionKey } from '../libs/TenantCrypto';
 import { TENANT_STATUS, tenantSchema } from '../models/ControlSchema';
 
 const NEON_API = 'https://console.neon.tech/api/v2';
@@ -195,7 +195,6 @@ export async function assertDistinctDatabase(
     throw new Error('No encryption key; cannot check existing tenants for collisions.');
   }
 
-  const { decryptConnectionString } = await import('../libs/TenantCrypto');
   const existing = await controlDb.select().from(tenantSchema);
   for (const row of existing) {
     if (row.orgId === orgId) {
@@ -227,10 +226,54 @@ export async function assertDistinctDatabase(
 }
 
 /** Apply the baseline, returning the migration tag that was applied. */
+/**
+ * Apply the baseline — or verify it is ALREADY applied.
+ *
+ * `0000_baseline.sql` uses bare `CREATE TABLE` for 40 of 42 tables, so it
+ * cannot be re-applied to a database that already holds the schema. That is
+ * the normal case for a Neon BRANCH, which inherits its parent's schema by
+ * definition, and branches are the only way to get a database on a
+ * Vercel-managed Neon account.
+ *
+ * So: if the destination already has the tables, verify the schema is COMPLETE
+ * rather than blindly running DDL that would fail on the first statement. A
+ * partially-migrated destination is rejected — a copy into one would fail
+ * mid-way, or worse, silently omit a table.
+ */
+/** Table names the baseline creates — the definition of a complete schema. */
+export function expectedTableNames(): string[] {
+  const sql = readFileSync(path.join(MIGRATIONS_FOLDER, '0000_baseline.sql'), 'utf8');
+  const names = [...sql.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?"([^"]+)"/g)].map(m => m[1]!);
+  return [...new Set(names)];
+}
+
 async function migrateTenantDatabase(connectionString: string): Promise<string> {
   const pool = new Pool({ connectionString, max: 1 });
   try {
-    await migrate(drizzle({ client: pool }), { migrationsFolder: MIGRATIONS_FOLDER });
+    const { rows } = await pool.query<{ table_name: string }>(
+      `SELECT table_name FROM information_schema.tables
+       WHERE table_schema = 'public' AND table_type = 'BASE TABLE'`,
+    );
+    const present = new Set(rows.map(r => r.table_name));
+
+    if (present.size === 0) {
+      await migrate(drizzle({ client: pool }), { migrationsFolder: MIGRATIONS_FOLDER });
+    } else {
+      // Already has a schema. Prove it is the WHOLE schema before trusting it.
+      const expected = expectedTableNames();
+      const missing = expected.filter(t => !present.has(t));
+
+      if (missing.length > 0) {
+        throw new Error(
+          `The destination already has ${present.size} table(s) but is MISSING ${missing.length}: `
+          + `${missing.slice(0, 5).join(', ')}${missing.length > 5 ? ', …' : ''}.\n`
+          + 'It is partially migrated. Copying into it would fail part-way or silently skip tables.\n'
+          + 'Use an empty database, or bring this one up to the current baseline by hand.',
+        );
+      }
+
+      console.info(`[provisionTenant] destination already has the full schema (${present.size} tables) — not re-applying the baseline`);
+    }
   } finally {
     await pool.end();
   }
@@ -245,11 +288,61 @@ async function migrateTenantDatabase(connectionString: string): Promise<string> 
   return latest;
 }
 
+/**
+ * Is this tenant row ALREADY on its own database?
+ *
+ * `status` cannot answer this. `registerTenants` writes rows as 'active' —
+ * correctly, since those orgs ARE served, from the SHARED database. Treating
+ * 'active' as "already provisioned" made every registered org unprovisionable,
+ * which is the normal starting state for a cutover.
+ *
+ * The predicate is the same one the app routes on: does the decrypted string
+ * name something other than the shared (or control) database?
+ */
+export function isAlreadyCutOver(
+  storedConnectionString: string,
+  sharedConnectionString: string | undefined,
+  controlConnectionString: string,
+): boolean {
+  if (storedConnectionString === SHARED_DATABASE_SENTINEL) {
+    return false;
+  }
+
+  const key = tenantEncryptionKey();
+  if (!key) {
+    return false;
+  }
+
+  try {
+    const decrypted = decryptConnectionString(storedConnectionString, key);
+    return decrypted !== sharedConnectionString && decrypted !== controlConnectionString;
+  } catch {
+    // Undecryptable means a key mismatch, not a cutover. Let provisioning
+    // proceed and fail later with a clearer error than "nothing to do".
+    return false;
+  }
+}
+
 async function main(): Promise<void> {
   loadEnvFiles();
   const args = parseArgs();
 
-  const controlConnectionString = process.env.CONTROL_DATABASE_URL ?? process.env.DATABASE_URL;
+  // REFUSE to fall back to DATABASE_URL.
+  //
+  // The `tenant` directory is control-plane. Falling back silently wrote
+  // directory rows into whatever DATABASE_URL happened to be — locally a dead
+  // socket (an opaque "failed query" error), and on a machine pointed at
+  // production, rows nobody reads. An unset control plane is a configuration
+  // mistake, not a default to guess at.
+  const controlConnectionString = process.env.CONTROL_DATABASE_URL;
+  if (!controlConnectionString) {
+    throw new Error(
+      'CONTROL_DATABASE_URL is not set.\n'
+      + 'provisionTenant writes the `tenant` directory row, which lives in the CONTROL database.\n'
+      + 'Set it to the pooled connection string of your control Neon project, e.g.\n'
+      + '  CONTROL_DATABASE_URL="postgresql://…-pooler…/neondb?sslmode=require" npm run db:provision-tenant -- --orgId=org_xxx',
+    );
+  }
   if (!controlConnectionString) {
     throw new Error('Neither CONTROL_DATABASE_URL nor DATABASE_URL is set.');
   }
@@ -269,11 +362,66 @@ async function main(): Promise<void> {
     const existing = await controlDb
       .select()
       .from(tenantSchema)
-      .where(eq(tenantSchema.orgId, args.orgId));
+      .where(eq(tenantSchema.orgId, args.orgId))
+      .catch((error: unknown) => {
+        // drizzle reports the failed SQL but drops the driver's cause, so a
+        // dead socket and an unmigrated database look identical. Name both.
+        const code = (error as { code?: string; cause?: { code?: string } }).code
+          ?? (error as { cause?: { code?: string } }).cause?.code;
+        if (code === '42P01') {
+          throw new Error(
+            'The `tenant` table does not exist in CONTROL_DATABASE_URL.\n'
+            + 'Either this is not the control database, or the baseline has never been applied to it:\n'
+            + '  CONTROL_DATABASE_URL="…" npm run db:migrate:tenants',
+          );
+        }
+        if (code === '42703') {
+          throw new Error(
+            'The `tenant` table in CONTROL_DATABASE_URL is missing a column this code expects.\n'
+            + 'It was migrated at an older baseline. drizzle compares created_at, not file hashes,\n'
+            + 'so an edited baseline is SILENTLY SKIPPED on a database that already recorded it —\n'
+            + 'the missing DDL must be applied by hand.',
+          );
+        }
+        if (code === 'ECONNREFUSED') {
+          throw new Error('Cannot connect to CONTROL_DATABASE_URL. Is the host reachable?');
+        }
+        throw error;
+      });
 
-    if (existing[0]?.status === TENANT_STATUS.ACTIVE) {
-      console.warn(`[provisionTenant] ${args.orgId} is already active. Nothing to do.`);
-      return;
+    // Refuse only when the org is ALREADY ON ITS OWN DATABASE.
+    //
+    // `status` alone cannot answer this. `registerTenants` writes rows as
+    // 'active' — correctly, because those orgs ARE being served, from the
+    // SHARED database. Treating 'active' as "already provisioned" made every
+    // registered org unprovisionable, which is the normal starting state for a
+    // cutover. The real question is the same one the app routes on: does this
+    // row point somewhere other than the shared database?
+    const row = existing[0];
+    if (row) {
+      const alreadyCutOver = isAlreadyCutOver(
+        row.connectionStringEncrypted,
+        process.env.DATABASE_URL,
+        controlConnectionString,
+      );
+
+      // Only refuse a row that is BOTH on its own database AND finished.
+      //
+      // Provisioning writes the row (status 'provisioning') before applying
+      // the schema, so a failure at any later step leaves a row that points at
+      // the new database but was never verified. Refusing that on the
+      // connection string alone made the failure unrecoverable: re-running
+      // said "nothing to do" while the tenant was still half-provisioned.
+      if (alreadyCutOver && row.status !== TENANT_STATUS.PROVISIONING) {
+        console.warn(`[provisionTenant] ${args.orgId} is already on its own database (status "${row.status}"). Nothing to do.`);
+        return;
+      }
+
+      if (alreadyCutOver) {
+        console.info(`[provisionTenant] ${args.orgId} has a half-provisioned row (status "${row.status}") — resuming.`);
+      }
+
+      console.info(`[provisionTenant] ${args.orgId} exists (status "${row.status}") on the shared database — provisioning its own.`);
     }
 
     if (args.dryRun) {
@@ -320,19 +468,28 @@ async function main(): Promise<void> {
     await assertDistinctDatabase(controlDb, args.orgId, project.connectionString);
     console.info('[provisionTenant] verified: distinct, reachable, unshared');
 
-    // 5. Only now.
+    // 5. Record the schema, but DELIBERATELY LEAVE THE ROW NON-SERVABLE.
+    //
+    // The database is empty at this point. Flipping to ACTIVE here would make
+    // `resolveTenant` serve this org from an empty database the moment the 60s
+    // directory cache expires — its dashboard would go blank with no flag
+    // change and no error. The org becomes servable only after its data has
+    // been copied AND verified, which is what `cutoverTenant` does.
     await controlDb
       .update(tenantSchema)
       .set({
-        status: TENANT_STATUS.ACTIVE,
         schemaVersion,
         schemaVersionAppliedAt: new Date(),
         updatedAt: new Date(),
       })
       .where(eq(tenantSchema.orgId, args.orgId));
 
-    console.info(`\n[provisionTenant] ${args.orgId} is ACTIVE.`);
-    console.info('Next: copy this org\'s data into its database, then run db:check-tenants.');
+    console.info(`\n[provisionTenant] ${args.orgId} is PROVISIONED (not yet servable).`);
+    console.info('Its database is empty, so the row stays non-servable until the copy is verified.');
+    console.info('Next:');
+    console.info(`  npm run db:copy-tenant   -- --orgId=${args.orgId} --target=<connection string>`);
+    console.info(`  npm run db:verify-copy   -- --orgId=${args.orgId} --target=<same>`);
+    console.info(`  npm run db:cutover-tenant -- --orgId=${args.orgId} --target=<same>   # flips to ACTIVE`);
   } finally {
     await controlPool.end();
   }

@@ -91,3 +91,64 @@ describe('assertDistinctDatabase', () => {
       .toBeUndefined();
   });
 });
+
+describe('isAlreadyCutOver — the provisioning guard', () => {
+  const SHARED = 'postgres://shared';
+  const CONTROL = 'postgres://control';
+
+  beforeEach(() => {
+    process.env.CONTROL_PLANE_ENCRYPTION_KEY = 'a'.repeat(64);
+  });
+
+  it('does NOT refuse a registerTenants row, which is active on the SHARED database', async () => {
+    // The bug this pins: the guard checked `status === 'active'`, but
+    // registerTenants writes 'active' for every org it registers against the
+    // shared database. That made the normal starting state for a cutover —
+    // registered, active, shared — permanently unprovisionable.
+    const { encryptConnectionString, tenantEncryptionKey } = await import('../libs/TenantCrypto');
+    const { isAlreadyCutOver } = await import('./provisionTenant');
+    const stored = encryptConnectionString(SHARED, tenantEncryptionKey()!);
+
+    expect(isAlreadyCutOver(stored, SHARED, CONTROL)).toBe(false);
+  });
+
+  it('does not refuse a sentinel row', async () => {
+    const { SHARED_DATABASE_SENTINEL } = await import('../libs/TenantCrypto');
+    const { isAlreadyCutOver } = await import('./provisionTenant');
+
+    expect(isAlreadyCutOver(SHARED_DATABASE_SENTINEL, SHARED, CONTROL)).toBe(false);
+  });
+
+  it('REFUSES an org already on its own database', async () => {
+    // Re-provisioning would mint a second Neon project and overwrite the row,
+    // orphaning the first database with that org's data still in it.
+    const { encryptConnectionString, tenantEncryptionKey } = await import('../libs/TenantCrypto');
+    const { isAlreadyCutOver } = await import('./provisionTenant');
+    const stored = encryptConnectionString('postgres://tenant-a', tenantEncryptionKey()!);
+
+    expect(isAlreadyCutOver(stored, SHARED, CONTROL)).toBe(true);
+  });
+
+  it('does not treat an undecryptable row as cut over', async () => {
+    // A key mismatch should surface as a real error later, not as a silent
+    // "nothing to do" that looks like success.
+    const { isAlreadyCutOver } = await import('./provisionTenant');
+
+    expect(isAlreadyCutOver('not-valid-ciphertext', SHARED, CONTROL)).toBe(false);
+  });
+});
+
+describe('expectedTableNames — what a complete schema means', () => {
+  it('parses every table the baseline creates', async () => {
+    // Used to decide whether a pre-existing destination is fully migrated. If
+    // this under-counts, a healthy database gets rejected; if it over-counts,
+    // a partial one gets accepted and the copy fails part-way through.
+    const { expectedTableNames } = await import('./provisionTenant');
+    const names = expectedTableNames();
+
+    expect(names.length).toBe(42);
+    expect(names).toContain('member');
+    expect(names).toContain('tenant');
+    expect(new Set(names).size).toBe(names.length);
+  });
+});

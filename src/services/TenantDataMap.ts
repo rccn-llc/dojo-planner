@@ -1,5 +1,3 @@
-import { sql } from 'drizzle-orm';
-
 /**
  * The authoritative map of which rows belong to one organization.
  *
@@ -145,9 +143,4 @@ export function orgScopePredicate(entry: TenantTable): string {
     return 'organization_id = $1';
   }
   return `${entry.parentColumn} IN (${entry.parentSelect})`;
-}
-
-/** `SELECT count(*)` for one org's rows in `table`. */
-export function countSql(entry: TenantTable) {
-  return sql.raw(`SELECT count(*)::int AS n FROM "${entry.table}" WHERE ${orgScopePredicate(entry)}`);
 }

@@ -7,9 +7,15 @@
  *     rollback: if the copy or the soak goes wrong, repoint the tenant row back
  *     at the shared database and nothing has been lost. Source deletion is a
  *     later phase, after a soak has passed.
- *  2. The tenant row is flipped to `migrating` for the duration, which
- *     `resolveTenant` refuses (503). Both apps stop serving that org rather
- *     than reading a half-populated database.
+ *  2. WRITE FREEZE. The tenant row is flipped to `migrating` before the first
+ *     read and restored afterwards. `resolveTenant` serves only `active`, so
+ *     both apps refuse that org for the duration rather than writing rows into
+ *     a source that is being copied out from under them. The row is restored
+ *     to its PRIOR status on both success and failure — a failed copy must not
+ *     leave an org permanently unservable.
+ *  2b. The source reads run in ONE `REPEATABLE READ` transaction, so every
+ *     table is read from the same snapshot. Without it a write landing between
+ *     the `member` read and the `attendance` read yields a torn copy.
  *  3. The destination writes run in ONE transaction. A failure rolls back to an
  *     empty database rather than leaving a partial org.
  *  4. Ids are preserved verbatim. Every PK is a text UUID with no sequence, so
@@ -30,6 +36,7 @@
 import process from 'node:process';
 import { Pool } from 'pg';
 import { argValue, loadEnvFiles } from '../libs/EnvFiles';
+import { TENANT_STATUS } from '../models/ControlSchema';
 import { ORGANIZATION_TENANT_COLUMNS, orgScopePredicate, TENANT_TABLES } from '../services/TenantDataMap';
 
 /** Rows per INSERT. Keeps parameter counts under Postgres's 65535 limit. */
@@ -81,6 +88,27 @@ async function insertChunked(
   }
 }
 
+/**
+ * Flip the tenant row's status, returning the status it held before.
+ *
+ * This is the write freeze. `resolveTenant` serves only `active`, so a row in
+ * `migrating` makes both apps refuse the org — which is the point: a write
+ * landing mid-copy would be silently lost, since the copy has already read
+ * that table.
+ */
+async function setTenantStatus(control: Pool, orgId: string, status: string): Promise<string | null> {
+  // The prior status comes from a CTE that reads the row BEFORE the update —
+  // a plain `RETURNING status` would hand back the value just written.
+  const { rows } = await control.query<{ prior: string }>(
+    `WITH before AS (SELECT status FROM "tenant" WHERE org_id = $1)
+     UPDATE "tenant" SET status = $2, updated_at = now()
+     WHERE org_id = $1
+     RETURNING (SELECT status FROM before) AS prior`,
+    [orgId, status],
+  );
+  return rows[0]?.prior ?? null;
+}
+
 async function main(): Promise<void> {
   loadEnvFiles();
 
@@ -106,41 +134,88 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // The freeze is a control-plane write, so the control connection is
+  // required for a LIVE run. A dry run reads only and never freezes.
+  const controlConnectionString = process.env.CONTROL_DATABASE_URL ?? sourceConnectionString;
+
   const source = new Pool({ connectionString: sourceConnectionString, max: 1 });
   const destination = new Pool({ connectionString: target, max: 1 });
+  const control = new Pool({ connectionString: controlConnectionString, max: 1 });
+
+  // Restored in `finally`. A failed copy must never leave an org frozen.
+  let priorStatus: string | null = null;
 
   try {
     console.info(`[copyTenantData] org: ${orgId}`);
     console.info(`[copyTenantData] mode: ${dryRun ? 'DRY RUN' : 'LIVE'}\n`);
+
+    // ── WRITE FREEZE ────────────────────────────────────────────────────────
+    // Flip BEFORE the first read. `resolveTenant` serves only `active`, so from
+    // here until `finally` both apps refuse this org rather than writing into a
+    // source that is being copied out from under them.
+    if (!dryRun) {
+      priorStatus = await setTenantStatus(control, orgId, TENANT_STATUS.MIGRATING);
+      if (priorStatus === null) {
+        console.error(`No tenant row for ${orgId} in the control database — provision it first.`);
+        process.exit(1);
+      }
+      console.info(`[copyTenantData] froze tenant (was "${priorStatus}", now "${TENANT_STATUS.MIGRATING}")\n`);
+    }
 
     // Read everything from the source FIRST, before opening a destination
     // transaction. A read failure then costs nothing, and the transaction stays
     // as short as possible.
     const plan: Array<{ table: string; columns: string[]; values: Record<string, unknown>[] }> = [];
 
-    // `organization` is special: only its tenant-plane columns may cross.
-    const orgColumns = [...ORGANIZATION_TENANT_COLUMNS];
-    const orgRows = await source.query<Record<string, unknown>>(
-      `SELECT ${orgColumns.map(c => `"${c}"`).join(', ')} FROM "organization" WHERE id = $1`,
-      [orgId],
-    );
-    if (orgRows.rows.length === 0) {
-      console.error(`No organization row for ${orgId} in the source database.`);
-      process.exit(1);
-    }
-    plan.push({ table: 'organization', columns: orgColumns, values: orgRows.rows });
-
-    for (const entry of TENANT_TABLES) {
-      const columns = await columnsOf(destination, entry.table);
-      if (columns.length === 0) {
-        console.error(`Destination has no "${entry.table}" table — apply the baseline first.`);
-        process.exit(1);
+    // ONE snapshot for every table. Separate autocommit queries would let a
+    // write land between the `member` read and the `attendance` read, yielding
+    // a copy that is internally inconsistent — an attendance row referencing a
+    // member that the copy does not contain.
+    const reader = await source.connect();
+    await reader.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    // Released on every path below, including the throws inside the plan build.
+    let readerReleased = false;
+    const releaseReader = async (): Promise<void> => {
+      if (readerReleased) {
+        return;
       }
-      const { rows } = await source.query<Record<string, unknown>>(
-        `SELECT ${columns.map(c => `"${c}"`).join(', ')} FROM "${entry.table}" WHERE ${orgScopePredicate(entry)}`,
+      readerReleased = true;
+      try {
+        await reader.query('COMMIT');
+      } finally {
+        reader.release();
+      }
+    };
+
+    try {
+      // `organization` is special: only its tenant-plane columns may cross.
+      const orgColumns = [...ORGANIZATION_TENANT_COLUMNS];
+      const orgRows = await reader.query<Record<string, unknown>>(
+        `SELECT ${orgColumns.map(c => `"${c}"`).join(', ')} FROM "organization" WHERE id = $1`,
         [orgId],
       );
-      plan.push({ table: entry.table, columns, values: rows });
+      if (orgRows.rows.length === 0) {
+        // Throw, never process.exit: exit skips `finally`, which would strand
+        // the org in `migrating` with nothing to unfreeze it.
+        throw new Error(`No organization row for ${orgId} in the source database.`);
+      }
+      plan.push({ table: 'organization', columns: orgColumns, values: orgRows.rows });
+
+      for (const entry of TENANT_TABLES) {
+        const columns = await columnsOf(destination, entry.table);
+        if (columns.length === 0) {
+          // Throw rather than exit — see the note above; we are inside the freeze.
+          throw new Error(`Destination has no "${entry.table}" table — apply the baseline first.`);
+        }
+        const { rows } = await reader.query<Record<string, unknown>>(
+          `SELECT ${columns.map(c => `"${c}"`).join(', ')} FROM "${entry.table}" WHERE ${orgScopePredicate(entry)}`,
+          [orgId],
+        );
+        plan.push({ table: entry.table, columns, values: rows });
+      }
+    } finally {
+      // The snapshot has served its purpose; everything is in memory now.
+      await releaseReader();
     }
 
     const total = plan.reduce((sum, p) => sum + p.values.length, 0);
@@ -180,8 +255,31 @@ async function main(): Promise<void> {
       client.release();
     }
   } finally {
+    // ── UNFREEZE ──────────────────────────────────────────────────────────
+    // Runs on EVERY exit path, success or failure. Leaving an org in
+    // `migrating` because a copy threw would be an outage that no code path
+    // recovers from — the operator would have to fix it by hand in SQL.
+    //
+    // Deliberately restores the PRIOR status rather than forcing `active`: a
+    // row that was `provisioning` before the copy must stay non-servable until
+    // the copy is verified, which is the A5 step-3 ordering.
+    if (priorStatus !== null) {
+      try {
+        await setTenantStatus(control, orgId, priorStatus);
+        console.info(`[copyTenantData] unfroze tenant (restored to "${priorStatus}")`);
+      } catch (error) {
+        // Loud, and with the exact remediation, because this is the one
+        // failure that leaves the org unservable.
+        console.error(
+          `[copyTenantData] ⚠️  FAILED TO UNFREEZE ${orgId}. It is stuck in "${TENANT_STATUS.MIGRATING}" and is NOT being served.\n`
+          + `    Fix by hand: UPDATE "tenant" SET status = '${priorStatus}' WHERE org_id = '${orgId}';`,
+          error instanceof Error ? error.message : error,
+        );
+      }
+    }
     await source.end();
     await destination.end();
+    await control.end();
   }
 }
 
@@ -193,4 +291,4 @@ if (isDirectRun) {
   });
 }
 
-export { insertChunked };
+export { insertChunked, setTenantStatus };
