@@ -365,6 +365,10 @@ export async function resolveTenant(orgId: string): Promise<TenantRecord> {
 /**
  * Refuse a row that does not point at a database of its own.
  *
+ * In shared mode (`sharesTenantDatabase() === true`) this is a no-op and returns
+ * immediately: shared-era rows are expected and accepted in that deployment
+ * mode.
+ *
  * Split mode means one database per organization. A row whose connection string
  * resolves to the SHARED database is not a provisioned tenant — it is leftover
  * data from the shared-database era, and serving it routes that organization
