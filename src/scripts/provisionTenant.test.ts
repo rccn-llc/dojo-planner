@@ -152,3 +152,20 @@ describe('expectedTableNames — what a complete schema means', () => {
     expect(new Set(names).size).toBe(names.length);
   });
 });
+
+describe('isAlreadyCutOver — failing closed', () => {
+  beforeEach(() => {
+    process.env.CONTROL_PLANE_ENCRYPTION_KEY = 'a'.repeat(64);
+  });
+
+  it('THROWS when the shared connection string is unknown', async () => {
+    // The bug: with DATABASE_URL unset, `decrypted !== undefined` is true for
+    // EVERY row, so every org looked cut over and provisioning refused with
+    // "nothing to do" — a guard failing OPEN. It must refuse to answer instead.
+    const { encryptConnectionString, tenantEncryptionKey } = await import('../libs/TenantCrypto');
+    const { isAlreadyCutOver } = await import('./provisionTenant');
+    const stored = encryptConnectionString('postgres://shared', tenantEncryptionKey()!);
+
+    expect(() => isAlreadyCutOver(stored, undefined, 'postgres://control')).toThrow(/DATABASE_URL is not set/);
+  });
+});

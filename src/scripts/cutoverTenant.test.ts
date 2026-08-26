@@ -4,6 +4,19 @@ import { runStep } from './cutoverTenant';
 
 vi.mock('node:child_process', () => ({ spawnSync: vi.fn() }));
 
+const query = vi.fn();
+// `pool.end()` is awaited with `.catch(...)`, so it must return a promise.
+const end = vi.fn(async () => {});
+
+vi.mock('pg', () => ({
+  // `new Pool(...)` — must be constructible, so a class rather than an arrow.
+  Pool: class {
+    query = query;
+    end = end;
+    on = vi.fn();
+  },
+}));
+
 const spawn = vi.mocked(spawnSync);
 
 describe('runStep — the cutover abort contract', () => {
@@ -39,5 +52,51 @@ describe('runStep — the cutover abort contract', () => {
       ['tsx', 'src/scripts/copyTenantData.ts', '--orgId=org_a'],
       expect.objectContaining({ stdio: 'inherit' }),
     );
+  });
+});
+
+describe('assertDestinationHasData — the activate-only guard', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('REFUSES a destination holding no rows for the org', async () => {
+    // Activating an empty database is silent: resolveTenant starts serving the
+    // org from it once the 60s cache expires, and every read comes back empty
+    // with no error. This guard is the only thing standing in the way, because
+    // activate-only has no copy and no verify step.
+    query.mockResolvedValue({ rows: [{ n: '0' }] });
+    const { assertDestinationHasData } = await import('./cutoverTenant');
+
+    await expect(assertDestinationHasData('postgres://empty', 'org_a')).rejects.toThrow(/NO rows/);
+  });
+
+  it('allows a destination that was seeded', async () => {
+    query.mockResolvedValue({ rows: [{ n: '5' }] });
+    const { assertDestinationHasData } = await import('./cutoverTenant');
+
+    await expect(assertDestinationHasData('postgres://seeded', 'org_a')).resolves.toBeUndefined();
+  });
+
+  it('counts only THIS org\'s rows, not "tables exist"', async () => {
+    // A Neon branch inherits its parent's schema, so every table is present in
+    // an unseeded destination. Only a row count scoped to the org distinguishes
+    // "ready" from "empty".
+    query.mockResolvedValue({ rows: [{ n: '0' }] });
+    const { assertDestinationHasData } = await import('./cutoverTenant');
+
+    await expect(assertDestinationHasData('postgres://branch', 'org_a')).rejects.toThrow();
+
+    const [, params] = query.mock.calls[0]!;
+
+    expect(params).toEqual(['org_a']);
+  });
+
+  it('releases the pool even when a count query throws', async () => {
+    query.mockRejectedValue(new Error('relation does not exist'));
+    const { assertDestinationHasData } = await import('./cutoverTenant');
+
+    await expect(assertDestinationHasData('postgres://x', 'org_a')).rejects.toThrow(/relation/);
+    expect(end).toHaveBeenCalled();
   });
 });
