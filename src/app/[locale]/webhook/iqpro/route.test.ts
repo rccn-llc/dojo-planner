@@ -12,9 +12,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const resolveOrgByExternalRef = vi.fn();
 const getDbForOrg = vi.fn();
-const sharesTenantDatabase = vi.fn(() => true);
 const runWithTenant = vi.fn(async (_scope: unknown, fn: () => Promise<unknown>) => fn());
 const loggerError = vi.fn();
+const loggerWarn = vi.fn();
 
 const tenantUpdateWhere = vi.fn();
 const tenantDb = {
@@ -35,7 +35,6 @@ const controlDb = {
 
 vi.mock('@/libs/DB', () => ({ db: tenantDb }));
 vi.mock('@/libs/ControlPlaneReads', () => ({ controlOrganizationDb: () => controlDb }));
-vi.mock('@/libs/TenancyMode', () => ({ sharesTenantDatabase: () => sharesTenantDatabase() }));
 vi.mock('@/libs/TenantContext', () => ({
   runWithTenant: (scope: unknown, fn: () => Promise<unknown>) => runWithTenant(scope, fn),
   requireTenantScope: () => ({ orgId: 'org_resolved' }),
@@ -58,7 +57,7 @@ vi.mock('@/services/TenantExternalRefService', () => ({
   resolveOrgByExternalRef: (t: string, id: string) => resolveOrgByExternalRef(t, id),
 }));
 vi.mock('@/libs/Logger', () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: (...a: unknown[]) => loggerError(...a) },
+  logger: { info: vi.fn(), warn: (...a: unknown[]) => loggerWarn(...a), error: (...a: unknown[]) => loggerError(...a) },
 }));
 vi.mock('@/libs/RateLimit', () => ({
   getClientIP: () => '127.0.0.1',
@@ -107,7 +106,6 @@ function paymentCompleted(transactionId: string) {
 describe('iQPro webhook tenant routing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    sharesTenantDatabase.mockReturnValue(true);
     resolveOrgByExternalRef.mockResolvedValue(null);
     getDbForOrg.mockResolvedValue(tenantDb);
   });
@@ -131,7 +129,6 @@ describe('iQPro webhook tenant routing', () => {
     // means the bootstrap scope reaches the same rows, so behaviour is
     // unchanged and the event must NOT be dropped.
     resolveOrgByExternalRef.mockResolvedValue(null);
-    sharesTenantDatabase.mockReturnValue(true);
     const { POST } = await import('./route');
 
     await POST(paymentCompleted('tx_legacy'));
@@ -140,17 +137,20 @@ describe('iQPro webhook tenant routing', () => {
     expect(loggerError).not.toHaveBeenCalled();
   });
 
-  it('REFUSES to process an unmapped event in split mode, loudly', async () => {
-    // The regression this exists to prevent: silently running against the
-    // control database and updating nothing.
+  it('processes an unmapped event against the shared database, and says so', async () => {
+    // An unmapped id predates ref-writing, so its rows can only be in the
+    // shared database. The regression guarded here is the inverse of the old
+    // one: it must NOT go silent. A cut-over org's ids are mapped at mint
+    // time, so this path cannot reach a cut-over org's data.
     resolveOrgByExternalRef.mockResolvedValue(null);
-    sharesTenantDatabase.mockReturnValue(false);
     const { POST } = await import('./route');
 
     await POST(paymentCompleted('tx_orphan'));
 
-    expect(tenantUpdateWhere).not.toHaveBeenCalled();
-    expect(loggerError).toHaveBeenCalledWith(
+    // It runs under the bootstrap scope (the shared database) rather than
+    // resolving a per-org one — and it processes rather than dropping.
+    expect(tenantUpdateWhere).toHaveBeenCalled();
+    expect(loggerWarn).toHaveBeenCalledWith(
       expect.stringContaining('No tenant mapping'),
       expect.objectContaining({ refId: 'tx_orphan' }),
     );

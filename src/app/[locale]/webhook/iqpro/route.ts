@@ -7,7 +7,6 @@ import { db } from '@/libs/DB';
 import { Env } from '@/libs/Env';
 import { logger } from '@/libs/Logger';
 import { getClientIP, isRateLimitingEnabled, webhookRateLimiter } from '@/libs/RateLimit';
-import { sharesTenantDatabase } from '@/libs/TenancyMode';
 import { requireTenantScope, runWithTenant } from '@/libs/TenantContext';
 import { getBootstrapTenantDb, WEBHOOK_BOOTSTRAP_ORG_ID } from '@/libs/WebhookTenantScope';
 import { memberMembershipSchema, memberSchema, organizationSchema, transactionSchema } from '@/models/Schema';
@@ -134,17 +133,24 @@ async function withResolvedTenantScope(
   const orgId = await resolveOrgByExternalRef(refType, refId);
 
   if (!orgId) {
-    if (sharesTenantDatabase()) {
-      // One physical database: the bootstrap scope reaches the same rows the
-      // handler would have read anyway, so behaviour is unchanged.
-      await fn();
-      return true;
-    }
-    logger.error('[IQPro Webhook] No tenant mapping for external id — event NOT processed', {
+    // No mapping. Refs are written at id-creation time, so an unmapped id
+    // predates that — its rows can only be in the shared database, which the
+    // bootstrap scope reaches.
+    //
+    // This stays safe under per-org cutover: a cut-over org's ids were mapped
+    // when they were minted, so an UNMAPPED id necessarily belongs to an org
+    // that has not moved. Processing it against the shared database is
+    // therefore correct, not a fallback.
+    //
+    // ⚠️ It stops being safe in A7, once source rows are DELETED after a soak:
+    // an unmapped id could then belong to a cut-over org whose shared rows are
+    // gone, and this would silently update nothing. Revisit here.
+    logger.warn('[IQPro Webhook] No tenant mapping for external id — processing against the shared database', {
       refType,
       refId,
     });
-    return false;
+    await fn();
+    return true;
   }
 
   const tenantDb = await getDbForOrg(orgId);

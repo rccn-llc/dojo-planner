@@ -27,12 +27,13 @@
  * everything else untouched.
  */
 
+import type { Buffer } from 'node:buffer';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
-import { encryptConnectionString, tenantEncryptionKey } from '../libs/TenantCrypto';
+import { decryptConnectionString, encryptConnectionString, SHARED_DATABASE_SENTINEL, tenantEncryptionKey } from '../libs/TenantCrypto';
 import { TENANT_STATUS, tenantSchema } from '../models/ControlSchema';
 import { organizationSchema } from '../models/Schema';
 
@@ -86,32 +87,62 @@ function parseArgs(): { dryRun: boolean; region: string } {
   };
 }
 
+/**
+ * Refuse to run once ANY organization has been cut over.
+ *
+ * This script encrypts ONE connection string as EVERY tenant's. That is
+ * correct while all orgs share a database and catastrophic afterwards: it
+ * would overwrite each cut-over org's real per-tenant string with the shared
+ * one and force status='active', routing every organization into everyone
+ * else's data. The rows would look legitimate — plausible region, ciphertext
+ * that decrypts cleanly — which is why it has to be blocked here rather than
+ * detected later.
+ *
+ * ⚠️ This used to test `TENANCY_MODE !== 'shared'`. A5 retired that flag from
+ * the read path, so nothing sets it any more and the guard silently stopped
+ * guarding. The check now inspects the DATA — a row whose decrypted string is
+ * neither the sentinel nor the shared database is a cut-over org — which is
+ * the same predicate the app itself routes on, and cannot drift out of sync
+ * with a flag nobody maintains.
+ */
+export async function assertNoTenantCutOver(
+  db: ReturnType<typeof drizzle>,
+  sharedConnectionString: string,
+  key: Buffer,
+): Promise<void> {
+  const rows = await db
+    .select({ orgId: tenantSchema.orgId, encrypted: tenantSchema.connectionStringEncrypted })
+    .from(tenantSchema);
+
+  const cutOver = rows.filter((row) => {
+    if (row.encrypted === SHARED_DATABASE_SENTINEL) {
+      return false;
+    }
+    try {
+      return decryptConnectionString(row.encrypted, key) !== sharedConnectionString;
+    } catch {
+      // Undecryptable rows are a key mismatch, not evidence of a cutover.
+      // checkTenantReadiness is the right place to surface that.
+      return false;
+    }
+  });
+
+  if (cutOver.length > 0) {
+    throw new Error(
+      `[registerTenants] ${cutOver.length} organization(s) are already on their own database `
+      + `(${cutOver.map(r => r.orgId).join(', ')}).\n`
+      + 'This script assigns the SAME connection string to every organization and '
+      + 'would overwrite those, routing every org into shared data.\n'
+      + 'To provision an organization once tenants are split, use:\n'
+      + '  npx tsx src/scripts/provisionTenant.ts --orgId=org_xxx',
+    );
+  }
+}
+
 async function main(): Promise<void> {
   loadEnvFiles();
 
   const { dryRun, region } = parseArgs();
-
-  // ⚠️ REFUSE TO RUN ONCE THE PLANES ARE SEPARATE.
-  //
-  // This script encrypts ONE connection string as EVERY tenant's. That is
-  // correct while all orgs share a database and catastrophic afterwards: it
-  // would overwrite each org's real per-tenant string with the shared one and
-  // force status='active', routing every organization into everyone else's
-  // data. The rows would look legitimate — plausible region, ciphertext that
-  // decrypts cleanly — which is exactly why this has to be blocked here rather
-  // than detected later.
-  //
-  // Reads process.env directly, like the rest of this script: an ops script
-  // targeting a remote database must not require a full validated app env.
-  if ((process.env.TENANCY_MODE ?? 'shared') !== 'shared') {
-    throw new Error(
-      '[registerTenants] TENANCY_MODE is not "shared". This script assigns the '
-      + 'SAME connection string to every organization and would destroy real '
-      + 'per-tenant provisioning.\n'
-      + 'To provision an organization once the planes are split, use:\n'
-      + '  npx tsx src/scripts/provisionTenant.ts --orgId=org_xxx',
-    );
-  }
 
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
@@ -122,17 +153,28 @@ async function main(): Promise<void> {
     );
   }
 
+  // TWO PLANES.
+  //
+  // Organizations live in the TENANT database; the `tenant` directory lives in
+  // the CONTROL database. This script used to use one connection for both,
+  // which wrote directory rows into the tenant database — where the app never
+  // reads them. Falls back to DATABASE_URL so single-database deployments are
+  // unaffected.
+  const controlConnectionString = process.env.CONTROL_DATABASE_URL ?? connectionString;
+
   // Which database this is about to write to matters a great deal — print the
   // host (never the password) so a production run is unmistakable.
-  const target = (() => {
+  const hostOf = (cs: string): string => {
     try {
-      const url = new URL(connectionString);
+      const url = new URL(cs);
       return `${url.hostname}${url.pathname}`;
     } catch {
       return '(unparseable connection string)';
     }
-  })();
-  console.info(`[registerTenants] target: ${target}`);
+  };
+  const target = hostOf(connectionString);
+  console.info(`[registerTenants] orgs read from:      ${target}`);
+  console.info(`[registerTenants] tenant rows written: ${hostOf(controlConnectionString)}`);
 
   const key = tenantEncryptionKey();
   if (!key) {
@@ -146,7 +188,19 @@ async function main(): Promise<void> {
   const pool = new Pool({ connectionString, max: 1 });
   const db = drizzle({ client: pool, schema: { organizationSchema, tenantSchema } });
 
+  // Separate handle for the directory. Same connection when the planes are not
+  // split, so the pool is only opened twice when it genuinely differs.
+  const controlPool = controlConnectionString === connectionString
+    ? pool
+    : new Pool({ connectionString: controlConnectionString, max: 1 });
+  const controlDb = controlConnectionString === connectionString
+    ? db
+    : drizzle({ client: controlPool, schema: { tenantSchema } });
+
   try {
+    // Before touching anything: prove no organization has been cut over.
+    await assertNoTenantCutOver(controlDb, connectionString, key);
+
     const orgs = await db
       .select({ id: organizationSchema.id })
       .from(organizationSchema)
@@ -177,7 +231,7 @@ async function main(): Promise<void> {
 
     // Verify the directory table exists before attempting writes, so a missing
     // table produces a clear message rather than a raw Postgres error.
-    const existing = await db.select({ orgId: tenantSchema.orgId }).from(tenantSchema).catch((error) => {
+    const existing = await controlDb.select({ orgId: tenantSchema.orgId }).from(tenantSchema).catch((error) => {
       const code = (error as { code?: string; cause?: { code?: string } }).code
         ?? (error as { cause?: { code?: string } }).cause?.code;
       if (code === '42P01') {
@@ -204,7 +258,7 @@ async function main(): Promise<void> {
       // A fresh IV per row: never reuse an IV with the same key under GCM.
       const encrypted = encryptConnectionString(connectionString, key);
 
-      await db
+      await controlDb
         .insert(tenantSchema)
         .values({
           orgId: org.id,
@@ -231,10 +285,25 @@ async function main(): Promise<void> {
     console.info('[registerTenants] every org now resolves to the current database.');
   } finally {
     await pool.end().catch(() => {});
+    if (controlPool !== pool) {
+      await controlPool.end().catch(() => {});
+    }
   }
 }
 
-main().catch((error) => {
-  console.error('[registerTenants] failed:', error instanceof Error ? error.message : error);
-  process.exit(1);
-});
+/**
+ * Only run when invoked as a script.
+ *
+ * Without this, importing the module (as a test does, to reach the cutover
+ * guard) executes `main()` as a side effect — which tries to open a database
+ * and calls `process.exit(1)` when it cannot, surfacing in vitest as an
+ * unhandled rejection that can mask a real failure elsewhere in the run.
+ */
+const isDirectRun = process.argv[1]?.includes('registerTenants');
+
+if (isDirectRun) {
+  main().catch((error) => {
+    console.error('[registerTenants] failed:', error instanceof Error ? error.message : error);
+    process.exit(1);
+  });
+}

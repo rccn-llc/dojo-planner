@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { resolveTargets } from './migrateTenants';
+import { directUri, resolveTargets, resolveTenantTargets } from './migrateTenants';
 
 const TENANT = 'postgresql://u:p@tenant-host/db';
 const CONTROL = 'postgresql://u:p@control-host/db';
@@ -39,5 +39,41 @@ describe('resolveTargets', () => {
     delete process.env.DATABASE_URL;
 
     expect(() => resolveTargets()).toThrow(/DATABASE_URL is not set/);
+  });
+});
+
+describe('directUri', () => {
+  it('strips Neon\'s -pooler suffix so DDL runs over a direct connection', () => {
+    // Multi-statement DDL is unreliable through PgBouncer transaction pooling,
+    // and provisionTenant deliberately stores the POOLED string because that
+    // is what the app should use. The conversion happens here, at the point of
+    // use, rather than as a second persisted column.
+    expect(directUri('postgresql://u:p@ep-x-123-pooler.us-east-1.aws.neon.tech/db?sslmode=require'))
+      .toBe('postgresql://u:p@ep-x-123.us-east-1.aws.neon.tech/db?sslmode=require');
+  });
+
+  it('leaves an already-direct connection string untouched', () => {
+    const direct = 'postgresql://u:p@ep-x-123.us-east-1.aws.neon.tech/db';
+
+    expect(directUri(direct)).toBe(direct);
+  });
+});
+
+describe('resolveTenantTargets', () => {
+  beforeEach(() => {
+    delete process.env.CONTROL_DATABASE_URL;
+    process.env.DATABASE_URL = TENANT;
+  });
+
+  it('returns nothing during the single-database phase', async () => {
+    // No control plane means no cut-over tenants to discover; the shared
+    // target already covers every org.
+    await expect(resolveTenantTargets()).resolves.toEqual([]);
+  });
+
+  it('returns nothing when control and shared are the same database', async () => {
+    process.env.CONTROL_DATABASE_URL = TENANT;
+
+    await expect(resolveTenantTargets()).resolves.toEqual([]);
   });
 });

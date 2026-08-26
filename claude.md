@@ -1120,7 +1120,31 @@ npm run commit        # Interactive commit helper
 
 ## Multi-Tenancy (tenant connection seam)
 
-The app is moving to **one Postgres database per Clerk organization**. Phase A1 landed the connection seam; **every organization currently still resolves to the same shared database**, so behaviour is unchanged. The seam exists so tenants can be split out one at a time later.
+The app is moving to **one Postgres database per Clerk organization**. A1 landed the connection seam, A3 provisioning, A4 the data copy, and A5 the per-org cutover machinery. **No organization has been cut over yet** — every org still resolves to the shared database — but the split is now per-org rather than global.
+
+### An org is cut over when its OWN tenant row says so
+
+There is no global switch. `TENANCY_MODE` has been **retired from the read path** in both apps: an org is split when its `tenant` row holds a real connection string that is not the shared database, and a row still naming the shared database is **served from there**, not refused.
+
+⚠️ **The predicate is the DECRYPTED CONNECTION STRING, never the `region` label.** `registerTenants` writes `region: 'aws-us-east-1'`, so a region check passes rows pointing straight at the shared database — that was a real cross-tenant leak. The region is a cheap secondary filter only.
+
+This is what makes "one org at a time" possible: with a global flag, cutting over one org made every other org 409. Both apps read the same per-row signal, so no coordinated env flip is needed.
+
+### Cutover scripts
+
+| Script | Does |
+|--------|------|
+| `npm run db:provision-tenant` | Creates the Neon project, applies the baseline, proves isolation. **Leaves the row non-servable** — the database is empty, and serving an org from an empty database blanks its dashboard with no error. |
+| `npm run db:copy-tenant` | Freezes the org (`status='migrating'`, which both apps refuse), reads the source in ONE `REPEATABLE READ` snapshot, copies into the destination in one transaction, then restores the prior status on **every** exit path. |
+| `npm run db:verify-copy` | Row parity, isolation, and content sampling. Exits non-zero on any mismatch. |
+| `npm run db:cutover-tenant` | The orchestrator: copy → verify → activate. **The only place a cut-over org is flipped to `active`**, and only after verification passes. |
+| `npm run db:rollback-tenant` | Repoints the row at the shared database. Reports what rows live only in the tenant database first, and refuses without `--force` when that number is non-zero. |
+
+Rollback stays cheap because the copy **never deletes from the source** — the shared rows are the rollback until a soak passes (source deletion is A7).
+
+### Migrations fan out
+
+`npm run db:migrate:tenants` migrates the control plane, the shared database, **and every `active` tenant database** read from the directory, recording `schema_version` back onto each row. A cut-over org this skipped would silently miss every future migration. DDL runs over a **direct** URI (`directUri` strips Neon's `-pooler` suffix) because multi-statement DDL is unreliable through transaction pooling.
 
 ### The two planes
 
@@ -1161,9 +1185,17 @@ The control plane must be readable **before** any tenant database can be opened,
 - Never pass `db` to something that reaches into drizzle internals (e.g. `migrate()`); build a raw connection instead.
 - `DEFAULT_TENANT_DATABASE_URL` is a **non-production** escape hatch. `TenantDirectoryService` refuses to honour it when `NODE_ENV === 'production'` — without that guard a misconfigured deploy would route every tenant to one database. Covered by an explicit test.
 
+### Observability
+
+Both apps log `{ orgId, dbHost }` once per tenant resolution — **host only, never credentials**. If an org is served from the wrong database the symptom is silent (empty reads, successful-looking writes), so this line is the only runtime detector.
+
 ### Env
 
 `CONTROL_DATABASE_URL` (falls back to `DATABASE_URL`), `DEFAULT_TENANT_DATABASE_URL` (dev only), `CONTROL_PLANE_ENCRYPTION_KEY` (falls back to `IQPRO_CONFIG_ENCRYPTION_KEY`; separate because a connection string is a higher trust tier than a gateway id).
+
+`TENANCY_MODE` is **no longer read by either app's routing**. It survives only as an ops guard for destructive scripts, where a global "are we mid-migration" answer is the right question.
+
+🔒 **Local dev is unchanged:** with no `CONTROL_DATABASE_URL` and no keys, `resolveTargets()` returns the one shared database and the tenant fan-out returns empty. `rm -rf local.db && npm run dev` works in both repos with no control plane.
 
 ## CI/CD
 
