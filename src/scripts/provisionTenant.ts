@@ -313,6 +313,21 @@ export function isAlreadyCutOver(
     return false;
   }
 
+  // ⚠️ FAIL CLOSED when the shared connection string is unknown.
+  //
+  // Without it, `decrypted !== undefined` is true for EVERY row, so every
+  // organization looks cut over and provisioning refuses with "nothing to do".
+  // That is precisely backwards: the comparison this guard depends on cannot be
+  // made, so it must not claim an answer.
+  if (!sharedConnectionString) {
+    throw new Error(
+      'DATABASE_URL is not set, so provisioning cannot tell whether this tenant row '
+      + 'still points at the shared database.\n'
+      + 'Set it to the SHARED (source) database and re-run:\n'
+      + '  DATABASE_URL="<shared>" CONTROL_DATABASE_URL="<control>" npm run db:provision-tenant -- --orgId=org_xxx --connection-string=<dest>',
+    );
+  }
+
   try {
     const decrypted = decryptConnectionString(storedConnectionString, key);
     return decrypted !== sharedConnectionString && decrypted !== controlConnectionString;
@@ -320,6 +335,36 @@ export function isAlreadyCutOver(
     // Undecryptable means a key mismatch, not a cutover. Let provisioning
     // proceed and fail later with a clearer error than "nothing to do".
     return false;
+  }
+}
+
+/**
+ * The organization's human name, from Clerk.
+ *
+ * `tenant.display_name` exists so an operator can tell which row is which
+ * without decoding a `org_3AmFYvg…` id. Storing the id there (what this used to
+ * do) made the column pure noise.
+ *
+ * Best-effort: a missing CLERK_SECRET_KEY or an API failure must never block
+ * provisioning, so this degrades to null rather than throwing.
+ */
+async function fetchOrgDisplayName(orgId: string): Promise<string | null> {
+  const secretKey = process.env.CLERK_SECRET_KEY;
+  if (!secretKey) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(`https://api.clerk.com/v1/organizations/${orgId}`, {
+      headers: { Authorization: `Bearer ${secretKey}` },
+    });
+    if (!response.ok) {
+      return null;
+    }
+    const body = await response.json() as { name?: string; slug?: string };
+    return body.name ?? body.slug ?? null;
+  } catch {
+    return null;
   }
 }
 
@@ -436,11 +481,16 @@ async function main(): Promise<void> {
     console.info(`[provisionTenant] database ready for ${args.orgId}`);
 
     // 2. Record it as NOT servable.
+    const displayName = await fetchOrgDisplayName(args.orgId);
+    if (displayName) {
+      console.info(`[provisionTenant] organization: ${displayName}`);
+    }
+
     await controlDb
       .insert(tenantSchema)
       .values({
         orgId: args.orgId,
-        displayName: args.orgId,
+        displayName: displayName ?? args.orgId,
         connectionStringEncrypted: encryptConnectionString(project.connectionString, key),
         region: args.region,
         neonProjectId: project.projectId,
@@ -451,6 +501,9 @@ async function main(): Promise<void> {
       .onConflictDoUpdate({
         target: tenantSchema.orgId,
         set: {
+          // Refresh on re-provision too — a row written by `registerTenants`
+          // carries a null display name, and a resumed provision should fix it.
+          displayName: displayName ?? args.orgId,
           connectionStringEncrypted: encryptConnectionString(project.connectionString, key),
           region: args.region,
           neonProjectId: project.projectId,
