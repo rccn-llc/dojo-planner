@@ -26,6 +26,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { Pool } from 'pg';
 import { decryptConnectionString } from '../libs/TenantCrypto';
+import { latestSchemaVersion } from './migrateTenants';
 
 /**
  * Decrypt exactly as TenantDirectoryService does — same AES-256-GCM layout,
@@ -296,6 +297,35 @@ async function main(): Promise<void> {
             );
           }
         }
+      }
+
+      // ── Schema drift ─────────────────────────────────────────────────────
+      //
+      // `migrateTenants` records `schema_version` after migrating each tenant,
+      // but until now NOTHING read it — so a cut-over org that missed a
+      // migration was undetectable. Its queries fail against columns that do
+      // not exist there, and the only symptom is a runtime error.
+      const latest = latestSchemaVersion();
+      const drifted = await controlPool.query<{ id: string; version: string | null }>(
+        `select org_id as id, schema_version as version from tenant
+         where status = 'active' and (schema_version is null or schema_version <> $1)
+         order by org_id`,
+        [latest],
+      );
+
+      console.info(`\nSchema version (latest: ${latest}):`);
+      if (drifted.rows.length === 0) {
+        console.info('  OK    every active tenant is on the latest migration');
+      } else {
+        console.info(`  FAIL  ${drifted.rows.length} active tenant(s) are behind or unrecorded`);
+        for (const row of drifted.rows.slice(0, 10)) {
+          console.info(`          ${row.id} (${row.version ?? 'never recorded'})`);
+        }
+        problems.push(
+          `${drifted.rows.length} active tenant(s) are not on ${latest}. Run\n`
+          + '     `npm run db:migrate:tenants` — a tenant that missed a migration fails\n'
+          + '     at runtime against columns its database does not have.',
+        );
       }
 
       const inactive = await controlPool.query<{ id: string; status: string }>(

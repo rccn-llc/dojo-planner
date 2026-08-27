@@ -44,7 +44,9 @@
     "db:cutover-tenant": "tsx src/scripts/cutoverTenant.ts",
     "db:rollback-tenant": "tsx src/scripts/rollbackTenant.ts",
     "db:purge-tenant": "tsx src/scripts/purgeTenantData.ts",
-    "db:show-tenants": "tsx src/scripts/showTenants.ts"
+    "db:show-tenants": "tsx src/scripts/showTenants.ts",
+    "db:deprovision-tenant": "tsx src/scripts/deprovisionTenant.ts",
+    "db:export-tenant": "tsx src/scripts/exportTenant.ts"
   },
   "dependencies": {
     "@clerk/backend": "^2.33.6",

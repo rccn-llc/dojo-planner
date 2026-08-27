@@ -5,9 +5,9 @@
  *
  * Every step happens before the row becomes servable:
  *
- *   1. Create the Neon project (or accept a connection string you supply).
+ *   1. Accept a connection string for a database you created by hand.
  *   2. Insert the `tenant` row as status='provisioning' — NOT servable.
- *   3. Apply the baseline to the new database.
+ *   3. Apply the baseline (or verify it is already complete).
  *   4. Verify it is a distinct, reachable database that no other org holds.
  *   5. Flip to status='active'.
  *
@@ -15,23 +15,22 @@
  * an empty or shared database. `resolveTenant` refuses anything that is not
  * exactly 'active', so a half-provisioned tenant 503s instead of leaking.
  *
- * ── Credentials ─────────────────────────────────────────────────────────────
+ * ── Databases are created BY HAND ───────────────────────────────────────────
  *
- * NEON_API_KEY belongs in .env.local and NEVER in Vercel. It can delete any
- * project in the account, including the shared database — the deployed app has
- * no reason to hold that power. Reads process.env directly rather than
- * `@/libs/Env` so an operator does not need a fully validated app environment
- * to run it.
+ * This script does NOT mint databases. Neon refuses `POST /api/v2/projects` on
+ * a Vercel-managed organization ("action restricted"), and at this scale
+ * (<50 orgs, hands-on onboarding) creating one in the console takes a few
+ * minutes. The API path was removed rather than left as dead code.
  *
- * An ORGANIZATION-scoped key (preferable to a personal one) additionally
- * requires NEON_ORG_ID on every call — Neon rejects the request with a 400
- * otherwise. Find it on the Neon organization settings page; it looks like
- * `org-something-12345678` and is unrelated to a Clerk org id.
+ * So: create the project in the Neon/Vercel console, copy its POOLED
+ * connection string, and pass it as --connection-string.
+ *
+ * Reads process.env directly rather than `@/libs/Env` so an operator does not
+ * need a fully validated app environment to run it.
  *
  * Usage:
- *   npx tsx src/scripts/provisionTenant.ts --orgId=org_xxx [--region=aws-us-east-1]
- *   npx tsx src/scripts/provisionTenant.ts --orgId=org_xxx --connection-string=postgres://...
- *   ... --dry-run
+ *   npx tsx src/scripts/provisionTenant.ts --orgId=org_xxx \
+ *     --connection-string=postgres://... [--region=aws-us-east-1] [--dry-run]
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -44,7 +43,6 @@ import { Pool } from 'pg';
 import { decryptConnectionString, encryptConnectionString, SHARED_DATABASE_SENTINEL, tenantEncryptionKey } from '../libs/TenantCrypto';
 import { TENANT_STATUS, tenantSchema } from '../models/ControlSchema';
 
-const NEON_API = 'https://console.neon.tech/api/v2';
 const MIGRATIONS_FOLDER = path.join(process.cwd(), 'migrations');
 
 /** Load .env.local then .env; values already in the environment win. */
@@ -79,7 +77,7 @@ function loadEnvFiles(): void {
 type Args = {
   orgId: string;
   region: string;
-  connectionString: string | null;
+  connectionString: string;
   dryRun: boolean;
 };
 
@@ -87,86 +85,31 @@ function parseArgs(): Args {
   const get = (name: string) =>
     process.argv.find(a => a.startsWith(`--${name}=`))?.split('=').slice(1).join('=');
 
+  const usage = 'Usage: tsx src/scripts/provisionTenant.ts --orgId=org_xxx --connection-string=postgres://... [--region=...] [--dry-run]';
+
   const orgId = get('orgId');
   if (!orgId) {
-    throw new Error('Usage: tsx src/scripts/provisionTenant.ts --orgId=org_xxx [--region=...] [--connection-string=...] [--dry-run]');
+    throw new Error(usage);
+  }
+
+  // Required, not optional: this script no longer creates databases. Neon
+  // refuses project creation on a Vercel-managed organization, so the database
+  // is made by hand in the console and its pooled string passed in here.
+  const connectionString = get('connection-string');
+  if (!connectionString) {
+    throw new Error(
+      `${usage}\n\n`
+      + 'Create the database first (Neon/Vercel console), then pass its POOLED\n'
+      + 'connection string. This script does not mint databases.',
+    );
   }
 
   return {
     orgId,
     region: get('region') ?? 'aws-us-east-1',
-    connectionString: get('connection-string') ?? null,
+    connectionString,
     dryRun: process.argv.includes('--dry-run'),
   };
-}
-
-type NeonProject = {
-  projectId: string;
-  branchId: string;
-  connectionString: string;
-};
-
-/**
- * Create a Neon project and return its POOLED connection string.
- *
- * Pooled matters: the app runs on serverless with `max: 1` per pool, and the
- * direct endpoint exhausts connections under any real traffic.
- */
-async function createNeonProject(orgId: string, region: string): Promise<NeonProject> {
-  const apiKey = process.env.NEON_API_KEY;
-  if (!apiKey) {
-    throw new Error(
-      'NEON_API_KEY is not set. Create one at console.neon.tech → Account settings '
-      + '→ API keys, and put it in .env.local (never in Vercel).\n'
-      + 'Alternatively pass --connection-string=... to use a project you created by hand.',
-    );
-  }
-
-  const neonOrgId = process.env.NEON_ORG_ID;
-
-  const res = await fetch(`${NEON_API}/projects`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      project: {
-        name: `dojo-tenant-${orgId}`,
-        region_id: region,
-        // Required for organization-scoped API keys; omitted for personal ones.
-        ...(neonOrgId && { org_id: neonOrgId }),
-      },
-    }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text();
-    if (res.status === 400 && body.includes('org_id is required')) {
-      throw new Error(
-        'Neon says org_id is required — your API key is organization-scoped. '
-        + 'Add NEON_ORG_ID to .env.local (Neon console → Organization settings; '
-        + 'it looks like org-something-12345678).',
-      );
-    }
-    throw new Error(`Neon API refused to create the project (${res.status}): ${body}`);
-  }
-
-  const body = await res.json() as {
-    project: { id: string };
-    branch: { id: string };
-    connection_uris?: Array<{ connection_uri: string }>;
-  };
-
-  const uri = body.connection_uris?.[0]?.connection_uri;
-  if (!uri) {
-    throw new Error('Neon created the project but returned no connection URI.');
-  }
-
-  // Neon returns the direct endpoint; the pooled host inserts "-pooler".
-  const pooled = uri.replace(/@(ep-[^.]+)\./, '@$1-pooler.');
-
-  return { projectId: body.project.id, branchId: body.branch.id, connectionString: pooled };
 }
 
 /**
@@ -475,9 +418,15 @@ async function main(): Promise<void> {
     }
 
     // 1. Get a database.
-    const project = args.connectionString
-      ? { projectId: null, branchId: null, connectionString: args.connectionString }
-      : await createNeonProject(args.orgId, args.region);
+    // Databases are created BY HAND in the Neon/Vercel console; this script
+    // never mints one. Neon refuses `POST /projects` on a Vercel-managed org,
+    // and at this scale (<50 orgs, hands-on onboarding) manual creation is not
+    // a bottleneck — so the API path was removed rather than left as dead code.
+    const project = {
+      projectId: null,
+      branchId: null,
+      connectionString: args.connectionString,
+    };
     console.info(`[provisionTenant] database ready for ${args.orgId}`);
 
     // 2. Record it as NOT servable.

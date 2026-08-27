@@ -29,7 +29,7 @@ export const SHARED_DATABASE_SENTINEL = '__shared_database__';
  * (`registerTenants`, `checkTenantReadiness`, `provisionTenant`, `seed`) or a
  * hot request path. Importing `@/libs/Env` would validate the WHOLE application
  * environment — Clerk, Stripe, the public keys — turning a two-variable job
- * into a full app config. Same reasoning as `migrateProviderConfigBlob.ts`.
+ * into a full app config — an ops script must not need a validated app env.
  *
  * ── Layout ──────────────────────────────────────────────────────────────────
  *
