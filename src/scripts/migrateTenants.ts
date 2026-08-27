@@ -191,7 +191,7 @@ export async function resolveTenantTargets(): Promise<TenantTarget[]> {
  * The newest migration tag, from the journal — the same source
  * `provisionTenant` uses, so the two always agree on what "current" means.
  */
-function latestSchemaVersion(): string {
+export function latestSchemaVersion(): string {
   const journal = JSON.parse(
     readFileSync(path.join(MIGRATIONS_FOLDER, 'meta', '_journal.json'), 'utf8'),
   ) as { entries: Array<{ tag: string }> };
