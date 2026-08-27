@@ -1144,7 +1144,7 @@ This is what makes "one org at a time" possible: with a global flag, cutting ove
 | `npm run db:show-tenants` | Read-only: prints each org's directory row — display name, status, region, and the **host** its connection string resolves to (never credentials). The fastest way to answer "which database does this org actually use?" |
 | `npm run db:purge-tenant` | Deletes ONE org's rows from ONE database. **Refuses to delete an org's only copy** — it reads the org's tenant row and requires that the target is NOT the database that org is served from, and that the org's own database holds rows. Override with `--i-know-this-is-the-only-copy`. **Dry run by default**; deleting needs `--confirm` **and** `--yes-delete=<orgId>` repeating the id. Row selection comes from `TenantDataMap` walked in reverse (insert order reversed = FK-safe delete order), in one transaction. `seed.ts --reset` clears *and re-seeds* — this is the clear-only counterpart. |
 
-Rollback stays cheap because the copy **never deletes from the source** — the shared rows are the rollback until a soak passes (source deletion is A7).
+Rollback stays cheap because the copy **never deletes from the source** — the shared rows are the rollback until a soak passes. Deleting them afterwards is `db:purge-tenant`, which refuses unless the org is genuinely served from elsewhere.
 
 ### Adding an organization (the supported path)
 
