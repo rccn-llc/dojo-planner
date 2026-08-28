@@ -26,7 +26,7 @@ import { addMembership, cancelMembership, changeMembership, create as createMemb
 import { list as listMembers } from './Members';
 import { create as createMembershipPlan, remove as removeMembershipPlan, update as updateMembershipPlan } from './MembershipPlans';
 import { create as createNoteHandler, list as listNotes, remove as removeNoteHandler, update as updateNoteHandler } from './Notes';
-import { getLocation as getOrganizationLocation, updateLocation as updateOrganizationLocation } from './Organization';
+import { getLocation as getOrganizationLocation, listProvisioned as listProvisionedOrganizations, updateLocation as updateOrganizationLocation } from './Organization';
 import { getTokenizationIframeConfig, processPayment, registerPaymentMethod } from './Payment';
 import { getConfig as getPaymentSettingsConfig, updateConfig as updatePaymentSettingsConfig } from './PaymentSettings';
 import { create as createProgram, list as listPrograms, remove as removeProgram, update as updateProgram } from './Programs';
@@ -181,6 +181,7 @@ export const router = {
   organization: {
     getLocation: getOrganizationLocation,
     updateLocation: updateOrganizationLocation,
+    listProvisioned: listProvisionedOrganizations,
   },
   catalog: {
     list: listCatalogItems,

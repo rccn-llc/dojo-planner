@@ -35,7 +35,10 @@ vi.mock('@/libs/IQPro', () => ({
 }));
 
 vi.mock('@/libs/Env', () => ({
-  Env: {},
+  // A control plane must exist: the tenant directory lives there, so
+  // `ControlPool` now throws without one rather than silently building a pool
+  // on `undefined`.
+  Env: { CONTROL_DATABASE_URL: 'postgres://control' },
 }));
 
 const testConfig = {

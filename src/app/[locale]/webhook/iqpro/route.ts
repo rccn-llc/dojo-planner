@@ -133,24 +133,27 @@ async function withResolvedTenantScope(
   const orgId = await resolveOrgByExternalRef(refType, refId);
 
   if (!orgId) {
-    // No mapping. Refs are written at id-creation time, so an unmapped id
-    // predates that — its rows can only be in the shared database, which the
-    // bootstrap scope reaches.
+    // REFUSE. This used to process against the shared database, which was
+    // correct while unmapped ids could only belong to an org that had not
+    // moved — their rows were still there.
     //
-    // This stays safe under per-org cutover: a cut-over org's ids were mapped
-    // when they were minted, so an UNMAPPED id necessarily belongs to an org
-    // that has not moved. Processing it against the shared database is
-    // therefore correct, not a fallback.
+    // Every organization now has its own database and the shared one holds no
+    // tenant data, so an unmapped id has nowhere valid to be applied. Running
+    // `fn()` against the control plane would update NOTHING while reporting
+    // success: a payment recorded at the gateway and lost here, silently.
     //
-    // ⚠️ It stops being safe in A7, once source rows are DELETED after a soak:
-    // an unmapped id could then belong to a cut-over org whose shared rows are
-    // gone, and this would silently update nothing. Revisit here.
-    logger.warn('[IQPro Webhook] No tenant mapping for external id — processing against the shared database', {
+    // ⚠️ The callers DISCARD this return value, so the endpoint still answers
+    // 200 and IQPro will NOT retry. Refusing therefore turns a silent no-op
+    // into a loud, actionable log line — not an automatic recovery. Making the
+    // response non-2xx so the provider retries is a deliberate change to the
+    // handler's contract and belongs in its own piece of work.
+    logger.error('[IQPro Webhook] No tenant mapping for external id — REFUSING to process', {
       refType,
       refId,
+      remedy: 'Add a tenant_external_ref row for this id, then let the provider retry.',
     });
-    await fn();
-    return true;
+
+    return false;
   }
 
   const tenantDb = await getDbForOrg(orgId);
