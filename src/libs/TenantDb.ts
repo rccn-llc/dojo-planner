@@ -112,7 +112,7 @@ export function getTenantDb(orgId: string, connectionString: string): TenantDb {
   evictIfNeeded();
 
   // When the tenant database IS the control-plane database — true throughout
-  // the no-op phase — reuse the control pool instead of opening a second
+  // local development — reuse the control pool instead of opening a second
   // socket. pglite-server accepts one connection total, so a separate tenant
   // pool would be refused mid-query.
   const pool = isControlPlaneConnection(connectionString)

@@ -80,7 +80,7 @@ export const POST = async (request: Request) => {
 
   // Sessionless, like the IQPro webhook: Stripe identifies the account by
   // customer id, not Clerk org. See WebhookTenantScope for why a bootstrap
-  // scope is correct during the no-op phase and what replaces it.
+  // scope is correct in local development and what replaces it.
   //
   // This route becomes scope-free in phase A2: `organization` moves to the
   // control plane, so `updateStripeSubscription` will target `controlDb`

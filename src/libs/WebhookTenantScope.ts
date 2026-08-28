@@ -16,7 +16,7 @@ import { getTenantDb } from './TenantDb';
  *
  * ── Why a bootstrap scope is correct FOR NOW ─────────────────────────────────
  *
- * During the no-op phase every organization resolves to the same shared
+ * In local development every organization resolves to the same shared
  * database, so any scope reaches the same rows the handlers read today. This
  * keeps behaviour identical while the seam goes in.
  *
@@ -43,7 +43,7 @@ import { getTenantDb } from './TenantDb';
 export const WEBHOOK_BOOTSTRAP_ORG_ID = '__webhook_bootstrap__';
 
 /**
- * The shared database, as a tenant handle.
+ * The CONTROL plane, as a tenant handle.
  *
  * Pooled under the sentinel key by `TenantDb`, so webhooks reuse one connection
  * rather than opening a fresh pool per delivery.

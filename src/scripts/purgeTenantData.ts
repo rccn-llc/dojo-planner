@@ -242,8 +242,9 @@ async function main(): Promise<void> {
       await client.query('COMMIT');
       console.info(`[purgeTenantData] deleted ${deleted} row(s) in ${Date.now() - startedAt}ms`);
       console.info('\nThe `organization` row and the control-plane `tenant` row are NOT touched.');
-      console.info('The app auto-registers an unknown org against the shared database, so');
-      console.info('leaving the tenant row is harmless — it will simply resolve to an org with no data.');
+      console.info('⚠️  The org will now 409: `resolveTenant` fails closed, so a tenant row');
+      console.info('    pointing at a database with no rows serves nothing. If this org is');
+      console.info('    finished with, run `npm run db:deprovision-tenant` to archive its row.');
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;

@@ -40,21 +40,19 @@ describe('control pool sizing', () => {
     expect((await freshPool()).max).toBe(1);
   });
 
-  it('caps at ONE even in split mode while the connection strings still match', async () => {
-    // The regression this pins: sizing was briefly derived from TENANCY_MODE,
-    // so flipping the mode locally opened a second socket against the same
-    // pglite-server and every tenant lookup died on a connection reset. Pool
-    // size is a property of the SOCKET, not the routing policy — during a
-    // staged rollout the mode can be 'split' before the databases diverge.
+  it('caps at ONE while both planes address the same database', async () => {
+    // The regression this pins: sizing was briefly derived from a routing
+    // flag rather than the connection string, so a local flip opened a second
+    // socket against the same pglite-server and every tenant lookup died on a
+    // connection reset. Pool size is a property of the SOCKET.
     envValues.CONTROL_DATABASE_URL = 'postgres://one';
-    envValues.TENANCY_MODE = 'split';
+    envValues.DATABASE_URL = 'postgres://one';
 
     expect((await freshPool()).max).toBe(1);
   });
 
   it('allows a second connection once the control plane is a distinct database', async () => {
     envValues.CONTROL_DATABASE_URL = 'postgres://control';
-    envValues.TENANCY_MODE = 'split';
 
     expect((await freshPool()).max).toBe(2);
   });
