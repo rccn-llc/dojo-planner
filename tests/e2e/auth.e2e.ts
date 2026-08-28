@@ -2,7 +2,34 @@ import { setupClerkTestingToken } from '@clerk/testing/playwright';
 import { faker } from '@faker-js/faker';
 import { expect, test } from '@playwright/test';
 
-import { createUserWithOrganization, deleteUserWithOrganization, signIn } from '../TestUtils';
+import { readCredentials } from '../e2e-credentials';
+import { deleteUserWithOrganization, signIn } from '../TestUtils';
+
+/**
+ * Users created at SETUP time, each with its own registered organization.
+ *
+ * These specs cannot create their own: a `tenant` row is only writable before
+ * the app under test starts, because pglite-server accepts ONE connection and
+ * the app holds it for the whole run.
+ */
+function authUser(index: number): { username: string; password: string } {
+  const users = readCredentials().authUsers ?? [];
+  const user = users[index];
+  if (!user) {
+    throw new Error(
+      `global.setup.ts did not pre-create auth user ${index}. `
+      + 'Raise AUTH_SPEC_USER_COUNT if a spec was added.',
+    );
+  }
+  return user;
+}
+
+/** Point the Clerk helpers at one of the pre-created users. */
+function selectAuthUser(index: number): void {
+  const { username, password } = authUser(index);
+  process.env.E2E_CLERK_USER_USERNAME = username;
+  process.env.E2E_CLERK_USER_PASSWORD = password;
+}
 
 // Auth tests create their own users — clear the global storageState
 test.use({ storageState: { cookies: [], origins: [] } });
@@ -14,7 +41,7 @@ test.describe('Authentication', () => {
     });
 
     test('should create user and organization via API and access dashboard', async ({ page }) => {
-      await createUserWithOrganization();
+      selectAuthUser(0);
 
       await setupClerkTestingToken({ page });
       await signIn(page);
@@ -26,8 +53,8 @@ test.describe('Authentication', () => {
   });
 
   test.describe('Sign In Flow', () => {
-    test.beforeAll(async () => {
-      await createUserWithOrganization();
+    test.beforeAll(() => {
+      selectAuthUser(1);
     });
 
     test.afterAll(async () => {
@@ -48,7 +75,7 @@ test.describe('Authentication', () => {
     let secondOrgName: string;
 
     test.beforeAll(async () => {
-      await createUserWithOrganization();
+      selectAuthUser(2);
 
       // Create a second org via API so the switcher has multiple options
       const { createClerkClient } = await import('@clerk/backend');
