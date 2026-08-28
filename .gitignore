@@ -66,3 +66,6 @@ build-archive.log
 .playwright/auth.json
 .playwright/e2e-credentials.json
 .env*
+
+# Database dumps (contain real data — never commit)
+*.dump

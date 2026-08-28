@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * The isolation guard is the reason this script exists: a `tenant` row that
@@ -167,5 +167,43 @@ describe('isAlreadyCutOver — failing closed', () => {
     const stored = encryptConnectionString('postgres://shared', tenantEncryptionKey()!);
 
     expect(() => isAlreadyCutOver(stored, undefined, 'postgres://control')).toThrow(/DATABASE_URL is not set/);
+  });
+});
+
+describe('--repoint parsing', () => {
+  const original = process.argv;
+
+  afterEach(() => {
+    process.argv = original;
+  });
+
+  it('carries the org id so it cannot be re-run against a different org', async () => {
+    // Matches purgeTenantData's double-confirmation: --repoint takes a LIVE
+    // org out of service, so a command recalled from shell history must not
+    // apply to an org it was never reviewed against.
+    process.argv = [
+      'node',
+      'provisionTenant',
+      '--orgId=org_a',
+      '--connection-string=postgres://new',
+      '--repoint=org_a',
+    ];
+    const { parseArgsForTest } = await import('./provisionTenant');
+
+    expect(parseArgsForTest()).toMatchObject({ orgId: 'org_a', repoint: 'org_a' });
+  });
+
+  it('is undefined when the flag is absent, so the guard still refuses', async () => {
+    process.argv = ['node', 'provisionTenant', '--orgId=org_a', '--connection-string=postgres://new'];
+    const { parseArgsForTest } = await import('./provisionTenant');
+
+    expect(parseArgsForTest().repoint).toBeUndefined();
+  });
+
+  it('requires --connection-string, since this script no longer creates databases', async () => {
+    process.argv = ['node', 'provisionTenant', '--orgId=org_a'];
+    const { parseArgsForTest } = await import('./provisionTenant');
+
+    expect(() => parseArgsForTest()).toThrow(/does not mint databases/);
   });
 });

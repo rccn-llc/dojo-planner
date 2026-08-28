@@ -1134,7 +1134,7 @@ This is what makes "one org at a time" possible: with a global flag, cutting ove
 
 | Script | Does |
 |--------|------|
-| `npm run db:provision-tenant` | Registers a database you created **by hand** (`--connection-string` is REQUIRED), applies the baseline or verifies it is already complete, proves isolation. **Leaves the row non-servable** — serving an org from an empty database blanks its dashboard with no error. It does NOT create databases: Neon refuses `POST /projects` on a Vercel-managed org, and at this scale manual creation is not a bottleneck. |
+| `npm run db:provision-tenant` | `--repoint=<orgId>` MOVES an org that is already cut over onto a different database (e.g. off a Neon branch onto its own project). It repeats the org id for the same reason `db:purge-tenant` does — the flag takes a live org out of service. All isolation checks still apply. Otherwise: registers a database you created **by hand** (`--connection-string` is REQUIRED), applies the baseline or verifies it is already complete, proves isolation. **Leaves the row non-servable** — serving an org from an empty database blanks its dashboard with no error. It does NOT create databases: Neon refuses `POST /projects` on a Vercel-managed org, and at this scale manual creation is not a bottleneck. |
 | `npm run db:copy-tenant` | Freezes the org (`status='migrating'`, which both apps refuse), reads the source in ONE `REPEATABLE READ` snapshot, copies into the destination in one transaction, then restores the prior status on **every** exit path. |
 | `npm run db:verify-copy` | Row parity, isolation, and content sampling. Exits non-zero on any mismatch. |
 | `npm run db:cutover-tenant` | The orchestrator: copy → verify → activate. **The only place a cut-over org is flipped to `active`**, and only after verification passes. `--activate-only` skips copy+verify for a database that was **seeded into place** rather than copied — it still refuses unless the destination actually holds rows for that org, since activating an empty database serves a blank dashboard with no error. Mutually exclusive with `--dry-run`. ⚠️ With `--activate-only` there are no source rows, so **rollback is not a restore** — the script says so explicitly. |
@@ -1145,6 +1145,22 @@ This is what makes "one org at a time" possible: with a global flag, cutting ove
 | `npm run db:purge-tenant` | Deletes ONE org's rows from ONE database. **Refuses to delete an org's only copy** — it reads the org's tenant row and requires that the target is NOT the database that org is served from, and that the org's own database holds rows. Override with `--i-know-this-is-the-only-copy`. **Dry run by default**; deleting needs `--confirm` **and** `--yes-delete=<orgId>` repeating the id. Row selection comes from `TenantDataMap` walked in reverse (insert order reversed = FK-safe delete order), in one transaction. `seed.ts --reset` clears *and re-seeds* — this is the clear-only counterpart. |
 
 Rollback stays cheap because the copy **never deletes from the source** — the shared rows are the rollback until a soak passes. Deleting them afterwards is `db:purge-tenant`, which refuses unless the org is genuinely served from elsewhere.
+
+### Moving an org between databases
+
+⚠️ **`DATABASE_URL` means different things in different steps here.** It is the *shared* database for the repoint, and the *source* database for the copy. Setting it once for the whole session is the mistake to avoid: `isAlreadyCutOver` compares against it, so a wrong value silently defeats the guard.
+
+Using `BRANCH` (old), `NEWPROJ` (new), `CONTROL`, `SHARED`:
+
+1. **Record the current state** — `CONTROL_DATABASE_URL=$CONTROL npm run db:show-tenants`. Save `BRANCH`'s full pooled string somewhere durable; `show-tenants` prints only the host, and you are about to overwrite the row.
+2. **Create the new database by hand**, copy its pooled string. Do not seed it.
+3. **Size the move** — `DATABASE_URL=$BRANCH ... npm run db:measure-tenant -- --orgId=<org>`.
+4. **Repoint** (`DATABASE_URL=$SHARED`) — `npm run db:provision-tenant -- --orgId=<org> --connection-string=$NEWPROJ --repoint=<org>`. **The org is now 409** until step 5 finishes.
+5. **Copy → verify → activate** (`DATABASE_URL=$BRANCH`) — `npm run db:cutover-tenant -- --orgId=<org> --target=$NEWPROJ` (dry-run first). Not `--activate-only`: there is a real source, so the parity and isolation checks should run.
+6. **Confirm** with `db:show-tenants` and the app's `[Tenancy] resolved { orgId, dbHost }` line.
+7. **Soak, then delete the old database in the console.** Keep it until the soak passes — it is the rollback.
+
+**Rollback** (while the old database still exists): repeat step 4 with `--connection-string=$BRANCH`, then `db:cutover-tenant --target=$BRANCH --activate-only`. The emptiness guard proves the old database still holds the rows. Note `db:rollback-tenant` is the **wrong tool** here — it points at the SHARED database, which may never have held this org's data.
 
 ### Adding an organization (the supported path)
 

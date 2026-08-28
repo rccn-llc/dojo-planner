@@ -20,7 +20,7 @@ type PoolEntry = {
  * Per-organization connection pools, bounded and LRU-evicted.
  *
  * Each pool keeps `max: 1`, matching the single-connection posture the app has
- * always had (see the note in utils/DBConnection.ts): on serverless each
+ * always had: on serverless each
  * instance handles one request at a time, and Neon's PgBouncer endpoint does
  * the real pooling upstream. The cache bound is therefore what keeps total
  * connections predictable — at most MAX_POOLS sockets per Node process,

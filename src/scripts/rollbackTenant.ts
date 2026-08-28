@@ -5,6 +5,21 @@
  * source, the shared rows are still there and still current up to the moment
  * of the freeze — so rolling back is a directory change, not a data restore.
  *
+ * ⚠️ ONLY rolls back to the SHARED database.
+ *
+ * If an org's fallback is ANOTHER TENANT DATABASE — moving between Neon
+ * projects, or off a branch onto a project — this is the WRONG tool. It writes
+ * the shared-database sentinel, and the shared database may never have held
+ * that org's data. Use instead:
+ *
+ *   npm run db:provision-tenant  -- --orgId=<org> --repoint=<org> \
+ *                                   --connection-string=<the OLD database>
+ *   npm run db:cutover-tenant    -- --orgId=<org> --target=<the OLD database> \
+ *                                   --activate-only
+ *
+ * `--activate-only`'s emptiness guard proves the old database still holds the
+ * org's rows before it is served again.
+ *
  * ── What this does NOT do ───────────────────────────────────────────────────
  *
  * It does not move rows written to the tenant database AFTER the cutover back

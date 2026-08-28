@@ -4,7 +4,6 @@ import { controlDb } from '@/libs/ControlDb';
 import { Env } from '@/libs/Env';
 import {
   decryptConnectionString as decryptStored,
-  encryptConnectionString as encryptStored,
   SHARED_DATABASE_SENTINEL,
   tenantEncryptionKey,
 } from '@/libs/TenantCrypto';
@@ -137,21 +136,6 @@ export function resetTenantDirectoryCache(orgId?: string): void {
  */
 
 /**
- * `region` values used by the writers that point a row at the shared database.
- *
- * ⚠️ These are a CHEAP FIRST FILTER, not the guarantee. A2 shipped a guard that
- * trusted `region` alone, and it did not hold: the three writers disagree —
- * `autoRegisterTenant` writes 'shared', `registerTenants.ts` defaults to
- * 'aws-us-east-1', and `seed.ts` writes 'local'. So the rows the production
- * backfill actually created sailed straight past it.
- *
- * The real check is `pointsAtSharedDatabase` below, which inspects the
- * DECRYPTED connection string. A label can be wrong; where the string actually
- * points cannot.
- */
-const SHARED_REGIONS = new Set(['shared', 'local']);
-
-/**
  * Decrypt a stored connection string.
  *
  * Wraps the shared helper to keep the "no key configured" case as a clear,
@@ -196,88 +180,6 @@ function defaultTenantRecord(orgId: string): TenantRecord | null {
 }
 
 /**
- * Auto-register an organization against the CURRENT shared database.
- *
- * A Clerk organization can be created at any moment — self-serve signup, an
- * admin in the Clerk dashboard, an E2E fixture — and none of those paths know
- * about this app's tenant directory. Without auto-registration the dashboard is
- * simply dead for a new organization until someone runs a script by hand.
- *
- * This mirrors what the app already does for the `organization` row itself,
- * which several services create lazily by upsert.
- *
- * ── Why this is safe during the no-op phase ─────────────────────────────────
- *
- * Every organization currently resolves to one shared database, so registering
- * a new one against that same database grants no access it did not already
- * have — before this phase, an org simply used the shared connection directly.
- *
- * ── Why it must be REMOVED before tenants are split (phase A3/A4) ───────────
- *
- * Once organizations have their own databases, silently pointing an unknown org
- * at the shared one would be a cross-tenant leak. From A3, provisioning becomes
- * explicit (`provisionTenant.ts` creates a real Neon project) and a missing row
- * must once again be a hard `TenantNotProvisionedError`.
- *
- * ⚠️ That guard is DEFERRED to A7, when source rows are deleted after a soak.
- * Until then, registering a brand-new org against the shared database is
- * correct: it has no data, nothing to migrate, and is indistinguishable from
- * any other org that has not been cut over. A global mode flag cannot express
- * this — under one, the first cutover made every NEW org 409 until an operator
- * intervened.
- */
-async function autoRegisterTenant(orgId: string): Promise<TenantRecord | null> {
-  // Registers against the SHARED database, deliberately.
-  //
-  // A new Clerk organization has no data yet and nothing to migrate, so the
-  // shared database is the correct home for it until someone cuts it over. It
-  // is then indistinguishable from any other not-yet-migrated org.
-  //
-  // This used to bail out whenever TENANCY_MODE was 'split', which meant that
-  // once ANY organization had been cut over, every newly created organization
-  // 409'd until an operator ran a script by hand. With a per-org split signal
-  // there is no such mode, and no such cliff.
-  const connectionString = Env.DATABASE_URL;
-  const key = tenantEncryptionKey();
-
-  // Encrypt when a key is available, but do NOT require one. While every
-  // organization resolves to `DATABASE_URL`, the stored string is a value the
-  // process already holds in plaintext — encrypting it protects nothing, and
-  // demanding a key would make the app unusable in any environment that has
-  // not configured one (CI being the obvious case).
-  //
-  // The sentinel below is recognised by the read path. It cannot leak a real
-  // per-tenant connection string, because auto-registration is disabled the
-  // moment the planes are separated.
-  const stored = key
-    ? encryptStored(connectionString, key)
-    : SHARED_DATABASE_SENTINEL;
-
-  await controlDb
-    .insert(tenantSchema)
-    .values({
-      orgId,
-      displayName: null,
-      connectionStringEncrypted: stored,
-      region: 'shared',
-      status: TENANT_STATUS.ACTIVE,
-      schemaVersion: null,
-    })
-    // Concurrent first requests race here; last write wins and both proceed.
-    .onConflictDoNothing({ target: tenantSchema.orgId });
-
-  console.info('[Tenancy] auto-registered organization against the shared database', { orgId });
-
-  return {
-    orgId,
-    connectionString,
-    region: 'shared',
-    status: TENANT_STATUS.ACTIVE,
-    schemaVersion: null,
-  };
-}
-
-/**
  * Look up one organization's tenant record.
  *
  * @throws TenantNotProvisionedError when no active row exists and the
@@ -311,14 +213,15 @@ export async function resolveTenant(orgId: string): Promise<TenantRecord> {
   }
 
   if (!row) {
-    // A Clerk organization that this app has never seen. While all
-    // organizations share one database, register it rather than failing — see
-    // autoRegisterTenant for why this is safe now and must go in phase A3.
-    const registered = await autoRegisterTenant(orgId);
-    if (registered) {
-      cacheSet(orgId, registered);
-      return registered;
-    }
+    // FAIL CLOSED. An organization is provisioned deliberately — its database
+    // is created and its `tenant` row written before anyone can sign in — so a
+    // missing row means something is wrong, not that a default should be
+    // guessed at.
+    //
+    // This used to auto-register the org against a shared database. That was
+    // right while every org lived in one database; now it would silently route
+    // an organization at a database nobody chose, which is the exact class of
+    // fault this architecture exists to make impossible.
     throw new TenantNotProvisionedError(orgId);
   }
   if (row.status !== TENANT_STATUS.ACTIVE) {
@@ -327,9 +230,8 @@ export async function resolveTenant(orgId: string): Promise<TenantRecord> {
     throw new TenantUnavailableError(orgId, row.status);
   }
 
-  // Resolves to this org's OWN database once it has been cut over, and to the
-  // shared database until then. Per-org, so organizations move one at a time.
-  const connectionString = resolveConnectionString(row.connectionStringEncrypted, row.region);
+  // This org's own database. There is no shared fallback any more.
+  const connectionString = resolveConnectionString(row.connectionStringEncrypted);
 
   const record: TenantRecord = {
     orgId: row.orgId,
@@ -356,38 +258,6 @@ export async function resolveTenant(orgId: string): Promise<TenantRecord> {
  * and is trivially wrong. `registerTenants.ts` in particular writes a plausible
  * real region onto rows that all share one connection string.
  */
-/**
- * Whether a tenant row still points at the shared database.
- *
- * ── This is the split signal, and it is PER-ORG ─────────────────────────────
- *
- * A5 retired the global `TENANCY_MODE` from this decision. That flag made
- * "one organization at a time" impossible: flipping it to `split` made EVERY
- * organization not yet cut over fail with 409, because their rows still
- * pointed at the shared database. Migrating fifty dojos then meant one
- * simultaneous all-or-nothing switch with a single rollback point.
- *
- * The row already carries everything needed to decide. An organization is
- * "split" precisely when its own connection string names a database that is
- * neither the shared one nor the control plane. So cut-over orgs resolve to
- * their own databases while every other org keeps resolving to the shared one,
- * with no coordinated flag flip and no window where both apps must agree.
- *
- * ⚠️ The decision is made on the DECRYPTED CONNECTION STRING, never on
- * `region`. A2 shipped a guard that trusted the label and it silently failed:
- * `registerTenants` writes 'aws-us-east-1', which no shared-region set
- * contains, so production rows pointing straight at the shared database sailed
- * through. A label can be wrong; where the string actually points cannot.
- */
-function pointsAtSharedDatabase(connectionString: string, region: string): boolean {
-  if (connectionString === Env.DATABASE_URL || connectionString === Env.CONTROL_DATABASE_URL) {
-    return true;
-  }
-
-  // Cheap secondary filter only — see the SHARED_REGIONS note above for why
-  // this can never be the primary check.
-  return SHARED_REGIONS.has(region);
-}
 
 /**
  * Turn a stored `connection_string_enc` value into a usable connection string.
@@ -406,17 +276,19 @@ function pointsAtSharedDatabase(connectionString: string, region: string): boole
  * the per-org model: those organizations keep working, untouched, while others
  * move one at a time.
  */
-function resolveConnectionString(stored: string, region: string): string {
+function resolveConnectionString(stored: string): string {
+  // No shared-database fallback. Every organization is provisioned onto its
+  // own database before anyone can sign in, so a row that does not name a real
+  // per-tenant database is a fault to surface, not a case to accommodate.
+  //
+  // The sentinel and the `pointsAtSharedDatabase` check both existed for the
+  // migration window, when orgs lived in one database and moved out one at a
+  // time. That window is closed.
   if (stored === SHARED_DATABASE_SENTINEL) {
-    return Env.DATABASE_URL;
+    throw new TenantNotProvisionedError(stored);
   }
 
-  const decrypted = decryptConnectionString(stored);
-
-  // A row whose string still names the shared database is not yet cut over.
-  // Serve it from there rather than refusing — refusing is what forced the
-  // all-or-nothing flip this replaced.
-  return pointsAtSharedDatabase(decrypted, region) ? Env.DATABASE_URL : decrypted;
+  return decryptConnectionString(stored);
 }
 
 /** Resolve an organization straight to a usable database handle. */

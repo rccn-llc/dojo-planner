@@ -39,6 +39,12 @@ export default defineConfig<ChromaticConfig>({
     reuseExistingServer: !process.env.CI,
     env: {
       NEXT_PUBLIC_SENTRY_DISABLED: 'true',
+      // E2E creates a throwaway Clerk org per run and never writes a `tenant`
+      // row for it. Auto-registration used to cover that implicitly; now that
+      // an unprovisioned org fails closed, the tests need the local escape
+      // hatch to resolve explicitly. `defaultTenantRecord` refuses to honour
+      // this when NODE_ENV is production, so it cannot leak into real routing.
+      DEFAULT_TENANT_DATABASE_URL: process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:5432/postgres',
     },
   },
 
