@@ -345,10 +345,6 @@ async function main(): Promise<void> {
       + '  CONTROL_DATABASE_URL="postgresql://…-pooler…/neondb?sslmode=require" npm run db:provision-tenant -- --orgId=org_xxx',
     );
   }
-  if (!controlConnectionString) {
-    throw new Error('Neither CONTROL_DATABASE_URL nor DATABASE_URL is set.');
-  }
-
   const key = tenantEncryptionKey();
   if (!key) {
     throw new Error(
@@ -484,11 +480,12 @@ async function main(): Promise<void> {
     // never mints one. Neon refuses `POST /projects` on a Vercel-managed org,
     // and at this scale (<50 orgs, hands-on onboarding) manual creation is not
     // a bottleneck — so the API path was removed rather than left as dead code.
-    const project = {
-      projectId: null,
-      branchId: null,
-      connectionString: args.connectionString,
-    };
+    // `neon_project_id` / `neon_branch_id` are deliberately NOT written. They
+    // were populated by the API-based provisioning that A9 removed; databases
+    // are now created by hand, so there is no id to record and nothing reads
+    // them. The columns survive because dropping them needs baseline DDL for a
+    // purely cosmetic gain.
+    const project = { connectionString: args.connectionString };
     console.info(`[provisionTenant] database ready for ${args.orgId}`);
 
     // 2. Record it as NOT servable.
@@ -504,8 +501,6 @@ async function main(): Promise<void> {
         displayName: displayName ?? args.orgId,
         connectionStringEncrypted: encryptConnectionString(project.connectionString, key),
         region: args.region,
-        neonProjectId: project.projectId,
-        neonBranchId: project.branchId,
         status: TENANT_STATUS.PROVISIONING,
         schemaVersion: null,
       })
@@ -517,8 +512,6 @@ async function main(): Promise<void> {
           displayName: displayName ?? args.orgId,
           connectionStringEncrypted: encryptConnectionString(project.connectionString, key),
           region: args.region,
-          neonProjectId: project.projectId,
-          neonBranchId: project.branchId,
           status: TENANT_STATUS.PROVISIONING,
           updatedAt: new Date(),
         },

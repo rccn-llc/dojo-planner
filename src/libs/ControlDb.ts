@@ -16,7 +16,7 @@ import { Env } from './Env';
  * tenant-plane table through this handle should be a type error, not a runtime
  * surprise about which database a query landed in.
  *
- * During the no-op phase `CONTROL_DATABASE_URL` is unset and this falls back to
+ * In local development `CONTROL_DATABASE_URL` is unset and this falls back to
  * `DATABASE_URL` — control and tenant data share one physical database until
  * tenants are split out.
  */

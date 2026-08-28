@@ -46,7 +46,7 @@ const TAG_BYTES = 16;
  *
  * Falls back to the IQPro key so local dev and CI keep working without a second
  * secret configured. Returns null rather than throwing: callers differ on
- * whether a missing key is fatal — `autoRegisterTenant` degrades to a sentinel,
+ * whether a missing key is fatal — the removed auto-registration path degrades to a sentinel,
  * the read path must hard-fail.
  */
 export function tenantEncryptionKey(): Buffer | null {

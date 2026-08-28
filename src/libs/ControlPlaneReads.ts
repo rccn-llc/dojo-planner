@@ -30,7 +30,7 @@ import { getControlPool } from './ControlPool';
  * Keep new control-plane organization reads going through this helper rather
  * than reintroducing `db` in an RSC path.
  *
- * During the no-op phase `CONTROL_DATABASE_URL` is unset, so this resolves to
+ * In local development `CONTROL_DATABASE_URL` is unset, so this resolves to
  * the same physical database as everything else.
  */
 type OrganizationReadDb = NodePgDatabase<typeof schema>;

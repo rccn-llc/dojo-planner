@@ -1120,15 +1120,13 @@ npm run commit        # Interactive commit helper
 
 ## Multi-Tenancy (tenant connection seam)
 
-The app is moving to **one Postgres database per Clerk organization**. A1 landed the connection seam, A3 provisioning, A4 the data copy, and A5 the per-org cutover machinery. **No organization has been cut over yet** — every org still resolves to the shared database — but the split is now per-org rather than global.
+**Every Clerk organization runs on its own Postgres database.** The migration is complete: there is no shared tenant database, and an organization that has not been provisioned fails closed with a 409 rather than falling back anywhere.
 
-### An org is cut over when its OWN tenant row says so
+### An org is servable only when its tenant row says so
 
-There is no global switch. `TENANCY_MODE` has been **retired from the read path** in both apps: an org is split when its `tenant` row holds a real connection string that is not the shared database, and a row still naming the shared database is **served from there**, not refused.
+`resolveTenant` **fails closed**. An org with no `tenant` row, or a row that is not `active`, is refused — `TenantNotProvisionedError` → 409, `TenantUnavailableError` → 503. There is no default and no fallback: an organization is provisioned deliberately before anyone can sign in, so a missing row means something is wrong.
 
-⚠️ **The predicate is the DECRYPTED CONNECTION STRING, never the `region` label.** `registerTenants` writes `region: 'aws-us-east-1'`, so a region check passes rows pointing straight at the shared database — that was a real cross-tenant leak. The region is a cheap secondary filter only.
-
-This is what makes "one org at a time" possible: with a global flag, cutting over one org made every other org 409. Both apps read the same per-row signal, so no coordinated env flip is needed.
+`SHARED_DATABASE_SENTINEL` still exists, but only so six code paths can **recognise a legacy row in order to refuse it**. Nothing writes it.
 
 ### Cutover scripts
 
@@ -1138,7 +1136,6 @@ This is what makes "one org at a time" possible: with a global flag, cutting ove
 | `npm run db:copy-tenant` | Freezes the org (`status='migrating'`, which both apps refuse), reads the source in ONE `REPEATABLE READ` snapshot, copies into the destination in one transaction, then restores the prior status on **every** exit path. |
 | `npm run db:verify-copy` | Row parity, isolation, and content sampling. Exits non-zero on any mismatch. |
 | `npm run db:cutover-tenant` | The orchestrator: copy → verify → activate. **The only place a cut-over org is flipped to `active`**, and only after verification passes. `--activate-only` skips copy+verify for a database that was **seeded into place** rather than copied — it still refuses unless the destination actually holds rows for that org, since activating an empty database serves a blank dashboard with no error. Mutually exclusive with `--dry-run`. ⚠️ With `--activate-only` there are no source rows, so **rollback is not a restore** — the script says so explicitly. |
-| `npm run db:rollback-tenant` | Repoints the row at the shared database. Reports what rows live only in the tenant database first, and refuses without `--force` when that number is non-zero. |
 | `npm run db:deprovision-tenant` | Stops serving one org: flips its row to `archived` (which `resolveTenant` refuses) and reports the database host + row count so the operator can delete it by hand. **It does NOT delete the database** — Neon refuses deletion on Vercel-managed projects, and `neon_project_id` is no longer recorded since databases are created manually. Claiming otherwise would be worse than not trying. Dry run by default. |
 | `npm run db:export-tenant` | `pg_dump` of one org's whole database, for a portability request. Refuses an org still on the SHARED database — a whole-database dump would hand that customer every other org's data. Strips `-pooler` (Neon recommends unpooled for dumps). |
 | `npm run db:show-tenants` | Read-only: prints each org's directory row — display name, status, region, and the **host** its connection string resolves to (never credentials). The fastest way to answer "which database does this org actually use?" |
@@ -1160,7 +1157,7 @@ Using `BRANCH` (old), `NEWPROJ` (new), `CONTROL`, `SHARED`:
 6. **Confirm** with `db:show-tenants` and the app's `[Tenancy] resolved { orgId, dbHost }` line.
 7. **Soak, then delete the old database in the console.** Keep it until the soak passes — it is the rollback.
 
-**Rollback** (while the old database still exists): repeat step 4 with `--connection-string=$BRANCH`, then `db:cutover-tenant --target=$BRANCH --activate-only`. The emptiness guard proves the old database still holds the rows. Note `db:rollback-tenant` is the **wrong tool** here — it points at the SHARED database, which may never have held this org's data.
+**Rollback** (while the old database still exists): repeat step 4 with `--connection-string=$BRANCH`, then `db:cutover-tenant --target=$BRANCH --activate-only`. The emptiness guard proves the old database still holds the rows. (`db:rollback-tenant` was **deleted**: it wrote the shared-database sentinel, which `resolveConnectionString` now refuses — running it took an org offline rather than rolling it back. The two commands above are the rollback.)
 
 ### Adding an organization (the supported path)
 
@@ -1225,7 +1222,7 @@ Both apps log `{ orgId, dbHost }` once per tenant resolution — **host only, ne
 
 `CONTROL_DATABASE_URL` (falls back to `DATABASE_URL`), `DEFAULT_TENANT_DATABASE_URL` (dev only), `CONTROL_PLANE_ENCRYPTION_KEY` (falls back to `IQPRO_CONFIG_ENCRYPTION_KEY`; separate because a connection string is a higher trust tier than a gateway id).
 
-`TENANCY_MODE` is **no longer read by either app's routing**. It survives only as an ops guard for destructive scripts, where a global "are we mid-migration" answer is the right question.
+`TENANCY_MODE` has been **removed entirely** — no code read it.
 
 🔒 **Local dev is unchanged:** with no `CONTROL_DATABASE_URL` and no keys, `resolveTargets()` returns the one shared database and the tenant fan-out returns empty. `rm -rf local.db && npm run dev` works in both repos with no control plane.
 

@@ -102,11 +102,28 @@ function cacheGet(orgId: string): TenantRecord | null {
 
 function cacheSet(orgId: string, record: TenantRecord): void {
   if (cache.size >= TENANT_CACHE_MAX) {
-    const firstKey = cache.keys().next().value;
-    if (firstKey !== undefined) {
-      cache.delete(firstKey);
+    // Prune expired entries BEFORE falling back to insertion order.
+    //
+    // Expiry is otherwise only noticed lazily on read, so a burst of entries
+    // that expire without ever being read would fill the cache and evict a
+    // still-valid, frequently-used org instead. Dropping the dead ones first
+    // keeps eviction from punishing the hot path.
+    const now = Date.now();
+    for (const [key, entry] of cache) {
+      if (entry.expiresAt <= now) {
+        cache.delete(key);
+      }
+    }
+
+    // Still full — every entry is live, so fall back to insertion order.
+    if (cache.size >= TENANT_CACHE_MAX) {
+      const firstKey = cache.keys().next().value;
+      if (firstKey !== undefined) {
+        cache.delete(firstKey);
+      }
     }
   }
+
   cache.set(orgId, { record, expiresAt: Date.now() + CACHE_TTL_MS });
 }
 
@@ -246,35 +263,11 @@ export async function resolveTenant(orgId: string): Promise<TenantRecord> {
 }
 
 /**
- * Refuse a row that does not point at a database of its own.
- *
- * Split mode means one database per organization. A row whose connection string
- * resolves to the SHARED database is not a provisioned tenant — it is leftover
- * data from the shared-database era, and serving it routes that organization
- * into everyone else's data.
- *
- * Checks the decrypted string rather than the `region` label because the label
- * is written inconsistently by three different code paths (see SHARED_REGIONS)
- * and is trivially wrong. `registerTenants.ts` in particular writes a plausible
- * real region onto rows that all share one connection string.
- */
-
-/**
  * Turn a stored `connection_string_enc` value into a usable connection string.
  *
- * Handles the sentinel written by key-less auto-registration, which means
- * "this tenant uses DATABASE_URL". Honouring it is refused once the planes are
- * separated: at that point a sentinel row is stale data from the shared-database
- * era, and silently routing that organization to the control database would be
- * a cross-tenant leak.
- */
-/**
- * The connection string for a tenant row, or the shared database when the row
- * has not been cut over yet.
- *
- * Returning the shared string for a not-yet-migrated org is the whole point of
- * the per-org model: those organizations keep working, untouched, while others
- * move one at a time.
+ * Every organization is provisioned onto its own database before anyone can
+ * sign in, so a row that does not name one is a fault to surface rather than a
+ * case to accommodate — there is no shared database left to fall back to.
  */
 function resolveConnectionString(stored: string): string {
   // No shared-database fallback. Every organization is provisioned onto its

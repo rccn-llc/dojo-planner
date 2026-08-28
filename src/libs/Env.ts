@@ -16,28 +16,10 @@ export const Env = createEnv({
     // The CONTROL database: holds the `tenant` directory, `tenant_external_ref`,
     // `platform_config`, and the org row's SaaS-billing columns. Must be
     // readable before any tenant database can be opened.
-    // Optional, falling back to DATABASE_URL, because during the no-op phase
-    // the control plane and the single shared tenant database are the same
-    // physical database. Once tenants are split out this should be set
-    // explicitly on every deployment.
+    // Optional only because LOCAL development runs one pglite database that
+    // serves as both planes. Every deployment must set it: the tenant
+    // directory lives here, so nothing resolves without it.
     CONTROL_DATABASE_URL: z.string().min(1).optional(),
-    // Whether the control plane and tenant data are physically separate.
-    //
-    // EXPLICIT rather than derived. This used to be inferred in five separate
-    // places from `CONTROL_DATABASE_URL !== DATABASE_URL`, which meant setting
-    // that one variable silently flipped auto-registration, sentinel-row
-    // handling, control-pool sizing, webhook routing, and the resolver path all
-    // at once — with no way to stage the change or verify it first.
-    //
-    // Splitting the flag from the connection string means a deployment can
-    // populate CONTROL_DATABASE_URL, migrate it, and verify it while STILL
-    // serving traffic in 'shared' mode. Flipping to 'split' is then a separate,
-    // reversible decision.
-    //
-    // ⚠️ Before setting 'split', every `tenant` row must carry a real per-org
-    // connection string: rows holding the shared-database sentinel throw, and
-    // rows encrypted from DATABASE_URL would silently serve the wrong database.
-    TENANCY_MODE: z.enum(['shared', 'split']).optional(),
     // Local/dev single-tenant escape hatch: when set, EVERY org resolves to
     // this connection string instead of consulting the `tenant` directory.
     // TenantDirectoryService refuses to honour it when NODE_ENV === 'production'
@@ -113,7 +95,6 @@ export const Env = createEnv({
     CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
     DATABASE_URL: process.env.DATABASE_URL,
     CONTROL_DATABASE_URL: process.env.CONTROL_DATABASE_URL,
-    TENANCY_MODE: process.env.TENANCY_MODE,
     DEFAULT_TENANT_DATABASE_URL: process.env.DEFAULT_TENANT_DATABASE_URL,
     CONTROL_PLANE_ENCRYPTION_KEY: process.env.CONTROL_PLANE_ENCRYPTION_KEY,
     STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,

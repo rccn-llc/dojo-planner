@@ -18,7 +18,7 @@ import { Env } from './Env';
  * control-plane pools plus a tenant pool means three sockets, and the second
  * and third are refused — surfacing as `read ECONNRESET` mid-query.
  *
- * During the no-op phase the control plane and the tenant database are the same
+ * In local development the control plane and the tenant database are the same
  * physical database, so a single connection has to serve both. `max` is
  * therefore 1 while they coincide, and can rise once the control plane is a
  * genuinely separate database with its own connection budget.
@@ -46,7 +46,7 @@ const globalForControlPool = globalThis as unknown as { controlPool?: Pool };
 /**
  * Whether this pool physically shares a server with the tenant pool.
  *
- * Deliberately compares CONNECTION STRINGS, not TENANCY_MODE. Pool sizing is a
+ * Deliberately compares CONNECTION STRINGS, not any routing flag. Sizing is a
  * property of the socket, not of the routing policy: during a staged rollout
  * the mode can be 'split' while both planes still address the same database
  * (and, locally, the same pglite-server — which accepts exactly ONE connection,
@@ -87,7 +87,7 @@ export function getControlPool(): Pool {
 /**
  * Whether `connectionString` targets the same database as the control plane.
  *
- * True for every organization during the no-op phase, which lets `TenantDb`
+ * True in local development, which lets `TenantDb`
  * reuse the control pool rather than opening a second socket against a server
  * that may only accept one. Goes false per-tenant as organizations move to
  * their own databases.
