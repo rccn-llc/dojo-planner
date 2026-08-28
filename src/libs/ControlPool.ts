@@ -25,7 +25,20 @@ import { Env } from './Env';
  */
 
 function controlConnectionString(): string {
-  return Env.CONTROL_DATABASE_URL ?? Env.DATABASE_URL;
+  // CONTROL_DATABASE_URL is the real answer. DATABASE_URL is the LOCAL
+  // fallback: local dev runs one pglite database that serves as both planes,
+  // so requiring a separate control plane there would break `npm run dev`.
+  const connectionString = Env.CONTROL_DATABASE_URL ?? Env.DATABASE_URL;
+
+  if (!connectionString) {
+    throw new Error(
+      'No control-plane database configured. Set CONTROL_DATABASE_URL (or, for '
+      + 'local development only, DATABASE_URL). Without it no organization can '
+      + 'be resolved, because the tenant directory lives in the control plane.',
+    );
+  }
+
+  return connectionString;
 }
 
 const globalForControlPool = globalThis as unknown as { controlPool?: Pool };
@@ -43,7 +56,10 @@ const globalForControlPool = globalThis as unknown as { controlPool?: Pool };
  * lookup dying on a connection reset.
  */
 function sharesPhysicalDatabase(): boolean {
-  return controlConnectionString() === Env.DATABASE_URL;
+  // True only when the control plane IS the local tenant database — i.e. local
+  // development on pglite. Deployments set a distinct CONTROL_DATABASE_URL and
+  // get the larger pool.
+  return Env.DATABASE_URL !== undefined && controlConnectionString() === Env.DATABASE_URL;
 }
 
 function createControlPool(): Pool {

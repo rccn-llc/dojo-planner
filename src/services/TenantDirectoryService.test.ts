@@ -345,3 +345,13 @@ describe('connectionHost', () => {
     expect(connectionHost('__shared_database__')).toBe('unparseable');
   });
 });
+
+describe('filterProvisionedOrgs', () => {
+  it('returns an empty list without querying when given no orgs', async () => {
+    // The switcher calls this on every mount; a user with no memberships
+    // should not cost a control-plane round trip.
+    const { filterProvisionedOrgs } = await import('./TenantDirectoryService');
+
+    await expect(filterProvisionedOrgs([])).resolves.toEqual([]);
+  });
+});

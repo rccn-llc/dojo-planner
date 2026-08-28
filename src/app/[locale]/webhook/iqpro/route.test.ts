@@ -124,34 +124,19 @@ describe('iQPro webhook tenant routing', () => {
     );
   });
 
-  it('still processes an unmapped event in shared mode', async () => {
-    // Refs minted before this table existed have no row. One physical database
-    // means the bootstrap scope reaches the same rows, so behaviour is
-    // unchanged and the event must NOT be dropped.
-    resolveOrgByExternalRef.mockResolvedValue(null);
-    const { POST } = await import('./route');
-
-    await POST(paymentCompleted('tx_legacy'));
-
-    expect(tenantUpdateWhere).toHaveBeenCalled();
-    expect(loggerError).not.toHaveBeenCalled();
-  });
-
-  it('processes an unmapped event against the shared database, and says so', async () => {
-    // An unmapped id predates ref-writing, so its rows can only be in the
-    // shared database. The regression guarded here is the inverse of the old
-    // one: it must NOT go silent. A cut-over org's ids are mapped at mint
-    // time, so this path cannot reach a cut-over org's data.
+  it('REFUSES an unmapped event rather than silently updating nothing', async () => {
+    // Every org now has its own database and the shared one holds no tenant
+    // data, so an unmapped id has nowhere valid to be applied. Processing it
+    // against the control plane would update NOTHING while reporting success —
+    // a payment recorded at the gateway and lost here.
     resolveOrgByExternalRef.mockResolvedValue(null);
     const { POST } = await import('./route');
 
     await POST(paymentCompleted('tx_orphan'));
 
-    // It runs under the bootstrap scope (the shared database) rather than
-    // resolving a per-org one — and it processes rather than dropping.
-    expect(tenantUpdateWhere).toHaveBeenCalled();
-    expect(loggerWarn).toHaveBeenCalledWith(
-      expect.stringContaining('No tenant mapping'),
+    expect(tenantUpdateWhere).not.toHaveBeenCalled();
+    expect(loggerError).toHaveBeenCalledWith(
+      expect.stringContaining('REFUSING'),
       expect.objectContaining({ refId: 'tx_orphan' }),
     );
   });

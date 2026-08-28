@@ -80,6 +80,9 @@ export async function clerkApiRequest<T>(
 type ClerkOrganizationMembership = {
   id: string;
   role: string;
+  // Present when listing a USER's memberships (`/users/{id}/organization_memberships`);
+  // absent when listing an ORGANIZATION's, where the org is already implied.
+  organization?: { id: string } | null;
   public_user_data?: {
     user_id?: string;
     first_name?: string | null;
@@ -236,4 +239,22 @@ export async function deleteOrganizationRole(roleId: string): Promise<void> {
   await clerkApiRequest<void>(`/organization_roles/${roleId}`, {
     method: 'DELETE',
   });
+}
+
+/**
+ * Every organization this user belongs to, by id.
+ *
+ * Read from Clerk rather than trusting ids the client supplies: the org
+ * switcher's provisioned-list endpoint uses this to bound what a caller can ask
+ * about, so that it cannot be used to probe which arbitrary organization ids
+ * exist in the tenant directory.
+ */
+export async function getUserOrganizationIds(userId: string): Promise<string[]> {
+  const response = await clerkApiRequest<ClerkPaginatedResponse<ClerkOrganizationMembership>>(
+    `/users/${userId}/organization_memberships?limit=100`,
+  );
+
+  return response.data
+    .map(membership => membership.organization?.id)
+    .filter((id): id is string => typeof id === 'string');
 }

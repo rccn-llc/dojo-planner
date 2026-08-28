@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
+import { client } from '@/libs/Orpc';
 
 type OrgData = {
   id: string;
@@ -38,7 +39,24 @@ export const OrganizationSelector = () => {
           name: membership.organization.name,
           image_url: membership.organization.imageUrl,
         })) || [];
-        setOrganizations(orgs);
+
+        // Clerk membership is not enough: an organization with no provisioned
+        // database cannot be served — `resolveTenant` fails closed, so picking
+        // one would 409 the whole dashboard. Hide those rather than offer a
+        // dead end.
+        //
+        // On failure, fall back to the UNFILTERED list. A transient
+        // control-plane blip should not make every organization vanish from
+        // the switcher, which looks far more alarming than the 409 this
+        // filtering exists to avoid.
+        try {
+          const { orgIds } = await client.organization.listProvisioned();
+          const provisioned = new Set(orgIds);
+          setOrganizations(orgs.filter(org => provisioned.has(org.id)));
+        } catch (error) {
+          console.error('Could not check which organizations are provisioned; showing all:', error);
+          setOrganizations(orgs);
+        }
       } catch (error) {
         console.error('Failed to fetch organizations:', error);
       } finally {

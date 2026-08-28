@@ -49,6 +49,16 @@ export const WEBHOOK_BOOTSTRAP_ORG_ID = '__webhook_bootstrap__';
  * rather than opening a fresh pool per delivery.
  */
 export function getBootstrapTenantDb(): TenantDb {
+  // Only ever used to look up which org a provider id belongs to; the real
+  // work then happens on that org's own database.
   const connectionString = Env.CONTROL_DATABASE_URL ?? Env.DATABASE_URL;
+
+  if (!connectionString) {
+    throw new Error(
+      'No control-plane database configured, so a webhook cannot be routed to '
+      + 'an organization. Set CONTROL_DATABASE_URL.',
+    );
+  }
+
   return getTenantDb(WEBHOOK_BOOTSTRAP_ORG_ID, connectionString);
 }

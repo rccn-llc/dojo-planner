@@ -37,7 +37,15 @@ async function main() {
     process.exit(1);
   }
 
-  const pool = new Pool({ connectionString: Env.DATABASE_URL });
+  // This script targets ONE database directly — pass the org's own database,
+  // or the control plane for platform config. DATABASE_URL is only a local
+  // convenience now that every org has its own.
+  const connectionString = Env.DATABASE_URL ?? Env.CONTROL_DATABASE_URL;
+  if (!connectionString) {
+    throw new Error('Set DATABASE_URL to the database this backfill should write to.');
+  }
+
+  const pool = new Pool({ connectionString });
   const db = drizzle(pool);
 
   // One encrypted blob rather than three columns (B3).

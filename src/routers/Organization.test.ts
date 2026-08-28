@@ -5,8 +5,10 @@ import { AUDIT_ACTION, AUDIT_ENTITY_TYPE } from '@/types/Audit';
 import { ORG_ROLE } from '@/types/Auth';
 
 vi.mock('@/libs/DB', () => ({ db: {} }));
-vi.mock('./AuthGuards', () => ({ guardRole: vi.fn() }));
+vi.mock('./AuthGuards', () => ({ guardRole: vi.fn(), guardAuth: vi.fn() }));
 vi.mock('@/services/AuditService', () => ({ audit: vi.fn() }));
+vi.mock('@/services/ClerkRolesService', () => ({ getUserOrganizationIds: vi.fn() }));
+vi.mock('@/services/TenantDirectoryService', () => ({ filterProvisionedOrgs: vi.fn() }));
 vi.mock('@/services/OrganizationService', async () => {
   const actual = await vi.importActual<typeof import('@/services/OrganizationService')>('@/services/OrganizationService');
   return {
@@ -104,5 +106,45 @@ describe('Organization Router', () => {
         expect.objectContaining({ entityId: 'org-1', status: 'failure', error: 'db down' }),
       );
     });
+  });
+});
+
+describe('listProvisioned', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('bounds the check to the caller\'s OWN organizations', async () => {
+    // Security property: the org ids come from Clerk server-side, never from
+    // the client. Otherwise this endpoint would let anyone probe which
+    // arbitrary organization ids exist in the tenant directory.
+    const { guardAuth } = await import('./AuthGuards');
+    const { getUserOrganizationIds } = await import('@/services/ClerkRolesService');
+    const { filterProvisionedOrgs } = await import('@/services/TenantDirectoryService');
+
+    vi.mocked(guardAuth).mockResolvedValue({ userId: 'user-1', orgId: 'org-1', has: () => true });
+    vi.mocked(getUserOrganizationIds).mockResolvedValue(['org-1', 'org-2']);
+    vi.mocked(filterProvisionedOrgs).mockResolvedValue(['org-1']);
+
+    const { listProvisioned } = await import('./Organization');
+    const result = await callHandler(listProvisioned);
+
+    expect(getUserOrganizationIds).toHaveBeenCalledWith('user-1');
+    expect(filterProvisionedOrgs).toHaveBeenCalledWith(['org-1', 'org-2']);
+    expect(result).toEqual({ orgIds: ['org-1'] });
+  });
+
+  it('skips the directory read for a user with no memberships', async () => {
+    const { guardAuth } = await import('./AuthGuards');
+    const { getUserOrganizationIds } = await import('@/services/ClerkRolesService');
+    const { filterProvisionedOrgs } = await import('@/services/TenantDirectoryService');
+
+    vi.mocked(guardAuth).mockResolvedValue({ userId: 'user-1', orgId: 'org-1', has: () => true });
+    vi.mocked(getUserOrganizationIds).mockResolvedValue([]);
+
+    const { listProvisioned } = await import('./Organization');
+
+    await expect(callHandler(listProvisioned)).resolves.toEqual({ orgIds: [] });
+    expect(filterProvisionedOrgs).not.toHaveBeenCalled();
   });
 });

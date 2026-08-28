@@ -1,5 +1,5 @@
 import type { TenantDb } from '@/libs/TenantDb';
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { controlDb } from '@/libs/ControlDb';
 import { Env } from '@/libs/Env';
 import {
@@ -129,18 +129,18 @@ export function resetTenantDirectoryCache(orgId?: string): void {
  * Marker stored in place of ciphertext when an organization was auto-registered
  * without an encryption key available.
  *
- * It means "this tenant uses DATABASE_URL", never a real connection string, so
- * nothing sensitive is stored unencrypted. It is only ever written, and only
- * ever honoured, while all organizations share one database — see
- * `autoRegisterTenant`.
+ * ⚠️ HISTORICAL. It meant "this tenant uses the shared database", which no
+ * longer exists as a concept — every organization has its own. Nothing writes
+ * it any more, and `resolveConnectionString` REFUSES a row still carrying it
+ * rather than guessing. Kept only to recognise such a row and fail clearly.
  */
 
 /**
  * Decrypt a stored connection string.
  *
  * Wraps the shared helper to keep the "no key configured" case as a clear,
- * actionable error on the read path — where a missing key is always fatal,
- * unlike in `autoRegisterTenant`, which degrades to a sentinel.
+ * actionable error on the read path, where a missing key is always fatal: a
+ * row that cannot be decrypted cannot be served.
  */
 function decryptConnectionString(ciphertextB64: string): string {
   const key = tenantEncryptionKey();
@@ -314,4 +314,31 @@ export async function getDbForOrg(orgId: string): Promise<TenantDb> {
   console.info('[Tenancy] resolved', { orgId, dbHost: connectionHost(tenant.connectionString) });
 
   return getTenantDb(orgId, tenant.connectionString);
+}
+
+/**
+ * Which of `orgIds` have a servable database of their own.
+ *
+ * The organization switcher lists Clerk memberships, but a Clerk organization
+ * is not usable until it has been provisioned: `resolveTenant` fails closed on
+ * an unknown org, so selecting one would 409 the whole dashboard. Filtering the
+ * list is how that dead end is kept off the screen.
+ *
+ * Returns only orgs whose row is `active` — one still `provisioning`, or frozen
+ * `migrating` mid-copy, is deliberately excluded: both would refuse to serve.
+ *
+ * Reads the CONTROL plane, so it needs no tenant scope and works during an RSC
+ * render.
+ */
+export async function filterProvisionedOrgs(orgIds: string[]): Promise<string[]> {
+  if (orgIds.length === 0) {
+    return [];
+  }
+
+  const rows = await controlDb
+    .select({ orgId: tenantSchema.orgId })
+    .from(tenantSchema)
+    .where(and(inArray(tenantSchema.orgId, orgIds), eq(tenantSchema.status, TENANT_STATUS.ACTIVE)));
+
+  return rows.map(row => row.orgId);
 }

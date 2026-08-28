@@ -4,7 +4,14 @@ import * as z from 'zod';
 export const Env = createEnv({
   server: {
     CLERK_SECRET_KEY: z.string().min(1),
-    DATABASE_URL: z.string().min(1),
+    // Optional as of A10. It is no longer the "shared tenant database" — every
+    // organization resolves to its own database through the control plane. It
+    // survives as the LOCAL development database, where it also stands in for
+    // CONTROL_DATABASE_URL, so local dev needs no control plane of its own.
+    //
+    // Deployments set CONTROL_DATABASE_URL instead; requiring this one there
+    // meant keeping a database alive purely to satisfy a validator.
+    DATABASE_URL: z.string().min(1).optional(),
     // ---- Multi-tenancy (see src/services/TenantDirectoryService.ts) ----
     // The CONTROL database: holds the `tenant` directory, `tenant_external_ref`,
     // `platform_config`, and the org row's SaaS-billing columns. Must be
