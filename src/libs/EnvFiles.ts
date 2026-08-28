@@ -62,3 +62,18 @@ export function loadEnvFiles(): void {
 export function argValue(name: string): string | undefined {
   return process.argv.find(a => a.startsWith(`--${name}=`))?.split('=').slice(1).join('=');
 }
+
+/**
+ * Host of a connection string, for logging. NEVER the credentials.
+ *
+ * Lived in three ops scripts as identical private copies. Which database a
+ * command is about to touch is the single most important thing it prints, so
+ * it should not be three implementations one edit away from disagreeing.
+ */
+export function hostOf(connectionString: string): string {
+  try {
+    return new URL(connectionString).host;
+  } catch {
+    return '(unparseable connection string)';
+  }
+}

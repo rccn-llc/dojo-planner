@@ -34,20 +34,11 @@ import process from 'node:process';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
-import { argValue, loadEnvFiles } from '../libs/EnvFiles';
+import { argValue, hostOf, loadEnvFiles } from '../libs/EnvFiles';
 import { decryptConnectionString, SHARED_DATABASE_SENTINEL, tenantEncryptionKey } from '../libs/TenantCrypto';
 import * as controlSchema from '../models/ControlSchema';
 import { TENANT_STATUS, tenantSchema } from '../models/ControlSchema';
 import { orgScopePredicate, TENANT_TABLES } from '../services/TenantDataMap';
-
-/** Host of a connection string. NEVER the credentials. */
-function hostOf(connectionString: string): string {
-  try {
-    return new URL(connectionString).host;
-  } catch {
-    return '(unparseable connection string)';
-  }
-}
 
 /**
  * Total rows this org holds in `connectionString`.

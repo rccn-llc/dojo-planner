@@ -128,17 +128,11 @@ describe('tenantDirectoryService', () => {
     it('falls through to the directory when the hatch is unset', async () => {
       envValues.CONTROL_DATABASE_URL = 'postgres://control';
       envValues.DATABASE_URL = 'postgres://tenant';
-      // The split is now EXPLICIT: distinct connection strings alone no longer
-      // separate the planes, so that a deployment can populate and migrate the
-      // control database while still serving traffic in shared mode.
-      // Auto-registration now always runs, so force IT to fail rather than
-      // relying on a retired global mode to disable it.
+      // With the hatch unset the directory IS consulted, and an unknown org is
+      // now fatal rather than auto-registered.
       findFirst.mockResolvedValue(undefined);
-      insert.mockImplementationOnce(() => {
-        throw new Error('control plane unavailable');
-      });
 
-      await expect(service.resolveTenant('org_a')).rejects.toThrow(/control plane unavailable/);
+      await expect(service.resolveTenant('org_a')).rejects.toBeInstanceOf(service.TenantNotProvisionedError);
       expect(findFirst).toHaveBeenCalled();
     });
   });
@@ -146,20 +140,6 @@ describe('tenantDirectoryService', () => {
   describe('resolution errors', () => {
     beforeEach(() => {
       envValues.CONTROL_PLANE_ENCRYPTION_KEY = 'a'.repeat(64);
-    });
-
-    it('auto-registers an unknown organization rather than refusing it', async () => {
-      // `TenantNotProvisionedError` is now unreachable from this path by
-      // design: an unknown org is registered against the shared database and
-      // served. The error class survives for A7's source-deletion phase, where
-      // a deliberately archived tenant must refuse.
-      envValues.DATABASE_URL = 'postgres://shared-tenant';
-      findFirst.mockResolvedValue(undefined);
-
-      await expect(service.resolveTenant('org_missing')).resolves.toMatchObject({
-        connectionString: 'postgres://shared-tenant',
-      });
-      expect(insert).toHaveBeenCalled();
     });
 
     it.each(['provisioning', 'migrating', 'suspended', 'archived'])(
@@ -200,147 +180,48 @@ describe('tenantDirectoryService', () => {
     });
   });
 
-  describe('auto-registration', () => {
+  describe('unprovisioned organizations fail closed', () => {
     beforeEach(() => {
       envValues.CONTROL_PLANE_ENCRYPTION_KEY = 'a'.repeat(64);
-      envValues.DATABASE_URL = 'postgres://shared';
-      // No CONTROL_DATABASE_URL: both planes still share one database.
+      envValues.DATABASE_URL = 'postgres://local';
     });
 
-    it('registers an unknown organization against the shared database', async () => {
-      // A Clerk org can be created at any time — self-serve signup, the Clerk
-      // dashboard, an E2E fixture — and none of those know about this app's
-      // tenant directory. Failing here would leave the dashboard dead until
-      // someone ran a script by hand.
+    it('REFUSES an organization with no tenant row', async () => {
+      // This replaced auto-registration. An org is provisioned deliberately —
+      // its database created and its row written before anyone can sign in —
+      // so a missing row means something is wrong. Registering it against a
+      // default would route that org at a database nobody chose, which is the
+      // exact fault this architecture exists to make impossible.
       findFirst.mockResolvedValue(undefined);
 
-      const tenant = await service.resolveTenant('org_brand_new');
-
-      expect(tenant.orgId).toBe('org_brand_new');
-      expect(tenant.connectionString).toBe('postgres://shared');
-      expect(tenant.status).toBe('active');
-      expect(insert).toHaveBeenCalled();
-    });
-
-    it('writes a row that decrypts back to the shared connection string', async () => {
-      findFirst.mockResolvedValue(undefined);
-
-      await service.resolveTenant('org_brand_new');
-
-      const written = values.mock.calls[0]?.[0];
-
-      expect(written?.connectionStringEncrypted).toBeTruthy();
-
-      // Round-trip through the resolver's own decryption path: seed the row it
-      // just wrote and confirm it reads back.
-      service.resetTenantDirectoryCache();
-      findFirst.mockResolvedValue(tenantRow({
-        orgId: 'org_brand_new',
-        connectionStringEncrypted: written?.connectionStringEncrypted,
-      }));
-
-      const reread = await service.resolveTenant('org_brand_new');
-
-      expect(reread.connectionString).toBe('postgres://shared');
-    });
-
-    it('tolerates a concurrent insert (ON CONFLICT DO NOTHING)', async () => {
-      findFirst.mockResolvedValue(undefined);
-
-      await service.resolveTenant('org_brand_new');
-
-      expect(onConflictDoNothing).toHaveBeenCalled();
-    });
-
-    it('still registers a brand-new organization against the shared database', async () => {
-      // This used to bail out whenever TENANCY_MODE was 'split', so once ANY
-      // organization had been cut over, every newly created Clerk org 409'd
-      // until an operator ran a script by hand. A new org has no data to
-      // migrate, so the shared database is its correct home until someone
-      // moves it deliberately.
-      envValues.CONTROL_DATABASE_URL = 'postgres://control';
-      findFirst.mockResolvedValue(undefined);
-
-      await expect(service.resolveTenant('org_brand_new')).resolves.toBeTruthy();
-      expect(insert).toHaveBeenCalled();
-    });
-
-    it('still registers when NO encryption key is configured', async () => {
-      // Regression guard: CI provides only CLERK_SECRET_KEY. Requiring a key
-      // here made auto-registration silently decline, so every E2E run failed
-      // with "No provisioned tenant database". While all orgs share one
-      // database the stored value is DATABASE_URL — something the process
-      // already holds in plaintext — so a key protects nothing.
-      delete envValues.CONTROL_PLANE_ENCRYPTION_KEY;
-      delete envValues.IQPRO_CONFIG_ENCRYPTION_KEY;
-      findFirst.mockResolvedValue(undefined);
-
-      const tenant = await service.resolveTenant('org_brand_new');
-
-      expect(tenant.connectionString).toBe('postgres://shared');
-      expect(insert).toHaveBeenCalled();
-      // Stores a marker, never a plaintext connection string.
-      expect(values.mock.calls[0]?.[0]?.connectionStringEncrypted).toBe('__shared_database__');
-    });
-
-    it('reads the sentinel back as DATABASE_URL', async () => {
-      delete envValues.CONTROL_PLANE_ENCRYPTION_KEY;
-      delete envValues.IQPRO_CONFIG_ENCRYPTION_KEY;
-      findFirst.mockResolvedValue(tenantRow({
-        connectionStringEncrypted: '__shared_database__',
-      }));
-
-      const tenant = await service.resolveTenant('org_a');
-
-      expect(tenant.connectionString).toBe('postgres://shared');
-    });
-
-    it('serves a sentinel row from the shared database', async () => {
-      // The sentinel means "this tenant uses DATABASE_URL". Under the per-org
-      // model that is a legitimate, complete answer for an organization that
-      // has not been cut over — not a condition to refuse.
-      envValues.DATABASE_URL = 'postgres://shared-tenant';
-      findFirst.mockResolvedValue(tenantRow({
-        connectionStringEncrypted: '__shared_database__',
-      }));
-
-      await expect(service.resolveTenant('org_a')).resolves.toMatchObject({
-        connectionString: 'postgres://shared-tenant',
-      });
-    });
-
-    it('turns a missing `tenant` table into an actionable deployment error', async () => {
-      // A database that predates the control-plane DDL. drizzle records the
-      // baseline as applied and will not re-run it, so this is a real and
-      // recurring failure mode — it must name the fix rather than surface as a
-      // raw Postgres 42P01 on every RPC call.
-      const pgError = Object.assign(new Error('relation "tenant" does not exist'), {
-        code: '42P01',
-      });
-      findFirst.mockRejectedValue(pgError);
-
-      await expect(service.resolveTenant('org_a')).rejects.toThrow(
-        service.ControlPlaneNotMigratedError,
-      );
-      await expect(service.resolveTenant('org_a')).rejects.toThrow(/rm -rf local\.db/);
-    });
-
-    it('detects the missing table when the driver error is nested under cause', async () => {
-      // drizzle re-wraps the driver error, so the pg code moves to `cause`.
-      const wrapped = Object.assign(new Error('Failed query'), {
-        cause: { code: '42P01' },
-      });
-      findFirst.mockRejectedValue(wrapped);
-
-      await expect(service.resolveTenant('org_a')).rejects.toThrow(
-        service.ControlPlaneNotMigratedError,
+      await expect(service.resolveTenant('org_unknown')).rejects.toBeInstanceOf(
+        service.TenantNotProvisionedError,
       );
     });
 
-    it('rethrows unrelated database errors untouched', async () => {
-      findFirst.mockRejectedValue(new Error('connection terminated'));
+    it('does not write anything when refusing', async () => {
+      // The old path inserted a directory row as a side effect of a read.
+      findFirst.mockResolvedValue(undefined);
 
-      await expect(service.resolveTenant('org_a')).rejects.toThrow(/connection terminated/);
+      await expect(service.resolveTenant('org_unknown')).rejects.toThrow();
+      expect(insert).not.toHaveBeenCalled();
+    });
+
+    it('REFUSES a row still carrying the shared-database sentinel', async () => {
+      // The sentinel meant "serve this org from the shared database", which no
+      // longer exists as a concept. Such a row is stale, and serving it would
+      // be a guess.
+      findFirst.mockResolvedValue({
+        orgId: 'org_a',
+        connectionStringEncrypted: '__shared_database__',
+        region: 'shared',
+        status: 'active',
+        schemaVersion: null,
+      });
+
+      await expect(service.resolveTenant('org_a')).rejects.toBeInstanceOf(
+        service.TenantNotProvisionedError,
+      );
     });
   });
 
@@ -368,62 +249,6 @@ describe('tenantDirectoryService', () => {
       await service.getDbForOrg('org_a');
 
       expect(getTenantDb).toHaveBeenCalledWith('org_a', 'postgres://local');
-    });
-
-    it('propagates resolution failures rather than opening a connection', async () => {
-      // Separate planes: auto-registration is off, so a missing row is fatal.
-      envValues.CONTROL_DATABASE_URL = 'postgres://control';
-      envValues.DATABASE_URL = 'postgres://tenant';
-      // The split is now EXPLICIT: distinct connection strings alone no longer
-      // separate the planes, so that a deployment can populate and migrate the
-      // control database while still serving traffic in shared mode.
-      // Auto-registration now always runs, so force IT to fail rather than
-      // relying on a retired global mode to disable it.
-      findFirst.mockResolvedValue(undefined);
-      insert.mockImplementationOnce(() => {
-        throw new Error('control plane unavailable');
-      });
-
-      await expect(service.getDbForOrg('org_missing')).rejects.toThrow(/control plane unavailable/);
-      expect(getTenantDb).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('tenancy mode is explicit, not derived', () => {
-    // The regression this guards: five behaviours used to flip off the implicit
-    // comparison `CONTROL_DATABASE_URL !== DATABASE_URL` — auto-registration,
-    // sentinel handling, control-pool sizing, webhook routing, and resolution.
-    // Setting one variable flipped all five at once, and one of them (the webhook
-    // bootstrap) fails SILENTLY, turning payment status updates into no-ops.
-    //
-    // Decoupling them is what lets a deployment populate and migrate the control
-    // database, verify it, and only then flip the mode.
-    it('stays in shared mode when CONTROL_DATABASE_URL is distinct but the mode is unset', async () => {
-      envValues.CONTROL_DATABASE_URL = 'postgres://control';
-      envValues.DATABASE_URL = 'postgres://tenant';
-      delete envValues.TENANCY_MODE;
-      findFirst.mockResolvedValue(undefined);
-
-      // Auto-registration is a shared-mode-only behaviour, so it proves the mode.
-      const record = await service.resolveTenant('org_staged');
-
-      expect(record.connectionString).toBe('postgres://tenant');
-      expect(insert).toHaveBeenCalled();
-    });
-
-    it('separates the planes when the mode says so, regardless of the URLs', async () => {
-      // Same connection string on both sides — during a staged rollout the flag
-      // is what matters, not whether the strings happen to differ.
-      envValues.CONTROL_DATABASE_URL = 'postgres://same';
-      envValues.DATABASE_URL = 'postgres://same';
-      // Auto-registration now always runs, so force IT to fail rather than
-      // relying on a retired global mode to disable it.
-      findFirst.mockResolvedValue(undefined);
-      insert.mockImplementationOnce(() => {
-        throw new Error('control plane unavailable');
-      });
-
-      await expect(service.resolveTenant('org_split')).rejects.toThrow(/control plane unavailable/);
     });
   });
 
@@ -467,37 +292,6 @@ describe('tenantDirectoryService', () => {
 
       await expect(service.resolveTenant('org_a')).resolves.toMatchObject({
         connectionString: 'postgres://org-a-own-db',
-      });
-    });
-
-    it('treats a row pointing at the CONTROL database as not cut over', async () => {
-      // Nothing should ever write this, but if it happened, serving the org's
-      // DATA from the control plane would be far worse than serving it from
-      // the shared database it came from.
-      envValues.DATABASE_URL = 'postgres://shared-tenant';
-      envValues.CONTROL_DATABASE_URL = 'postgres://control';
-      findFirst.mockResolvedValue(tenantRow({
-        region: 'aws-us-east-1',
-        connectionStringEncrypted: encryptConnectionString('postgres://control'),
-      }));
-
-      await expect(service.resolveTenant('org_a')).resolves.toMatchObject({
-        connectionString: 'postgres://shared-tenant',
-      });
-    });
-
-    it('treats a shared-era region label as not cut over', async () => {
-      // Belt and braces, inverted for the per-org model: a row that was never
-      // re-provisioned is served from the shared database rather than refused.
-      envValues.DATABASE_URL = 'postgres://shared-tenant';
-      envValues.CONTROL_PLANE_ENCRYPTION_KEY = 'a'.repeat(64);
-      findFirst.mockResolvedValue(tenantRow({
-        region: 'local',
-        connectionStringEncrypted: encryptConnectionString('postgres://something-else'),
-      }));
-
-      await expect(service.resolveTenant('org_a')).resolves.toMatchObject({
-        connectionString: 'postgres://shared-tenant',
       });
     });
 

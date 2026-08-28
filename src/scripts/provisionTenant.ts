@@ -40,6 +40,7 @@ import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { Pool } from 'pg';
+import { hostOf } from '../libs/EnvFiles';
 import { decryptConnectionString, encryptConnectionString, SHARED_DATABASE_SENTINEL, tenantEncryptionKey } from '../libs/TenantCrypto';
 import { TENANT_STATUS, tenantSchema } from '../models/ControlSchema';
 
@@ -78,14 +79,19 @@ type Args = {
   orgId: string;
   region: string;
   connectionString: string;
+  repoint: string | undefined;
   dryRun: boolean;
 };
+
+export function parseArgsForTest(): Args {
+  return parseArgs();
+}
 
 function parseArgs(): Args {
   const get = (name: string) =>
     process.argv.find(a => a.startsWith(`--${name}=`))?.split('=').slice(1).join('=');
 
-  const usage = 'Usage: tsx src/scripts/provisionTenant.ts --orgId=org_xxx --connection-string=postgres://... [--region=...] [--dry-run]';
+  const usage = 'Usage: tsx src/scripts/provisionTenant.ts --orgId=org_xxx --connection-string=postgres://... [--region=...] [--repoint=org_xxx] [--dry-run]';
 
   const orgId = get('orgId');
   if (!orgId) {
@@ -109,6 +115,14 @@ function parseArgs(): Args {
     region: get('region') ?? 'aws-us-east-1',
     connectionString,
     dryRun: process.argv.includes('--dry-run'),
+    // Permits moving an org that is ALREADY cut over onto a different
+    // database — e.g. off a Neon branch and onto its own project.
+    //
+    // Takes the org id rather than being a bare boolean, matching
+    // `purgeTenantData`: this flag takes a LIVE organization out of service,
+    // so a --repoint recalled from shell history must not be re-runnable
+    // against a different org than the one it was reviewed against.
+    repoint: get('repoint'),
   };
 }
 
@@ -401,15 +415,63 @@ async function main(): Promise<void> {
       // connection string alone made the failure unrecoverable: re-running
       // said "nothing to do" while the tenant was still half-provisioned.
       if (alreadyCutOver && row.status !== TENANT_STATUS.PROVISIONING) {
-        console.warn(`[provisionTenant] ${args.orgId} is already on its own database (status "${row.status}"). Nothing to do.`);
-        return;
+        // Where is it NOW? For a branch-vs-project move the org id, status and
+        // region are identical either way — the host is the only thing that
+        // distinguishes them, so the refusal has to print it.
+        const currentHost = (() => {
+          try {
+            const currentKey = tenantEncryptionKey();
+            return currentKey
+              ? new URL(decryptConnectionString(row.connectionStringEncrypted, currentKey)).host
+              : '(no encryption key)';
+          } catch {
+            return '(unresolvable)';
+          }
+        })();
+
+        if (!args.repoint) {
+          console.warn(
+            `[provisionTenant] ${args.orgId} is already on its own database (status "${row.status}").\n`
+            + `  currently: ${currentHost}\n`
+            + `  requested: ${hostOf(args.connectionString)}\n\n`
+            + '  Nothing to do. To MOVE it to a different database (e.g. off a Neon branch\n'
+            + `  and onto its own project), re-run with --repoint=${args.orgId}.\n`
+            + '  ⚠️  That takes the org OUT OF SERVICE until db:cutover-tenant completes.',
+          );
+          return;
+        }
+
+        if (args.repoint !== args.orgId) {
+          throw new Error(
+            `--repoint must repeat the org id exactly.\n`
+            + `  --orgId=${args.orgId}\n`
+            + `  --repoint=${args.repoint}`,
+          );
+        }
+
+        // A deliberate move. The upsert below rewrites the row to
+        // `provisioning`, so the org stops being served until the copy is
+        // verified and activated — the same non-servable window a first-time
+        // provision gets, entered earlier.
+        console.warn(
+          `[provisionTenant] --repoint: MOVING ${args.orgId}\n`
+          + `    from ${currentHost}\n`
+          + `    to   ${hostOf(args.connectionString)}\n`
+          + '  The organization is NOT served until db:cutover-tenant completes.',
+        );
       }
 
       if (alreadyCutOver) {
-        console.info(`[provisionTenant] ${args.orgId} has a half-provisioned row (status "${row.status}") — resuming.`);
+        if (!args.repoint) {
+          console.info(`[provisionTenant] ${args.orgId} has a half-provisioned row (status "${row.status}") — resuming.`);
+        }
       }
 
-      console.info(`[provisionTenant] ${args.orgId} exists (status "${row.status}") on the shared database — provisioning its own.`);
+      console.info(
+        alreadyCutOver
+          ? `[provisionTenant] ${args.orgId} exists (status "${row.status}") — repointing it.`
+          : `[provisionTenant] ${args.orgId} exists (status "${row.status}") on the shared database — provisioning its own.`,
+      );
     }
 
     if (args.dryRun) {
@@ -487,7 +549,11 @@ async function main(): Promise<void> {
       .where(eq(tenantSchema.orgId, args.orgId));
 
     console.info(`\n[provisionTenant] ${args.orgId} is PROVISIONED (not yet servable).`);
-    console.info('Its database is empty, so the row stays non-servable until the copy is verified.');
+    console.info(
+      'The row stays non-servable until the data is in place and verified.\n'
+      + '  If you restored it yourself (pg_restore), activate with:\n'
+      + `    npm run db:cutover-tenant -- --orgId=${args.orgId} --target=<same> --activate-only`,
+    );
     console.info('Next:');
     console.info(`  npm run db:copy-tenant   -- --orgId=${args.orgId} --target=<connection string>`);
     console.info(`  npm run db:verify-copy   -- --orgId=${args.orgId} --target=<same>`);

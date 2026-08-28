@@ -14,7 +14,7 @@ import { Env } from './Env';
  *
  * Local development runs against pglite-server, which accepts exactly ONE
  * connection (the same constraint that makes `max: 1` deliberate in
- * `utils/DBConnection.ts` and in the kiosk's `lib/database.ts`). Two
+ * the kiosk's `lib/database.ts`). Two
  * control-plane pools plus a tenant pool means three sockets, and the second
  * and third are refused — surfacing as `read ECONNRESET` mid-query.
  *

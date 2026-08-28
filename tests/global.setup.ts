@@ -6,6 +6,9 @@ import { cleanupOrphanedE2EUsers, createUserWithOrganization } from './TestUtils
 
 setup.describe.configure({ mode: 'serial' });
 
+/** One per `auth.e2e.ts` spec that needs its own fresh, registered org. */
+const AUTH_SPEC_USER_COUNT = 3;
+
 setup('authenticate with Clerk', async ({ page }) => {
   await clerkSetup();
 
@@ -18,9 +21,31 @@ setup('authenticate with Clerk', async ({ page }) => {
 
   await createUserWithOrganization();
 
+  const sharedUsername = process.env.E2E_CLERK_USER_USERNAME!;
+  const sharedPassword = process.env.E2E_CLERK_USER_PASSWORD!;
+
+  // `auth.e2e.ts` needs FRESH users whose orgs have a `tenant` row. Creating
+  // them here is not a convenience — it is the only moment the row can be
+  // written: pglite-server accepts ONE connection and the app under test holds
+  // it for the rest of the run (idle timeout 5 min), so a mid-suite write has
+  // no window at all.
+  const authUsers: { username: string; password: string }[] = [];
+  for (let i = 0; i < AUTH_SPEC_USER_COUNT; i++) {
+    await createUserWithOrganization();
+    authUsers.push({
+      username: process.env.E2E_CLERK_USER_USERNAME!,
+      password: process.env.E2E_CLERK_USER_PASSWORD!,
+    });
+  }
+
+  // Restore the shared user: the sign-in below, and every other spec, uses it.
+  process.env.E2E_CLERK_USER_USERNAME = sharedUsername;
+  process.env.E2E_CLERK_USER_PASSWORD = sharedPassword;
+
   writeCredentials({
-    username: process.env.E2E_CLERK_USER_USERNAME!,
-    password: process.env.E2E_CLERK_USER_PASSWORD!,
+    username: sharedUsername,
+    password: sharedPassword,
+    authUsers,
   });
 
   // Sign in using email-based approach (uses signInTokens + ticket strategy

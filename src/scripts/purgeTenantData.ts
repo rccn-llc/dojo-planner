@@ -32,7 +32,7 @@
 
 import process from 'node:process';
 import { Pool } from 'pg';
-import { argValue, loadEnvFiles } from '../libs/EnvFiles';
+import { argValue, hostOf, loadEnvFiles } from '../libs/EnvFiles';
 import { decryptConnectionString, SHARED_DATABASE_SENTINEL, tenantEncryptionKey } from '../libs/TenantCrypto';
 import { orgScopePredicate, TENANT_TABLES } from '../services/TenantDataMap';
 import { assertDestinationHasData } from './cutoverTenant';
@@ -56,14 +56,6 @@ export async function countOrgRows(pool: Pool, orgId: string): Promise<TableCoun
   }
 
   return found;
-}
-
-function hostOf(connectionString: string): string {
-  try {
-    return new URL(connectionString).host;
-  } catch {
-    return '(unparseable connection string)';
-  }
 }
 
 /**

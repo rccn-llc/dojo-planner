@@ -39,3 +39,21 @@ describe('argValue', () => {
     expect(argValue('orgId')).toBeUndefined();
   });
 });
+
+describe('hostOf', () => {
+  it('returns the host, never the credentials', async () => {
+    // This is what every ops script prints to say which database it is about
+    // to touch, so it must never leak the password.
+    const { hostOf } = await import('./EnvFiles');
+    const host = hostOf('postgresql://user:npg_secret_not_real@ep-x-pooler.aws.neon.tech/db');
+
+    expect(host).toBe('ep-x-pooler.aws.neon.tech');
+    expect(host).not.toContain('npg_secret_not_real');
+  });
+
+  it('degrades rather than throwing on an unparseable string', async () => {
+    const { hostOf } = await import('./EnvFiles');
+
+    expect(hostOf('__shared_database__')).toBe('(unparseable connection string)');
+  });
+});
