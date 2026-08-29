@@ -77,7 +77,8 @@ src/
 │   ├── EmailService.ts    # Resend email integration with PDF attachment support
 │   ├── PaymentProviderService.ts # Payment provider abstraction (interface + factory)
 │   ├── IQProPaymentService.ts # IQPro implementation of payment provider
-│   ├── MemberPaymentService.ts # Member payment orchestration (customer → method → charge/subscription) + registerPaymentMethod (no charge)
+│   ├── SquarePaymentService.ts # Square implementation (B4a) — card-only, member payments only. Customers/cards/fees/one-time charges work; subscription methods return typed soft failures until B4b
+│   ├── MemberPaymentService.ts # Member payment orchestration (customer → method → charge/subscription) + registerPaymentMethod (no charge). Provider-CLEAN as of B4a: imports nothing IQPro-specific
 │   └── SaasSubscriptionService.ts # Org-level SaaS billing via IQPro (subscribe, change plan, cancel, billing history, super admin auto-grant)
 │
 ├── models/
@@ -94,7 +95,8 @@ src/
 │   ├── Logger.ts          # Better Stack logging
 │   ├── Orpc.ts            # RPC client setup
 │   ├── Stripe.ts          # Stripe client
-│   └── IQPro.ts           # IQPro payment client singleton + gateway processor lookup
+│   ├── IQPro.ts           # IQPro payment client singleton + gateway processor lookup + `getServiceFeePct` (platform-wide, shared with Square)
+│   └── Square.ts          # Square REST transport (no SDK). `toMinorUnits`/`fromMinorUnits` are the ONLY dollars↔cents crossing
 ├── utils/                 # Helper functions
 │   ├── AppConfig.ts       # Pricing plans, Clerk locales
 │   ├── Auth.ts            # Page-level auth helpers
@@ -501,7 +503,7 @@ The webhook handler at `src/app/[locale]/webhook/iqpro/route.ts` does only DB wr
 **Key Files:**
 - `src/libs/IQPro.ts` - REST helpers (`iqproPost`, `iqproGet`, `iqproPut`), OAuth token management, tokenization config endpoint, ACH tokenization (`tokenizeAch`), gateway processor lookup (`getGatewayProcessors`), server-authoritative fee calculation (`calculateTransactionFees`)
 - `src/services/IQProConfigService.ts` - Per-org + platform IQPro config resolver (DB → env fallback). `resolveIQProConfig(orgId)` for customer-facing payments; `resolvePlatformIQProConfig()` for SaaS billing. Decrypts `client_secret` from AES-GCM at-rest storage. 60s in-memory cache per scope; invalidated on update.
-- `src/services/PaymentProviderService.ts` - Provider-agnostic interface + factory; defines `FeeBreakdown`, `TransactionLineItem`, `TransactionBillingAddress` types. Every interface method now takes `config: IQProConfig` as its first arg so the provider hits the right merchant gateway per call.
+- `src/services/PaymentProviderService.ts` - Provider-agnostic interface + factory. ⚠️ `ComputeFeesParams` takes **`paymentMethodType: 'card' | 'ach'`**, not a `processorId`: a gateway processor is an IQPro concept, and obtaining one required an IQPro call, so the orchestrator could not build these params for any other provider — a Square org threw before reaching provider code at all. Each provider now resolves its own, and the same applies to the optional `customerId`/`paymentMethodId` used to price a SAVED method. The factory's `switch` is exhaustive: adding a provider without a `case` is a compile error, not a silent fall-through that bills the wrong merchant. Defines `FeeBreakdown`, `TransactionLineItem`, `TransactionBillingAddress` types. Every interface method takes `config: PaymentProviderConfig` (the discriminated union) as its first arg, and each implementation narrows it at its own boundary — `requireIQPro` / `requireSquare` — so a provider can never be handed another's credentials.
 - `src/services/IQProPaymentService.ts` - IQPro implementation (REST). `createCustomer` returns `{ customerId, billingAddressId }` (the billing-address ID is fetched via `iqproGet` and forwarded into transaction payloads as `paymentMethod.customer.customerBillingAddressId` so the ACH processor can resolve the cardholder name). Card uses InsertCard schema with token + maskedCard BIN format; ACH uses `tokenizeAch` then InsertAch. `processPayment` builds the canonical `Sale` payload with `remit` (tax + paymentAdjustments), `address[]`, and `lineItems[]`. Sandbox certification errors on ACH (`"not a valid transaction for certification"`) are tolerated as `pendingsettlement → approved` so dev flows work.
 - `src/services/MemberPaymentService.ts` - Payment orchestration (customer → method → calculate fees → charge/subscription → DB). Tax state for fee calculation comes from `params.memberAddress.state`. For autopay: subscription is created **and** an immediate Sale charge runs for the first period (IQPro subscriptions don't auto-charge on creation). If the initial charge fails after subscription creation, the failure is surfaced and `providerSubscriptionId` is NOT persisted on the membership — the IQPro subscription will exist but the local membership stays unactivated.
 - `src/services/SaasSubscriptionService.ts` - Org SaaS subscriptions via REST. Uses `iqproPost`/`iqproGet`/`iqproPut` for customer create, payment method, subscription create/get/update, and cancel.
@@ -618,6 +620,46 @@ Organization-level SaaS subscriptions use IQPro (same SDK as member payments). A
 **Real vs synthetic subscriptions:** A real subscription is created only via the card-collecting subscribe flow (TokenEx → `subscribe()` registers the IQPro payment method, creates the subscription with `isAutoRenewed`/`isAutoCharged`, so renewals + plan changes auto-charge the stored method with no re-collection). The seed does **not** fabricate a paid subscription — it writes an honest `trial` with null IQPro IDs (see seed section). `changePlan`/`cancelSubscription` reject unbacked subscriptions (null or `seed_org_`-prefixed `saasProviderSubscriptionId`) via `isRealSubscriptionId` with a clear "subscribe with a payment method first" error, instead of firing doomed IQPro calls or silently mutating state.
 
 **Cancel flow:** Cancels at end of billing period. All org members lose dashboard access. Admins can re-subscribe from the subscription-expired page.
+
+### Square (Member Payments — alternative to IQPro)
+
+**Transport:** direct REST via `fetch` — **no SDK**, mirroring the IQPro decision. Every request and response body is logged through the structured logger; that logging is what made IQPro's vague 4xx errors diagnosable, and Square's error envelope is no friendlier.
+
+⚠️ **Square governs MEMBER payments only.** An organization choosing Square changes how *its members* are charged. It never changes how that organization pays *us*: the SaaS subscription is always the platform's own IQPro account via `resolvePlatformIQProConfig`, which is typed against `IQProConfig` and therefore **cannot receive a Square config even by accident**. That separation is enforced by the type system, not convention.
+
+⚠️ **Card-only, org-wide.** Square's Subscriptions API cannot store a bank account and charge it later, so recurring ACH would mean this app owning a charge scheduler — retry, dunning, idempotency — having always delegated recurrence to the processor. `createPaymentMethod` rejects ACH with a typed error. The rule applies org-wide rather than per-flow, because a per-surface capability matrix is confusing to explain and awkward to enforce in four separate payment-method pickers.
+
+**Key files:**
+- `src/libs/Square.ts` — REST helpers (`squarePost`/`squareGet`/`squarePut`), `SquareApiError` parsing Square's `{errors:[{category,code,detail}]}` envelope, base-URL selection from `environment`, and **`toMinorUnits`/`fromMinorUnits` — the only place float dollars cross to Square's integer minor units.** Never write an inline `* 100`; each ad-hoc conversion is a rounding decision on the money path.
+- `src/services/SquarePaymentService.ts` — `SquarePaymentProvider`, with `requireSquare` narrowing the union at the boundary exactly as `requireIQPro` does.
+
+**Implemented vs. deferred:**
+
+| Works now | Returns a soft failure (B4b) |
+|---|---|
+| `createCustomer`, `createPaymentMethod` (card), `computeFees`, `processPayment` | `createSubscription`, `chargeOneTimeFee`, `cancelSubscription`, `setSubscriptionAutoRenewal`, `getSubscriptionPaymentMethod` |
+
+⚠️ **The deferred methods RETURN failures; they never throw.** Four carry a documented degrade-never-throw contract (#237) — a throw would turn a Square org's hold or cancel into a 500 and block the local DB write that must still happen. A stub that throws is a regression, not a missing feature.
+
+**Sandbox-verified behaviour** (a $100 line item, 8.375% tax, 3.75% service charge):
+
+```
+total_tax_money           838   tax on the SUBTOTAL only
+total_service_charge      375
+total_money             11213
+```
+
+- **The service fee is an order-level `service_charge` with a percentage.** Square computes `applied_money` itself, so `computeFees` reports `provenance: { tax: 'provider', serviceFee: 'provider' }` — unlike IQPro, whose tax is local arithmetic.
+- **`total_tax_money` does NOT include the service charge** (838, not 869). A service charge comes back `taxable: false` by default and is only taxed if `applied_taxes` names the tax explicitly — the documented footgun, confirmed live.
+- **Square rounds half-up** (837.5 → 838), matching `roundCents`. ⚠️ `toMinorUnits(1.005)` is **100**, not 101, because the float is stored slightly low — and `roundCents` does the same. That agreement is the point: on a two-provider money path, IQPro and Square never disagreeing about an amount matters more than either being arithmetically ideal.
+
+⚠️ **`processPayment` is NON-ATOMIC**, unlike IQPro's single Sale call: it creates an Order then a Payment, so a failure between the two leaves an unpaid order. Square orders carry no money on their own, so an orphan is inert — but it is a reconciliation surface IQPro never had.
+
+**Idempotency:** Square requires an `idempotency_key` on every mutating call and `ProcessPaymentParams` has no field for one, so it is generated per attempt. Deliberately not derived from the params: the orchestrator does not retry, and a key derived from amount+member would wrongly collapse two *deliberate* identical charges (a second event registration, say) into one.
+
+**Configuration:** all five `SQUARE_*` env vars must be present or `resolveSquareConfigFromEnv` returns `null` and the provider never resolves — including `SQUARE_WEBHOOK_SIGNATURE_KEY`, which is not used until B7. A placeholder value unblocks local work. `SQUARE_ENVIRONMENT` is a `z.enum` precisely so a typo cannot silently mean production.
+
+**Testing:** `SquarePaymentService.test.ts` mocks the transport module (never `fetch`), mirroring `IQProPaymentService.test.ts`. `SquarePaymentService.sandbox.test.ts` makes **live** calls and skips itself unless `SQUARE_ACCESS_TOKEN` is set, so CI and other developers are unaffected.
 
 ### Sentry (Error Monitoring)
 

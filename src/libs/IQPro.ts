@@ -395,7 +395,14 @@ export async function getGatewayProcessors(config: IQProConfig): Promise<Gateway
 
 // ===== Service fee config =====
 
-function getServiceFeePct(): number {
+/**
+ * The platform's service-fee percentage.
+ *
+ * Platform-wide, not per-provider: the same rate applies whichever processor
+ * an organization uses, so Square reads it from here rather than keeping a
+ * second copy that could drift.
+ */
+export function getServiceFeePct(): number {
   const fromEnv = Env.SERVICE_FEE_PCT?.trim();
   if (!fromEnv) {
     throw new Error('SERVICE_FEE_PCT is not set. Add it to .env.local (e.g. SERVICE_FEE_PCT=3.75).');
