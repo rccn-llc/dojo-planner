@@ -123,10 +123,23 @@ export type ComputeFeesParams = {
    */
   taxStatePct: number;
   /**
-   * Gateway processor id. Required by IQPro's /calculatefees; resolve it via
-   * `getGatewayProcessors` and pick card vs ACH before calling.
+   * Which instrument is being charged.
+   *
+   * Provider-neutral by design. This replaced a `processorId` that only IQPro
+   * has: obtaining one meant an IQPro gateway call, so the orchestrator could
+   * not build these params for any other provider — a Square org failed before
+   * reaching provider code at all. A provider that needs a processor id now
+   * resolves its own from this.
    */
-  processorId: string;
+  paymentMethodType: 'card' | 'ach';
+  /**
+   * A SAVED payment method to price against, when the caller has no BIN or
+   * token to hand. IQPro's /calculatefees needs one of those identifiers, so
+   * its implementation looks them up itself rather than making the
+   * orchestrator do an IQPro-shaped fetch.
+   */
+  customerId?: string;
+  paymentMethodId?: string;
   creditCardBin?: string;
   token?: string;
 };
@@ -372,11 +385,17 @@ export async function getPaymentProvider(config: PaymentProviderConfig): Promise
       provider = new IQProPaymentProvider();
       break;
     }
-    // B4 adds `case PAYMENT_PROVIDER.SQUARE`. Until then the exhaustiveness
-    // check below makes a Square org fail loudly at its first charge rather
-    // than silently falling through to IQPro and billing the wrong merchant.
+    case PAYMENT_PROVIDER.SQUARE: {
+      const { SquarePaymentProvider } = await import('./SquarePaymentService');
+      provider = new SquarePaymentProvider();
+      break;
+    }
+    // Unreachable while every PaymentProvider has a case above — `config` is
+    // `never` here, which is the compiler proving the switch is exhaustive.
+    // Adding a provider without a case turns that proof into a type error
+    // rather than a silent fall-through that bills the wrong merchant.
     default:
-      throw new UnsupportedProviderError(config.provider);
+      throw new UnsupportedProviderError((config as PaymentProviderConfig).provider);
   }
 
   providerCache.set(config.provider, provider);

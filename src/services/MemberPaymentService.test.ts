@@ -104,10 +104,35 @@ const mockProvider = {
     // touching the IQPro transport, so assertions below see the same config
     // shape production does.
     const { provider: _p, ...iqpro } = config;
+    // Mirror what the real IQPro provider now does: resolve the processor from
+    // `paymentMethodType` itself. That lookup moved OUT of the orchestrator so
+    // a non-IQPro provider could be reached at all, so this shim has to do it
+    // here for the fee assertions below to still describe production.
+    const { getGatewayProcessors } = await import('@/libs/IQPro');
+    const processors = await (getGatewayProcessors as any)(iqpro);
+    const processorId = params.paymentMethodType === 'card'
+      ? processors.cardProcessorId
+      : processors.achProcessorId;
+    if (!processorId) {
+      throw new Error(`No ${params.paymentMethodType} processor configured for this gateway.`);
+    }
+    // Also mirror the vault lookup that moved into the provider: with a saved
+    // method the caller has no BIN or token, so IQPro fetches them itself.
+    let { creditCardBin, token } = params;
+    if (!creditCardBin && !token && params.customerId && params.paymentMethodId) {
+      const { getCustomerPaymentMethod } = await import('@/libs/IQPro');
+      const info = await (getCustomerPaymentMethod as any)(iqpro, params.customerId, params.paymentMethodId);
+      if (info?.type === 'card' && info.firstSix) {
+        creditCardBin = info.firstSix;
+      } else if (info?.type === 'ach' && info.achToken) {
+        token = info.achToken;
+      }
+    }
+
     const breakdown = await (computeFeeBreakdown as any)(iqpro, params.baseAmount, params.isTaxable, params.taxStatePct, {
-      processorId: params.processorId,
-      ...(params.token ? { token: params.token } : {}),
-      ...(params.creditCardBin ? { creditCardBin: params.creditCardBin } : {}),
+      processorId,
+      ...(token ? { token } : {}),
+      ...(creditCardBin ? { creditCardBin } : {}),
     });
     return { ...breakdown, provenance: { tax: 'local', serviceFee: 'provider' } };
   }),
@@ -854,7 +879,13 @@ describe('processMemberPayment', () => {
     expect(result.success).toBe(true);
     expect(mockProvider.createCustomer).not.toHaveBeenCalled();
     expect(mockProvider.createPaymentMethod).not.toHaveBeenCalled();
-    expect(getCustomerPaymentMethod).toHaveBeenCalledWith(transportConfig, 'cust_have', 'pm_saved_1');
+    // The vault lookup moved INTO the provider: the orchestrator now hands
+    // over the ids and lets each provider fetch whatever its fee API needs.
+    // `IQProPaymentService.test.ts` covers that it still happens.
+    expect(mockProvider.computeFees).toHaveBeenCalledWith(
+      testConfig,
+      expect.objectContaining({ customerId: 'cust_have', paymentMethodId: 'pm_saved_1' }),
+    );
     expect(computeFeeBreakdown).toHaveBeenCalledWith(
       transportConfig,
       100,

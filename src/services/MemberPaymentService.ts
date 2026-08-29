@@ -20,15 +20,10 @@ import type {
   TransactionLineItem,
 } from './PaymentProviderService';
 import type { AppliedCoupon, BillingType, PaymentMethod } from '@/hooks/useAddMemberWizard';
-import type { IQProConfig } from '@/libs/IQPro';
 import { randomUUID } from 'node:crypto';
 
 import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import { db } from '@/libs/DB';
-import {
-  getCustomerPaymentMethod,
-  getGatewayProcessors,
-} from '@/libs/IQPro';
 import { logger } from '@/libs/Logger';
 import { auditEventSchema, couponSchema, couponUsageSchema, memberMembershipSchema, memberSchema, membershipPlanSchema, paymentMethodSchema, transactionSchema } from '@/models/Schema';
 import { computeNextPaymentDate, normalizeFrequency } from '@/utils/PaymentSchedule';
@@ -37,26 +32,6 @@ import { sendPaymentReceiptEmail } from './EmailService';
 import { getOrganizationTaxRate } from './OrganizationService';
 import { getPaymentProvider } from './PaymentProviderService';
 import { recordExternalRef, REF_TYPE } from './TenantExternalRefService';
-
-/**
- * Narrow a provider config to IQPro for the two lib helpers this orchestrator
- * still calls directly — `getGatewayProcessors` (processor-id lookup) and
- * `getCustomerPaymentMethod` (vaulted-PM fee preview). Both are IQPro gateway
- * concepts with no Square equivalent.
- *
- * B4 folds these into the provider interface. Until then this throws rather
- * than silently proceeding, so a Square org can never reach an IQPro gateway
- * call — the same guarantee `requireIQPro` gives inside the provider itself.
- */
-function requireIQProConfig(config: PaymentProviderConfig): IQProConfig {
-  if (config.provider !== 'iqpro') {
-    throw new TypeError(
-      `Expected an IQPro config on the payment path but got "${config.provider}". This IQPro-specific step has no ${config.provider} equivalent yet.`,
-    );
-  }
-  const { provider: _provider, ...iqpro } = config;
-  return iqpro;
-}
 
 // ===== Public types =====
 
@@ -283,26 +258,12 @@ export async function processMemberPayment(
       effectivePaymentMethod = savedPm.type === 'bank_transfer' ? 'ach' : 'card';
       last4ForReceipt = savedPm.last4 ?? undefined;
 
-      // Fetch the BIN (for card) or achToken (for ACH) from IQPro so
-      // /calculatefees has a valid identifier. The endpoint requires exactly
-      // one of token or creditCardBin.
-      const remoteInfo = await getCustomerPaymentMethod(requireIQProConfig(config), customerId, paymentMethodId);
-      if (remoteInfo) {
-        if (remoteInfo.type === 'card' && remoteInfo.firstSix) {
-          feeBin = remoteInfo.firstSix;
-        } else if (remoteInfo.type === 'ach' && remoteInfo.achToken) {
-          feeToken = remoteInfo.achToken;
-        }
-      }
-      if (!feeToken && !feeBin) {
-        // Last resort: pass nothing and let IQPro reject; this surfaces a
-        // clear error to the operator rather than charging without fee preview.
-        logger.warn('[MemberPayment] Saved PM has no BIN/achToken — fee preview will fail', {
-          memberId: params.memberId,
-          customerId,
-          paymentMethodId,
-        });
-      }
+      // The identifiers a fee quote needs from a SAVED method are the
+      // provider's business: IQPro's /calculatefees wants a BIN or ACH token,
+      // Square's order pricing wants neither. The customer and payment-method
+      // ids are passed to `computeFees` below and each provider looks up what
+      // it needs — this used to be an IQPro vault fetch inlined here, which is
+      // what made the whole orchestrator IQPro-only.
 
       logger.info('[MemberPayment] Charging vaulted payment method', {
         memberId: params.memberId,
@@ -394,15 +355,10 @@ export async function processMemberPayment(
     }
 
     // ── Step 2: Calculate authoritative fees (kiosk shape) ──────────
-    // Processor lookup is IQPro-specific; a provider whose fee API needs no
-    // processor id simply ignores the value we pass through.
-    const processors = await getGatewayProcessors(requireIQProConfig(config));
-    const processorId = effectivePaymentMethod === 'card'
-      ? processors.cardProcessorId
-      : processors.achProcessorId;
-    if (!processorId) {
-      throw new Error(`No ${effectivePaymentMethod} processor configured for this gateway.`);
-    }
+    // No provider-specific setup here any more. A gateway processor id is an
+    // IQPro concept, and fetching one required an IQPro call — which threw for
+    // any other provider, so this orchestrator could never reach a non-IQPro
+    // implementation at all. Providers now resolve their own.
 
     const couponDiscount = computeCouponDiscount(params.amount, params.appliedCoupon);
     const signupFee = params.signupFee ?? 0;
@@ -421,7 +377,10 @@ export async function processMemberPayment(
       baseAmount,
       isTaxable,
       taxStatePct,
-      processorId,
+      paymentMethodType: effectivePaymentMethod,
+      // For a saved method the provider looks up whatever identifier its fee
+      // API needs; for a new one we already hold the BIN or token.
+      ...(customerId && paymentMethodId && { customerId, paymentMethodId }),
       ...(feeToken && { token: feeToken }),
       ...(!feeToken && feeBin && { creditCardBin: feeBin }),
     });

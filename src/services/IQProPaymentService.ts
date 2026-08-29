@@ -38,6 +38,7 @@ import {
   assertTransactionApproved,
   buildServiceFeeAdjustment,
   computeFeeBreakdown,
+  getCustomerPaymentMethod,
   getGatewayProcessors,
   iqproGet,
   iqproPost,
@@ -631,16 +632,37 @@ export class IQProPaymentProvider implements IPaymentProvider {
    */
   async computeFees(config: PaymentProviderConfig, params: ComputeFeesParams): Promise<FeeQuote> {
     const iqpro = requireIQPro(config);
+
+    // Resolve the processor HERE rather than making the caller do it. It is an
+    // IQPro gateway concept, and requiring it in the shared params meant the
+    // orchestrator had to make an IQPro call before it could price anything —
+    // which threw outright for a Square org. `chargeOneTimeFee` already did it
+    // this way; this makes the two consistent.
+    const { cardProcessorId, achProcessorId } = await getGatewayProcessors(iqpro);
+    const processorId = params.paymentMethodType === 'card' ? cardProcessorId : achProcessorId;
+    if (!processorId) {
+      throw new Error(`No ${params.paymentMethodType} processor configured for this gateway.`);
+    }
+
+    // /calculatefees needs exactly one of token or creditCardBin. When pricing
+    // a SAVED method the caller has neither, so fetch them from the vault —
+    // again inside the provider, since this is an IQPro-shaped requirement.
+    let { creditCardBin, token } = params;
+    if (!creditCardBin && !token && params.customerId && params.paymentMethodId) {
+      const remoteInfo = await getCustomerPaymentMethod(iqpro, params.customerId, params.paymentMethodId);
+      if (remoteInfo?.type === 'card' && remoteInfo.firstSix) {
+        creditCardBin = remoteInfo.firstSix;
+      } else if (remoteInfo?.type === 'ach' && remoteInfo.achToken) {
+        token = remoteInfo.achToken;
+      }
+    }
+
     const breakdown = await computeFeeBreakdown(
       iqpro,
       params.baseAmount,
       params.isTaxable,
       params.taxStatePct,
-      {
-        processorId: params.processorId,
-        creditCardBin: params.creditCardBin,
-        token: params.token,
-      },
+      { processorId, creditCardBin, token },
     );
     return { ...breakdown, provenance: { tax: 'local', serviceFee: 'provider' } };
   }
@@ -679,20 +701,17 @@ export class IQProPaymentProvider implements IPaymentProvider {
       const customerId = resolved.customerId || params.providerCustomerId;
       const { paymentMethodId: pmId, paymentMethodName } = resolved;
 
-      // /calculatefees needs processorId + BIN for cards. Fall back to '400000'
-      // for the test BIN when the vault doesn't expose one — matches kiosk.
-      const { cardProcessorId, achProcessorId } = await getGatewayProcessors(iqpro);
-      const processorId = paymentMethodName === 'card' ? cardProcessorId : achProcessorId;
-      if (!processorId) {
-        return { success: false, error: `No ${paymentMethodName} processor configured` };
-      }
-
+      // `computeFees` resolves the processor itself now, so the lookup that
+      // used to sit here is gone. A missing processor throws from in there and
+      // is caught by this method's outer try, which still returns a soft
+      // failure — the degrade-never-throw contract (#237) is preserved.
+      //
       // Cancellation / hold fees are NOT taxable (per Basys guidance on non-store charges).
       const serverFees = await this.computeFees(config, {
         baseAmount,
         isTaxable: false,
         taxStatePct: 0,
-        processorId,
+        paymentMethodType: paymentMethodName === 'card' ? 'card' : 'ach',
         creditCardBin: paymentMethodName === 'card' ? resolved.cardBin : undefined,
       });
       const paymentAdjustments: Array<Record<string, unknown>> = [buildServiceFeeAdjustment(serverFees)];
