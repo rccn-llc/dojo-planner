@@ -225,6 +225,15 @@ export type PaymentResult = {
 export type SubscriptionFrequency = 'weekly' | 'monthly' | 'semi-annual' | 'annual';
 
 export type CreateSubscriptionParams = {
+  /**
+   * The org whose merchant account is being billed.
+   *
+   * Square needs it to resolve that org's catalog plan variation (see
+   * `square_plan_variation`); IQPro ignores it. Required rather than optional
+   * so a new caller cannot forget it and silently land on another org's
+   * catalog object.
+   */
+  organizationId: string;
   customerId: string;
   paymentMethodId: string;
   amount: number;

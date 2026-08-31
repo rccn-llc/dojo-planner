@@ -633,13 +633,42 @@ Organization-level SaaS subscriptions use IQPro (same SDK as member payments). A
 - `src/libs/Square.ts` — REST helpers (`squarePost`/`squareGet`/`squarePut`), `SquareApiError` parsing Square's `{errors:[{category,code,detail}]}` envelope, base-URL selection from `environment`, and **`toMinorUnits`/`fromMinorUnits` — the only place float dollars cross to Square's integer minor units.** Never write an inline `* 100`; each ad-hoc conversion is a rounding decision on the money path.
 - `src/services/SquarePaymentService.ts` — `SquarePaymentProvider`, with `requireSquare` narrowing the union at the boundary exactly as `requireIQPro` does.
 
-**Implemented vs. deferred:**
+**The whole `IPaymentProvider` surface is implemented** — customers, cards, fee quotes, one-time payments, subscriptions, and the lifecycle trio.
 
-| Works now | Returns a soft failure (B4b) |
+⚠️ **The lifecycle methods RETURN failures; they never throw.** Four carry a documented degrade-never-throw contract (#237) — a throw would turn a Square org's hold or cancel into a 500 and block the local DB write that must still happen.
+
+**Subscriptions — three sandbox findings that contradict the documentation:**
+
+1. **`plan_variation_id` IS required**, though the API reference marks it optional. Omitting it returns `` `plan_variation_id` cannot be empty ``, and ad-hoc `phases` are rejected outright (`cadence` belongs to the *catalog* variation, not the subscription). Designing from the docs alone produces a subscription path that cannot work.
+2. **But ONE variation serves every member.** `price_override_money` and `tax_percentage` are set **per subscription**, not per plan — a $50 catalog variation happily produced a $73.50 subscription. So the catalog holds **four objects per org (one per cadence)**, not one per membership plan, and there is no price-sync problem. Both are mutable after creation, so a mid-term tax-rate change *can* be pushed to existing members.
+3. ⚠️ **`card_id` must ALWAYS be sent.** Omitting it does not fail — Square silently switches to emailing the member an invoice, so autopay would stop collecting with no error anywhere. `createSubscription` refuses rather than creating an invoice-billed subscription, and there is an explicit test for it.
+
+Also undocumented: **the customer must have an email address** or Square rejects with `CUSTOMER_MISSING_EMAIL`. Checked up front rather than surfaced as a raw Square error.
+
+**Cadence mapping** — all four map natively, including semi-annual, which on IQPro has to be emulated with a yearly billing period and two `monthsOfYear` entries:
+
+| Our frequency | Square cadence |
 |---|---|
-| `createCustomer`, `createPaymentMethod` (card), `computeFees`, `processPayment` | `createSubscription`, `chargeOneTimeFee`, `cancelSubscription`, `setSubscriptionAutoRenewal`, `getSubscriptionPaymentMethod` |
+| `weekly` | `WEEKLY` |
+| `monthly` | `MONTHLY` |
+| `semi-annual` | `EVERY_SIX_MONTHS` |
+| `annual` | `ANNUAL` |
 
-⚠️ **The deferred methods RETURN failures; they never throw.** Four carry a documented degrade-never-throw contract (#237) — a throw would turn a Square org's hold or cancel into a 500 and block the local DB write that must still happen. A stub that throws is a regression, not a missing feature.
+**Lifecycle mapping** — Square has no auto-renewal flag, so the IQPro-shaped boolean maps onto PAUSE/RESUME:
+
+| Operation | Square call |
+|---|---|
+| Hold | `POST /v2/subscriptions/{id}/pause` |
+| Reactivate | `POST /v2/subscriptions/{id}/resume` with `resume_change_timing: 'IMMEDIATE'` |
+| Cancel | `POST /v2/subscriptions/{id}/cancel` |
+
+⚠️ Two sandbox corrections here, both found only by running against Square:
+- **Resume REQUIRES `resume_change_timing`** despite not being marked required; omitting it returns *"Resume change timing must not be null"*, so a reactivate would fail while the matching hold succeeded.
+- **There is no immediate-cancel variant.** An earlier draft honoured `endOfBillingPeriod: false` by PUTting `status: 'DEACTIVATED'`, which Square refuses — *"The provided subscription field status is immutable."* `/cancel` sets `canceled_date` to the end of the current billing period, which is the outcome the membership-cancel flow wants anyway. The `opts` argument is accepted only because the interface is shared with IQPro, where it does something.
+
+**`square_plan_variation` table** — maps `(organization_id, cadence) → plan_variation_id`, at most four rows per org, created lazily by `ensurePlanVariation` on first use. The unique index on the pair is the real guard: two concurrent first-charges both miss the cache, and the loser's `onConflictDoNothing` insert re-reads the winner's row rather than minting a second catalog object. Its `organizationId` column is redundant inside a tenant database but kept for the same reason every other table keeps it. It is in `TENANT_TABLES` so a cutover copies it.
+
+⚠️ `ensurePlanVariation` uses the ambient `db`, so it **must run inside a tenant scope**. Every caller is an RPC handler; a server component would throw.
 
 **Sandbox-verified behaviour** (a $100 line item, 8.375% tax, 3.75% service charge):
 
@@ -660,6 +689,19 @@ total_money             11213
 **Configuration:** all five `SQUARE_*` env vars must be present or `resolveSquareConfigFromEnv` returns `null` and the provider never resolves — including `SQUARE_WEBHOOK_SIGNATURE_KEY`, which is not used until B7. A placeholder value unblocks local work. `SQUARE_ENVIRONMENT` is a `z.enum` precisely so a typo cannot silently mean production.
 
 **Testing:** `SquarePaymentService.test.ts` mocks the transport module (never `fetch`), mirroring `IQProPaymentService.test.ts`. `SquarePaymentService.sandbox.test.ts` makes **live** calls and skips itself unless `SQUARE_ACCESS_TOKEN` is set, so CI and other developers are unaffected.
+
+The subscription probes additionally need a real tenant database, and are gated on an explicit `SQUARE_SANDBOX_DB=1` rather than on `DATABASE_URL` — `vitest.config.mts` sets that for every run, so keying on it would make `npm run test` attempt live calls against a database that is not listening:
+
+```bash
+npm run db-server:file   # in another terminal
+set -a; . ./.env.local; set +a
+SQUARE_SANDBOX_DB=1 \
+  DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/postgres" \
+  DEFAULT_TENANT_DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/postgres" \
+  npx vitest run src/services/SquarePaymentService.sandbox.test.ts
+```
+
+Both resume-timing and cancel-semantics bugs above were caught by these probes and by nothing else — the mocked unit tests asserted the payloads I had written, which is exactly the blind spot live calls exist to cover.
 
 ### Sentry (Error Monitoring)
 
@@ -852,6 +894,7 @@ await deleteUserWithOrganization();
 - `signed_waiver` - Signed waiver records with signature data, rendered content, membership plan snapshot (name, price, frequency, contract length, signup fee, trial status), and coupon/discount snapshot (code, type, amount, discounted price). Only a **single** signature is captured per waiver: `signatureDataUrl`/`signedByName` hold the signer. When a minor requires a guardian (`requiresGuardian`), that single signature is the **guardian's** and `signedByRelationship` records the relationship (`parent` | `guardian` | `legal_guardian`); the minor never signs. The waiver PDF labels the line "Guardian signed by" when `signedByRelationship` is set to anything other than `self`, else "Signed by".
 - `membership_waiver` - Junction table linking memberships to required waivers
 - `waiver_merge_field` - Configurable placeholder fields for waiver templates
+- `square_plan_variation` - Square catalog plan variations for a Square org's subscriptions, keyed `(organization_id, cadence)` with a unique index on the pair. At most **four rows per org** — one per cadence, NOT one per membership plan, because `price_override_money` is set per subscription. Written lazily by `ensurePlanVariation` in `SquarePaymentService`; irrelevant to IQPro orgs.
 
 **Commands:**
 ```bash
@@ -1151,7 +1194,7 @@ npm run commit        # Interactive commit helper
 - **Proving the schema is in sync:** `npm run db:check-schema` diffs `Schema.ts` + `ControlSchema.ts` against `0000_baseline.sql`, and against the live database when `DATABASE_URL` is set. Because `db:generate` is disabled, the Drizzle definitions and the DDL are maintained by hand with nothing else to catch a slip — **run this after every schema edit.**
 - **Editing an already-applied baseline:** drizzle's migrator compares `created_at` timestamps, not file hashes (`pg-core/dialect.js`), so editing `0000_baseline.sql` is safe for fresh databases but is **silently skipped** on any database that already recorded it. Existing databases (preview, production) need the equivalent DDL applied by hand — see the B1 PR for the generated forward and rollback SQL, and prove convergence by building both paths and diffing `information_schema`.
 - **Provider-neutral column names:** payment columns are named for the *role*, not the vendor — `provider_*` on member-facing tables (`member`, `member_membership`, `payment_method`, `transaction`) and `saas_*` on `organization`/`platform_config` for the platform's own billing. `organization.payment_provider` (CHECK: `iqpro`|`square`) selects the processor for an org's member payments; keep it in step with `src/types/PaymentProvider.ts`. The token `iqpro` still legitimately names the *vendor* — `libs/IQPro.ts`, `IQPRO_*` env vars, the `/webhook/iqpro` route — so never blanket-rename it.
-- **There are still NO numbered migrations — `0000_baseline.sql` remains the only one.** A schema change edits the baseline in place (so a fresh database gets the final shape) and ships **hand-applied DDL** for databases that already recorded 0000, since drizzle compares `created_at` rather than file hashes and silently skips an edited baseline there. See `~/Desktop/b1-ddl/` and `~/Desktop/b3-ddl/` for the pattern: an idempotent `*-forward.sql` and a `*-rollback.sql`, both proven by building a database from the previous baseline, applying the forward DDL, and diffing `information_schema` against a fresh one. `npm run db:check-schema` only proves column NAMES agree — not types, nullability, or CHECK constraints — so verify those by hand.
+- **There are still NO numbered migrations — `0000_baseline.sql` remains the only one.** A schema change edits the baseline in place (so a fresh database gets the final shape) and ships **hand-applied DDL** for databases that already recorded 0000, since drizzle compares `created_at` rather than file hashes and silently skips an edited baseline there. See `~/Desktop/b1-ddl/`, `~/Desktop/b3-ddl/`, and `~/Desktop/b4b-ddl/` for the pattern: an idempotent `*-forward.sql` and a `*-rollback.sql`, both proven by building a database from the previous baseline, applying the forward DDL, and diffing `information_schema` against a fresh one. `npm run db:check-schema` only proves column NAMES agree — not types, nullability, or CHECK constraints — so verify those by hand.
 - **Data migrations that need the encryption key cannot be SQL.** `payment_provider_config_enc` holds AES-GCM ciphertext whose key lives in the app environment, so a backfill has to be a script rather than DDL. B3's `migrateProviderConfigBlob.ts` did that job and has since been deleted: the `iqpro_config_*` columns it read no longer exist in the baseline, so it could not run. Keep the pattern in mind for the next such migration.
 - **Applying migrations:** `npm run db:migrate:tenants` (`src/scripts/migrateTenants.ts`) is the deploy-time migrator; it runs in the pipeline **before** the new version serves traffic and exits non-zero on any failure. It replaced a `runMigrations()` call in the root layout that ran during page render, swallowed errors, and raced across serverless instances. Local dev is unaffected — `npm run dev` still runs `db:migrate` via the `db-server:file` script. The migrator builds its own **raw** connection: `@/libs/DB` is a Proxy (see Multi-Tenancy) and drizzle's `migrate()` reaches into internals it does not forward.
 - **Index every hot filter/join column:** every table that is filtered or joined on `member_id`, `organization_id`, a status column, or ordered by `created_at` should have a matching (often composite) index. The member-scoped tables (`address`, `note`, `payment_method`) and `transaction (organization_id, created_at)` / `signed_waiver (organization_id, signed_at)` composites were added for exactly this.

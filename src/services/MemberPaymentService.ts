@@ -715,6 +715,7 @@ async function handleAutopay(args: AutopayParams): Promise<ProcessMemberPaymentR
   const recurringAmount = Math.max(0, Math.round((params.amount - couponDiscount) * 100) / 100);
 
   const subResult = await provider.createSubscription(config, {
+    organizationId: params.organizationId,
     customerId,
     paymentMethodId,
     amount: recurringAmount,
@@ -1846,6 +1847,7 @@ export async function holdMembershipLifecycle(args: {
 
           if (pmId) {
             const subResult = await provider.createSubscription(config, {
+              organizationId: ctx.member.organizationId,
               customerId,
               paymentMethodId: pmId,
               amount: feeAmount,

@@ -522,6 +522,49 @@ export const classSchema = pgTable(
 // (role org:instructor / org:academy_owner); their name/default avatar come
 // from Clerk, but an admin can upload a headshot here (base64 data URL) which
 // takes precedence over the Clerk image. Keyed by (organizationId, clerkUserId).
+/**
+ * Square subscription plan variations, per organization and cadence.
+ *
+ * Square REQUIRES a catalog `plan_variation_id` on every subscription — the
+ * API reference lists it as optional, but `CreateSubscription` without one is
+ * rejected outright, and ad-hoc `phases` are not accepted on the subscription.
+ *
+ * There are at most FOUR rows per organization, not one per membership plan:
+ * `price_override_money` and `tax_percentage` are set per SUBSCRIPTION, so a
+ * single $0 variation per cadence serves every member at any price. That also
+ * means there is no price to keep in sync with Square when a plan changes.
+ *
+ * Tenant-plane: the catalog object lives in that merchant's own Square
+ * account, so it belongs beside the org's other data. `organization_id` is
+ * kept even though it is redundant inside a per-org database — same reasoning
+ * as every other tenant table.
+ */
+export const squarePlanVariationSchema = pgTable(
+  'square_plan_variation',
+  {
+    id: text('id').primaryKey(), // UUID v4
+    organizationId: text('organization_id').notNull(),
+    // 'Weekly' | 'Monthly' | 'Semi-Annual' | 'Annual' — our vocabulary, not
+    // Square's. The mapping to WEEKLY/MONTHLY/EVERY_SIX_MONTHS/ANNUAL lives in
+    // SquarePaymentService; all four map natively, unlike IQPro where
+    // semi-annual is emulated with a yearly period.
+    cadence: text('cadence').notNull(),
+    // The Square catalog SUBSCRIPTION_PLAN_VARIATION id used as
+    // `plan_variation_id`.
+    planVariationId: text('plan_variation_id').notNull(),
+    // Kept for traceability into the Square dashboard; nothing reads it.
+    planId: text('plan_id'),
+    createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { mode: 'date' })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  table => [
+    uniqueIndex('square_plan_variation_org_cadence_idx').on(table.organizationId, table.cadence),
+  ],
+);
+
 export const instructorProfileSchema = pgTable(
   'instructor_profile',
   {

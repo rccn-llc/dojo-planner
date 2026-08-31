@@ -731,4 +731,20 @@ CREATE TABLE IF NOT EXISTS "tenant_external_ref" (
 -- transaction id (the signup-fee split). Inserts must be ON CONFLICT DO NOTHING
 -- against this index or the second row throws inside a db.transaction.
 CREATE UNIQUE INDEX IF NOT EXISTS "tenant_external_ref_pk_idx" ON "tenant_external_ref" USING btree ("ref_type","ref_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "tenant_external_ref_org_idx" ON "tenant_external_ref" USING btree ("org_id");
+CREATE INDEX IF NOT EXISTS "tenant_external_ref_org_idx" ON "tenant_external_ref" USING btree ("org_id");--> statement-breakpoint
+-- ── B4b: Square subscription plan variations ────────────────────────────────
+-- Square REQUIRES a catalog plan_variation_id on every subscription (the API
+-- reference calls it optional; CreateSubscription rejects requests without
+-- one). At most FOUR rows per organization — one per cadence — because
+-- price_override_money and tax_percentage are set per SUBSCRIPTION, so a
+-- single variation serves every member at any price.
+CREATE TABLE IF NOT EXISTS "square_plan_variation" (
+	"id" text PRIMARY KEY NOT NULL,
+	"organization_id" text NOT NULL,
+	"cadence" text NOT NULL,
+	"plan_variation_id" text NOT NULL,
+	"plan_id" text,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	"updated_at" timestamp DEFAULT now() NOT NULL
+);--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "square_plan_variation_org_cadence_idx" ON "square_plan_variation" USING btree ("organization_id","cadence");
