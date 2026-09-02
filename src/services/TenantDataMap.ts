@@ -47,7 +47,7 @@ export type TenantTable = {
 };
 
 /**
- * All 38 copyable tables, in INSERT order.
+ * All 39 copyable tables, in INSERT order.
  *
  * NOTE: `image` and `instructor_profile` are org-scoped but are NOT cleared by
  * `seed.ts`'s teardown — it covers 36 of 40. Copying only what the seed clears
@@ -64,6 +64,11 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   { table: 'catalog_category', scope: 'direct' },
   { table: 'coupon', scope: 'direct' },
   { table: 'waiver_template', scope: 'direct' },
+  // Square catalog plan variations. Org-scoped with no FK dependencies, so it
+  // sits in L1. Losing these on a cutover would not lose money — the lazy
+  // ensurePlanVariation would recreate them — but it would orphan the
+  // already-created Square catalog objects, so it is copied.
+  { table: 'square_plan_variation', scope: 'direct' },
 
   // ── L2: reference L1 ──
   { table: 'member', scope: 'direct' },

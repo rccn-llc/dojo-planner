@@ -545,6 +545,7 @@ describe('IQProPaymentProvider', () => {
       iqproPost.mockResolvedValueOnce({ data: { subscriptionId: 'sub_1' } });
 
       const result = await provider.createSubscription(testConfig, {
+        organizationId: 'test-org-456',
         customerId: 'cust_123',
         paymentMethodId: 'pm_card_1',
         amount: 99,
@@ -593,6 +594,7 @@ describe('IQProPaymentProvider', () => {
       iqproPost.mockResolvedValueOnce({ data: { subscriptionId: 'sub_annual' } });
 
       await provider.createSubscription(testConfig, {
+        organizationId: 'test-org-456',
         customerId: 'cust_123',
         paymentMethodId: 'pm_card_1',
         amount: 999,

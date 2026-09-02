@@ -146,7 +146,7 @@ describe('expectedTableNames — what a complete schema means', () => {
     const { expectedTableNames } = await import('./provisionTenant');
     const names = expectedTableNames();
 
-    expect(names.length).toBe(42);
+    expect(names.length).toBe(43);
     expect(names).toContain('member');
     expect(names).toContain('tenant');
     expect(new Set(names).size).toBe(names.length);
