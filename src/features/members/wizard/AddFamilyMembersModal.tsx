@@ -3,7 +3,7 @@
 import type { Coupon } from '@/features/marketing';
 import type { PaymentDeclineReason, PaymentMethod } from '@/hooks/useAddMemberWizard';
 import type { HOHData } from '@/hooks/useFamilyMemberWizard';
-import type { TokenizationIframeConfig } from '@/libs/IQPro';
+import type { ClientTokenizationConfig } from '@/types/Tokenization';
 import { useOrganization, useUser } from '@clerk/nextjs';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
@@ -39,7 +39,7 @@ export const AddFamilyMembersModal = ({
   const { organization } = useOrganization();
   const t = useTranslations('AddFamilyMembersModal');
 
-  const [tokenizationConfig, setTokenizationConfig] = useState<TokenizationIframeConfig | null>(null);
+  const [tokenizationConfig, setTokenizationConfig] = useState<ClientTokenizationConfig | null>(null);
 
   // Refs for TokenEx iframe token data (avoids stale closure)
   const cardTokenRef = useRef<string | undefined>(undefined);

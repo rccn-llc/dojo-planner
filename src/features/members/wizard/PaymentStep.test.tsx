@@ -1,6 +1,6 @@
 import type { Coupon } from '@/features/marketing';
 import type { AddMemberWizardData } from '@/hooks/useAddMemberWizard';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { page, userEvent } from 'vitest/browser';
 import { PaymentStep } from './PaymentStep';
@@ -158,17 +158,28 @@ vi.mock('next-intl', () => ({
   },
 }));
 
-// Mock useTokenExIframe — default returns inactive state
+// Mock useCardTokenizer — default returns inactive state, IQPro-shaped.
+// `layout` is what components branch on to choose split vs unified fields.
 const mockTokenize = vi.fn();
-const mockIframeReturn: { isLoaded: boolean; isValid: boolean; isCvvValid: boolean; error: string | null; tokenize: typeof mockTokenize } = {
+const mockIframeReturn: {
+  isLoaded: boolean;
+  isValid: boolean;
+  isCvvValid: boolean;
+  error: string | null;
+  tokenize: typeof mockTokenize;
+  layout: 'split' | 'unified';
+  provider: 'iqpro' | 'square' | null;
+} = {
   isLoaded: false,
   isValid: false,
   isCvvValid: false,
   error: null,
   tokenize: mockTokenize,
+  layout: 'split',
+  provider: 'iqpro',
 };
-vi.mock('@/hooks/useTokenExIframe', () => ({
-  useTokenExIframe: () => mockIframeReturn,
+vi.mock('@/hooks/useCardTokenizer', () => ({
+  useCardTokenizer: () => mockIframeReturn,
 }));
 
 const defaultProps = {
@@ -1809,13 +1820,16 @@ describe('PaymentStep', () => {
   // TokenEx iframe integration tests
   describe('TokenEx iframe integration', () => {
     const tokenizationConfig = {
-      origin: 'https://example.com',
-      tokenizationId: 'test-id',
-      tokenScheme: 'test-scheme',
-      authenticationKey: 'test-key',
-      timestamp: '2024-01-01T00:00:00Z',
-      iframeScriptUrl: 'https://sandbox.api.basyspro.com/Iframe/iframe/iframe-v3.js',
-    };
+      provider: 'iqpro',
+      iqpro: {
+        origin: 'https://example.com',
+        tokenizationId: 'test-id',
+        tokenScheme: 'test-scheme',
+        authenticationKey: 'test-key',
+        timestamp: '2024-01-01T00:00:00Z',
+        iframeScriptUrl: 'https://sandbox.api.basyspro.com/Iframe/iframe/iframe-v3.js',
+      },
+    } as const;
 
     it('renders card number iframe container when tokenization config is provided', async () => {
       mockIframeReturn.isLoaded = true;
@@ -1902,11 +1916,14 @@ describe('PaymentStep', () => {
 
       const iframeContainer = document.getElementById('tokenExIframeDiv');
 
-      expect(iframeContainer?.classList.contains('hidden')).toBe(true);
+      // `invisible` (visibility:hidden), NOT `hidden` (display:none): the
+      // provider SDK has to lay the widget out while it initialises, and a
+      // display:none box gives it zero size to work with.
+      expect(iframeContainer?.classList.contains('invisible')).toBe(true);
 
       const cvvContainer = document.getElementById('tokenExCvvIframeDiv');
 
-      expect(cvvContainer?.classList.contains('hidden')).toBe(true);
+      expect(cvvContainer?.classList.contains('invisible')).toBe(true);
     });
 
     it('shows iframe containers after loading', async () => {
@@ -2379,6 +2396,84 @@ describe('PaymentStep', () => {
       // No "today" suffix in the heading, no breakdown panel
       expect(page.getByText(/Pay \$149\.00$/).first()).toBeTruthy();
       expect(document.body.textContent).not.toContain('Total due today');
+    });
+  });
+
+  // Square renders number, expiry and CVV as ONE widget, and cannot take ACH.
+  describe('square (unified layout)', () => {
+    const squareConfig = {
+      provider: 'square',
+      square: { applicationId: 'sq-app', locationId: 'L1', environment: 'sandbox' },
+    } as const;
+
+    beforeEach(() => {
+      mockIframeReturn.layout = 'unified';
+      mockIframeReturn.provider = 'square';
+      mockIframeReturn.isLoaded = true;
+      mockIframeReturn.isValid = true;
+      mockIframeReturn.isCvvValid = true;
+    });
+
+    afterEach(() => {
+      mockIframeReturn.layout = 'split';
+      mockIframeReturn.provider = 'iqpro';
+    });
+
+    it('accepts the card form with NO expiry entered, because the widget owns it', async () => {
+      // The regression test for the expiry asymmetry: IQPro needs an
+      // expirationDate from us, Square's widget collects it internally and
+      // SquarePaymentService never reads params.cardExpiry. Requiring a field
+      // we do not render would leave Next permanently disabled.
+      await render(
+        <PaymentStep
+          {...defaultProps}
+          data={{ ...defaultProps.data, cardholderName: 'Jane Doe', cardExpiry: '' }}
+          tokenizationConfig={squareConfig}
+        />,
+      );
+
+      const nextButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent === 'Next') as HTMLButtonElement;
+
+      expect(nextButton?.disabled).toBe(false);
+    });
+
+    it('does not render our own expiry or CVV inputs', async () => {
+      await render(
+        <PaymentStep
+          {...defaultProps}
+          data={{ ...defaultProps.data, cardholderName: 'Jane Doe' }}
+          tokenizationConfig={squareConfig}
+        />,
+      );
+
+      expect(document.getElementById('cardExpiry')).toBeNull();
+      expect(document.getElementById('tokenExCvvIframeDiv')).toBeNull();
+    });
+
+    it('hides the ACH option — Square throws a TypeError for non-card methods', async () => {
+      await render(
+        <PaymentStep
+          {...defaultProps}
+          data={{ ...defaultProps.data, cardholderName: 'Jane Doe' }}
+          tokenizationConfig={squareConfig}
+        />,
+      );
+
+      const achButton = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent?.includes('Bank'));
+
+      expect(achButton).toBeUndefined();
+    });
+
+    it('still renders the card container', async () => {
+      await render(
+        <PaymentStep
+          {...defaultProps}
+          data={{ ...defaultProps.data, cardholderName: 'Jane Doe' }}
+          tokenizationConfig={squareConfig}
+        />,
+      );
+
+      expect(document.getElementById('tokenExIframeDiv')).toBeTruthy();
     });
   });
 });

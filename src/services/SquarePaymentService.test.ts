@@ -83,6 +83,62 @@ describe('squarePaymentService', () => {
     });
   });
 
+  describe('createCustomer', () => {
+    it('retries WITHOUT the phone number when Square rejects it', async () => {
+      // Square validates that a phone is DIALABLE, not merely well-formed —
+      // every format of a 555-prefix number is refused. A member's phone is
+      // optional contact data, so failing the whole charge over it would
+      // decline real money for a typo.
+      const { SquareApiError } = await import('@/libs/Square');
+      squarePost
+        .mockRejectedValueOnce(new SquareApiError('/v2/customers', 400, JSON.stringify({
+          errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'INVALID_PHONE_NUMBER', detail: 'bad' }],
+        })))
+        .mockResolvedValueOnce({ customer: { id: 'cust_1' } });
+
+      const provider = await loadProvider();
+      const result = await provider.createCustomer(squareConfig as never, {
+        organizationId: 'o',
+        memberId: 'm',
+        email: 'a@example.com',
+        firstName: 'A',
+        lastName: 'B',
+        phone: '5551233456',
+      });
+
+      expect(result.customerId).toBe('cust_1');
+      expect(squarePost).toHaveBeenCalledTimes(2);
+
+      const [, , retryBody] = squarePost.mock.calls[1] as [unknown, string, Record<string, unknown>];
+
+      expect(retryBody).not.toHaveProperty('phone_number');
+
+      // A fresh idempotency key, or Square would replay the failed attempt.
+      const [, , firstBody] = squarePost.mock.calls[0] as [unknown, string, Record<string, unknown>];
+
+      expect(retryBody.idempotency_key).not.toBe(firstBody.idempotency_key);
+    });
+
+    it('does NOT retry on an unrelated Square failure', async () => {
+      const { SquareApiError } = await import('@/libs/Square');
+      squarePost.mockRejectedValueOnce(new SquareApiError('/v2/customers', 400, JSON.stringify({
+        errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'BAD_REQUEST', detail: 'nope' }],
+      })));
+
+      const provider = await loadProvider();
+
+      await expect(provider.createCustomer(squareConfig as never, {
+        organizationId: 'o',
+        memberId: 'm',
+        email: 'a@example.com',
+        firstName: 'A',
+        lastName: 'B',
+        phone: '5551233456',
+      })).rejects.toThrow(/BAD_REQUEST/);
+      expect(squarePost).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('card-only enforcement', () => {
     it('REFUSES ACH', async () => {
       // Square cannot store a bank account and charge it later, so offering

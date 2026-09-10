@@ -49,7 +49,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/libs/DB';
 import { getServiceFeePct } from '@/libs/IQPro';
 import { logger } from '@/libs/Logger';
-import { fromMinorUnits, squareGet, squarePost, toMinorUnits } from '@/libs/Square';
+import { fromMinorUnits, SquareApiError, squareGet, squarePost, toMinorUnits } from '@/libs/Square';
 import { squarePlanVariationSchema } from '@/models/Schema';
 import { PAYMENT_PROVIDER } from '@/types/PaymentProvider';
 
@@ -289,7 +289,30 @@ export class SquarePaymentProvider implements IPaymentProvider {
       reference_id: params.memberId,
     };
 
-    const res = await squarePost<{ customer?: { id?: string } }>(square, '/v2/customers', body);
+    let res: { customer?: { id?: string } };
+    try {
+      res = await squarePost<{ customer?: { id?: string } }>(square, '/v2/customers', body);
+    } catch (error) {
+      // ⚠️ Square validates that the phone number is DIALABLE, not merely
+      // well-formed: every format of a 555-prefix number is rejected, while
+      // the same formats with a real area code are accepted. A member's phone
+      // is optional contact data, so letting it fail the entire charge would
+      // decline real money over a typo. Retry once without it.
+      const isBadPhone = error instanceof SquareApiError && error.code === 'INVALID_PHONE_NUMBER';
+      if (!isBadPhone || !params.phone) {
+        throw error;
+      }
+
+      logger.warn('[Square] customer create rejected the phone number; retrying without it', {
+        memberId: params.memberId,
+      });
+      const { phone_number: _omitted, ...withoutPhone } = body;
+      res = await squarePost<{ customer?: { id?: string } }>(square, '/v2/customers', {
+        ...withoutPhone,
+        idempotency_key: idempotencyKey(),
+      });
+    }
+
     const customerId = res.customer?.id;
     if (!customerId) {
       throw new Error('Square created a customer but returned no id.');

@@ -73,7 +73,7 @@ vi.mock('next-intl', () => ({
   },
 }));
 
-// Mock useTokenExIframe — inactive by default (no iframe).
+// Mock useCardTokenizer — inactive by default (no hosted fields).
 const mockTokenize = vi.fn();
 const mockIframeReturn = {
   isLoaded: false,
@@ -81,9 +81,12 @@ const mockIframeReturn = {
   isCvvValid: false,
   error: null as string | null,
   tokenize: mockTokenize,
+  // `layout` drives split-vs-unified card fields; 'split' is the IQPro shape.
+  layout: 'split' as 'split' | 'unified',
+  provider: 'iqpro' as 'iqpro' | 'square' | null,
 };
-vi.mock('@/hooks/useTokenExIframe', () => ({
-  useTokenExIframe: () => mockIframeReturn,
+vi.mock('@/hooks/useCardTokenizer', () => ({
+  useCardTokenizer: () => mockIframeReturn,
 }));
 
 vi.mock('next-themes', () => ({

@@ -51,10 +51,13 @@ const mockIframe = {
   isCvvValid: false,
   error: null as string | null,
   tokenize: mockTokenize,
+  // `layout` drives split-vs-unified card fields; 'split' is the IQPro shape.
+  layout: 'split' as 'split' | 'unified',
+  provider: 'iqpro' as 'iqpro' | 'square' | null,
 };
 
-vi.mock('@/hooks/useTokenExIframe', () => ({
-  useTokenExIframe: () => mockIframe,
+vi.mock('@/hooks/useCardTokenizer', () => ({
+  useCardTokenizer: () => mockIframe,
 }));
 
 const mockGetTokenizationConfig = vi.fn();

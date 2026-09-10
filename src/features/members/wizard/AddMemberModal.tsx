@@ -2,7 +2,7 @@
 
 import type { Coupon } from '@/features/marketing';
 import type { PaymentDeclineReason } from '@/hooks/useAddMemberWizard';
-import type { TokenizationIframeConfig } from '@/libs/IQPro';
+import type { ClientTokenizationConfig } from '@/types/Tokenization';
 import { useOrganization, useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -32,7 +32,7 @@ export const AddMemberModal = ({ isOpen, onCloseAction, availableCoupons = [] }:
   const wizard = useAddMemberWizard();
   const { user } = useUser();
   const { organization } = useOrganization();
-  const [tokenizationConfig, setTokenizationConfig] = useState<TokenizationIframeConfig | null>(null);
+  const [tokenizationConfig, setTokenizationConfig] = useState<ClientTokenizationConfig | null>(null);
   // Holds the cardToken + cardFirstSix + cardLastFour from iframe tokenization so handleFinalNext
   // can access them without waiting for React state to commit (avoids stale closure).
   const cardTokenRef = useRef<string | undefined>(undefined);

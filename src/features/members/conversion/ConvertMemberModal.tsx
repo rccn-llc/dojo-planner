@@ -3,7 +3,7 @@
 import type { Coupon } from '@/features/marketing';
 import type { MemberType, PaymentDeclineReason } from '@/hooks/useAddMemberWizard';
 import type { ConversionType, ConvertMemberWizardData } from '@/hooks/useConvertMemberWizard';
-import type { TokenizationIframeConfig } from '@/libs/IQPro';
+import type { ClientTokenizationConfig } from '@/types/Tokenization';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -70,7 +70,7 @@ export const ConvertMemberModal = ({
     currentHOHName,
   });
 
-  const [tokenizationConfig, setTokenizationConfig] = useState<TokenizationIframeConfig | null>(null);
+  const [tokenizationConfig, setTokenizationConfig] = useState<ClientTokenizationConfig | null>(null);
   const cardTokenRef = useRef<string | undefined>(undefined);
   const cardFirstSixRef = useRef<string | undefined>(undefined);
   const cardLastFourRef = useRef<string | undefined>(undefined);

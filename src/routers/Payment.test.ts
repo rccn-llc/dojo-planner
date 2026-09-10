@@ -44,6 +44,17 @@ const testConfig = {
 /** The same credentials tagged with the discriminant, as the union resolver returns them. */
 const providerConfig = { ...testConfig, provider: 'iqpro' as const };
 
+/** A Square org's resolved config. The last two fields must never reach a browser. */
+const squareProviderConfig = {
+  provider: 'square' as const,
+  applicationId: 'sq-app-id',
+  locationId: 'L-square-1',
+  environment: 'sandbox' as const,
+  accessToken: 'sq-secret-access-token',
+  webhookSignatureKey: 'sq-webhook-signature-key',
+  source: 'org' as const,
+};
+
 const mockContext: AuditContext = {
   userId: 'test-user-123',
   orgId: 'test-org-456',
@@ -295,16 +306,16 @@ describe('Payment Router', () => {
       const result = await callHandler(getTokenizationIframeConfig, input);
 
       expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
-      expect(getTokenizationConfig).toHaveBeenCalledWith(testConfig, 'http://localhost:3000');
-      expect(result).toEqual(mockConfig);
+      expect(getTokenizationConfig).toHaveBeenCalledWith(providerConfig, 'http://localhost:3000');
+      expect(result).toEqual({ provider: 'iqpro', iqpro: mockConfig });
     });
 
-    it('should throw 503 when IQPro is not configured for the org', async () => {
+    it('should throw 503 when no payment provider is configured for the org', async () => {
       const { guardRole } = await import('./AuthGuards');
-      const { resolveIQProConfig } = await import('@/services/PaymentProviderConfigService');
+      const { resolvePaymentProviderConfig } = await import('@/services/PaymentProviderConfigService');
 
       vi.mocked(guardRole).mockResolvedValue(mockContext);
-      vi.mocked(resolveIQProConfig).mockResolvedValue(null);
+      vi.mocked(resolvePaymentProviderConfig).mockResolvedValue(null);
 
       const { getTokenizationIframeConfig } = await import('./Payment');
       const input = { origin: 'http://localhost:3000' };
@@ -327,6 +338,42 @@ describe('Payment Router', () => {
       await expect(callHandler(getTokenizationIframeConfig, input)).rejects.toThrow(
         'Failed to load payment configuration.',
       );
+    });
+
+    it('returns the Square branch for a Square org, and never calls IQPro', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { getTokenizationConfig } = await import('@/libs/IQPro');
+      const { resolvePaymentProviderConfig } = await import('@/services/PaymentProviderConfigService');
+
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(resolvePaymentProviderConfig).mockResolvedValue(squareProviderConfig);
+
+      const { getTokenizationIframeConfig } = await import('./Payment');
+      const result = await callHandler(getTokenizationIframeConfig, { origin: 'http://localhost:3000' });
+
+      expect(result).toEqual({
+        provider: 'square',
+        square: { applicationId: 'sq-app-id', locationId: 'L-square-1', environment: 'sandbox' },
+      });
+      expect(getTokenizationConfig).not.toHaveBeenCalled();
+    });
+
+    it('NEVER returns Square merchant secrets to the browser', async () => {
+      // This response reaches every browser that opens the payment wizard.
+      // accessToken would let anyone charge the dojo's merchant account.
+      const { guardRole } = await import('./AuthGuards');
+      const { resolvePaymentProviderConfig } = await import('@/services/PaymentProviderConfigService');
+
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(resolvePaymentProviderConfig).mockResolvedValue(squareProviderConfig);
+
+      const { getTokenizationIframeConfig } = await import('./Payment');
+      const result = await callHandler(getTokenizationIframeConfig, { origin: 'http://localhost:3000' });
+
+      const serialized = JSON.stringify(result);
+
+      expect(serialized).not.toContain('sq-secret-access-token');
+      expect(serialized).not.toContain('sq-webhook-signature-key');
     });
 
     it('should require FRONT_DESK role', async () => {

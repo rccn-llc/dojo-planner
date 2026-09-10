@@ -2,7 +2,7 @@
 
 import type { Coupon } from '@/features/marketing';
 import type { AddMemberWizardData, AppliedCoupon, PaymentDeclineReason, PaymentMethod } from '@/hooks/useAddMemberWizard';
-import type { TokenizationIframeConfig } from '@/libs/IQPro';
+import type { ClientTokenizationConfig } from '@/types/Tokenization';
 import { AlertCircle, CreditCard, Landmark, Loader2, Tag } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useTheme } from 'next-themes';
@@ -11,7 +11,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { calculateCouponDiscount, getValidMembershipCoupons } from '@/features/marketing';
-import { useTokenExIframe } from '@/hooks/useTokenExIframe';
+import { useCardTokenizer } from '@/hooks/useCardTokenizer';
+import { PAYMENT_PROVIDER } from '@/types/PaymentProvider';
 
 type FamilyPaymentStepProps = {
   data: AddMemberWizardData;
@@ -21,7 +22,7 @@ type FamilyPaymentStepProps = {
   onCancelAction: () => void;
   isLoading?: boolean;
   availableCoupons?: Coupon[];
-  tokenizationConfig?: TokenizationIframeConfig | null;
+  tokenizationConfig?: ClientTokenizationConfig | null;
 };
 
 const TOKENEX_CONTAINER_ID = 'tokenExFamilyIframeDiv';
@@ -73,7 +74,7 @@ export const FamilyPaymentStep = ({
   const hohHasCard = !!data.hohHasPaymentMethod;
   const originalPrice = data.membershipPlanPrice ?? 0;
   const frequencyLabel = getFrequencyLabel(data.membershipPlanFrequency);
-  const paymentMethod = data.paymentMethod || 'card';
+  const requestedPaymentMethod = data.paymentMethod || 'card';
   const paymentStatus = data.paymentStatus;
 
   const getDeclineReasonMessage = (reason?: PaymentDeclineReason): string => {
@@ -110,12 +111,22 @@ export const FamilyPaymentStep = ({
     isCvvValid: iframeCvvValid,
     error: iframeError,
     tokenize: iframeTokenize,
-  } = useTokenExIframe({
+    layout,
+    provider,
+    backgroundColor: cardBackgroundColor,
+  } = useCardTokenizer({
     containerId: TOKENEX_CONTAINER_ID,
     cvvContainerId: TOKENEX_CVV_CONTAINER_ID,
     config: useIframe ? (tokenizationConfig ?? null) : null,
     theme: resolvedTheme === 'dark' ? 'dark' : 'light',
   });
+
+  // Square renders number, expiry and CVV as ONE widget (see useCardTokenizer).
+  const isUnified = layout === 'unified';
+  // Square is card-only — its createPaymentMethod throws for anything else —
+  // so the ACH option is hidden and any stale 'ach' in wizard state is ignored.
+  const isCardOnly = provider === PAYMENT_PROVIDER.SQUARE;
+  const paymentMethod = isCardOnly ? 'card' : requestedPaymentMethod;
 
   // Get valid membership coupons
   const validCoupons = useMemo(() => {
@@ -197,7 +208,8 @@ export const FamilyPaymentStep = ({
   const isCardFormValid = paymentMethod === 'card'
     && data.cardholderName
     && (useIframe ? iframeValid : data.cardNumber)
-    && data.cardExpiry
+    // Square's widget owns expiry — we render no field of our own to validate.
+    && (isUnified || data.cardExpiry)
     && (useIframe ? iframeCvvValid : data.cardCvc);
   const isAchFormValid = paymentMethod === 'ach'
     && data.achAccountHolder
@@ -442,19 +454,23 @@ export const FamilyPaymentStep = ({
               <CreditCard className="size-5" />
               <span className="font-medium">{tPayment('card_tab_label')}</span>
             </button>
-            <button
-              type="button"
-              onClick={() => handlePaymentMethodChange('ach')}
-              disabled={isLoading}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 transition-all ${
-                paymentMethod === 'ach'
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border bg-background hover:border-primary/50 hover:bg-accent/50'
-              } ${isLoading ? 'cursor-not-allowed opacity-50' : ''}`}
-            >
-              <Landmark className="size-5" />
-              <span className="font-medium">{tPayment('ach_tab_label')}</span>
-            </button>
+            {/* ACH is IQPro-only — Square cannot store a bank account for
+                later charging. See useCardTokenizer. */}
+            {!isCardOnly && (
+              <button
+                type="button"
+                onClick={() => handlePaymentMethodChange('ach')}
+                disabled={isLoading}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 transition-all ${
+                  paymentMethod === 'ach'
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border bg-background hover:border-primary/50 hover:bg-accent/50'
+                } ${isLoading ? 'cursor-not-allowed opacity-50' : ''}`}
+              >
+                <Landmark className="size-5" />
+                <span className="font-medium">{tPayment('ach_tab_label')}</span>
+              </button>
+            )}
           </div>
 
           {/* Card Form */}
@@ -497,9 +513,10 @@ export const FamilyPaymentStep = ({
                         )}
                         <div
                           id={TOKENEX_CONTAINER_ID}
-                          className={`mt-1 h-9 w-full overflow-hidden rounded-md border border-neutral-600 bg-neutral-100 shadow-xs dark:bg-input/30 [&_iframe]:border-none ${
+                          style={isUnified && cardBackgroundColor ? ({ '--sq-bg': cardBackgroundColor } as React.CSSProperties) : undefined}
+                          className={`mt-1 w-full rounded-md ${isUnified ? '' : 'h-9 overflow-hidden border border-neutral-600 bg-neutral-100 shadow-xs dark:bg-input/30'} [&_iframe]:border-none ${
                             isLoading ? 'pointer-events-none opacity-50' : ''
-                          } ${!iframeLoaded && !iframeError ? 'hidden' : ''}`}
+                          } ${!iframeLoaded && !iframeError ? 'invisible' : ''}`}
                         />
                       </div>
                     )
@@ -522,57 +539,59 @@ export const FamilyPaymentStep = ({
                     )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="familyCardExpiry" className="block text-sm font-medium">
-                    {tPayment('card_expiry_label')}
-                  </label>
-                  <Input
-                    id="familyCardExpiry"
-                    placeholder={tPayment('card_expiry_placeholder')}
-                    value={data.cardExpiry || ''}
-                    onChange={e => handleInputChange('cardExpiry', e.target.value)}
-                    onBlur={() => handleInputBlur('cardExpiry')}
-                    error={isCardExpiryInvalid}
-                    disabled={isLoading}
-                    className="mt-1"
-                  />
-                  {isCardExpiryInvalid && (
-                    <p className="text-xs text-destructive">{tPayment('card_expiry_error')}</p>
-                  )}
-                </div>
-                <div>
-                  <label htmlFor={useIframe ? TOKENEX_CVV_CONTAINER_ID : 'familyCardCvc'} className="block text-sm font-medium">
-                    {tPayment('card_cvc_label')}
-                  </label>
-                  {useIframe
-                    ? (
-                        <div
-                          id={TOKENEX_CVV_CONTAINER_ID}
-                          className={`mt-1 h-9 w-full overflow-hidden rounded-md border border-neutral-600 bg-neutral-100 shadow-xs dark:bg-input/30 [&_iframe]:border-none ${
-                            isLoading ? 'pointer-events-none opacity-50' : ''
-                          } ${!iframeLoaded && !iframeError ? 'hidden' : ''}`}
-                        />
-                      )
-                    : (
-                        <>
-                          <Input
-                            id="familyCardCvc"
-                            placeholder={tPayment('card_cvc_placeholder')}
-                            value={data.cardCvc || ''}
-                            onChange={e => handleInputChange('cardCvc', e.target.value)}
-                            onBlur={() => handleInputBlur('cardCvc')}
-                            error={isCardCvcInvalid}
-                            disabled={isLoading}
-                            className="mt-1"
+              {!isUnified && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="familyCardExpiry" className="block text-sm font-medium">
+                      {tPayment('card_expiry_label')}
+                    </label>
+                    <Input
+                      id="familyCardExpiry"
+                      placeholder={tPayment('card_expiry_placeholder')}
+                      value={data.cardExpiry || ''}
+                      onChange={e => handleInputChange('cardExpiry', e.target.value)}
+                      onBlur={() => handleInputBlur('cardExpiry')}
+                      error={isCardExpiryInvalid}
+                      disabled={isLoading}
+                      className="mt-1"
+                    />
+                    {isCardExpiryInvalid && (
+                      <p className="text-xs text-destructive">{tPayment('card_expiry_error')}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label htmlFor={useIframe ? TOKENEX_CVV_CONTAINER_ID : 'familyCardCvc'} className="block text-sm font-medium">
+                      {tPayment('card_cvc_label')}
+                    </label>
+                    {useIframe
+                      ? (
+                          <div
+                            id={TOKENEX_CVV_CONTAINER_ID}
+                            className={`mt-1 h-9 w-full overflow-hidden rounded-md border border-neutral-600 bg-neutral-100 shadow-xs dark:bg-input/30 [&_iframe]:border-none ${
+                              isLoading ? 'pointer-events-none opacity-50' : ''
+                            } ${!iframeLoaded && !iframeError ? 'invisible' : ''}`}
                           />
-                          {isCardCvcInvalid && (
-                            <p className="text-xs text-destructive">{tPayment('card_cvc_error')}</p>
-                          )}
-                        </>
-                      )}
+                        )
+                      : (
+                          <>
+                            <Input
+                              id="familyCardCvc"
+                              placeholder={tPayment('card_cvc_placeholder')}
+                              value={data.cardCvc || ''}
+                              onChange={e => handleInputChange('cardCvc', e.target.value)}
+                              onBlur={() => handleInputBlur('cardCvc')}
+                              error={isCardCvcInvalid}
+                              disabled={isLoading}
+                              className="mt-1"
+                            />
+                            {isCardCvcInvalid && (
+                              <p className="text-xs text-destructive">{tPayment('card_cvc_error')}</p>
+                            )}
+                          </>
+                        )}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
