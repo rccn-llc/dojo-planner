@@ -57,6 +57,11 @@ type UseSquareCardOptions = {
   config: SquareCardConfig | null;
   theme?: 'light' | 'dark';
   /**
+   * How long to let the iframe paint before revealing it. Exposed so tests can
+   * collapse the wait; production callers use the default.
+   */
+  revealDelayMs?: number;
+  /**
    * How long to wait for the container to appear. Exposed only so tests need
    * not sit through the real timeout; callers should use the default.
    */
@@ -294,6 +299,12 @@ function cardStyleFor(palette: NonNullable<ReturnType<typeof readInputPalette>>)
   };
 }
 
+/**
+ * How long to let the Square iframe paint before revealing it. Long enough to
+ * cover the styled first paint, short enough not to read as a stall.
+ */
+const REVEAL_PAINT_DELAY_MS = 120;
+
 /** The SDK is served from a different host per environment. */
 function squareSdkUrl(environment: SquareCardConfig['environment']): string {
   return environment === 'production'
@@ -301,12 +312,21 @@ function squareSdkUrl(environment: SquareCardConfig['environment']): string {
     : 'https://sandbox.web.squarecdn.com/v1/square.js';
 }
 
-export function useSquareCard({ containerId, config, theme = 'light', containerTimeoutMs = 5000 }: UseSquareCardOptions): UseSquareCardReturn {
+export function useSquareCard({ containerId, config, theme = 'light', containerTimeoutMs = 5000, revealDelayMs = REVEAL_PAINT_DELAY_MS }: UseSquareCardOptions): UseSquareCardReturn {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isValid, setIsValid] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [backgroundColor, setBackgroundColor] = useState<string | null>(null);
   const cardRef = useRef<SquareCardInstance | null>(null);
+  /**
+   * Cancels a reveal-wait that is still in flight.
+   *
+   * Set while the hook waits for the iframe to paint, cleared once it has.
+   * Without it an unmount mid-wait leaves a `load` listener, a timer and a
+   * queued animation frame behind, all of which would resolve against a
+   * component that no longer exists.
+   */
+  const revealCleanupRef = useRef<(() => void) | null>(null);
   /**
    * Serialises effect runs. React Strict Mode double-invokes effects in dev,
    * so pass 2 would otherwise call `payments.card()` while pass 1's
@@ -431,32 +451,27 @@ export function useSquareCard({ containerId, config, theme = 'light', containerT
       // Wait for the iframe's own `load` instead — that is observable from the
       // parent even though the document is cross-origin — with a frame-based
       // fallback in case it already fired before we could listen.
+      // Give the iframe a beat to paint before revealing it.
+      //
+      // `attach()` resolving means the iframe is INSERTED, not that Square has
+      // finished styling its contents (measured at ~47ms), so revealing here
+      // shows the embedded document's own unstyled WHITE for a frame — the
+      // flash that made the field look light until it was clicked.
+      //
+      // A timer rather than the iframe's `load` event: measured, `load` has
+      // ALWAYS already fired by the time we could attach a listener, so the
+      // listener never ran and only created a leak to clean up. The SDK itself
+      // fires no readiness event (verified against `ready`, `load`, `rendered`
+      // and `focusClassAdded`), so there is nothing better to await.
       await new Promise<void>((resolve) => {
-        const iframe = container.querySelector('iframe');
-        if (!iframe) {
+        const timeoutId = setTimeout(resolve, revealDelayMs);
+        revealCleanupRef.current = () => {
+          clearTimeout(timeoutId);
           resolve();
-          return;
-        }
-
-        let settled = false;
-        const finish = () => {
-          if (settled) {
-            return;
-          }
-          settled = true;
-          // One more frame so the styled content is painted, not merely parsed.
-          requestAnimationFrame(() => resolve());
         };
-
-        iframe.addEventListener('load', finish, { once: true });
-        // `load` has usually ALREADY fired by the time we get here (measured:
-        // the iframe is inserted and sized within one frame of attach()), so
-        // this timeout is the normal path, not the exception. Kept short so
-        // the field is not blank for longer than it needs to be, and it also
-        // guarantees the widget is never left invisible if the load event is
-        // missed entirely.
-        setTimeout(finish, 120);
       });
+
+      revealCleanupRef.current = null;
 
       if (cancelled) {
         await card.destroy?.().catch(() => {});
@@ -519,6 +534,8 @@ export function useSquareCard({ containerId, config, theme = 'light', containerT
 
     return () => {
       cancelled = true;
+      revealCleanupRef.current?.();
+      revealCleanupRef.current = null;
       const card = cardRef.current;
       cardRef.current = null;
       setIsLoaded(false);
@@ -534,7 +551,7 @@ export function useSquareCard({ containerId, config, theme = 'light', containerT
         () => card?.destroy?.().catch(() => {}) ?? undefined,
       );
     };
-  }, [containerId, config, theme, containerTimeoutMs]);
+  }, [containerId, config, theme, containerTimeoutMs, revealDelayMs]);
 
   const tokenize = useCallback(async (): Promise<TokenizeResult> => {
     const card = cardRef.current;

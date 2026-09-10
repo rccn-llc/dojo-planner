@@ -99,7 +99,7 @@ describe('useSquareCard', () => {
     addContainer(id);
     stubScriptTag();
 
-    const { result } = await renderHook(() => useSquareCard({ containerId: id, config: sandboxConfig }));
+    const { result } = await renderHook(() => useSquareCard({ containerId: id, config: sandboxConfig, revealDelayMs: 0 }));
     await settle();
 
     expect(mockSquareGlobal.payments).toHaveBeenCalledWith('sandbox-app-id', 'L123');
@@ -111,7 +111,7 @@ describe('useSquareCard', () => {
     const id = nextId();
     addContainer(id);
 
-    await renderHook(() => useSquareCard({ containerId: id, config: sandboxConfig }));
+    await renderHook(() => useSquareCard({ containerId: id, config: sandboxConfig, revealDelayMs: 0 }));
     await settle();
 
     expect(document.querySelector<HTMLScriptElement>('script[data-square-sdk]')?.src)
@@ -156,15 +156,21 @@ describe('useSquareCard', () => {
     const id = nextId();
     stubScriptTag();
 
-    const { result } = await renderHook(() => useSquareCard({ containerId: id, config: sandboxConfig }));
+    const { result } = await renderHook(() => useSquareCard({ containerId: id, config: sandboxConfig, revealDelayMs: 0 }));
 
     expect(mockCard.attach).not.toHaveBeenCalled();
 
     addContainer(id);
-    await settle();
+    // Poll rather than settling a fixed number of ticks: the hook waits for the
+    // container on animation frames and then for a reveal tick, so under
+    // full-suite load a fixed count is a flake waiting to happen.
+    await vi.waitFor(() => {
+      expect(mockCard.attach).toHaveBeenCalledWith(`#${id}`);
+    });
+    await vi.waitFor(() => {
+      expect(result.current.isLoaded).toBe(true);
+    });
 
-    expect(mockCard.attach).toHaveBeenCalledWith(`#${id}`);
-    expect(result.current.isLoaded).toBe(true);
     expect(result.current.error).toBeNull();
   });
 
@@ -173,7 +179,7 @@ describe('useSquareCard', () => {
     stubScriptTag();
 
     const { result } = await renderHook(() =>
-      useSquareCard({ containerId: id, config: sandboxConfig, containerTimeoutMs: 20 }));
+      useSquareCard({ containerId: id, config: sandboxConfig, containerTimeoutMs: 20, revealDelayMs: 0 }));
     // Wait past the timeout, then let the rejection propagate.
     await new Promise(r => setTimeout(r, 60));
     await settle();
@@ -191,7 +197,7 @@ describe('useSquareCard', () => {
     delete (window as unknown as { Square?: unknown }).Square;
 
     await renderHook(() =>
-      useSquareCard({ containerId: id, config: sandboxConfig, containerTimeoutMs: 20 }));
+      useSquareCard({ containerId: id, config: sandboxConfig, containerTimeoutMs: 20, revealDelayMs: 0 }));
     await settle();
 
     expect(mockSquareGlobal.payments).not.toHaveBeenCalled();
@@ -203,7 +209,7 @@ describe('useSquareCard', () => {
     stubScriptTag();
     mockCard.tokenize.mockResolvedValueOnce({ status: 'OK', token: 'cnon:abc123' });
 
-    const { result } = await renderHook(() => useSquareCard({ containerId: id, config: sandboxConfig }));
+    const { result } = await renderHook(() => useSquareCard({ containerId: id, config: sandboxConfig, revealDelayMs: 0 }));
     await settle();
 
     await expect(result.current.tokenize()).resolves.toEqual({
@@ -222,7 +228,7 @@ describe('useSquareCard', () => {
       errors: [{ message: 'Card number is invalid' }, { message: 'CVV is required' }],
     });
 
-    const { result } = await renderHook(() => useSquareCard({ containerId: id, config: sandboxConfig }));
+    const { result } = await renderHook(() => useSquareCard({ containerId: id, config: sandboxConfig, revealDelayMs: 0 }));
     await settle();
 
     await expect(result.current.tokenize()).rejects.toThrow('Card number is invalid; CVV is required');
@@ -233,7 +239,7 @@ describe('useSquareCard', () => {
     stubScriptTag();
 
     const { result } = await renderHook(() =>
-      useSquareCard({ containerId: id, config: sandboxConfig, containerTimeoutMs: 20 }));
+      useSquareCard({ containerId: id, config: sandboxConfig, containerTimeoutMs: 20, revealDelayMs: 0 }));
     await new Promise(r => setTimeout(r, 60));
     await settle();
 
@@ -251,7 +257,7 @@ describe('useSquareCard', () => {
       listeners.set(ev, cb);
     });
 
-    const { result, act } = await renderHook(() => useSquareCard({ containerId: id, config: sandboxConfig }));
+    const { result, act } = await renderHook(() => useSquareCard({ containerId: id, config: sandboxConfig, revealDelayMs: 0 }));
     await settle();
 
     expect(result.current.isValid).toBe(true);
@@ -290,7 +296,7 @@ describe('useSquareCard', () => {
     });
 
     const { unmount } = await renderHook(() =>
-      useSquareCard({ containerId: id, config: sandboxConfig }));
+      useSquareCard({ containerId: id, config: sandboxConfig, revealDelayMs: 0 }));
     await settle();
     unmount();
     await settle();
@@ -311,7 +317,7 @@ describe('useSquareCard', () => {
     addContainer(id);
     stubScriptTag();
 
-    const { unmount } = await renderHook(() => useSquareCard({ containerId: id, config: sandboxConfig }));
+    const { unmount } = await renderHook(() => useSquareCard({ containerId: id, config: sandboxConfig, revealDelayMs: 0 }));
     await settle();
     unmount();
     await settle();
