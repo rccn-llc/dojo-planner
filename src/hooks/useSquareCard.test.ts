@@ -1,6 +1,6 @@
 import type { SquareCardConfig } from '@/types/Tokenization';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderHook } from 'vitest-browser-react';
+import { cleanup, renderHook } from 'vitest-browser-react';
 import { useSquareCard } from './useSquareCard';
 
 // Built fresh in beforeEach. Module-scope vi.fn()s do not survive this
@@ -74,7 +74,14 @@ describe('useSquareCard', () => {
     (window as unknown as { Square?: unknown }).Square = mockSquareGlobal;
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    // Unmount and let every in-flight init settle BEFORE tearing the globals
+    // down. Without this a hook from the finishing test keeps running, and its
+    // async work reassigns `window.Square` or calls into the next test's mocks
+    // — which is how this file failed only under the full suite.
+    cleanup();
+    await new Promise(r => setTimeout(r, 0));
+
     delete (window as unknown as { Square?: unknown }).Square;
     document.querySelectorAll('script[data-square-sdk]').forEach(s => s.remove());
     document.querySelectorAll('div[id^="square-card-"]').forEach(d => d.remove());
@@ -145,6 +152,14 @@ describe('useSquareCard', () => {
     await settle();
 
     expect(result.current.error).toMatch(/different environment/i);
+
+    // Read the spy off the LIVE global rather than the module-level variable:
+    // under the full suite another file's hook can still be finishing async
+    // work and reassign `window.Square`, leaving this binding pointing at an
+    // object the hook never used ("is not a spy").
+    const liveGlobal = (window as unknown as { Square?: { payments: ReturnType<typeof vi.fn> } }).Square;
+
+    expect(liveGlobal?.payments).toBe(mockSquareGlobal.payments);
     expect(mockSquareGlobal.payments).not.toHaveBeenCalled();
   });
 
@@ -164,12 +179,18 @@ describe('useSquareCard', () => {
     // Poll rather than settling a fixed number of ticks: the hook waits for the
     // container on animation frames and then for a reveal tick, so under
     // full-suite load a fixed count is a flake waiting to happen.
+    // ⚠️ Generous timeout on purpose. The hook polls for its container on
+    // requestAnimationFrame, and browsers throttle rAF hard in a backgrounded
+    // tab — which is exactly the state this page is in while the rest of the
+    // suite runs. The default ~1s budget passes locally and fails in CI.
+    const rafBudget = { timeout: 10_000, interval: 50 };
+
     await vi.waitFor(() => {
       expect(mockCard.attach).toHaveBeenCalledWith(`#${id}`);
-    });
+    }, rafBudget);
     await vi.waitFor(() => {
       expect(result.current.isLoaded).toBe(true);
-    });
+    }, rafBudget);
 
     expect(result.current.error).toBeNull();
   });

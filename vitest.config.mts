@@ -11,7 +11,12 @@ export default defineConfig({
   },
   test: {
     silent: true,
-    reporters: process.env.CI ? ['dot'] : ['default'],
+    // `verbose` in CI, not `dot`: the dot reporter buffers and flushes at the
+    // end, so when the run dies mid-way the log shows only the RUN banner and
+    // nothing else — no indication of WHICH file was executing. Verbose prints
+    // each file as it completes, which is the difference between a diagnosable
+    // failure and a silent one.
+    reporters: process.env.CI ? ['verbose'] : ['default'],
     // Cap concurrency in CI. Browser-mode files each hold a Chromium page, and
     // with ~180 of them an unbounded worker pool sizes itself against the
     // HOST's core count while sharing the container's much smaller memory
@@ -60,20 +65,9 @@ export default defineConfig({
                 //
                 // ⚠️ The symptom is silent: vitest prints `RUN` and the
                 // coverage banner, then the step fails with NO test output and
-                // no summary. If you see that, it is the browser being killed,
+                // no summary. If you see that, the browser was killed — it is
                 // not a failing assertion.
-                args: [
-                  '--disable-dev-shm-usage',
-                  // Chromium otherwise sizes its heap against the HOST's
-                  // memory, ignoring the container's smaller cgroup limit, and
-                  // is OOM-killed once enough test files have accumulated.
-                  '--js-flags=--max-old-space-size=2048',
-                  // Trim per-tab overhead; these suites never need GPU,
-                  // extensions or the sandbox (already unprivileged in CI).
-                  '--disable-gpu',
-                  '--disable-extensions',
-                  '--no-sandbox',
-                ],
+                args: ['--disable-dev-shm-usage'],
               },
             }),
             screenshotDirectory: 'vitest-test-results',

@@ -100,26 +100,46 @@ async function waitForElement(
 
   return new Promise((resolve) => {
     const deadline = Date.now() + timeoutMs;
+    // Both schedulers below can fire for the same tick; settle once so the
+    // loop cannot fan out into two concurrent polls.
+    let settled = false;
+    const finish = (value: HTMLElement | null) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve(value);
+    };
     const poll = () => {
+      if (settled) {
+        return;
+      }
       // Stop the moment the effect is torn down, so an unmounted hook cannot
       // keep a rAF loop alive and later latch onto some other component's
       // container.
       if (isCancelled()) {
-        resolve(null);
+        finish(null);
         return;
       }
       const el = document.getElementById(id);
       if (el) {
-        resolve(el);
+        finish(el);
         return;
       }
       if (Date.now() > deadline) {
-        resolve(null);
+        finish(null);
         return;
       }
+      // ⚠️ Schedule on BOTH a frame and a timer. Browsers throttle
+      // requestAnimationFrame hard in a backgrounded tab, so a rAF-only loop
+      // can stall for seconds — the payment step would sit blank for a user
+      // who opened it in a background tab, and it made this hook's own test
+      // fail under full-suite load while passing in isolation.
       requestAnimationFrame(poll);
+      setTimeout(poll, 50);
     };
     requestAnimationFrame(poll);
+    setTimeout(poll, 50);
   });
 }
 
