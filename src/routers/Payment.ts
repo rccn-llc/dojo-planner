@@ -1,13 +1,15 @@
+import type { ClientTokenizationConfig } from '@/types/Tokenization';
 import { ORPCError, os } from '@orpc/server';
-import * as z from 'zod';
 
+import * as z from 'zod';
 import { getTokenizationConfig } from '@/libs/IQPro';
 import { logger } from '@/libs/Logger';
 import { audit } from '@/services/AuditService';
 import { processMemberPayment, registerPaymentMethod as registerPaymentMethodService } from '@/services/MemberPaymentService';
-import { resolveIQProConfig, resolvePaymentProviderConfig } from '@/services/PaymentProviderConfigService';
+import { resolvePaymentProviderConfig } from '@/services/PaymentProviderConfigService';
 import { AUDIT_ACTION, AUDIT_ENTITY_TYPE } from '@/types/Audit';
 import { ORG_ROLE } from '@/types/Auth';
+import { PAYMENT_PROVIDER } from '@/types/PaymentProvider';
 import { ProcessPaymentValidation, RegisterPaymentMethodValidation } from '@/validations/PaymentValidation';
 
 import { guardRole } from './AuthGuards';
@@ -26,26 +28,37 @@ async function requirePerOrgConfig(orgId: string) {
 }
 
 /**
- * IQPro-only config, for the TokenEx iframe. Card tokenization is inherently
- * provider-specific — Square uses its own Web Payments SDK — so a Square org
- * gets a clear error here until B6 builds the Square tokenization path.
+ * What the browser needs to collect a card, for whichever provider this org
+ * uses. Card tokenization is inherently provider-specific — IQPro hosts a
+ * TokenEx iframe, Square runs its own Web Payments SDK — so the response is a
+ * discriminated union and the client switches on `provider`.
+ *
+ * ⚠️ The Square branch returns ONLY browser-safe fields. `accessToken` and
+ * `webhookSignatureKey` are merchant secrets; leaking either here would hand a
+ * dojo's payment credentials to every browser that opens the wizard.
  */
-async function requireIQProOnlyConfig(orgId: string) {
-  const config = await resolveIQProConfig(orgId);
-  if (!config) {
-    throw new ORPCError('Payment processing is not configured for this organization. Set IQPro credentials in Payment Settings.', { status: 503 });
-  }
-  return config;
-}
-
 export const getTokenizationIframeConfig = os
   .input(z.object({ origin: z.string().url() }))
-  .handler(async ({ input }) => {
+  .handler(async ({ input }): Promise<ClientTokenizationConfig> => {
     const context = await guardRole(ORG_ROLE.FRONT_DESK);
-    const config = await requireIQProOnlyConfig(context.orgId);
+    const config = await requirePerOrgConfig(context.orgId);
+
+    if (config.provider === PAYMENT_PROVIDER.SQUARE) {
+      return {
+        provider: PAYMENT_PROVIDER.SQUARE,
+        square: {
+          applicationId: config.applicationId,
+          locationId: config.locationId,
+          environment: config.environment,
+        },
+      };
+    }
 
     try {
-      return await getTokenizationConfig(config, input.origin);
+      return {
+        provider: PAYMENT_PROVIDER.IQPRO,
+        iqpro: await getTokenizationConfig(config, input.origin),
+      };
     } catch (error) {
       logger.error('[Payment] Failed to get tokenization config', { error });
       throw new ORPCError('Failed to load payment configuration.', { status: 500 });

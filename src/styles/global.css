@@ -139,3 +139,75 @@
     font-family: var(--font-family-inter);
   }
 }
+
+/*
+ * Square Web Payments SDK — card widget.
+ *
+ * ⚠️ These MUST live here as plain CSS, not as Tailwind arbitrary variants on
+ * the component (`[&_.sq-card-message]:…`). Those variants are never compiled:
+ * Tailwind's JIT only emits classes it can see as literal strings in source,
+ * and these were built inside template literals, so a query for
+ * `selectorText` containing "sq-card" returned ZERO rules in the built app.
+ * Every earlier styling attempt through those classes was dead code.
+ *
+ * Square injects this structure INSIDE our container:
+ *   .sq-card-wrapper            (outer; also holds the message row)
+ *     .sq-card-iframe-container (the field itself — white by default)
+ *       iframe.sq-card-component
+ *     .sq-card-message          (validation text; 28px even when EMPTY)
+ *
+ * The input inside the iframe is cross-origin and can only be coloured via the
+ * SDK's own `style` object (see `cardStyleFor` in useSquareCard.ts). These
+ * rules cover the parts that live in OUR document.
+ */
+.sq-card-iframe-container {
+  background-color: var(--sq-bg, transparent);
+}
+
+/*
+ * The iframe is an inline element by default, so it sits on the text baseline
+ * and leaves a few pixels of container showing beneath it — which reads as a
+ * pale strip under the field whenever the container is lighter than the
+ * widget. Making it block-level removes the baseline gap so the iframe fills
+ * its container exactly.
+ */
+.sq-card-iframe-container iframe {
+  display: block;
+  width: 100%;
+}
+
+/* Square reserves this row permanently, doubling the control's height for a
+   message that is usually absent. Collapse it until it has something to say.
+   No !important needed: Square styles this from a stylesheet, not inline. */
+.sq-card-message:empty {
+  display: none;
+}
+
+/*
+ * When the message IS present it is far too heavy for one line of helper text:
+ * Square gives it a 28px line-height plus 11px margins top and bottom, so a
+ * single line costs 50px and the control jumps from 50px to 100px.
+ *
+ * Retuned to match how our own field errors render (text-xs, tight leading),
+ * which brings the messaged state to ~69px without hiding anything the user
+ * needs to read.
+ */
+.sq-card-message {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+/*
+ * Height is DELIBERATELY not overridden.
+ *
+ * The SDK sets `height: 48px` inline on the container, and only an
+ * `!important` rule can beat an inline style — verified: the same rule without
+ * it leaves the widget at 50px. Forcing 36px to match our `h-9` inputs clipped
+ * the card fields and left a gap where the iframe no longer filled its box.
+ *
+ * 48px is the size Square lays the widget out for, so we accept it. It is
+ * taller than a native <Input>, which is a visual compromise rather than a
+ * bug — the alternative is fighting the vendor's own layout with !important
+ * and shipping a clipped payment form.
+ */

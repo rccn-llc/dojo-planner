@@ -1,6 +1,6 @@
 'use client';
 
-import type { TokenizationIframeConfig } from '@/libs/IQPro';
+import type { ClientTokenizationConfig } from '@/types/Tokenization';
 import { CreditCard, Landmark, Loader2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useTheme } from 'next-themes';
@@ -21,8 +21,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { dedupeRequest } from '@/hooks/dedupeRequest';
-import { useTokenExIframe } from '@/hooks/useTokenExIframe';
+import { useCardTokenizer } from '@/hooks/useCardTokenizer';
 import { client } from '@/libs/Orpc';
+import { PAYMENT_PROVIDER } from '@/types/PaymentProvider';
 
 const TOKENEX_CONTAINER_ID = 'editPmTokenExIframeDiv';
 const TOKENEX_CVV_CONTAINER_ID = 'editPmTokenExCvvIframeDiv';
@@ -75,7 +76,7 @@ export function EditPaymentMethodModal({
   const tEdit = useTranslations('EditPaymentMethodModal');
   const { resolvedTheme } = useTheme();
 
-  const [tokenizationConfig, setTokenizationConfig] = useState<TokenizationIframeConfig | null>(null);
+  const [tokenizationConfig, setTokenizationConfig] = useState<ClientTokenizationConfig | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   // Single form-state object so reopening the modal triggers exactly one
@@ -135,16 +136,25 @@ export function EditPaymentMethodModal({
     isCvvValid: iframeCvvValid,
     error: iframeError,
     tokenize: iframeTokenize,
-  } = useTokenExIframe({
+    layout,
+    provider,
+    backgroundColor: cardBackgroundColor,
+  } = useCardTokenizer({
     containerId: TOKENEX_CONTAINER_ID,
     cvvContainerId: TOKENEX_CVV_CONTAINER_ID,
     config: useIframe ? tokenizationConfig : null,
     theme: resolvedTheme === 'dark' ? 'dark' : 'light',
   });
 
+  // Square renders number, expiry and CVV as ONE widget (see useCardTokenizer).
+  const isUnified = layout === 'unified';
+  // Square is card-only; its createPaymentMethod throws for anything else.
+  const isCardOnly = provider === PAYMENT_PROVIDER.SQUARE;
+
   const isCardFormValid = form.paymentMethod === 'card'
     && form.cardholderName.trim().length > 0
-    && form.cardExpiry.trim().length > 0
+    // Square's widget owns expiry — there is no field of ours to validate.
+    && (isUnified || form.cardExpiry.trim().length > 0)
     && (useIframe ? iframeValid && iframeCvvValid : true);
 
   const isAchFormValid = form.paymentMethod === 'ach'
@@ -244,19 +254,23 @@ export function EditPaymentMethodModal({
               <CreditCard className="size-5" />
               <span className="font-medium">{t('card_tab_label')}</span>
             </button>
-            <button
-              type="button"
-              onClick={() => setForm(prev => ({ ...prev, paymentMethod: 'ach' }))}
-              disabled={isSaving}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 transition-all ${
-                form.paymentMethod === 'ach'
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border bg-background hover:border-primary/50 hover:bg-accent/50'
-              } ${isSaving ? 'cursor-not-allowed opacity-50' : ''}`}
-            >
-              <Landmark className="size-5" />
-              <span className="font-medium">{t('ach_tab_label')}</span>
-            </button>
+            {/* ACH is IQPro-only — Square cannot store a bank account for
+                later charging. See useCardTokenizer. */}
+            {!isCardOnly && (
+              <button
+                type="button"
+                onClick={() => setForm(prev => ({ ...prev, paymentMethod: 'ach' }))}
+                disabled={isSaving}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 transition-all ${
+                  form.paymentMethod === 'ach'
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border bg-background hover:border-primary/50 hover:bg-accent/50'
+                } ${isSaving ? 'cursor-not-allowed opacity-50' : ''}`}
+              >
+                <Landmark className="size-5" />
+                <span className="font-medium">{t('ach_tab_label')}</span>
+              </button>
+            )}
           </div>
           <p className="text-xs text-muted-foreground">{tEdit('tabs_help')}</p>
 
@@ -294,9 +308,10 @@ export function EditPaymentMethodModal({
                         )}
                         <div
                           id={TOKENEX_CONTAINER_ID}
-                          className={`mt-1 h-9 w-full overflow-hidden rounded-md border border-neutral-600 bg-neutral-100 shadow-xs dark:bg-input/30 [&_iframe]:border-none ${
+                          style={isUnified && cardBackgroundColor ? ({ '--sq-bg': cardBackgroundColor } as React.CSSProperties) : undefined}
+                          className={`mt-1 w-full rounded-md ${isUnified ? '' : 'h-9 overflow-hidden border border-neutral-600 bg-neutral-100 shadow-xs dark:bg-input/30'} [&_iframe]:border-none ${
                             isSaving ? 'pointer-events-none opacity-50' : ''
-                          } ${!iframeLoaded && !iframeError ? 'hidden' : ''}`}
+                          } ${!iframeLoaded && !iframeError ? 'invisible' : ''}`}
                         />
                       </div>
                     )
@@ -305,38 +320,40 @@ export function EditPaymentMethodModal({
                     )}
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label htmlFor="edit-pm-expiry" className="block text-sm font-medium">
-                    {t('card_expiry_label')}
-                  </label>
-                  <Input
-                    id="edit-pm-expiry"
-                    value={form.cardExpiry}
-                    onChange={e => setForm(prev => ({ ...prev, cardExpiry: e.target.value }))}
-                    placeholder={t('card_expiry_placeholder')}
-                    disabled={isSaving}
-                    className="mt-1"
-                  />
+              {!isUnified && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor="edit-pm-expiry" className="block text-sm font-medium">
+                      {t('card_expiry_label')}
+                    </label>
+                    <Input
+                      id="edit-pm-expiry"
+                      value={form.cardExpiry}
+                      onChange={e => setForm(prev => ({ ...prev, cardExpiry: e.target.value }))}
+                      placeholder={t('card_expiry_placeholder')}
+                      disabled={isSaving}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor={useIframe ? TOKENEX_CVV_CONTAINER_ID : 'edit-pm-cvc'} className="block text-sm font-medium">
+                      {t('card_cvc_label')}
+                    </label>
+                    {useIframe
+                      ? (
+                          <div
+                            id={TOKENEX_CVV_CONTAINER_ID}
+                            className={`mt-1 h-9 w-full overflow-hidden rounded-md border border-neutral-600 bg-neutral-100 shadow-xs dark:bg-input/30 [&_iframe]:border-none ${
+                              isSaving ? 'pointer-events-none opacity-50' : ''
+                            } ${!iframeLoaded && !iframeError ? 'invisible' : ''}`}
+                          />
+                        )
+                      : (
+                          <p className="mt-1 text-xs text-muted-foreground">{tEdit('card_iframe_unavailable')}</p>
+                        )}
+                  </div>
                 </div>
-                <div>
-                  <label htmlFor={useIframe ? TOKENEX_CVV_CONTAINER_ID : 'edit-pm-cvc'} className="block text-sm font-medium">
-                    {t('card_cvc_label')}
-                  </label>
-                  {useIframe
-                    ? (
-                        <div
-                          id={TOKENEX_CVV_CONTAINER_ID}
-                          className={`mt-1 h-9 w-full overflow-hidden rounded-md border border-neutral-600 bg-neutral-100 shadow-xs dark:bg-input/30 [&_iframe]:border-none ${
-                            isSaving ? 'pointer-events-none opacity-50' : ''
-                          } ${!iframeLoaded && !iframeError ? 'hidden' : ''}`}
-                        />
-                      )
-                    : (
-                        <p className="mt-1 text-xs text-muted-foreground">{tEdit('card_iframe_unavailable')}</p>
-                      )}
-                </div>
-              </div>
+              )}
             </div>
           )}
 

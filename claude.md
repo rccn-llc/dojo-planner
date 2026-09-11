@@ -645,6 +645,25 @@ Organization-level SaaS subscriptions use IQPro (same SDK as member payments). A
 
 Also undocumented: **the customer must have an email address** or Square rejects with `CUSTOMER_MISSING_EMAIL`. Checked up front rather than surfaced as a raw Square error.
 
+**Front-end card collection (B6).** `payment.getTokenizationConfig` returns a **discriminated union on `provider`** (`src/types/Tokenization.ts`), not a bare IQPro iframe config — the provider and its credentials are read together so they cannot disagree and tokenize against the wrong merchant. The Square branch carries **only** `applicationId` / `locationId` / `environment`; `accessToken` and `webhookSignatureKey` must never appear there, and a test asserts their absence.
+
+`useCardTokenizer` (`src/hooks/useCardTokenizer.ts`) is the one interface components use. It calls **both** `useTokenExIframe` and `useSquareCard` on every render — rules of hooks forbid choosing one — and passes `config: null` to the non-selected hook, which each treats as "not my provider, do nothing". It returns the shape components already used, plus:
+
+- `layout: 'split' | 'unified'` — components branch on THIS, not the vendor name, so a future unified provider needs no component changes. IQPro is `split` (separate PAN and CVV iframes plus our own expiry input); Square is `unified` (one widget owning number, expiry and CVV).
+- `provider` — used only for the genuinely vendor-specific ACH decision.
+- `isCvvValid` **mirrors** `isValid` for Square rather than being hardcoded `true`, so existing `useIframe ? iframeCvvValid : …` checks stay truthful without edits.
+
+⚠️ **ACH is hidden whenever the provider is Square**, in both apps. `SquarePaymentService.createPaymentMethod` *throws a `TypeError`* for non-card methods, so an offered-but-unusable ACH tab is an uncaught 500, not a decline.
+
+⚠️ **Square exposes no BIN to the browser.** `tokenize()` returns only a nonce, so `cardFirstSix` / `cardLastFour` are `undefined`; the server reads `last_4` off its own `POST /v2/cards` response. IQPro genuinely needs them (they build `maskedCard`), which is why the fields stay optional on the wire rather than being removed.
+
+⚠️ **The SDK script URL differs by environment** (`sandbox.web.squarecdn.com` vs `web.squarecdn.com`), so it cannot be a static tag in the layout. `useSquareCard` keys its already-loaded check on the **URL**, not on `window.Square` existing, and refuses rather than silently reusing an SDK loaded for the other environment.
+
+**Kiosk differences (both flows in `MembershipFlow.tsx` / `StoreFlow.tsx`):**
+- The kiosk **eagerly auto-tokenizes** when the card form reports valid, so submit is instant. Square **skips that and tokenizes on submit** — its nonce is single-use and short-lived, so minting one early risks expiry. The IQPro path is unchanged.
+- The kiosk collects `cardExpiry` as a plain input even in iframe mode; it is hidden for Square, whose widget owns expiry.
+- `StoreFlow`'s **saved-card path is IQPro-vault-only** (signed match tokens). The lookup is skipped for Square orgs rather than offering a card the charge could not use. Square saved cards are B5k.
+
 **Cadence mapping** — all four map natively, including semi-annual, which on IQPro has to be emulated with a yearly billing period and two `monthsOfYear` entries:
 
 | Our frequency | Square cadence |
@@ -1532,6 +1551,7 @@ This approach:
 | **Better Stack** | `*.betterstack.com`, `logs.betterstack.com` | connect-src |
 | **Upstash** | `*.upstash.io` | connect-src |
 | **TokenEx/BasysPro** | `sandbox.api.basyspro.com`, `api.basyspro.com`, `*.tokenex.com` | script-src, frame-src, connect-src |
+| **Square (Web Payments SDK)** | `sandbox.web.squarecdn.com`, `web.squarecdn.com`, `pci-connect.squareupsandbox.com`, `pci-connect.squareup.com` | script-src, frame-src, style-src, connect-src |
 
 **Adding New Third-Party Services:**
 

@@ -331,26 +331,32 @@ export function WaiverStep({
       />
 
       {/* Agreement checkbox */}
-      <div className="flex items-start gap-2">
-        <Checkbox
-          id="agreement"
-          checked={hasAgreed}
-          onCheckedChange={(checked) => {
-            setHasAgreed(checked === true);
-            setErrors(prev => ({ ...prev, agreement: undefined }));
-          }}
-        />
-        <div className="grid gap-1.5 leading-none">
+      {/* items-center, not items-start: the label is a single line, so the
+          checkbox should sit on its centre. The previous items-start pinned
+          the 16px box to the top of a taller line box (text-sm +
+          leading-relaxed), which read as a few pixels too high. The error
+          message moved out of the column so it cannot drag the row's height
+          and re-break the alignment. */}
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="agreement"
+            checked={hasAgreed}
+            onCheckedChange={(checked) => {
+              setHasAgreed(checked === true);
+              setErrors(prev => ({ ...prev, agreement: undefined }));
+            }}
+          />
           <Label
             htmlFor="agreement"
-            className="cursor-pointer text-sm leading-relaxed font-normal"
+            className="cursor-pointer text-sm font-normal"
           >
             {t('agree_checkbox')}
           </Label>
-          {errors.agreement && (
-            <p className="text-sm text-destructive">{errors.agreement}</p>
-          )}
         </div>
+        {errors.agreement && (
+          <p className="text-sm text-destructive">{errors.agreement}</p>
+        )}
       </div>
 
       {/* Navigation buttons */}
