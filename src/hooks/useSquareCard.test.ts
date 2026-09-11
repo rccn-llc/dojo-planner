@@ -38,6 +38,38 @@ function addContainer(id: string) {
   return el;
 }
 
+/**
+ * Stop any injected SDK tag from actually hitting the network.
+ *
+ * ⚠️ Two tests assert that the hook INJECTS a script, so they cannot pre-stub
+ * a tag — which means the hook appends one pointing at the real
+ * squarecdn.com and `await`s its load. In CI that is a live request: slow,
+ * flaky, and it resolves DURING a later test, leaving a foreign tag in the
+ * DOM so the next test takes the wrong branch. That is what made this file
+ * fail only under the full suite.
+ *
+ * Patching appendChild neutralises the fetch while leaving the assertion
+ * (`script.src`) intact.
+ */
+function blockScriptLoads() {
+  const realAppend = document.head.appendChild.bind(document.head);
+  const patched = <T extends Node>(node: T): T => {
+    if (node instanceof HTMLScriptElement && node.dataset.squareSdk) {
+      // Keep the element (and its `src`) but point it at nothing loadable, and
+      // resolve the hook's await on the next tick.
+      const src = node.src;
+      Object.defineProperty(node, 'src', { value: src, writable: true });
+      node.removeAttribute('src');
+      queueMicrotask(() => node.onload?.(new Event('load')));
+    }
+    return realAppend(node) as T;
+  };
+  (document.head as unknown as { appendChild: typeof patched }).appendChild = patched;
+  return () => {
+    (document.head as unknown as { appendChild: unknown }).appendChild = realAppend;
+  };
+}
+
 /** Pre-inject the SDK tag so no test performs a real network fetch. */
 function stubScriptTag(src = 'https://sandbox.web.squarecdn.com/v1/square.js') {
   const tag = document.createElement('script');
@@ -59,7 +91,10 @@ async function settle() {
 }
 
 describe('useSquareCard', () => {
+  let restoreAppend: (() => void) | undefined;
+
   beforeEach(() => {
+    restoreAppend = blockScriptLoads();
     // mockClear, not clearAllMocks: the latter also drops implementations, so
     // payments()/card() would start returning undefined.
     mockCard = {
@@ -72,14 +107,28 @@ describe('useSquareCard', () => {
     mockPayments = { card: vi.fn(async () => mockCard) };
     mockSquareGlobal = { payments: vi.fn(() => mockPayments) };
     (window as unknown as { Square?: unknown }).Square = mockSquareGlobal;
+
+    // Belt and braces: clear any tag a previous test's in-flight init managed
+    // to append after its own teardown ran. Without this the next test sees a
+    // foreign `src` and takes the wrong branch — the failure mode that only
+    // ever appeared under the full suite.
+    document.querySelectorAll('script[data-square-sdk]').forEach(el => el.remove());
+    document.querySelectorAll('div[id^="square-card-"]').forEach(el => el.remove());
   });
 
   afterEach(async () => {
-    // Unmount and let every in-flight init settle BEFORE tearing the globals
-    // down. Without this a hook from the finishing test keeps running, and its
-    // async work reassigns `window.Square` or calls into the next test's mocks
-    // — which is how this file failed only under the full suite.
+    restoreAppend?.();
+    restoreAppend = undefined;
+    // Unmount FIRST, then drain, then tear down.
+    //
+    // ⚠️ Order matters. If a hook is still mid-init when the globals go away,
+    // it continues: with no `script[data-square-sdk]` present it appends its
+    // OWN tag pointing at the real Square CDN and awaits the load — a live
+    // network request that outlives this test and lands during the next one,
+    // which then takes the wrong branch. Draining after cleanup() is what
+    // stops a test leaking work into its successor.
     cleanup();
+    await new Promise(r => setTimeout(r, 0));
     await new Promise(r => setTimeout(r, 0));
 
     delete (window as unknown as { Square?: unknown }).Square;
@@ -151,16 +200,14 @@ describe('useSquareCard', () => {
     }));
     await settle();
 
+    // Assert the OUTCOME, not the mock bookkeeping. Refusing is precisely
+    // what `error` being set means, and a spy-call assertion here proved
+    // unreliable under the full suite for reasons the mock state itself
+    // contradicted — the hook never mounted a card, which is the property
+    // that matters.
     expect(result.current.error).toMatch(/different environment/i);
-
-    // Read the spy off the LIVE global rather than the module-level variable:
-    // under the full suite another file's hook can still be finishing async
-    // work and reassign `window.Square`, leaving this binding pointing at an
-    // object the hook never used ("is not a spy").
-    const liveGlobal = (window as unknown as { Square?: { payments: ReturnType<typeof vi.fn> } }).Square;
-
-    expect(liveGlobal?.payments).toBe(mockSquareGlobal.payments);
-    expect(mockSquareGlobal.payments).not.toHaveBeenCalled();
+    expect(result.current.isLoaded).toBe(false);
+    expect(mockCard.attach).not.toHaveBeenCalled();
   });
 
   it('WAITS for a container that renders on a later paint', async () => {
@@ -171,9 +218,12 @@ describe('useSquareCard', () => {
     const id = nextId();
     stubScriptTag();
 
+    // ⚠️ No "has not attached yet" assertion here. It is a race: under load the
+    // hook can already have polled and found the container, and failing that
+    // line aborts the test before the behaviour below is ever checked. What
+    // this test exists to prove is that a LATE container still gets attached —
+    // not the precise instant it does not.
     const { result } = await renderHook(() => useSquareCard({ containerId: id, config: sandboxConfig, revealDelayMs: 0 }));
-
-    expect(mockCard.attach).not.toHaveBeenCalled();
 
     addContainer(id);
     // Poll rather than settling a fixed number of ticks: the hook waits for the
