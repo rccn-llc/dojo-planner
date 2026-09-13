@@ -15,8 +15,9 @@ vi.mock('@/services/PaymentProviderConfigService', async () => {
   );
   return {
     MissingClientSecretError: actual.MissingClientSecretError,
-    getIQProConfigForAdmin: vi.fn(),
-    updateIQProConfig: vi.fn(),
+    ProviderSwitchBlockedError: actual.ProviderSwitchBlockedError,
+    getPaymentProviderConfigForAdmin: vi.fn(),
+    updatePaymentProviderConfig: vi.fn(),
   };
 });
 
@@ -35,20 +36,26 @@ describe('PaymentSettings Router', () => {
   describe('getConfig', () => {
     it('admits ACADEMY_OWNER (and higher) and never returns the secret value', async () => {
       const { guardRole } = await import('./AuthGuards');
-      const { getIQProConfigForAdmin } = await import('@/services/PaymentProviderConfigService');
+      const { getPaymentProviderConfigForAdmin } = await import('@/services/PaymentProviderConfigService');
       vi.mocked(guardRole).mockResolvedValue(adminContext);
-      vi.mocked(getIQProConfigForAdmin).mockResolvedValue({
-        clientId: 'cid',
-        gatewayId: 'gid',
-        hasSecret: true,
+      vi.mocked(getPaymentProviderConfigForAdmin).mockResolvedValue({
+        provider: 'iqpro',
         source: 'org',
+        iqpro: { clientId: 'cid', gatewayId: 'gid', hasSecret: true },
+        square: {
+          locationId: null,
+          applicationId: null,
+          environment: 'sandbox',
+          hasAccessToken: false,
+          hasWebhookKey: false,
+        },
       });
 
       const { getConfig } = await import('./PaymentSettings');
       const result = await callHandler(getConfig);
 
       expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ACADEMY_OWNER);
-      expect(result).toMatchObject({ clientId: 'cid', gatewayId: 'gid', hasSecret: true });
+      expect(result).toMatchObject({ provider: 'iqpro', iqpro: { clientId: 'cid', gatewayId: 'gid', hasSecret: true } });
       expect(JSON.stringify(result)).not.toContain('secret-value');
     });
   });
@@ -56,17 +63,18 @@ describe('PaymentSettings Router', () => {
   describe('updateConfig', () => {
     it('persists the config and emits a success audit with secret-redacted change diff', async () => {
       const { guardRole } = await import('./AuthGuards');
-      const { updateIQProConfig } = await import('@/services/PaymentProviderConfigService');
+      const { updatePaymentProviderConfig } = await import('@/services/PaymentProviderConfigService');
       const { audit } = await import('@/services/AuditService');
       vi.mocked(guardRole).mockResolvedValue(adminContext);
-      vi.mocked(updateIQProConfig).mockResolvedValue({
-        clientIdChanged: true,
-        clientSecretChanged: true,
-        gatewayIdChanged: false,
+      vi.mocked(updatePaymentProviderConfig).mockResolvedValue({
+        providerChanged: false,
+        credentialsChanged: true,
+        secretChanged: true,
       });
 
       const { updateConfig } = await import('./PaymentSettings');
       const result = await callHandler(updateConfig, {
+        provider: 'iqpro',
         clientId: 'new-cid',
         clientSecret: 'super-secret-value',
         gatewayId: 'gid',
@@ -85,21 +93,22 @@ describe('PaymentSettings Router', () => {
 
     it('treats blank clientSecret as "no change"', async () => {
       const { guardRole } = await import('./AuthGuards');
-      const { updateIQProConfig } = await import('@/services/PaymentProviderConfigService');
+      const { updatePaymentProviderConfig } = await import('@/services/PaymentProviderConfigService');
       vi.mocked(guardRole).mockResolvedValue(adminContext);
-      vi.mocked(updateIQProConfig).mockResolvedValue({
-        clientIdChanged: false,
-        clientSecretChanged: false,
-        gatewayIdChanged: false,
+      vi.mocked(updatePaymentProviderConfig).mockResolvedValue({
+        providerChanged: false,
+        credentialsChanged: false,
+        secretChanged: false,
       });
 
       const { updateConfig } = await import('./PaymentSettings');
       await callHandler(updateConfig, {
+        provider: 'iqpro',
         clientId: 'cid',
         gatewayId: 'gid',
       });
 
-      expect(updateIQProConfig).toHaveBeenCalledWith('org-1', expect.objectContaining({
+      expect(updatePaymentProviderConfig).toHaveBeenCalledWith('org-1', expect.objectContaining({
         clientId: 'cid',
         gatewayId: 'gid',
       }));
@@ -107,10 +116,10 @@ describe('PaymentSettings Router', () => {
 
     it('emits failure audit and rethrows on service error', async () => {
       const { guardRole } = await import('./AuthGuards');
-      const { updateIQProConfig } = await import('@/services/PaymentProviderConfigService');
+      const { updatePaymentProviderConfig } = await import('@/services/PaymentProviderConfigService');
       const { audit } = await import('@/services/AuditService');
       vi.mocked(guardRole).mockResolvedValue(adminContext);
-      vi.mocked(updateIQProConfig).mockRejectedValue(new Error('encryption key missing'));
+      vi.mocked(updatePaymentProviderConfig).mockRejectedValue(new Error('encryption key missing'));
 
       const { updateConfig } = await import('./PaymentSettings');
 
@@ -123,6 +132,57 @@ describe('PaymentSettings Router', () => {
         expect.objectContaining({ status: 'failure', error: 'encryption key missing' }),
       );
     });
+  });
+
+  it('audits a PROVIDER CHANGE distinctly from a credential rotation', async () => {
+    // A switch moves which merchant account receives this org's money — a
+    // materially different event from rotating keys within one provider.
+    const { guardRole } = await import('./AuthGuards');
+    const { updatePaymentProviderConfig } = await import('@/services/PaymentProviderConfigService');
+    const { audit } = await import('@/services/AuditService');
+    vi.mocked(guardRole).mockResolvedValue(adminContext);
+    vi.mocked(updatePaymentProviderConfig).mockResolvedValue({
+      providerChanged: true,
+      credentialsChanged: true,
+      secretChanged: true,
+    });
+
+    const { updateConfig } = await import('./PaymentSettings');
+    await callHandler(updateConfig, {
+      provider: 'square',
+      applicationId: 'sandbox-app',
+      locationId: 'L123',
+      environment: 'sandbox',
+      accessToken: 'super-secret-token',
+      webhookSignatureKey: 'super-secret-key',
+    });
+
+    const auditCall = vi.mocked(audit).mock.calls[0]!;
+
+    expect(auditCall[1]).toBe(AUDIT_ACTION.PAYMENT_PROVIDER_CHANGE);
+    // Neither secret may appear in audit metadata.
+    expect(JSON.stringify(auditCall[3])).not.toContain('super-secret-token');
+    expect(JSON.stringify(auditCall[3])).not.toContain('super-secret-key');
+  });
+
+  it('returns 400, not 500, when a switch is blocked by saved payment methods', async () => {
+    const { guardRole } = await import('./AuthGuards');
+    const { updatePaymentProviderConfig, ProviderSwitchBlockedError } = await import(
+      '@/services/PaymentProviderConfigService',
+    );
+    vi.mocked(guardRole).mockResolvedValue(adminContext);
+    vi.mocked(updatePaymentProviderConfig).mockRejectedValue(new ProviderSwitchBlockedError(3));
+
+    const { updateConfig } = await import('./PaymentSettings');
+
+    await expect(callHandler(updateConfig, {
+      provider: 'square',
+      applicationId: 'a',
+      locationId: 'l',
+      environment: 'sandbox',
+      accessToken: 't',
+      webhookSignatureKey: 'k',
+    })).rejects.toMatchObject({ status: 400 });
   });
 });
 
@@ -138,15 +198,15 @@ describe('updateConfig — first save without a client secret', () => {
     const { guardRole } = await import('./AuthGuards');
     vi.mocked(guardRole).mockResolvedValue(adminContext);
 
-    const { MissingClientSecretError, updateIQProConfig } = await import(
+    const { MissingClientSecretError, updatePaymentProviderConfig } = await import(
       '@/services/PaymentProviderConfigService',
     );
-    vi.mocked(updateIQProConfig).mockRejectedValue(new MissingClientSecretError());
+    vi.mocked(updatePaymentProviderConfig).mockRejectedValue(new MissingClientSecretError());
 
     const { updateConfig } = await import('./PaymentSettings');
 
     await expect(
-      callHandler(updateConfig, { clientId: 'cid', gatewayId: 'gid' }),
+      callHandler(updateConfig, { provider: 'iqpro', clientId: 'cid', gatewayId: 'gid' }),
     ).rejects.toMatchObject({ status: 400 });
   });
 });

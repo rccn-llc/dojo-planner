@@ -6,9 +6,15 @@ import { EditPaymentSettingsModal } from './EditPaymentSettingsModal';
 const defaultProps = {
   isOpen: true,
   onClose: vi.fn(),
-  clientId: 'client-abc-123',
-  gatewayId: 'gateway-xyz-789',
-  hasSecret: true,
+  provider: 'iqpro' as const,
+  iqpro: { clientId: 'client-abc-123', gatewayId: 'gateway-xyz-789', hasSecret: true },
+  square: {
+    locationId: 'L123',
+    applicationId: 'sandbox-app',
+    environment: 'sandbox' as const,
+    hasAccessToken: true,
+    hasWebhookKey: true,
+  },
   onSave: vi.fn(),
 };
 
@@ -60,6 +66,7 @@ describe('EditPaymentSettingsModal', () => {
 
     await vi.waitFor(() => {
       expect(onSave).toHaveBeenCalledWith({
+        provider: 'iqpro',
         clientId: 'client-abc-123',
         gatewayId: 'gateway-xyz-789',
       });
@@ -77,6 +84,7 @@ describe('EditPaymentSettingsModal', () => {
 
     await vi.waitFor(() => {
       expect(onSave).toHaveBeenCalledWith({
+        provider: 'iqpro',
         clientId: 'client-abc-123',
         gatewayId: 'gateway-xyz-789',
         clientSecret: 'new-secret-value',
@@ -85,7 +93,7 @@ describe('EditPaymentSettingsModal', () => {
   });
 
   it('should require a secret when none has ever been saved', async () => {
-    await render(<EditPaymentSettingsModal {...defaultProps} hasSecret={false} />);
+    await render(<EditPaymentSettingsModal {...defaultProps} iqpro={{ ...defaultProps.iqpro, hasSecret: false }} />);
 
     // No saved secret and none entered → form invalid, save disabled.
     expect(page.getByRole('button', { name: /^save$/i }).element()).toBeDisabled();
@@ -101,9 +109,7 @@ describe('EditPaymentSettingsModal', () => {
       <EditPaymentSettingsModal
         {...defaultProps}
         isOpen={false}
-        clientId=""
-        gatewayId=""
-        hasSecret={false}
+        iqpro={{ clientId: '', gatewayId: '', hasSecret: false }}
       />,
     );
 
@@ -111,9 +117,7 @@ describe('EditPaymentSettingsModal', () => {
       <EditPaymentSettingsModal
         {...defaultProps}
         isOpen
-        clientId="client-abc-123"
-        gatewayId="gateway-xyz-789"
-        hasSecret
+        iqpro={{ clientId: 'client-abc-123', gatewayId: 'gateway-xyz-789', hasSecret: true }}
       />,
     );
 
@@ -124,5 +128,47 @@ describe('EditPaymentSettingsModal', () => {
       expect(clientIdInput.element()).toHaveProperty('value', 'client-abc-123');
       expect(gatewayIdInput.element()).toHaveProperty('value', 'gateway-xyz-789');
     });
+  });
+
+  it('switches the credential fields when Square is selected', async () => {
+    await render(<EditPaymentSettingsModal {...defaultProps} provider="square" />);
+
+    // Square's fields, not IQPro's — the two providers share no credentials,
+    // so showing the wrong set would collect values that cannot be saved.
+    await expect.element(page.getByPlaceholder('Square location identifier')).toBeInTheDocument();
+    expect(page.getByPlaceholder('e.g. abc123-...').elements()).toHaveLength(0);
+  });
+
+  it('sends a SQUARE payload, omitting the token when one is already stored', async () => {
+    const onSave = vi.fn();
+    await render(<EditPaymentSettingsModal {...defaultProps} provider="square" onSave={onSave} />);
+
+    await userEvent.click(page.getByRole('button', { name: 'Save' }));
+
+    await vi.waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith({
+        provider: 'square',
+        applicationId: 'sandbox-app',
+        locationId: 'L123',
+        environment: 'sandbox',
+      });
+    });
+  });
+
+  it('requires an access token on a FIRST Square save', async () => {
+    // Nothing stored yet, so "leave blank to keep the existing" has nothing to
+    // keep — saving would write a config that cannot authenticate.
+    const onSave = vi.fn();
+    await render(
+      <EditPaymentSettingsModal
+        {...defaultProps}
+        provider="square"
+        square={{ ...defaultProps.square, hasAccessToken: false }}
+        onSave={onSave}
+      />,
+    );
+
+    await expect.element(page.getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(onSave).not.toHaveBeenCalled();
   });
 });

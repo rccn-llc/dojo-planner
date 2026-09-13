@@ -20,6 +20,8 @@ vi.mock('@/libs/Logger', () => ({
 
 vi.mock('drizzle-orm', () => ({
   eq: vi.fn((_col, val) => ({ _type: 'eq', value: val })),
+  and: vi.fn((...parts) => ({ _type: 'and', parts })),
+  isNotNull: vi.fn(col => ({ _type: 'isNotNull', col })),
 }));
 
 const orgFindFirst = vi.fn();
@@ -28,6 +30,22 @@ const insertOnConflict = vi.fn().mockResolvedValue(undefined);
 const insertValues = vi.fn().mockReturnValue({ onConflictDoUpdate: insertOnConflict });
 const insertFn = vi.fn().mockReturnValue({ values: insertValues });
 
+/**
+ * The saved-payment-method guard runs
+ * `select().from().innerJoin().where().limit()`. `savedMethodRows` is what that
+ * chain resolves to — empty means "no saved cards", so a provider switch is
+ * allowed.
+ */
+let savedMethodRows: Array<{ id: string }> = [];
+const selectLimit = vi.fn(() => Promise.resolve(savedMethodRows));
+const selectFn = vi.fn((..._args: unknown[]) => ({
+  from: () => ({
+    innerJoin: () => ({
+      where: () => ({ limit: selectLimit }),
+    }),
+  }),
+}));
+
 vi.mock('@/libs/DB', () => ({
   db: {
     query: {
@@ -35,6 +53,7 @@ vi.mock('@/libs/DB', () => ({
       platformConfigSchema: { findFirst: (...args: unknown[]) => platformFindFirst(...args) },
     },
     insert: (...args: unknown[]) => insertFn(...args),
+    select: (...args: unknown[]) => selectFn(...args),
   },
 }));
 
@@ -156,14 +175,14 @@ describe('PaymentProviderConfigService', () => {
       expect(orgFindFirst).toHaveBeenCalledTimes(1);
     });
 
-    it('invalidates the cache after updateIQProConfig', async () => {
+    it('invalidates the cache after updatePaymentProviderConfig', async () => {
       orgFindFirst.mockResolvedValue({});
-      const { resolveIQProConfig, updateIQProConfig } = await import('./PaymentProviderConfigService');
+      const { resolveIQProConfig, updatePaymentProviderConfig } = await import('./PaymentProviderConfigService');
       await resolveIQProConfig('org_x');
-      await updateIQProConfig('org_x', { clientId: 'new', clientSecret: 'new', gatewayId: 'new' });
+      await updatePaymentProviderConfig('org_x', { provider: 'iqpro', clientId: 'new', clientSecret: 'new', gatewayId: 'new' });
       await resolveIQProConfig('org_x');
 
-      // 1 read for initial resolve, 1 read inside updateIQProConfig for diff, 1 for re-resolve
+      // 1 read for initial resolve, 1 read inside updatePaymentProviderConfig for diff, 1 for re-resolve
       expect(orgFindFirst).toHaveBeenCalledTimes(3);
     });
   });
@@ -186,11 +205,107 @@ describe('PaymentProviderConfigService', () => {
     });
   });
 
-  describe('updateIQProConfig', () => {
+  describe('updatePaymentProviderConfig', () => {
+    it('writes provider and blob from the SAME discriminant for Square', async () => {
+      // ⚠️ The regression test for a live wrong-merchant bug: the old writer
+      // hardcoded `iqpro` in both the column and the blob, so saving from the
+      // settings form silently flipped a Square org back to IQPro and its next
+      // member payment charged the wrong merchant account.
+      savedMethodRows = [];
+      orgFindFirst.mockResolvedValueOnce({ paymentProvider: 'square' });
+      const { updatePaymentProviderConfig } = await import('./PaymentProviderConfigService');
+      await updatePaymentProviderConfig('org_x', {
+        provider: 'square',
+        applicationId: 'sandbox-app',
+        locationId: 'L123',
+        environment: 'sandbox',
+        accessToken: 'sq-token',
+        webhookSignatureKey: 'sq-webhook',
+      });
+
+      const payload = insertValues.mock.calls[0]?.[0] as Record<string, unknown>;
+
+      expect(payload.paymentProvider).toBe('square');
+
+      // `resolvePaymentProviderConfig` treats the column as authoritative and a
+      // mismatched blob as absent, so a divergence silently falls back to env
+      // credentials rather than failing.
+      const { decryptSecret } = await import('@/libs/Crypto');
+      const blob = JSON.parse(decryptSecret(payload.paymentProviderConfigEncrypted as string));
+
+      expect(blob.provider).toBe('square');
+      expect(payload.paymentProviderConfigEncrypted).not.toContain('sq-token');
+    });
+
+    it('REFUSES a provider switch while saved payment methods exist', async () => {
+      // Provider ids do not transfer: every saved card and autopay
+      // subscription would be orphaned at the old processor.
+      savedMethodRows = [{ id: 'pm_1' }, { id: 'pm_2' }];
+      orgFindFirst.mockResolvedValueOnce({ paymentProvider: 'iqpro' });
+      const { updatePaymentProviderConfig, ProviderSwitchBlockedError } = await import(
+        './PaymentProviderConfigService',
+      );
+
+      await expect(updatePaymentProviderConfig('org_x', {
+        provider: 'square',
+        applicationId: 'a',
+        locationId: 'l',
+        environment: 'sandbox',
+        accessToken: 't',
+        webhookSignatureKey: 'k',
+      })).rejects.toBeInstanceOf(ProviderSwitchBlockedError);
+
+      // Nothing written — a blocked switch leaves the org exactly as it was.
+      expect(insertValues).not.toHaveBeenCalled();
+
+      savedMethodRows = [];
+    });
+
+    it('allows a credential rotation WITHIN a provider even with saved cards', async () => {
+      // Only a switch strands saved methods; rotating keys does not.
+      savedMethodRows = [{ id: 'pm_1' }];
+      orgFindFirst.mockResolvedValueOnce({ paymentProvider: 'iqpro' });
+      const { updatePaymentProviderConfig } = await import('./PaymentProviderConfigService');
+      await updatePaymentProviderConfig('org_x', {
+        provider: 'iqpro',
+        clientId: 'c',
+        clientSecret: 's',
+        gatewayId: 'g',
+      });
+
+      expect(insertValues).toHaveBeenCalled();
+
+      savedMethodRows = [];
+    });
+
+    it('does not reuse an IQPro secret as a Square access token', async () => {
+      // The stored blob belongs to the other provider, so there is nothing to
+      // merge — a first Square save must supply its own token.
+      savedMethodRows = [];
+      const { encryptSecret } = await import('@/libs/Crypto');
+      orgFindFirst.mockResolvedValueOnce({
+        paymentProvider: 'square',
+        paymentProviderConfigEncrypted: encryptSecret(JSON.stringify({
+          provider: 'iqpro',
+          credentials: { clientId: 'c', clientSecret: 'iqpro-secret', gatewayId: 'g' },
+        })),
+      });
+      const { updatePaymentProviderConfig, MissingClientSecretError } = await import(
+        './PaymentProviderConfigService',
+      );
+
+      await expect(updatePaymentProviderConfig('org_x', {
+        provider: 'square',
+        applicationId: 'a',
+        locationId: 'l',
+        environment: 'sandbox',
+      })).rejects.toBeInstanceOf(MissingClientSecretError);
+    });
+
     it('encrypts the credentials before persisting', async () => {
       orgFindFirst.mockResolvedValueOnce({});
-      const { updateIQProConfig } = await import('./PaymentProviderConfigService');
-      await updateIQProConfig('org_x', { clientId: 'c', clientSecret: 'shhh', gatewayId: 'g' });
+      const { updatePaymentProviderConfig } = await import('./PaymentProviderConfigService');
+      await updatePaymentProviderConfig('org_x', { provider: 'iqpro', clientId: 'c', clientSecret: 'shhh', gatewayId: 'g' });
 
       const payload = insertValues.mock.calls[0]?.[0] as Record<string, unknown>;
       const blob = payload.paymentProviderConfigEncrypted as string;
@@ -212,34 +327,34 @@ describe('PaymentProviderConfigService', () => {
           credentials: { clientId: 'old', clientSecret: 'keep-me', gatewayId: 'old-gw' },
         })),
       });
-      const { updateIQProConfig } = await import('./PaymentProviderConfigService');
-      const diff = await updateIQProConfig('org_x', { clientId: 'new', gatewayId: 'g' });
+      const { updatePaymentProviderConfig } = await import('./PaymentProviderConfigService');
+      const diff = await updatePaymentProviderConfig('org_x', { provider: 'iqpro', clientId: 'new', gatewayId: 'g' });
 
       const payload = insertValues.mock.calls[0]?.[0] as Record<string, unknown>;
       const stored = JSON.parse(decryptSecret(payload.paymentProviderConfigEncrypted as string));
 
       expect(stored.credentials.clientSecret).toBe('keep-me');
       expect(stored.credentials.clientId).toBe('new');
-      expect(diff.clientSecretChanged).toBe(false);
+      expect(diff.secretChanged).toBe(false);
     });
 
     it('refuses the first save when no secret is supplied', async () => {
       // No stored blob to merge with, so there is nothing to preserve — better
       // a clear error than writing credentials that cannot authenticate.
       orgFindFirst.mockResolvedValueOnce({});
-      const { updateIQProConfig } = await import('./PaymentProviderConfigService');
+      const { updatePaymentProviderConfig } = await import('./PaymentProviderConfigService');
 
-      await expect(updateIQProConfig('org_x', { clientId: 'c', gatewayId: 'g' }))
+      await expect(updatePaymentProviderConfig('org_x', { provider: 'iqpro', clientId: 'c', gatewayId: 'g' }))
         .rejects
         .toThrow(/client secret is required/i);
     });
 
     it('reports clientSecretChanged=true when a new secret is provided', async () => {
       orgFindFirst.mockResolvedValueOnce({});
-      const { updateIQProConfig } = await import('./PaymentProviderConfigService');
-      const diff = await updateIQProConfig('org_x', { clientId: 'c', clientSecret: 'new', gatewayId: 'g' });
+      const { updatePaymentProviderConfig } = await import('./PaymentProviderConfigService');
+      const diff = await updatePaymentProviderConfig('org_x', { provider: 'iqpro', clientId: 'c', clientSecret: 'new', gatewayId: 'g' });
 
-      expect(diff.clientSecretChanged).toBe(true);
+      expect(diff.secretChanged).toBe(true);
     });
   });
 

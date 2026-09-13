@@ -37,10 +37,16 @@ vi.mock('next-intl', () => ({
 const refetchMock = vi.fn();
 const updateLocationMock = vi.fn().mockResolvedValue({ location: {} });
 const getPaymentConfigMock = vi.fn().mockResolvedValue({
-  clientId: 'env-client-id',
-  gatewayId: 'env-gateway-id',
-  hasSecret: true,
+  provider: 'iqpro',
   source: 'env',
+  iqpro: { clientId: 'env-client-id', gatewayId: 'env-gateway-id', hasSecret: true },
+  square: {
+    locationId: null,
+    applicationId: null,
+    environment: 'sandbox',
+    hasAccessToken: false,
+    hasWebhookKey: false,
+  },
 });
 const updatePaymentConfigMock = vi.fn().mockResolvedValue({ success: true });
 
@@ -282,7 +288,12 @@ describe('LocationSettingsPage payment config de-duplication', () => {
 
     expect(getPaymentConfigMock).toHaveBeenCalledTimes(1);
 
-    release?.({ clientId: 'c', gatewayId: 'g', hasSecret: true, source: 'org' });
+    release?.({
+      provider: 'iqpro',
+      source: 'org',
+      iqpro: { clientId: 'c', gatewayId: 'g', hasSecret: true },
+      square: { locationId: null, applicationId: null, environment: 'sandbox', hasAccessToken: false, hasWebhookKey: false },
+    });
 
     await first.unmount();
     await second.unmount();
@@ -293,10 +304,10 @@ describe('LocationSettingsPage payment config de-duplication', () => {
   // keeps the post-save reload correct.
   it('does not cache across mounts once a request has settled', async () => {
     getPaymentConfigMock.mockResolvedValue({
-      clientId: 'c',
-      gatewayId: 'g',
-      hasSecret: true,
+      provider: 'iqpro',
       source: 'org',
+      iqpro: { clientId: 'c', gatewayId: 'g', hasSecret: true },
+      square: { locationId: null, applicationId: null, environment: 'sandbox', hasAccessToken: false, hasWebhookKey: false },
     });
 
     const first = await render(<LocationSettingsPage userRole="org:admin" />);

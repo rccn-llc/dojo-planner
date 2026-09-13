@@ -36,14 +36,16 @@
  * Secrets are encrypted at rest with AES-256-GCM (see `Crypto.ts`).
  */
 
-import { eq } from 'drizzle-orm';
+import type { PaymentProvider } from '@/types/PaymentProvider';
+import type { UpdatePaymentProviderConfigInput } from '@/validations/PaymentSettingsValidation';
+import { and, eq, isNotNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { controlOrganizationDb } from '@/libs/ControlPlaneReads';
 import { decryptSecret, encryptSecret } from '@/libs/Crypto';
 import { db } from '@/libs/DB';
 import { Env } from '@/libs/Env';
 import { logger } from '@/libs/Logger';
-import { organizationSchema, platformConfigSchema } from '@/models/Schema';
+import { memberSchema, organizationSchema, paymentMethodSchema, platformConfigSchema } from '@/models/Schema';
 import { PAYMENT_PROVIDER } from '@/types/PaymentProvider';
 
 const PLATFORM_CONFIG_ID = 'singleton';
@@ -107,6 +109,27 @@ export type IQProConfigPublic = {
   gatewayId: string | null;
   hasSecret: boolean;
   source: ConfigSource;
+};
+
+/**
+ * What the settings UI may see.
+ *
+ * ⚠️ Secrets are reported as BOOLEANS only. `clientSecret`, `accessToken` and
+ * `webhookSignatureKey` must never cross to the browser; the form treats a
+ * blank input as "keep the stored one" precisely because it cannot round-trip
+ * the value.
+ */
+export type PaymentProviderConfigPublic = {
+  provider: PaymentProvider;
+  source: ConfigSource;
+  iqpro: { clientId: string | null; gatewayId: string | null; hasSecret: boolean };
+  square: {
+    locationId: string | null;
+    applicationId: string | null;
+    environment: 'sandbox' | 'production';
+    hasAccessToken: boolean;
+    hasWebhookKey: boolean;
+  };
 };
 
 /**
@@ -419,57 +442,195 @@ export async function getIQProConfigForAdmin(orgId: string): Promise<IQProConfig
   };
 }
 
+/**
+ * The settings projection for both providers.
+ *
+ * Returns BOTH credential sets regardless of the active provider, so the form
+ * can pre-fill the other one when an admin switches without losing what was
+ * previously entered. Env fallbacks are reported the same way the IQPro-only
+ * projection has always done.
+ */
+export async function getPaymentProviderConfigForAdmin(orgId: string): Promise<PaymentProviderConfigPublic> {
+  const row = await db.query.organizationSchema.findFirst({
+    where: eq(organizationSchema.id, orgId),
+    columns: { paymentProvider: true, paymentProviderConfigEncrypted: true },
+  });
+
+  const provider = row?.paymentProvider ?? PAYMENT_PROVIDER.IQPRO;
+  const blob = readConfigBlob(row?.paymentProviderConfigEncrypted);
+  const iqproStored = blob?.provider === PAYMENT_PROVIDER.IQPRO ? blob.credentials : null;
+  const squareStored = blob?.provider === PAYMENT_PROVIDER.SQUARE ? blob.credentials : null;
+
+  return {
+    provider,
+    source: blob ? 'org' : 'env',
+    iqpro: {
+      clientId: iqproStored?.clientId ?? Env.IQPRO_CLIENT_ID ?? null,
+      gatewayId: iqproStored?.gatewayId ?? Env.IQPRO_GATEWAY_ID ?? null,
+      hasSecret: Boolean(iqproStored?.clientSecret) || Boolean(Env.IQPRO_CLIENT_SECRET),
+    },
+    square: {
+      locationId: squareStored?.locationId ?? Env.SQUARE_LOCATION_ID ?? null,
+      applicationId: squareStored?.applicationId ?? Env.SQUARE_APPLICATION_ID ?? null,
+      environment: squareStored?.environment ?? Env.SQUARE_ENVIRONMENT ?? 'sandbox',
+      hasAccessToken: Boolean(squareStored?.accessToken) || Boolean(Env.SQUARE_ACCESS_TOKEN),
+      hasWebhookKey: Boolean(squareStored?.webhookSignatureKey) || Boolean(Env.SQUARE_WEBHOOK_SIGNATURE_KEY),
+    },
+  };
+}
+
 export type IQProConfigUpdateDiff = {
   clientIdChanged: boolean;
   clientSecretChanged: boolean;
   gatewayIdChanged: boolean;
 };
 
-export async function updateIQProConfig(
+/** What changed on a save. Booleans only — never the values themselves. */
+export type PaymentProviderUpdateDiff = {
+  providerChanged: boolean;
+  credentialsChanged: boolean;
+  secretChanged: boolean;
+};
+
+/**
+ * Thrown when switching provider would strand saved payment methods.
+ *
+ * Provider ids do not transfer: an IQPro customer/payment-method/subscription
+ * id means nothing to Square, and ACH methods cannot be charged there at all.
+ * Flipping an org with saved cards would leave every one of them unusable and
+ * every autopay subscription orphaned at the old processor.
+ */
+export class ProviderSwitchBlockedError extends Error {
+  constructor(count: number) {
+    super(
+      `This organization has ${count} saved payment method(s). Switching payment provider would leave them unusable, `
+      + `because provider ids do not transfer between processors. Remove them first.`,
+    );
+    this.name = 'ProviderSwitchBlockedError';
+  }
+}
+
+/**
+ * Write an org's merchant credentials, for either provider.
+ *
+ * ⚠️ The provider column and the credential blob are written from the SAME
+ * discriminant, in one statement. They must never disagree:
+ * `resolvePaymentProviderConfig` treats the column as authoritative and a
+ * mismatched blob as absent, so a divergence silently falls back to env
+ * credentials — i.e. charges the wrong merchant rather than failing.
+ *
+ * This replaced `updateIQProConfig`, which hardcoded `provider: 'iqpro'` in
+ * both places. Saving from the settings form therefore flipped a Square org
+ * back to IQPro, and its next member payment went to the wrong account.
+ */
+export async function updatePaymentProviderConfig(
   orgId: string,
-  input: UpdateIQProConfigInput,
-): Promise<IQProConfigUpdateDiff> {
+  input: UpdatePaymentProviderConfigInput,
+): Promise<PaymentProviderUpdateDiff> {
   const existingRow = await db.query.organizationSchema.findFirst({
     where: eq(organizationSchema.id, orgId),
-    columns: { paymentProviderConfigEncrypted: true },
+    columns: { paymentProvider: true, paymentProviderConfigEncrypted: true },
   });
+
+  const currentProvider = existingRow?.paymentProvider ?? PAYMENT_PROVIDER.IQPRO;
+  const providerChanged = currentProvider !== input.provider;
+
+  // Refuse a switch that would strand saved cards. Checked before any write so
+  // a blocked switch leaves the org exactly as it was.
+  if (providerChanged && existingRow) {
+    // `payment_method` carries no organization_id — it is org-scoped through
+    // its member, so join up rather than assuming a column that is not there.
+    const saved = await db
+      .select({ id: paymentMethodSchema.id })
+      .from(paymentMethodSchema)
+      .innerJoin(memberSchema, eq(paymentMethodSchema.memberId, memberSchema.id))
+      .where(and(
+        eq(memberSchema.organizationId, orgId),
+        isNotNull(paymentMethodSchema.providerPaymentMethodId),
+      ))
+      .limit(51);
+    if (saved.length > 0) {
+      throw new ProviderSwitchBlockedError(saved.length);
+    }
+  }
+
   const existingBlob = readConfigBlob(existingRow?.paymentProviderConfigEncrypted);
-  const existing = existingBlob?.provider === PAYMENT_PROVIDER.IQPRO ? existingBlob.credentials : null;
+  // Only reuse a stored secret when the blob belongs to the SAME provider —
+  // an IQPro client secret is not a Square access token.
+  const existingSame = existingBlob?.provider === input.provider ? existingBlob.credentials : null;
 
-  const secretProvided = input.clientSecret != null && input.clientSecret !== '';
-  const diff: IQProConfigUpdateDiff = {
-    clientIdChanged: existing?.clientId !== input.clientId,
-    clientSecretChanged: secretProvided,
-    gatewayIdChanged: existing?.gatewayId !== input.gatewayId,
-  };
+  let stored: StoredProviderConfig;
+  let secretChanged: boolean;
+  let credentialsChanged: boolean;
 
-  // The blob is a single value, so an update is a MERGE, not an overwrite:
-  // the settings form lets an admin change the client/gateway id without
-  // re-typing the secret (it is never sent back to the browser), and writing
-  // the blob wholesale would silently blank it.
-  const clientSecret = secretProvided ? input.clientSecret! : existing?.clientSecret;
-  if (!clientSecret) {
-    throw new MissingClientSecretError();
+  if (input.provider === PAYMENT_PROVIDER.IQPRO) {
+    const previous = existingSame as { clientId: string; clientSecret: string; gatewayId: string } | null;
+    const provided = input.clientSecret != null && input.clientSecret !== '';
+    // A blank secret means "keep the stored one" — it is never sent to the
+    // browser, so the form cannot round-trip it.
+    const clientSecret = provided ? input.clientSecret! : previous?.clientSecret;
+    if (!clientSecret) {
+      throw new MissingClientSecretError();
+    }
+    secretChanged = provided;
+    credentialsChanged = previous?.clientId !== input.clientId || previous?.gatewayId !== input.gatewayId;
+    stored = {
+      provider: PAYMENT_PROVIDER.IQPRO,
+      credentials: { clientId: input.clientId, clientSecret, gatewayId: input.gatewayId },
+    };
+  } else {
+    const previous = existingSame as {
+      accessToken: string;
+      locationId: string;
+      applicationId: string;
+      environment: 'sandbox' | 'production';
+      webhookSignatureKey: string;
+    } | null;
+    const provided = input.accessToken != null && input.accessToken !== '';
+    const accessToken = provided ? input.accessToken! : previous?.accessToken;
+    if (!accessToken) {
+      throw new MissingClientSecretError();
+    }
+    // The webhook key is equally a secret and merges the same way, but it is
+    // required by the stored schema, so a first save must supply it.
+    const webhookSignatureKey = input.webhookSignatureKey != null && input.webhookSignatureKey !== ''
+      ? input.webhookSignatureKey
+      : previous?.webhookSignatureKey;
+    if (!webhookSignatureKey) {
+      throw new MissingClientSecretError();
+    }
+    secretChanged = provided;
+    credentialsChanged = previous?.locationId !== input.locationId
+      || previous?.applicationId !== input.applicationId
+      || previous?.environment !== input.environment;
+    stored = {
+      provider: PAYMENT_PROVIDER.SQUARE,
+      credentials: {
+        accessToken,
+        locationId: input.locationId,
+        applicationId: input.applicationId,
+        environment: input.environment,
+        webhookSignatureKey,
+      },
+    };
   }
 
   const set: Partial<typeof organizationSchema.$inferInsert> = {
-    paymentProvider: PAYMENT_PROVIDER.IQPRO,
-    paymentProviderConfigEncrypted: writeConfigBlob({
-      provider: PAYMENT_PROVIDER.IQPRO,
-      credentials: { clientId: input.clientId, clientSecret, gatewayId: input.gatewayId },
-    }),
+    paymentProvider: input.provider,
+    paymentProviderConfigEncrypted: writeConfigBlob(stored),
   };
 
   await db
     .insert(organizationSchema)
     .values({ id: orgId, ...set })
-    .onConflictDoUpdate({
-      target: organizationSchema.id,
-      set,
-    });
+    .onConflictDoUpdate({ target: organizationSchema.id, set });
 
+  // MUST happen on every write. Without it the previous provider's credentials
+  // are served for up to the cache TTL, which on the payment path means
+  // charging the wrong merchant account.
   invalidatePaymentProviderConfig(orgId);
-  return diff;
+
+  return { providerChanged, credentialsChanged, secretChanged };
 }
 
 // ---------- platform (SaaS billing) ----------

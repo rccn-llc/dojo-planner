@@ -24,6 +24,8 @@
  */
 
 import type { SquareProviderConfig } from '@/services/PaymentProviderConfigService';
+import { Buffer } from 'node:buffer';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { logger } from '@/libs/Logger';
 
 /** Square's API version, pinned. Sent on every request. */
@@ -167,4 +169,48 @@ export async function squarePut<T = Record<string, unknown>>(
   body: unknown,
 ): Promise<T> {
   return squareRequest<T>(config, 'PUT', path, body);
+}
+
+/**
+ * Verify a Square webhook signature.
+ *
+ * Square signs `notificationUrl + rawBody` with HMAC-SHA256, base64-encoded,
+ * and sends it as `x-square-hmacsha256-signature`.
+ *
+ * ⚠️ `rawBody` must be the EXACT bytes received. Parsing the JSON and
+ * re-serializing changes whitespace, key order and unicode escaping, so the
+ * bytes no longer match what Square signed and every signature fails.
+ *
+ * ⚠️ The notification URL is an HMAC input, so it must match what is configured
+ * in the Square dashboard character for character — including scheme, host and
+ * any trailing path. A URL mismatch is indistinguishable from a forged
+ * signature, which is the likeliest cause of a "valid" webhook being rejected.
+ *
+ * Compared in constant time: a fast-exit compare leaks how much of the
+ * signature was correct, which is enough to forge one byte at a time.
+ */
+export function verifySquareWebhookSignature(params: {
+  signatureKey: string;
+  notificationUrl: string;
+  rawBody: string;
+  signatureHeader: string | null;
+}): boolean {
+  if (!params.signatureHeader || !params.signatureKey) {
+    return false;
+  }
+
+  const expected = createHmac('sha256', params.signatureKey)
+    .update(params.notificationUrl + params.rawBody)
+    .digest('base64');
+
+  const expectedBuf = Buffer.from(expected, 'utf8');
+  const actualBuf = Buffer.from(params.signatureHeader, 'utf8');
+
+  // timingSafeEqual throws on a length mismatch, which would itself be a
+  // (coarser) leak — so compare lengths first and still run the constant-time
+  // check on the equal-length path.
+  if (expectedBuf.length !== actualBuf.length) {
+    return false;
+  }
+  return timingSafeEqual(expectedBuf, actualBuf);
 }

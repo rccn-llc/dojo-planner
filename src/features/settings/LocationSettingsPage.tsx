@@ -1,6 +1,8 @@
 'use client';
 
 import type { ConfigSource } from '@/services/PaymentProviderConfigService';
+import type { PaymentProvider } from '@/types/PaymentProvider';
+import type { UpdatePaymentProviderConfigInput } from '@/validations/PaymentSettingsValidation';
 import { Edit } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useState } from 'react';
@@ -28,11 +30,18 @@ type LocationFormData = {
   taxRate: number;
 };
 
+/** Mirrors `PaymentProviderConfigPublic`: booleans for secrets, never values. */
 type PaymentConfigState = {
-  clientId: string | null;
-  gatewayId: string | null;
-  hasSecret: boolean;
+  provider: PaymentProvider;
   source: ConfigSource;
+  iqpro: { clientId: string | null; gatewayId: string | null; hasSecret: boolean };
+  square: {
+    locationId: string | null;
+    applicationId: string | null;
+    environment: 'sandbox' | 'production';
+    hasAccessToken: boolean;
+    hasWebhookKey: boolean;
+  };
 };
 
 export type LocationSettingsPageProps = {
@@ -96,11 +105,7 @@ export function LocationSettingsPage({ userRole }: LocationSettingsPageProps = {
     }
   };
 
-  const handleSavePaymentConfig = async (data: {
-    clientId: string;
-    clientSecret?: string;
-    gatewayId: string;
-  }) => {
+  const handleSavePaymentConfig = async (data: UpdatePaymentProviderConfigInput) => {
     setPaymentSaveError(null);
     try {
       await client.paymentSettings.updateConfig(data);
@@ -172,12 +177,19 @@ export function LocationSettingsPage({ userRole }: LocationSettingsPageProps = {
       {canViewPayment && (
         <Card className="relative p-6">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-foreground">IQPro Payment Gateway</h3>
-            {paymentConfig && (
-              <Badge variant={paymentConfig.source === 'env' ? 'secondary' : 'default'}>
-                {paymentConfig.source === 'env' ? 'Using env fallback' : `Source: ${paymentConfig.source}`}
-              </Badge>
-            )}
+            <h3 className="text-lg font-semibold text-foreground">Payment Gateway</h3>
+            <div className="flex items-center gap-2">
+              {paymentConfig && (
+                <Badge variant={paymentConfig.provider === 'square' ? 'default' : 'secondary'}>
+                  {paymentConfig.provider === 'square' ? 'Square' : 'IQPro'}
+                </Badge>
+              )}
+              {paymentConfig && (
+                <Badge variant={paymentConfig.source === 'env' ? 'secondary' : 'default'}>
+                  {paymentConfig.source === 'env' ? 'Using env fallback' : `Source: ${paymentConfig.source}`}
+                </Badge>
+              )}
+            </div>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
             Merchant credentials used to process member payments. Stored encrypted at rest.
@@ -186,30 +198,87 @@ export function LocationSettingsPage({ userRole }: LocationSettingsPageProps = {
             <p className="mt-2 text-sm text-destructive">{paymentError}</p>
           )}
           <div className="mt-4 space-y-4">
-            <div>
-              <span className="text-sm text-muted-foreground">Client ID</span>
-              {paymentLoading
-                ? <Skeleton className="mt-1 h-5 w-64" />
-                : <p className="mt-1 text-foreground">{paymentConfig?.clientId || '-'}</p>}
-            </div>
-            <div>
-              <span className="text-sm text-muted-foreground">Client Secret</span>
-              {paymentLoading
-                ? <Skeleton className="mt-1 h-5 w-40" />
-                : (
-                    <p className="mt-1">
-                      {paymentConfig?.hasSecret
-                        ? <Badge>Configured</Badge>
-                        : <span className="text-muted-foreground">Not set</span>}
-                    </p>
-                  )}
-            </div>
-            <div>
-              <span className="text-sm text-muted-foreground">Gateway ID</span>
-              {paymentLoading
-                ? <Skeleton className="mt-1 h-5 w-56" />
-                : <p className="mt-1 text-foreground">{paymentConfig?.gatewayId || '-'}</p>}
-            </div>
+            {paymentConfig?.provider === 'square'
+              ? (
+                  <>
+                    <div>
+                      <span className="text-sm text-muted-foreground">Application ID</span>
+                      {paymentLoading
+                        ? <Skeleton className="mt-1 h-5 w-64" />
+                        : <p className="mt-1 text-foreground">{paymentConfig?.square.applicationId || '-'}</p>}
+                    </div>
+                    <div>
+                      <span className="text-sm text-muted-foreground">Location ID</span>
+                      {paymentLoading
+                        ? <Skeleton className="mt-1 h-5 w-56" />
+                        : <p className="mt-1 text-foreground">{paymentConfig?.square.locationId || '-'}</p>}
+                    </div>
+                    <div>
+                      <span className="text-sm text-muted-foreground">Environment</span>
+                      {paymentLoading
+                        ? <Skeleton className="mt-1 h-5 w-32" />
+                        : (
+                            <p className="mt-1">
+                              <Badge variant={paymentConfig?.square.environment === 'production' ? 'default' : 'secondary'}>
+                                {paymentConfig?.square.environment ?? 'sandbox'}
+                              </Badge>
+                            </p>
+                          )}
+                    </div>
+                    <div>
+                      <span className="text-sm text-muted-foreground">Access Token</span>
+                      {paymentLoading
+                        ? <Skeleton className="mt-1 h-5 w-40" />
+                        : (
+                            <p className="mt-1">
+                              {paymentConfig?.square.hasAccessToken
+                                ? <Badge>Configured</Badge>
+                                : <span className="text-muted-foreground">Not set</span>}
+                            </p>
+                          )}
+                    </div>
+                    <div>
+                      <span className="text-sm text-muted-foreground">Webhook Signature Key</span>
+                      {paymentLoading
+                        ? <Skeleton className="mt-1 h-5 w-40" />
+                        : (
+                            <p className="mt-1">
+                              {paymentConfig?.square.hasWebhookKey
+                                ? <Badge>Configured</Badge>
+                                : <span className="text-muted-foreground">Not set</span>}
+                            </p>
+                          )}
+                    </div>
+                  </>
+                )
+              : (
+                  <>
+                    <div>
+                      <span className="text-sm text-muted-foreground">Client ID</span>
+                      {paymentLoading
+                        ? <Skeleton className="mt-1 h-5 w-64" />
+                        : <p className="mt-1 text-foreground">{paymentConfig?.iqpro.clientId || '-'}</p>}
+                    </div>
+                    <div>
+                      <span className="text-sm text-muted-foreground">Client Secret</span>
+                      {paymentLoading
+                        ? <Skeleton className="mt-1 h-5 w-40" />
+                        : (
+                            <p className="mt-1">
+                              {paymentConfig?.iqpro.hasSecret
+                                ? <Badge>Configured</Badge>
+                                : <span className="text-muted-foreground">Not set</span>}
+                            </p>
+                          )}
+                    </div>
+                    <div>
+                      <span className="text-sm text-muted-foreground">Gateway ID</span>
+                      {paymentLoading
+                        ? <Skeleton className="mt-1 h-5 w-56" />
+                        : <p className="mt-1 text-foreground">{paymentConfig?.iqpro.gatewayId || '-'}</p>}
+                    </div>
+                  </>
+                )}
           </div>
 
           {canEditPayment && (
@@ -218,8 +287,8 @@ export function LocationSettingsPage({ userRole }: LocationSettingsPageProps = {
                 variant="outline"
                 size="sm"
                 onClick={() => setIsPaymentModalOpen(true)}
-                aria-label="Edit IQPro credentials"
-                title="Edit IQPro credentials"
+                aria-label="Edit payment credentials"
+                title="Edit payment credentials"
                 disabled={paymentLoading}
               >
                 <Edit className="size-4" />
@@ -250,9 +319,19 @@ export function LocationSettingsPage({ userRole }: LocationSettingsPageProps = {
             setIsPaymentModalOpen(false);
             setPaymentSaveError(null);
           }}
-          clientId={paymentConfig?.clientId ?? ''}
-          gatewayId={paymentConfig?.gatewayId ?? ''}
-          hasSecret={paymentConfig?.hasSecret ?? false}
+          provider={paymentConfig?.provider ?? 'iqpro'}
+          iqpro={{
+            clientId: paymentConfig?.iqpro.clientId ?? '',
+            gatewayId: paymentConfig?.iqpro.gatewayId ?? '',
+            hasSecret: paymentConfig?.iqpro.hasSecret ?? false,
+          }}
+          square={{
+            locationId: paymentConfig?.square.locationId ?? '',
+            applicationId: paymentConfig?.square.applicationId ?? '',
+            environment: paymentConfig?.square.environment ?? 'sandbox',
+            hasAccessToken: paymentConfig?.square.hasAccessToken ?? false,
+            hasWebhookKey: paymentConfig?.square.hasWebhookKey ?? false,
+          }}
           onSave={handleSavePaymentConfig}
           errorMessage={paymentSaveError}
         />
