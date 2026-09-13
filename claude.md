@@ -159,7 +159,7 @@ docs/                      # Documentation
 | `/dashboard/subscription-expired` | `subscription-expired/page.tsx` | Subscription expired — re-subscribe prompt |
 | `/dashboard/preferences` | `preferences/page.tsx` | User preferences |
 | `/dashboard/security` | `security/page.tsx` | Security settings |
-| `/dashboard/location-settings` | `location-settings/page.tsx` | Per-org location settings (name, address, phone, email, tax rate) — backed by `organization.location*` columns. **Also hosts the per-org IQPro merchant-credentials card** (clientId / clientSecret / gatewayId → the encrypted `organization.payment_provider_config_enc` blob). There is NO `/dashboard/payment-settings` route and no `/dashboard/platform-settings` route; `PaymentSettingsForm` (`src/features/payment-settings/`) is rendered only here. Card is viewable by ADMIN + ACADEMY_OWNER, editable by ADMIN only (`PAYMENT_VIEW_ROLES` / `PAYMENT_EDIT_ROLES` in `LocationSettingsPage.tsx`); the `paymentSettings.updateConfig` endpoint enforces ADMIN server-side |
+| `/dashboard/location-settings` | `location-settings/page.tsx` | Per-org location settings (name, address, phone, email, tax rate) — backed by `organization.location*` columns. **Also hosts the per-org payment-gateway card**, which selects the org's payment provider (`organization.payment_provider`) and holds that provider's merchant credentials in the encrypted `organization.payment_provider_config_enc` blob: IQPro (clientId / clientSecret / gatewayId) or Square (applicationId / locationId / environment / accessToken / webhookSignatureKey). There is NO `/dashboard/payment-settings` route and no `/dashboard/platform-settings` route. ⚠️ The live form is `src/features/settings/EditPaymentSettingsModal.tsx` — `src/features/payment-settings/PaymentSettingsForm.tsx` is **dead code**, referenced only by its own test, so editing it changes nothing in the app. Card is viewable by ADMIN + ACADEMY_OWNER, editable by ADMIN only (`PAYMENT_VIEW_ROLES` / `PAYMENT_EDIT_ROLES` in `LocationSettingsPage.tsx`); the `paymentSettings.updateConfig` endpoint enforces ADMIN server-side. ⚠️ A provider switch is REFUSED while the org has saved payment methods — provider ids do not transfer, so the switch would orphan every saved card and autopay subscription at the old processor |
 
 ### Auth Routes
 
@@ -176,6 +176,7 @@ docs/                      # Documentation
 | `/rpc/[[...rest]]` | ALL | ORPC handler |
 | `/webhook/billing` | POST | Stripe webhooks |
 | `/webhook/iqpro` | POST | IQPro payment webhooks |
+| `/webhook/square` | POST | Square payment webhooks (B7) |
 | `/api/organization/[orgId]/subscription` | GET | Subscription details |
 
 ### Layout Hierarchy
@@ -662,7 +663,8 @@ Also undocumented: **the customer must have an email address** or Square rejects
 **Kiosk differences (both flows in `MembershipFlow.tsx` / `StoreFlow.tsx`):**
 - The kiosk **eagerly auto-tokenizes** when the card form reports valid, so submit is instant. Square **skips that and tokenizes on submit** — its nonce is single-use and short-lived, so minting one early risks expiry. The IQPro path is unchanged.
 - The kiosk collects `cardExpiry` as a plain input even in iframe mode; it is hidden for Square, whose widget owns expiry.
-- `StoreFlow`'s **saved-card path is IQPro-vault-only** (signed match tokens). The lookup is skipped for Square orgs rather than offering a card the charge could not use. Square saved cards are B5k.
+- `StoreFlow`'s **saved-card path now works on both providers.** For IQPro it searches the vault by phone; for Square it needs **no provider call at all** — `member.provider_customer_id` and `payment_method.provider_payment_method_id` are already stored locally and are provider-neutral, so a join finds the saved card. A saved Square card charges by its `ccof:` id in the same `source_id` field a fresh nonce uses.
+- **Match tokens are provider-neutral** (`kiosk/src/lib/matchToken.ts`). They used to live in `iqpro.ts` and take an `IQProConfig` purely to reach a dev-only fallback secret, which forced the whole saved-card flow to resolve IQPro config even for a Square org. The HMAC key is `KIOSK_MATCH_TOKEN_SECRET` (required in production). ⚠️ The token body is base64url, **not encrypted** — the signature only proves it was not tampered with, so nothing may go in it that the browser must not see. It carries an **`orgId` claim** that verification requires: without it a token minted at one dojo verifies cleanly at another and charges a customer that dojo has no relationship with.
 
 **Cadence mapping** — all four map natively, including semi-annual, which on IQPro has to be emulated with a yearly billing period and two `monthsOfYear` entries:
 
@@ -705,7 +707,7 @@ total_money             11213
 
 **Idempotency:** Square requires an `idempotency_key` on every mutating call and `ProcessPaymentParams` has no field for one, so it is generated per attempt. Deliberately not derived from the params: the orchestrator does not retry, and a key derived from amount+member would wrongly collapse two *deliberate* identical charges (a second event registration, say) into one.
 
-**Configuration:** all five `SQUARE_*` env vars must be present or `resolveSquareConfigFromEnv` returns `null` and the provider never resolves — including `SQUARE_WEBHOOK_SIGNATURE_KEY`, which is not used until B7. A placeholder value unblocks local work. `SQUARE_ENVIRONMENT` is a `z.enum` precisely so a typo cannot silently mean production.
+**Configuration:** all five `SQUARE_*` env vars must be present or `resolveSquareConfigFromEnv` returns `null` and the provider never resolves — including `SQUARE_WEBHOOK_SIGNATURE_KEY`, which the webhook handler reads (B7). A placeholder value unblocks local work. `SQUARE_ENVIRONMENT` is a `z.enum` precisely so a typo cannot silently mean production.
 
 **Testing:** `SquarePaymentService.test.ts` mocks the transport module (never `fetch`), mirroring `IQProPaymentService.test.ts`. `SquarePaymentService.sandbox.test.ts` makes **live** calls and skips itself unless `SQUARE_ACCESS_TOKEN` is set, so CI and other developers are unaffected.
 
@@ -721,6 +723,57 @@ SQUARE_SANDBOX_DB=1 \
 ```
 
 Both resume-timing and cancel-semantics bugs above were caught by these probes and by nothing else — the mocked unit tests asserted the payloads I had written, which is exactly the blind spot live calls exist to cover.
+
+#### Square webhooks (B7)
+
+`src/app/[locale]/webhook/square/route.ts`.
+
+⚠️ **Verification order is INVERTED compared with IQPro.** IQPro validates every
+webhook against one global `IQPRO_WEBHOOK_SECRET` *before* knowing the org.
+Square's `webhookSignatureKey` is **per-org**, inside the encrypted config blob,
+so the handler must resolve the org FIRST and only then verify:
+
+1. parse the payload for a provider id,
+2. `resolveOrgByExternalRef` → orgId,
+3. load that org's config,
+4. verify the signature.
+
+Nothing is written before step 4 passes. An invalid signature answers **401**,
+not 200 — a forgery and a misconfiguration both deserve to be visible.
+
+**Routing reuses `tenant_external_ref`**, not `tenant.square_merchant_id`. That
+column exists but has **no writer anywhere**, whereas `PROVIDER_SUBSCRIPTION` /
+`PROVIDER_TRANSACTION` refs are already recorded for Square on the shared
+payment path (`MemberPaymentService`), so routing works with no new schema and
+no backfill.
+
+**Signature:** HMAC-SHA256 over `notificationUrl + rawBody`, base64, header
+`x-square-hmacsha256-signature`, compared in constant time
+(`verifySquareWebhookSignature` in `libs/Square.ts`). ⚠️ The raw body must be
+used verbatim — re-serializing parsed JSON changes the bytes and every check
+fails. ⚠️ The notification URL is an HMAC input, so it must match the Square
+dashboard character for character; a URL mismatch is indistinguishable from a
+forgery and is the likeliest cause of a genuine webhook being rejected.
+
+**Event mapping.** Square has no direct "subscription charge succeeded" event —
+recurring billing surfaces as INVOICE events, and an invoice carries the
+`subscription_id` that generated it.
+
+| Square event | Effect |
+|---|---|
+| `invoice.payment_made` | membership → `active`; member `past_due` → `active` only |
+| `invoice.scheduled_charge_failed` | membership + member → `past_due` (never a cancelled or held member) |
+| `subscription.updated` with status `CANCELED`/`DEACTIVATED` | membership → `cancelled`; member → `cancelled` only when it was their last active membership |
+| `payment.updated` | `transaction.status` → `paid` (COMPLETED only) / `declined` |
+
+⚠️ `subscription.updated` fires on every status change, so only terminal
+statuses act — treating any update as a cancellation would cancel memberships
+that merely paused. ⚠️ `APPROVED` is authorised-but-not-captured and must never
+be recorded as paid.
+
+`member_membership` carries no `organization_id`, so its updates are scoped by
+the tenant DATABASE rather than a predicate; `member` and `transaction` do carry
+it and are scoped explicitly.
 
 ### Sentry (Error Monitoring)
 
@@ -1440,7 +1493,8 @@ AUDIT_ACTION.SAAS_SUBSCRIPTION_CANCEL;
 AUDIT_ACTION.ORGANIZATION_LOCATION_UPDATE;
 
 // IQPro merchant configuration
-AUDIT_ACTION.IQPRO_CONFIG_UPDATE; // per-org IQPro card (Location Settings page)
+AUDIT_ACTION.IQPRO_CONFIG_UPDATE; // per-org merchant credentials rotated (Location Settings page)
+AUDIT_ACTION.PAYMENT_PROVIDER_CHANGE; // org switched provider — changes WHICH merchant account receives its member payments
 AUDIT_ACTION.PLATFORM_IQPRO_CONFIG_UPDATE; // declared but NOT emitted — its only emitter was the removed platform-settings router
 
 // Instructor operations

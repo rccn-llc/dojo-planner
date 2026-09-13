@@ -139,6 +139,12 @@ export const AUDIT_ACTION = {
 
   // IQPro merchant configuration
   IQPRO_CONFIG_UPDATE: 'iqproConfig.update',
+  /**
+   * The org switched payment providers. Its own action because a switch
+   * changes which merchant account receives this org's member payments —
+   * materially different from rotating credentials within one provider.
+   */
+  PAYMENT_PROVIDER_CHANGE: 'paymentProvider.change',
   PLATFORM_IQPRO_CONFIG_UPDATE: 'platformIqproConfig.update',
 
   // Note operations

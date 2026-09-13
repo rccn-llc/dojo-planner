@@ -1,5 +1,6 @@
+import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { fromMinorUnits, squareBaseUrl, toMinorUnits } from './Square';
+import { fromMinorUnits, squareBaseUrl, toMinorUnits, verifySquareWebhookSignature } from './Square';
 
 describe('money conversion', () => {
   // This codebase is float dollars; Square is integer minor units. Every
@@ -58,5 +59,88 @@ describe('squareBaseUrl', () => {
     // `environment` is a z.enum rather than a free string precisely so a typo
     // cannot silently mean production — the failure that moves real money.
     expect(squareBaseUrl({ environment: 'production' } as never)).toBe('https://connect.squareup.com');
+  });
+});
+
+describe('verifySquareWebhookSignature', () => {
+  const signatureKey = 'test_webhook_key_not_real';
+  const notificationUrl = 'https://example.test/webhook/square';
+  const rawBody = '{"type":"invoice.payment_made","event_id":"ev_1"}';
+
+  /** What Square does: HMAC-SHA256 over url + body, base64. */
+  function sign(key: string, url: string, body: string): string {
+    return createHmac('sha256', key).update(url + body).digest('base64');
+  }
+
+  it('accepts a correctly signed body', () => {
+    expect(verifySquareWebhookSignature({
+      signatureKey,
+      notificationUrl,
+      rawBody,
+      signatureHeader: sign(signatureKey, notificationUrl, rawBody),
+    })).toBe(true);
+  });
+
+  it('REJECTS a tampered body', () => {
+    // The amount changed after signing — the whole point of the check.
+    const header = sign(signatureKey, notificationUrl, rawBody);
+
+    expect(verifySquareWebhookSignature({
+      signatureKey,
+      notificationUrl,
+      rawBody: rawBody.replace('ev_1', 'ev_tampered'),
+      signatureHeader: header,
+    })).toBe(false);
+  });
+
+  it('REJECTS a signature made with a different key', () => {
+    // i.e. another org's key, or a forgery.
+    expect(verifySquareWebhookSignature({
+      signatureKey,
+      notificationUrl,
+      rawBody,
+      signatureHeader: sign('someone-elses-key', notificationUrl, rawBody),
+    })).toBe(false);
+  });
+
+  it('REJECTS when the notification URL differs', () => {
+    // The URL is an HMAC input, so a mismatch between the configured endpoint
+    // and the one we reconstruct fails exactly like a forgery. This is the
+    // likeliest cause of a genuine webhook being rejected.
+    expect(verifySquareWebhookSignature({
+      signatureKey,
+      notificationUrl,
+      rawBody,
+      signatureHeader: sign(signatureKey, 'https://other.test/webhook/square', rawBody),
+    })).toBe(false);
+  });
+
+  it('rejects a missing header rather than throwing', () => {
+    expect(verifySquareWebhookSignature({
+      signatureKey,
+      notificationUrl,
+      rawBody,
+      signatureHeader: null,
+    })).toBe(false);
+  });
+
+  it('rejects an empty key rather than accepting everything', () => {
+    // An unconfigured org must fail closed, not verify against ''.
+    expect(verifySquareWebhookSignature({
+      signatureKey: '',
+      notificationUrl,
+      rawBody,
+      signatureHeader: sign('', notificationUrl, rawBody),
+    })).toBe(false);
+  });
+
+  it('rejects a wrong-length signature without throwing', () => {
+    // timingSafeEqual throws on length mismatch; the guard must catch that.
+    expect(verifySquareWebhookSignature({
+      signatureKey,
+      notificationUrl,
+      rawBody,
+      signatureHeader: 'short',
+    })).toBe(false);
   });
 });
