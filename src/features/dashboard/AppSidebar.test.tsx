@@ -18,6 +18,7 @@ vi.mock('next-intl', () => ({
   useTranslations: () => (key: string) => {
     const translations: Record<string, string> = {
       academy_section_label: 'Academy',
+      cookie_preferences: 'Cookie preferences',
       business_section_label: 'Business',
       settings_section_label: 'Settings',
       performance: 'Performance',
@@ -231,9 +232,11 @@ describe('AppSidebar - Component Rendering', () => {
   it('should NOT render Settings section (hidden)', async () => {
     await render(<AppSidebar />);
 
-    // Settings section should be hidden (only Preferences lived there now, also hidden)
-    expect(page.getByText('Settings').elements().length).toBe(0);
-    expect(page.getByText('Preferences').elements().length).toBe(0);
+    // Settings section should be hidden (only Preferences lived there now, also hidden).
+    // Matched exactly: the visible "Cookie preferences" item is a different entry
+    // and must not make this assertion fail.
+    expect(page.getByText('Settings', { exact: true }).elements().length).toBe(0);
+    expect(page.getByText('Preferences', { exact: true }).elements().length).toBe(0);
   });
 
   it('should render Location item under Academy as visible last item', async () => {

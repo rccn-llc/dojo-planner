@@ -1,12 +1,13 @@
 'use client';
 
 import { useClerk } from '@clerk/nextjs';
-import { BarChart3, BookMarked, Briefcase, Building, CircleUser, FileSignature, FileText, Home, LogOut, Mail, Map, Megaphone, Package, Settings, Shield, Users, Users2 } from 'lucide-react';
+import { BarChart3, BookMarked, Briefcase, Building, CircleUser, Cookie, FileSignature, FileText, Home, LogOut, Mail, Map, Megaphone, Package, Settings, Shield, Users, Users2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { Badge } from '@/components/ui/badge';
 import { Sidebar, SidebarContent, SidebarHeader, SidebarRail } from '@/components/ui/sidebar';
 import { AppSidebarNav } from '@/features/dashboard/AppSidebarNav';
 import { OrganizationSelector } from '@/features/dashboard/OrganizationSelector';
+import { CONSENT_OPEN_PREFS_EVENT } from '@/libs/consent/constants';
 import { Logo } from '@/templates/Logo';
 
 type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
@@ -148,6 +149,17 @@ export const AppSidebar = ({ userRole, ...props }: AppSidebarProps) => {
               url: '/privacy',
               icon: Shield,
               external: true,
+            },
+            {
+              // Consent must be withdrawable as easily as it was given, so the
+              // dialog is reachable from inside the app too, not just the
+              // public footer.
+              title: t('cookie_preferences'),
+              url: '#cookie-preferences',
+              icon: Cookie,
+              onClick: () => {
+                window.dispatchEvent(new Event(CONSENT_OPEN_PREFS_EVENT));
+              },
             },
           ]}
           className="mt-auto"

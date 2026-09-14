@@ -4,6 +4,7 @@ import { setRequestLocale } from 'next-intl/server';
 import { ThemeProvider } from 'next-themes';
 import { Inter } from 'next/font/google';
 import { notFound } from 'next/navigation';
+import { CookieConsentGate } from '@/features/consent/CookieConsentGate';
 import { routing } from '@/libs/I18nRouting';
 import '@/styles/global.css';
 
@@ -83,6 +84,7 @@ export default async function RootLayout(props: {
         >
           <NextIntlClientProvider>
             {props.children}
+            <CookieConsentGate />
           </NextIntlClientProvider>
         </ThemeProvider>
       </body>

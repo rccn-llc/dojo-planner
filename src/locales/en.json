@@ -64,7 +64,8 @@
     "preferences": "Preferences",
     "log_out": "Log Out",
     "terms_of_use": "Terms of Use",
-    "privacy_policy": "Privacy Policy"
+    "privacy_policy": "Privacy Policy",
+    "cookie_preferences": "Cookie preferences"
   },
   "CatalogPage": {
     "title": "Product Catalog",
@@ -2274,12 +2275,38 @@
     "rights_title": "6. Your Rights",
     "rights_body": "Depending on your location, you may have rights to access, correct, delete, or export your personal information, and to object to or restrict certain processing. Contact us to exercise these rights.",
     "cookies_title": "7. Cookies and Similar Technologies",
-    "cookies_body": "We use cookies and similar technologies to operate the Service, remember your preferences, analyze usage, and improve your experience. You can control cookies through your browser settings.",
+    "cookies_body": "We use cookies and similar technologies to operate the Service, remember your preferences, and — with your consent — to monitor errors and performance. Strictly necessary storage (signing in, payments, and remembering your cookie choice) cannot be disabled. You can review and change your choice at any time using the Cookie preferences link in the footer, and you can also control cookies through your browser settings.",
     "children_title": "8. Children's Privacy",
     "children_body": "The Service is not directed to children under the age required by applicable law for online services. If we learn that we have collected personal information from a child without appropriate consent, we will delete it.",
     "changes_title": "9. Changes to This Policy",
     "changes_body": "We may update this policy from time to time. We will notify you of material changes by posting the updated policy in the Service or by other reasonable means.",
     "contact_title": "10. Contact",
     "contact_body": "For questions about this policy or our privacy practices, contact support through the channels listed in the Service."
+  },
+  "CookieConsent": {
+    "banner_aria_label": "Cookie consent",
+    "banner_title": "We value your privacy",
+    "banner_body": "We use strictly necessary storage to run Dojo Planner. With your permission, we also use error and performance monitoring to help us find and fix problems. Read our <link>Privacy Policy</link>.",
+    "accept_all": "Accept all",
+    "reject_all": "Reject all",
+    "customise": "Customise",
+    "save_preferences": "Save preferences",
+    "preferences_link": "Cookie preferences",
+    "dialog_title": "Cookie preferences",
+    "dialog_description": "Choose which categories of storage you allow. Your choice is saved on this device so we don't have to ask again, and you can change it at any time.",
+    "necessary_label": "Strictly necessary",
+    "necessary_description": "Required to sign you in, keep you signed in, process payments, and remember this cookie choice. These cannot be turned off.",
+    "necessary_always_on": "Always on",
+    "functional_label": "Preferences",
+    "functional_description": "Remembers your language, theme, and sidebar layout so the app looks the way you left it.",
+    "analytics_label": "Error and performance monitoring",
+    "analytics_description": "Lets us record errors, performance traces, and session replays through Sentry so we can diagnose problems. Turning this off means we will not hear about errors you run into.",
+    "vendors_title": "Who receives this data",
+    "vendors_body": "Error and performance monitoring is processed by Sentry. Strictly necessary session data is processed by Clerk, and payment data by our payment processor."
+  },
+  "Footer": {
+    "copyright": "© Dojo Planner. All rights reserved.",
+    "privacy": "Privacy Policy",
+    "terms": "Terms of Use"
   }
 }
