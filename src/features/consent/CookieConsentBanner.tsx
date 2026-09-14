@@ -22,6 +22,34 @@ export function CookieConsentBanner({ onCustomiseAction }: Props) {
     containerRef.current?.focus();
   }, []);
 
+  // The banner is fixed to the bottom of the viewport, so without this it sits
+  // on top of whatever is at the end of the page — covering controls the user
+  // can see but cannot click. Reserve exactly its height as body padding while
+  // it is shown, and give it back on dismiss.
+  useEffect(() => {
+    const element = containerRef.current;
+
+    if (element === null) {
+      return;
+    }
+
+    const applyOffset = () => {
+      document.body.style.paddingBottom = `${String(element.offsetHeight)}px`;
+    };
+
+    applyOffset();
+
+    // The banner reflows between the stacked mobile layout and the single-row
+    // desktop one, so its height is not a constant.
+    const observer = new ResizeObserver(applyOffset);
+    observer.observe(element);
+
+    return () => {
+      observer.disconnect();
+      document.body.style.paddingBottom = '';
+    };
+  }, []);
+
   return (
     <aside
       ref={containerRef}

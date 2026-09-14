@@ -115,6 +115,36 @@ describe('CookieConsentGate', () => {
     expect(reject.className).toBe(accept.className);
   });
 
+  /*
+   * The banner is fixed to the bottom of the viewport, so without reserved
+   * space it covers whatever sits at the end of the page — controls the user
+   * can see but cannot click. This regressed the E2E suite before it was
+   * caught, and it would hit real users on short viewports.
+   */
+  it('reserves page space so it cannot cover content', async () => {
+    await render(<CookieConsentGate />);
+
+    await vi.waitFor(() => {
+      expect(document.body.style.paddingBottom).not.toBe('');
+    });
+
+    expect(Number.parseInt(document.body.style.paddingBottom, 10)).toBeGreaterThan(0);
+  });
+
+  it('releases the reserved space once a choice is made', async () => {
+    await render(<CookieConsentGate />);
+
+    await vi.waitFor(() => {
+      expect(document.body.style.paddingBottom).not.toBe('');
+    });
+
+    await userEvent.click(page.getByRole('button', { name: 'Reject all' }));
+
+    await vi.waitFor(() => {
+      expect(document.body.style.paddingBottom).toBe('');
+    });
+  });
+
   it('opens the preferences dialog from the banner', async () => {
     await render(<CookieConsentGate />);
 
