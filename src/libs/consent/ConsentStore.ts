@@ -14,6 +14,7 @@ import type { ConsentCategory, ConsentDecision, ConsentState } from './types';
 import {
   CONSENT_EVENT,
   CONSENT_MAX_AGE_MS,
+  CONSENT_MAX_CLOCK_SKEW_MS,
   CONSENT_STORAGE_KEY,
   CONSENT_VERSION,
 } from './constants';
@@ -71,9 +72,10 @@ function safeClear(): void {
 
 /**
  * Parse and validate a stored record. Returns null for anything we will not
- * honour: corrupt JSON, wrong shape, a superseded policy version, or an
- * expired decision. Category flags are compared with strict `=== true` so a
- * truthy-but-not-true value (`"yes"`, `1`) can never be read as a grant.
+ * honour: corrupt JSON, wrong shape, a superseded policy version, an expired
+ * decision, or one dated in the future. Category flags are compared with strict
+ * `=== true` so a truthy-but-not-true value (`"yes"`, `1`) can never be read as
+ * a grant.
  */
 function parse(raw: string | null): ConsentDecision | null {
   if (raw === null) {
@@ -92,7 +94,16 @@ function parse(raw: string | null): ConsentDecision | null {
     if (typeof parsed.timestamp !== 'number' || !Number.isFinite(parsed.timestamp)) {
       return null;
     }
-    if (Date.now() - parsed.timestamp > CONSENT_MAX_AGE_MS) {
+    const age = Date.now() - parsed.timestamp;
+    if (age > CONSENT_MAX_AGE_MS) {
+      return null;
+    }
+    // A future-dated record is rejected rather than trusted. Honouring one
+    // keeps it valid until `timestamp + CONSENT_MAX_AGE_MS`, so a device whose
+    // clock was years fast when the visitor chose would suppress the banner
+    // long past the six-month re-solicitation cadence even after the clock is
+    // corrected. Dropping it re-prompts, which is the safe direction.
+    if (age < -CONSENT_MAX_CLOCK_SKEW_MS) {
       return null;
     }
     if (typeof parsed.categories !== 'object' || parsed.categories === null) {

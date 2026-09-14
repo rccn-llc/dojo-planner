@@ -112,9 +112,9 @@ function invoicePaid(subscriptionId = 'sub_1') {
   });
 }
 
-async function post(body: string) {
+async function post(body: string, url = NOTIFICATION_URL) {
   const { POST } = await import('./route');
-  return POST(new Request(NOTIFICATION_URL, { method: 'POST', body }));
+  return POST(new Request(url, { method: 'POST', body }));
 }
 
 describe('square webhook', () => {
@@ -241,5 +241,74 @@ describe('square webhook', () => {
     const res = await post('not json');
 
     expect(res.status).toBe(400);
+  });
+});
+
+describe('notification URL derivation', () => {
+  // ⚠️ The notification URL is an HMAC input. This route is locale-prefixed
+  // (`/[locale]/webhook/square`) with `localePrefix: 'as-needed'`, so Square can
+  // legitimately be pointed at `/webhook/square` OR `/en|fr|ja/webhook/square`.
+  // Deriving it as origin + a hardcoded `/webhook/square` rejected every event
+  // from a locale-prefixed configuration: org and key resolved correctly, then
+  // the signature check failed.
+  beforeEach(() => {
+    vi.clearAllMocks();
+    membershipFindFirst.mockResolvedValue(undefined);
+    resolveOrgByExternalRef.mockResolvedValue('org_resolved');
+    getDbForOrg.mockResolvedValue(tenantDb);
+    resolvePaymentProviderConfig.mockResolvedValue({
+      provider: 'square',
+      webhookSignatureKey: SIGNATURE_KEY,
+    });
+    signatureHeader = null;
+  });
+
+  it.each([
+    ['https://example.test/en/webhook/square'],
+    ['https://example.test/fr/webhook/square'],
+    ['https://example.test/ja/webhook/square'],
+  ])('accepts an event signed against the locale-prefixed URL %s', async (url) => {
+    const body = invoicePaid();
+    signatureHeader = sign(body, SIGNATURE_KEY, url);
+
+    const res = await post(body, url);
+
+    expect(res.status).toBe(200);
+    expect(tenantUpdateWhere).toHaveBeenCalled();
+  });
+
+  it('still accepts the un-prefixed URL a pre-existing deployment signs against', async () => {
+    // Square configured with `/webhook/square`, but the request arrives at the
+    // locale-prefixed path. The un-prefixed candidate keeps that working.
+    const body = invoicePaid();
+    signatureHeader = sign(body, SIGNATURE_KEY, NOTIFICATION_URL);
+
+    const res = await post(body, 'https://example.test/en/webhook/square');
+
+    expect(res.status).toBe(200);
+    expect(tenantUpdateWhere).toHaveBeenCalled();
+  });
+
+  it('a wrong key is STILL refused on a locale-prefixed URL', async () => {
+    // Trying several URL candidates must not weaken verification: each is
+    // checked against the same per-org key.
+    const url = 'https://example.test/ja/webhook/square';
+    const body = invoicePaid();
+    signatureHeader = sign(body, 'someone-elses-key', url);
+
+    const res = await post(body, url);
+
+    expect(res.status).toBe(401);
+    expect(tenantUpdateWhere).not.toHaveBeenCalled();
+  });
+
+  it('refuses a signature computed over a DIFFERENT origin', async () => {
+    const body = invoicePaid();
+    signatureHeader = sign(body, SIGNATURE_KEY, 'https://attacker.test/webhook/square');
+
+    const res = await post(body, 'https://example.test/en/webhook/square');
+
+    expect(res.status).toBe(401);
+    expect(tenantUpdateWhere).not.toHaveBeenCalled();
   });
 });

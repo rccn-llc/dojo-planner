@@ -291,6 +291,82 @@ async function handleWebhookEvent(orgId: string, payload: SquareWebhookPayload):
   }
 }
 
+/** The locale-less form of this route's path. */
+const UNPREFIXED_PATH = '/webhook/square';
+
+/**
+ * The URLs this request could have been signed against, most-likely first.
+ *
+ * ⚠️ The notification URL is an HMAC INPUT, so it must match what Square was
+ * configured with character for character. Two things made a single derived URL
+ * wrong:
+ *
+ *  1. **The locale prefix.** This route lives at `/[locale]/webhook/square`
+ *     and `localePrefix` is `as-needed`, so `/webhook/square` (default locale)
+ *     AND `/en|fr|ja/webhook/square` all reach it. The old code always appended
+ *     a bare `/webhook/square` to `NEXT_PUBLIC_APP_URL`, so an org whose Square
+ *     dashboard pointed at `/en/webhook/square` failed EVERY signature — the
+ *     handler resolved the org and the key correctly, then rejected the event.
+ *
+ *  2. **The origin.** `request.url` behind Vercel can carry the internal host
+ *     rather than the public one Square was given, which is why
+ *     `NEXT_PUBLIC_APP_URL` was used at all.
+ *
+ * So the path comes from the REQUEST (preserving whatever locale prefix Square
+ * actually calls) while the origin prefers the configured public URL. The bare
+ * `/webhook/square` form is kept as a second candidate so deployments already
+ * signing successfully against it are not broken by this change.
+ *
+ * Trying more than one candidate does NOT weaken verification: each is checked
+ * against the same per-org key with the same constant-time comparison, and an
+ * attacker who cannot produce a valid HMAC for one URL cannot produce one for
+ * another.
+ */
+function notificationUrlCandidates(
+  request: Request,
+  headersList: Headers,
+): string[] {
+  const requestUrl = new URL(request.url);
+
+  // Strip query and hash: Square signs the notification URL as configured.
+  const path = requestUrl.pathname;
+
+  const origins: string[] = [];
+  const configured = Env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '');
+  if (configured) {
+    origins.push(configured);
+  }
+
+  // Forwarded host, for a deployment where the public origin is not configured.
+  const forwardedHost = headersList.get('x-forwarded-host');
+  if (forwardedHost) {
+    const proto = headersList.get('x-forwarded-proto') ?? 'https';
+    const forwarded = `${proto}://${forwardedHost}`;
+    if (!origins.includes(forwarded)) {
+      origins.push(forwarded);
+    }
+  }
+
+  if (!origins.includes(requestUrl.origin)) {
+    origins.push(requestUrl.origin);
+  }
+
+  // The path as called (locale-prefixed or not), then the un-prefixed form —
+  // which is what a deployment configured before this fix will be signing.
+  const paths = path === UNPREFIXED_PATH ? [path] : [path, UNPREFIXED_PATH];
+
+  const candidates: string[] = [];
+  for (const origin of origins) {
+    for (const p of paths) {
+      const candidate = `${origin}${p}`;
+      if (!candidates.includes(candidate)) {
+        candidates.push(candidate);
+      }
+    }
+  }
+  return candidates;
+}
+
 export const POST = async (request: Request) => {
   const rateLimitResponse = await applyWebhookRateLimit(request);
   if (rateLimitResponse) {
@@ -347,21 +423,23 @@ export const POST = async (request: Request) => {
   }
 
   const headersList = await headers();
-  const notificationUrl = Env.NEXT_PUBLIC_APP_URL
-    ? `${Env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '')}/webhook/square`
-    : new URL(request.url).toString();
+  const signatureHeader = headersList.get('x-square-hmacsha256-signature');
+  const candidates = notificationUrlCandidates(request, headersList);
 
-  const valid = verifySquareWebhookSignature({
+  const valid = candidates.some(notificationUrl => verifySquareWebhookSignature({
     signatureKey: config.webhookSignatureKey,
     notificationUrl,
     rawBody,
-    signatureHeader: headersList.get('x-square-hmacsha256-signature'),
-  });
+    signatureHeader,
+  }));
 
   if (!valid) {
     // 401, not 200: a failed signature is either a forgery or a genuine
     // misconfiguration, and both deserve to be visible rather than absorbed.
-    logger.error('[Square Webhook] Invalid signature', { orgId, notificationUrl });
+    // The candidates are logged because a URL mismatch is indistinguishable
+    // from a forgery, and is by far the likelier cause — this line is what
+    // turns "Square says invalid" into "the dashboard URL says /en/...".
+    logger.error('[Square Webhook] Invalid signature', { orgId, candidates });
     return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
   }
 

@@ -1,5 +1,5 @@
 // This file configures the initialization of Sentry on the client.
-// The added config here will be used whenever a users loads a page in their browser.
+// The added config here will be used whenever a user loads a page in their browser.
 // https://docs.sentry.io/platforms/javascript/guides/nextjs/
 //
 // ⚠️ GDPR: client-side Sentry is gated ENTIRELY behind the `analytics` consent
@@ -15,7 +15,13 @@ const isBuildDisabled = Boolean(process.env.NEXT_PUBLIC_SENTRY_DISABLED);
 
 /** Guards a double init when consent flips grant → withdraw → grant. */
 let started = false;
-/** Guards re-entrant teardown while a close() is still in flight. */
+/**
+ * Guards re-entrant teardown while a close() is still in flight.
+ *
+ * ⚠️ A grant arriving DURING that window is dropped by `startSentry`, which
+ * sees `started` still true. `stopSentry` therefore re-checks consent once
+ * teardown finishes — see the tail of that function.
+ */
 let stopping = false;
 
 function startSentry(): void {
@@ -85,6 +91,15 @@ async function stopSentry(): Promise<void> {
   } finally {
     started = false;
     stopping = false;
+  }
+
+  // Re-check consent AFTER teardown, because the state may have changed while
+  // `close()` was in flight. A withdraw → grant flip inside that window would
+  // otherwise leave Sentry permanently stopped: `started` was still true when
+  // the grant arrived, so `startSentry()` returned early, and the `finally`
+  // above then cleared it with no one left to act on the grant.
+  if (hasConsent('analytics')) {
+    startSentry();
   }
 }
 
