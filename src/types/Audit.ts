@@ -145,7 +145,6 @@ export const AUDIT_ACTION = {
    * materially different from rotating credentials within one provider.
    */
   PAYMENT_PROVIDER_CHANGE: 'paymentProvider.change',
-  PLATFORM_IQPRO_CONFIG_UPDATE: 'platformIqproConfig.update',
 
   // Note operations
   NOTE_CREATE: 'note.create',

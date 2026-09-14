@@ -5,7 +5,6 @@ const config: KnipConfig = {
   ignore: [
     'checkly.config.ts',
     'src/components/ui/**',
-    'src/features/landing/LogoCloud.tsx',
     'src/libs/I18n.ts',
     'src/templates/**', // Template files export types for consumption by other components
     'src/types/Auth.ts',
