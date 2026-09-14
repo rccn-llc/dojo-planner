@@ -31,9 +31,9 @@ describe('Audit Types', () => {
       // + 1 family member unlink + 1 member convert + 3 saas subscription
       // + 3 note (create + update + delete) + 3 staff (invite + update + remove)
       // + 3 role (create + update + delete) + 1 organization location update
-      // + 2 iqpro config (per-org + platform) + 1 payment provider change
-      // + 1 instructor photo update = 101
-      expect(actionCount).toBe(101);
+      // + 1 iqpro config (per-org) + 1 payment provider change
+      // + 1 instructor photo update = 100
+      expect(actionCount).toBe(100);
     });
   });
 

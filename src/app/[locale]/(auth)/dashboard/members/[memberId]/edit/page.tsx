@@ -612,9 +612,17 @@ export default function EditMemberPage() {
         return;
       }
       try {
-        const response = await fetch(`/${locale}/api/organization/${organization.id}/subscription`);
-        if (response.ok) {
-          const data = await response.json();
+        // De-duped so React's development double-invoke of effects (StrictMode)
+        // issues one request rather than two. Only the in-flight request is
+        // shared — nothing is cached — so a remount still refetches.
+        const data = await dedupeRequest(
+          `organization.subscription:${organization.id}:${locale}`,
+          async () => {
+            const response = await fetch(`/${locale}/api/organization/${organization.id}/subscription`);
+            return response.ok ? await response.json() : null;
+          },
+        );
+        if (data) {
           dispatch({ type: 'SET_SUBSCRIPTION_TYPE', payload: data.subscriptionType });
         }
       } catch (err) {

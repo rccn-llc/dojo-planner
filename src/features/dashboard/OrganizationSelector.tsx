@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
+import { dedupeRequest } from '@/hooks/dedupeRequest';
 import { client } from '@/libs/Orpc';
 
 type OrgData = {
@@ -50,7 +51,12 @@ export const OrganizationSelector = () => {
         // the switcher, which looks far more alarming than the 409 this
         // filtering exists to avoid.
         try {
-          const { orgIds } = await client.organization.listProvisioned();
+          // De-duped so React's development double-invoke of effects
+          // (StrictMode), and any re-run of this effect, issue one request
+          // rather than two. Only the in-flight request is shared — nothing
+          // is cached — so a later mount still re-checks provisioning.
+          const { orgIds } = await dedupeRequest('organization:listProvisioned', async () =>
+            client.organization.listProvisioned());
           const provisioned = new Set(orgIds);
           setOrganizations(orgs.filter(org => provisioned.has(org.id)));
         } catch (error) {

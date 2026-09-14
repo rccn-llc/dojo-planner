@@ -165,12 +165,7 @@ The seed script creates a complete, realistic dataset for testing every flow end
    stripe login
    ```
 
-2. Set up subscription prices:
-   ```shell
-   npm run stripe:setup-price
-   ```
-
-3. Forward webhooks to your local server:
+2. Forward webhooks to your local server:
    ```shell
    npm run stripe:listen
    ```

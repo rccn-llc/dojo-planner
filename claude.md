@@ -159,7 +159,7 @@ docs/                      # Documentation
 | `/dashboard/subscription-expired` | `subscription-expired/page.tsx` | Subscription expired — re-subscribe prompt |
 | `/dashboard/preferences` | `preferences/page.tsx` | User preferences |
 | `/dashboard/security` | `security/page.tsx` | Security settings |
-| `/dashboard/location-settings` | `location-settings/page.tsx` | Per-org location settings (name, address, phone, email, tax rate) — backed by `organization.location*` columns. **Also hosts the per-org payment-gateway card**, which selects the org's payment provider (`organization.payment_provider`) and holds that provider's merchant credentials in the encrypted `organization.payment_provider_config_enc` blob: IQPro (clientId / clientSecret / gatewayId) or Square (applicationId / locationId / environment / accessToken / webhookSignatureKey). There is NO `/dashboard/payment-settings` route and no `/dashboard/platform-settings` route. ⚠️ The live form is `src/features/settings/EditPaymentSettingsModal.tsx` — `src/features/payment-settings/PaymentSettingsForm.tsx` is **dead code**, referenced only by its own test, so editing it changes nothing in the app. Card is viewable by ADMIN + ACADEMY_OWNER, editable by ADMIN only (`PAYMENT_VIEW_ROLES` / `PAYMENT_EDIT_ROLES` in `LocationSettingsPage.tsx`); the `paymentSettings.updateConfig` endpoint enforces ADMIN server-side. ⚠️ A provider switch is REFUSED while the org has saved payment methods — provider ids do not transfer, so the switch would orphan every saved card and autopay subscription at the old processor |
+| `/dashboard/location-settings` | `location-settings/page.tsx` | Per-org location settings (name, address, phone, email, tax rate) — backed by `organization.location*` columns. **Also hosts the per-org payment-gateway card**, which selects the org's payment provider (`organization.payment_provider`) and holds that provider's merchant credentials in the encrypted `organization.payment_provider_config_enc` blob: IQPro (clientId / clientSecret / gatewayId) or Square (applicationId / locationId / environment / accessToken / webhookSignatureKey). There is NO `/dashboard/payment-settings` route and no `/dashboard/platform-settings` route. The live form is `src/features/settings/EditPaymentSettingsModal.tsx`. Card is viewable by ADMIN + ACADEMY_OWNER, editable by ADMIN only (`PAYMENT_VIEW_ROLES` / `PAYMENT_EDIT_ROLES` in `LocationSettingsPage.tsx`); the `paymentSettings.updateConfig` endpoint enforces ADMIN server-side. ⚠️ A provider switch is REFUSED while the org has saved payment methods — provider ids do not transfer, so the switch would orphan every saved card and autopay subscription at the old processor |
 
 ### Auth Routes
 
@@ -469,7 +469,6 @@ PLAN_ID.ANNUAL      -> $790/year
 **Commands:**
 ```bash
 npm run stripe:listen    # Forward webhooks locally
-npm run stripe:setup-price # Create test prices
 ```
 
 ### IQPro (Member Payments)
@@ -1495,7 +1494,6 @@ AUDIT_ACTION.ORGANIZATION_LOCATION_UPDATE;
 // IQPro merchant configuration
 AUDIT_ACTION.IQPRO_CONFIG_UPDATE; // per-org merchant credentials rotated (Location Settings page)
 AUDIT_ACTION.PAYMENT_PROVIDER_CHANGE; // org switched provider — changes WHICH merchant account receives its member payments
-AUDIT_ACTION.PLATFORM_IQPRO_CONFIG_UPDATE; // declared but NOT emitted — its only emitter was the removed platform-settings router
 
 // Instructor operations
 AUDIT_ACTION.INSTRUCTOR_PHOTO_UPDATE; // in-app instructor headshot upload/clear
@@ -1527,7 +1525,6 @@ AUDIT_ACTION.HOLD_FEE_CHARGE;
 **Key Files:**
 - `src/libs/RateLimit.ts` - Upstash Redis rate limiters
 - `src/libs/Env.ts` - Environment variables for Upstash
-- `src/routers/RateLimitGuard.ts` - ORPC rate limit guard
 - `src/app/[locale]/rpc/[[...rest]]/route.ts` - RPC rate limiting
 - `src/app/[locale]/webhook/billing/route.ts` - Webhook rate limiting
 
