@@ -1,6 +1,7 @@
 import { clerk, clerkSetup } from '@clerk/testing/playwright';
 import { expect, test as setup } from '@playwright/test';
 
+import { CONSENT_STORAGE_KEY, CONSENT_VERSION } from '@/libs/consent/constants';
 import { writeCredentials } from './e2e-credentials';
 import { cleanupOrphanedE2EUsers, createUserWithOrganization } from './TestUtils';
 
@@ -61,6 +62,19 @@ setup('authenticate with Clerk', async ({ page }) => {
   await page.waitForURL(/\/dashboard/, { timeout: 15000 });
 
   await expect(page.getByRole('heading', { name: 'Performance' })).toBeVisible();
+
+  // Record a cookie-consent decision so the banner does not render during the
+  // suite. It is fixed to the bottom of the viewport, so on a fresh profile it
+  // would cover controls at the end of the page and block clicks. The consent
+  // UI has its own dedicated coverage in src/features/consent/.
+  await page.evaluate(([key, version]) => {
+    localStorage.setItem(key as string, JSON.stringify({
+      version,
+      timestamp: Date.now(),
+      method: 'reject_all',
+      categories: { necessary: true, functional: false, analytics: false },
+    }));
+  }, [CONSENT_STORAGE_KEY, CONSENT_VERSION] as const);
 
   await page.context().storageState({ path: '.playwright/auth.json' });
 });

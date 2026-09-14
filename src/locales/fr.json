@@ -64,7 +64,8 @@
     "preferences": "Préférences",
     "log_out": "Se déconnecter",
     "terms_of_use": "Conditions d'utilisation",
-    "privacy_policy": "Politique de confidentialité"
+    "privacy_policy": "Politique de confidentialité",
+    "cookie_preferences": "Préférences de cookies"
   },
   "CatalogPage": {
     "title": "Catalogue de produits",
@@ -2279,12 +2280,38 @@
     "rights_title": "6. Vos droits",
     "rights_body": "Selon votre lieu de résidence, vous pouvez disposer de droits d'accès, de rectification, de suppression ou de portabilité de vos données personnelles, ainsi que de droits d'opposition ou de limitation de certains traitements. Contactez-nous pour exercer ces droits.",
     "cookies_title": "7. Cookies et technologies similaires",
-    "cookies_body": "Nous utilisons des cookies et technologies similaires pour faire fonctionner le Service, mémoriser vos préférences, analyser l'utilisation et améliorer votre expérience. Vous pouvez gérer les cookies via les paramètres de votre navigateur.",
+    "cookies_body": "Nous utilisons des cookies et des technologies similaires pour faire fonctionner le Service, mémoriser vos préférences et — avec votre consentement — surveiller les erreurs et les performances. Le stockage strictement nécessaire (connexion, paiements et mémorisation de votre choix de cookies) ne peut pas être désactivé. Vous pouvez consulter et modifier votre choix à tout moment via le lien Préférences de cookies dans le pied de page, et vous pouvez également contrôler les cookies via les paramètres de votre navigateur.",
     "children_title": "8. Vie privée des enfants",
     "children_body": "Le Service n'est pas destiné aux enfants en dessous de l'âge requis par la loi applicable pour les services en ligne. Si nous apprenons que nous avons collecté des informations personnelles auprès d'un enfant sans consentement approprié, nous les supprimerons.",
     "changes_title": "9. Modifications de cette politique",
     "changes_body": "Nous pouvons mettre à jour cette politique de temps à autre. Nous vous informerons des changements importants en publiant la politique mise à jour dans le Service ou par d'autres moyens raisonnables.",
     "contact_title": "10. Contact",
     "contact_body": "Pour toute question concernant cette politique ou nos pratiques en matière de confidentialité, contactez le support via les canaux indiqués dans le Service."
+  },
+  "CookieConsent": {
+    "banner_aria_label": "Consentement aux cookies",
+    "banner_title": "Nous respectons votre vie privée",
+    "banner_body": "Nous utilisons un stockage strictement nécessaire au fonctionnement de Dojo Planner. Avec votre autorisation, nous utilisons également la surveillance des erreurs et des performances afin de détecter et corriger les problèmes. Consultez notre <link>politique de confidentialité</link>.",
+    "accept_all": "Tout accepter",
+    "reject_all": "Tout refuser",
+    "customise": "Personnaliser",
+    "save_preferences": "Enregistrer les préférences",
+    "preferences_link": "Préférences de cookies",
+    "dialog_title": "Préférences de cookies",
+    "dialog_description": "Choisissez les catégories de stockage que vous autorisez. Votre choix est enregistré sur cet appareil afin que nous n'ayons pas à vous le redemander, et vous pouvez le modifier à tout moment.",
+    "necessary_label": "Strictement nécessaires",
+    "necessary_description": "Nécessaires pour vous connecter, maintenir votre session, traiter les paiements et mémoriser ce choix de cookies. Ils ne peuvent pas être désactivés.",
+    "necessary_always_on": "Toujours actifs",
+    "functional_label": "Préférences",
+    "functional_description": "Mémorise votre langue, votre thème et la disposition de la barre latérale afin de retrouver l'application telle que vous l'avez laissée.",
+    "analytics_label": "Surveillance des erreurs et des performances",
+    "analytics_description": "Nous permet d'enregistrer les erreurs, les traces de performance et les relectures de session via Sentry afin de diagnostiquer les problèmes. En le désactivant, nous ne serons pas informés des erreurs que vous rencontrez.",
+    "vendors_title": "Qui reçoit ces données",
+    "vendors_body": "La surveillance des erreurs et des performances est traitée par Sentry. Les données de session strictement nécessaires sont traitées par Clerk, et les données de paiement par notre prestataire de paiement."
+  },
+  "Footer": {
+    "copyright": "© Dojo Planner. Tous droits réservés.",
+    "privacy": "Politique de confidentialité",
+    "terms": "Conditions d'utilisation"
   }
 }

@@ -774,9 +774,52 @@ be recorded as paid.
 the tenant DATABASE rather than a predicate; `member` and `transaction` do carry
 it and are scoped explicitly.
 
+## Privacy & Cookie Consent
+
+GDPR-strict **opt-in**, applied globally (no geo-detection). No non-essential
+vendor runs until the visitor actively consents. Full rationale, the cookie
+inventory, and the documented judgement calls live in `docs/PRIVACY-CONSENT.md`.
+
+**Categories:** `necessary` (always on — Clerk, payment SDKs, `NEXT_LOCALE`, the
+consent record), `functional` (`sidebar_state`, theme), `analytics` (Sentry in
+full + browser-side Better Stack).
+
+**Key files:**
+
+| File | Role |
+|------|------|
+| `src/libs/consent/ConsentStore.ts` | The store. Framework-free and SSR-safe so `instrumentation-client.ts` can read it before React mounts. Never throws — all storage access is `try/catch` with an in-memory fallback |
+| `src/libs/consent/constants.ts` | `CONSENT_VERSION`, storage key, 6-month expiry, event names |
+| `src/libs/consent/useConsent.ts` | `useConsentState()` + `useIsHydrated()` via `useSyncExternalStore` |
+| `src/features/consent/CookieConsentGate.tsx` | Mounted once in the root layout; renders banner + dialog |
+| `src/features/consent/CookiePreferencesButton.tsx` | Re-open entry (public footer + dashboard sidebar) |
+
+**Rules when adding any client-side third-party script, pixel, or SDK:**
+
+1. Gate its init behind `hasConsent('analytics')` (or a new category) and
+   subscribe via `subscribeToConsent` so it starts/stops with no reload.
+   **Never call a vendor SDK's init at module scope.**
+2. Bump `CONSENT_VERSION` to re-prompt everyone.
+3. Update all three locale files, `docs/PRIVACY-CONSENT.md`, and the privacy page.
+
+⚠️ The root layout is **statically rendered**, so no server component may read
+the consent record — that is why it lives in `localStorage` and why the gate
+renders `null` until hydrated. Verify with `npm run build`: `/[locale]`,
+`/[locale]/privacy` and `/[locale]/terms` must stay `●` (SSG), not `ƒ`.
+
+⚠️ Accept and Reject must keep **identical** button variants (equal prominence
+is an EDPB/CNIL requirement). Tests assert their classNames match.
+
 ### Sentry (Error Monitoring)
 
-**Package:** `@sentry/nextjs` v10.32.1
+**Package:** `@sentry/nextjs` v10.68.0
+
+⚠️ **Client-side Sentry is GATED behind `analytics` consent.** It does not
+initialise until the visitor grants it, and it stops sending when they withdraw
+(`src/instrumentation-client.ts` → `src/libs/consent/ConsentStore.ts`).
+Server-side Sentry (`src/instrumentation.ts`) is ungated — it is our own
+infrastructure, not terminal-equipment storage. **Never add a client-side
+`Sentry.init()` anywhere else.** See `docs/PRIVACY-CONSENT.md`.
 
 **Key Files:**
 - `src/instrumentation.ts` - Server-side init
@@ -807,6 +850,11 @@ it and are scoped explicitly.
 - Test pattern: `**/tests/e2e/**/*.e2e.ts`
 
 ### Better Stack (Logging)
+
+⚠️ **Browser-side** log shipping is gated behind `analytics` consent (the guard
+lives inside `betterStackSink` in `src/libs/Logger.ts` and is scoped with
+`typeof window !== 'undefined'`). **Server-side logging and the SOC2 audit trail
+are unaffected** by a visitor's browser choice.
 
 **Package:** `@logtape/logtape` v1.3.5
 
@@ -1256,7 +1304,7 @@ npm run commit        # Interactive commit helper
 - **Tests:** Co-located with source files
 - **Validation:** Zod schemas in `src/validations/`
 - **i18n:** Translation keys in `src/locales/[lang].json`
-- **Locales:** English (en), French (fr)
+- **Locales:** English (en), French (fr), Japanese (ja) — new i18n keys must be added to ALL THREE or `npm run check:i18n` fails
 - **Lint:** Never use eslint-ignore comments; fix the underlying issue instead
 
 ### Performance conventions
