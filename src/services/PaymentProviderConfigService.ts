@@ -309,9 +309,14 @@ export type StoredProviderConfig = z.infer<typeof StoredProviderConfigSchema>;
  * A decrypt failure rethrows (same reasoning as `decryptOrNull`: a bad or
  * rotated key must hard-fail the payment path, never silently fall back to env
  * credentials belonging to a different merchant). A *parse* failure is
- * different — the ciphertext was readable but the shape is wrong, which means
+ * different — the ciphertext was readable but the content is wrong, which means
  * corrupt or partially-written data. That also throws rather than falling
  * back, for the same reason.
+ *
+ * "Parse failure" covers BOTH invalid JSON and a valid-JSON blob of the wrong
+ * shape. They are deliberately reported as the same error: from the caller's
+ * point of view the stored credentials are unusable either way, and the log
+ * line distinguishes them for whoever has to diagnose it.
  */
 function readConfigBlob(enc: string | null | undefined): StoredProviderConfig | null {
   if (!enc) {
@@ -327,7 +332,22 @@ function readConfigBlob(enc: string | null | undefined): StoredProviderConfig | 
     throw new Error('Failed to decrypt stored payment provider credentials');
   }
 
-  const parsed = StoredProviderConfigSchema.safeParse(JSON.parse(json));
+  // ⚠️ JSON.parse must be INSIDE the malformed-blob path. Decryptable-but-
+  // invalid JSON (a truncated or partially-written blob) otherwise threw a raw
+  // SyntaxError straight out of this function: never logged, and surfaced to
+  // the caller as an opaque parse error rather than the documented
+  // "credentials are malformed". Both corruption modes now report identically.
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(json);
+  } catch (err) {
+    logger.error('[PaymentProviderConfig] credential blob is not valid JSON', {
+      error: err instanceof Error ? err.message : 'unknown',
+    });
+    throw new Error('Stored payment provider credentials are malformed');
+  }
+
+  const parsed = StoredProviderConfigSchema.safeParse(decoded);
   if (!parsed.success) {
     logger.error('[PaymentProviderConfig] credential blob failed schema validation', {
       issues: parsed.error.issues.map(i => i.path.join('.')),
@@ -387,14 +407,29 @@ export async function resolveIQProConfig(orgId: string): Promise<IQProConfig | n
 export async function resolvePaymentProviderConfig(
   orgId: string,
 ): Promise<PaymentProviderConfig | null> {
+  // ⚠️ ONE read. The provider column and the credential blob MUST come from the
+  // same row snapshot.
+  //
+  // The IQPro branch used to delegate to `resolveIQProConfig(orgId)`, which
+  // issues its own SECOND read — and consults a 60s cache before doing so. A
+  // provider switch landing between the two reads (or simply a stale cache
+  // entry) meant this resolver could decide "IQPro" from a fresh column and
+  // then pair it with credentials belonging to a different configuration. Worse
+  // than a mismatch: `resolveIQProConfig` falls back to the `IQPRO_*` env vars
+  // when the blob is not IQPro, so a Square org could be handed the platform's
+  // fallback merchant credentials and have a member payment sent there.
+  //
+  // Reading once removes the window entirely rather than narrowing it, and
+  // needs no transaction: a single findFirst is already a consistent snapshot
+  // of one row.
   const row = await db.query.organizationSchema.findFirst({
     where: eq(organizationSchema.id, orgId),
     columns: { paymentProvider: true, paymentProviderConfigEncrypted: true },
   });
   const provider = row?.paymentProvider ?? PAYMENT_PROVIDER.IQPRO;
+  const blob = readConfigBlob(row?.paymentProviderConfigEncrypted);
 
   if (provider === PAYMENT_PROVIDER.SQUARE) {
-    const blob = readConfigBlob(row?.paymentProviderConfigEncrypted);
     // Guard against a blob whose provider disagrees with the column: trusting
     // the wrong one would charge the wrong merchant. The column wins, and a
     // mismatched blob is treated as absent.
@@ -404,7 +439,15 @@ export async function resolvePaymentProviderConfig(
       : resolveSquareConfigFromEnv();
   }
 
-  const iqpro = await resolveIQProConfig(orgId);
+  const stored = blob?.provider === PAYMENT_PROVIDER.IQPRO ? blob.credentials : null;
+  const iqpro = buildConfig(
+    {
+      clientId: stored?.clientId ?? null,
+      clientSecret: stored?.clientSecret ?? null,
+      gatewayId: stored?.gatewayId ?? null,
+    },
+    Boolean(stored),
+  );
   if (!iqpro) {
     return null;
   }
@@ -558,33 +601,100 @@ export async function updatePaymentProviderConfig(
   orgId: string,
   input: UpdatePaymentProviderConfigInput,
 ): Promise<PaymentProviderUpdateDiff> {
-  const existingRow = await db.query.organizationSchema.findFirst({
-    where: eq(organizationSchema.id, orgId),
-    columns: { paymentProvider: true, paymentProviderConfigEncrypted: true },
-  });
+  // ⚠️ The whole read-check-write runs in ONE transaction, and the org row is
+  // locked FOR UPDATE up front.
+  //
+  // Two separate races made the un-transactional version unsound:
+  //
+  //  1. The saved-method check and the provider write were independent
+  //     statements, so a card registered in between was stranded at the old
+  //     processor anyway — exactly the outcome the check exists to prevent.
+  //  2. Two concurrent saves could each read the same "before" provider and
+  //     both write, so the recorded `providerChanged` diff (and its audit row)
+  //     could describe a transition that never happened.
+  //
+  // The lock is taken on `organization` rather than on `payment_method`
+  // because a row lock cannot prevent an INSERT of a row that does not exist
+  // yet — only a predicate lock (SERIALIZABLE) or locking the parent object can.
+  //
+  // ⚠️ REMAINING GAP, deliberately not closed here. This serialises concurrent
+  // *config saves* against each other and makes the check-then-write atomic on
+  // this side. It does NOT stop a card registration that is already in flight:
+  // `MemberPaymentService` inserts its `payment_method` row after a live call
+  // to the processor, outside any transaction, so it never contends on the org
+  // row. Closing that fully means having the payment path take this same lock
+  // for the duration of a network round-trip to IQPro/Square, which would stall
+  // the org row for seconds on every card save — a worse trade than the
+  // residual risk.
+  //
+  // The residual window is now bounded by this transaction rather than by the
+  // whole handler, and the outcome is a stranded card on an org that was mid-
+  // switch — already a deliberate, rare, admin-initiated action that the
+  // ProviderSwitchBlockedError check makes them retry. If that becomes
+  // unacceptable, the fix is a `provider_switch_in_progress` flag on the org
+  // that the payment path checks, not a longer-held lock.
+  return db.transaction(async (tx) => {
+    const lockedRows = await tx
+      .select({
+        paymentProvider: organizationSchema.paymentProvider,
+        paymentProviderConfigEncrypted: organizationSchema.paymentProviderConfigEncrypted,
+      })
+      .from(organizationSchema)
+      .where(eq(organizationSchema.id, orgId))
+      .for('update')
+      .limit(1);
+    const existingRow = lockedRows[0];
 
-  const currentProvider = existingRow?.paymentProvider ?? PAYMENT_PROVIDER.IQPRO;
-  const providerChanged = currentProvider !== input.provider;
+    const currentProvider = existingRow?.paymentProvider ?? PAYMENT_PROVIDER.IQPRO;
+    const providerChanged = currentProvider !== input.provider;
 
-  // Refuse a switch that would strand saved cards. Checked before any write so
-  // a blocked switch leaves the org exactly as it was.
-  if (providerChanged && existingRow) {
-    // `payment_method` carries no organization_id — it is org-scoped through
-    // its member, so join up rather than assuming a column that is not there.
-    const saved = await db
-      .select({ id: paymentMethodSchema.id })
-      .from(paymentMethodSchema)
-      .innerJoin(memberSchema, eq(paymentMethodSchema.memberId, memberSchema.id))
-      .where(and(
-        eq(memberSchema.organizationId, orgId),
-        isNotNull(paymentMethodSchema.providerPaymentMethodId),
-      ))
-      .limit(51);
-    if (saved.length > 0) {
-      throw new ProviderSwitchBlockedError(saved.length);
+    // Refuse a switch that would strand saved cards. Inside the transaction, so
+    // a card registered concurrently either lands before this read (and blocks
+    // the switch) or waits on the org lock (and is refused by the payment path).
+    if (providerChanged && existingRow) {
+      // `payment_method` carries no organization_id — it is org-scoped through
+      // its member, so join up rather than assuming a column that is not there.
+      const saved = await tx
+        .select({ id: paymentMethodSchema.id })
+        .from(paymentMethodSchema)
+        .innerJoin(memberSchema, eq(paymentMethodSchema.memberId, memberSchema.id))
+        .where(and(
+          eq(memberSchema.organizationId, orgId),
+          isNotNull(paymentMethodSchema.providerPaymentMethodId),
+        ))
+        .limit(51);
+      if (saved.length > 0) {
+        throw new ProviderSwitchBlockedError(saved.length);
+      }
     }
-  }
 
+    return buildAndPersistConfig(tx, orgId, input, existingRow, providerChanged);
+  }).then((diff) => {
+    // AFTER commit, never inside the transaction. Invalidating early lets a
+    // concurrent read repopulate the cache from the pre-commit state and serve
+    // the OLD provider's credentials past the write — the precise failure this
+    // invalidation exists to prevent. Without it at all, the previous
+    // provider's credentials are served for up to the cache TTL, which on the
+    // payment path means charging the wrong merchant account.
+    invalidatePaymentProviderConfig(orgId);
+    return diff;
+  });
+}
+
+/**
+ * The credential-merge and write half of `updatePaymentProviderConfig`.
+ *
+ * Split out only so the transactional guard above stays readable; it is not
+ * meant to be called on its own, and MUST run inside that transaction because
+ * it writes the provider column the lock protects.
+ */
+async function buildAndPersistConfig(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  orgId: string,
+  input: UpdatePaymentProviderConfigInput,
+  existingRow: { paymentProviderConfigEncrypted: string | null } | undefined,
+  providerChanged: boolean,
+): Promise<PaymentProviderUpdateDiff> {
   const existingBlob = readConfigBlob(existingRow?.paymentProviderConfigEncrypted);
   // Only reuse a stored secret when the blob belongs to the SAME provider —
   // an IQPro client secret is not a Square access token.
@@ -656,15 +766,10 @@ export async function updatePaymentProviderConfig(
     paymentProviderConfigEncrypted: writeConfigBlob(stored),
   };
 
-  await db
+  await tx
     .insert(organizationSchema)
     .values({ id: orgId, ...set })
     .onConflictDoUpdate({ target: organizationSchema.id, set });
-
-  // MUST happen on every write. Without it the previous provider's credentials
-  // are served for up to the cache TTL, which on the payment path means
-  // charging the wrong merchant account.
-  invalidatePaymentProviderConfig(orgId);
 
   return { providerChanged, credentialsChanged, secretChanged };
 }
