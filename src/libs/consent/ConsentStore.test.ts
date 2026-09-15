@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CONSENT_MAX_AGE_MS, CONSENT_STORAGE_KEY, CONSENT_VERSION } from './constants';
+import { CONSENT_MAX_AGE_MS, CONSENT_MAX_CLOCK_SKEW_MS, CONSENT_STORAGE_KEY, CONSENT_VERSION } from './constants';
 
 /**
  * The store caches state in module scope and wires window listeners once, so
@@ -160,6 +160,42 @@ describe('ConsentStore', () => {
 
     it('still honours a decision just inside the max age', async () => {
       installStorage(validRecord({ timestamp: Date.now() - CONSENT_MAX_AGE_MS + 1000 }));
+      const store = await loadStore();
+
+      expect(store.needsConsentDecision()).toBe(false);
+      expect(store.hasConsent('analytics')).toBe(true);
+    });
+
+    it('re-prompts and clears a record dated in the future', async () => {
+      // A future timestamp is not a valid decision — it is a tampered value or
+      // the residue of a device with a badly wrong clock. Honoured, it stays
+      // valid until `timestamp + CONSENT_MAX_AGE_MS`, suppressing the banner
+      // far past the six-month re-solicitation cadence once the clock is fixed.
+      const map = installStorage(validRecord({
+        timestamp: Date.now() + 5 * CONSENT_MAX_AGE_MS,
+      }));
+      const store = await loadStore();
+
+      expect(store.needsConsentDecision()).toBe(true);
+      expect(store.hasConsent('analytics')).toBe(false);
+      expect(map.has(CONSENT_STORAGE_KEY)).toBe(false);
+    });
+
+    it('re-prompts once a future timestamp exceeds the skew tolerance', async () => {
+      installStorage(validRecord({
+        timestamp: Date.now() + CONSENT_MAX_CLOCK_SKEW_MS + 60_000,
+      }));
+      const store = await loadStore();
+
+      expect(store.needsConsentDecision()).toBe(true);
+    });
+
+    it('still honours a decision inside the clock-skew tolerance', async () => {
+      // Ordinary drift between the write and a later read must not discard a
+      // choice the visitor genuinely made.
+      installStorage(validRecord({
+        timestamp: Date.now() + CONSENT_MAX_CLOCK_SKEW_MS - 1000,
+      }));
       const store = await loadStore();
 
       expect(store.needsConsentDecision()).toBe(false);

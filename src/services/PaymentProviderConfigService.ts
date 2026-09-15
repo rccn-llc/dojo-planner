@@ -132,18 +132,44 @@ export type PaymentProviderConfigPublic = {
   };
 };
 
+/** The secrets that cannot be merged from a prior save because none exists yet. */
+export type MissingSecretField
+  = | 'iqproClientSecret'
+    | 'squareAccessToken'
+    | 'squareWebhookSignatureKey';
+
+const MISSING_SECRET_MESSAGE: Record<MissingSecretField, string> = {
+  iqproClientSecret:
+    'A client secret is required the first time IQPro credentials are saved for this organization.',
+  squareAccessToken:
+    'An access token is required the first time Square credentials are saved for this organization.',
+  squareWebhookSignatureKey:
+    'A webhook signature key is required the first time Square credentials are saved for this organization. '
+    + 'Square webhooks cannot be verified without it.',
+};
+
 /**
- * Thrown when a save would produce credentials with no client secret.
+ * Thrown when a save would produce credentials with a required secret missing.
  *
  * Happens on the FIRST save for an org: there is no stored blob to merge with,
  * so an omitted secret leaves nothing to preserve. Typed (rather than a bare
  * Error) so the router maps it to a 400 with an actionable message — an
  * untyped throw becomes an opaque 500.
+ *
+ * ⚠️ The message names the FIELD THAT IS ACTUALLY MISSING. It previously always
+ * said "IQPro client secret", so a Square org saving without an access token or
+ * a webhook signature key was told to supply an IQPro credential that its form
+ * does not even show. The class name is kept for the router's `instanceof`
+ * mapping despite now covering three different secrets.
  */
 export class MissingClientSecretError extends Error {
-  constructor() {
-    super('A client secret is required the first time IQPro credentials are saved for this organization.');
+  /** Which credential was missing — for callers that branch on it rather than on prose. */
+  readonly field: MissingSecretField;
+
+  constructor(field: MissingSecretField = 'iqproClientSecret') {
+    super(MISSING_SECRET_MESSAGE[field]);
     this.name = 'MissingClientSecretError';
+    this.field = field;
   }
 }
 
@@ -489,6 +515,11 @@ export type IQProConfigUpdateDiff = {
 export type PaymentProviderUpdateDiff = {
   providerChanged: boolean;
   credentialsChanged: boolean;
+  /**
+   * Whether ANY secret was supplied on this save. For IQPro that is the client
+   * secret; for Square it is the access token OR the webhook signature key,
+   * since both are secrets and either being rotated must show in the audit log.
+   */
   secretChanged: boolean;
 };
 
@@ -570,7 +601,7 @@ export async function updatePaymentProviderConfig(
     // browser, so the form cannot round-trip it.
     const clientSecret = provided ? input.clientSecret! : previous?.clientSecret;
     if (!clientSecret) {
-      throw new MissingClientSecretError();
+      throw new MissingClientSecretError('iqproClientSecret');
     }
     secretChanged = provided;
     credentialsChanged = previous?.clientId !== input.clientId || previous?.gatewayId !== input.gatewayId;
@@ -589,17 +620,22 @@ export async function updatePaymentProviderConfig(
     const provided = input.accessToken != null && input.accessToken !== '';
     const accessToken = provided ? input.accessToken! : previous?.accessToken;
     if (!accessToken) {
-      throw new MissingClientSecretError();
+      throw new MissingClientSecretError('squareAccessToken');
     }
     // The webhook key is equally a secret and merges the same way, but it is
     // required by the stored schema, so a first save must supply it.
-    const webhookSignatureKey = input.webhookSignatureKey != null && input.webhookSignatureKey !== ''
-      ? input.webhookSignatureKey
+    const webhookKeyProvided = input.webhookSignatureKey != null && input.webhookSignatureKey !== '';
+    const webhookSignatureKey = webhookKeyProvided
+      ? input.webhookSignatureKey!
       : previous?.webhookSignatureKey;
     if (!webhookSignatureKey) {
-      throw new MissingClientSecretError();
+      throw new MissingClientSecretError('squareWebhookSignatureKey');
     }
-    secretChanged = provided;
+    // EITHER Square secret counts. Reporting only the access token left the
+    // audit trail claiming "secret unchanged" after a webhook signature key —
+    // the credential that authenticates every inbound Square webhook — had just
+    // been rotated.
+    secretChanged = provided || webhookKeyProvided;
     credentialsChanged = previous?.locationId !== input.locationId
       || previous?.applicationId !== input.applicationId
       || previous?.environment !== input.environment;

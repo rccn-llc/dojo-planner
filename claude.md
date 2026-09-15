@@ -754,6 +754,21 @@ fails. ⚠️ The notification URL is an HMAC input, so it must match the Square
 dashboard character for character; a URL mismatch is indistinguishable from a
 forgery and is the likeliest cause of a genuine webhook being rejected.
 
+⚠️ **The route is locale-prefixed** (`/[locale]/webhook/square`) and
+`localePrefix` is `as-needed`, so `/webhook/square` AND `/en|fr|ja/webhook/square`
+all reach it. Deriving the URL as `NEXT_PUBLIC_APP_URL + '/webhook/square'`
+therefore rejected EVERY event from an org whose Square dashboard pointed at a
+locale-prefixed URL — org and key resolved correctly, then the signature failed.
+`notificationUrlCandidates` now takes the PATH from the request (preserving
+whatever prefix Square actually calls) and the ORIGIN from `NEXT_PUBLIC_APP_URL`
+(falling back to `x-forwarded-host`, then the request origin, since `request.url`
+behind Vercel can carry the internal host). The un-prefixed path stays a
+candidate so deployments already verifying against it keep working. Trying
+several candidates does not weaken verification — each is checked against the
+same per-org key with the same constant-time comparison. The rejection log
+prints the candidates, which is what turns "Square says invalid" into "the
+dashboard is pointed at /en/…".
+
 **Event mapping.** Square has no direct "subscription charge succeeded" event —
 recurring billing surfaces as INVOICE events, and an invoice carries the
 `subscription_id` that generated it.
@@ -789,7 +804,7 @@ full + browser-side Better Stack).
 | File | Role |
 |------|------|
 | `src/libs/consent/ConsentStore.ts` | The store. Framework-free and SSR-safe so `instrumentation-client.ts` can read it before React mounts. Never throws — all storage access is `try/catch` with an in-memory fallback |
-| `src/libs/consent/constants.ts` | `CONSENT_VERSION`, storage key, 6-month expiry, event names |
+| `src/libs/consent/constants.ts` | `CONSENT_VERSION`, storage key, 6-month expiry, clock-skew tolerance, event names |
 | `src/libs/consent/useConsent.ts` | `useConsentState()` + `useIsHydrated()` via `useSyncExternalStore` |
 | `src/features/consent/CookieConsentGate.tsx` | Mounted once in the root layout; renders banner + dialog |
 | `src/features/consent/CookiePreferencesButton.tsx` | Re-open entry (public footer + dashboard sidebar) |
@@ -809,6 +824,13 @@ renders `null` until hydrated. Verify with `npm run build`: `/[locale]`,
 
 ⚠️ Accept and Reject must keep **identical** button variants (equal prominence
 is an EDPB/CNIL requirement). Tests assert their classNames match.
+
+⚠️ A stored decision is rejected when it is **older than `CONSENT_MAX_AGE_MS`
+OR dated in the future** beyond `CONSENT_MAX_CLOCK_SKEW_MS` (5 min). A
+future-dated record stays valid until `timestamp + CONSENT_MAX_AGE_MS`, so a
+device with a badly wrong clock would suppress the banner far past the six-month
+re-solicitation cadence even after the clock is corrected. Dropping it
+re-prompts, which is the safe direction.
 
 ### Sentry (Error Monitoring)
 

@@ -38,3 +38,20 @@ export const CONSENT_EVENT = 'dojo-planner:consent-change';
 
 /** Request to open the cookie-preferences dialog from anywhere in the app. */
 export const CONSENT_OPEN_PREFS_EVENT = 'dojo-planner:open-cookie-preferences';
+
+/**
+ * How far ahead of "now" a stored timestamp may sit and still be honoured.
+ *
+ * A record dated in the future is not a valid decision: it is either a
+ * malformed/tampered value or the residue of a device whose clock was wrong
+ * when the visitor chose. Left unchecked it stays valid until
+ * `timestamp + CONSENT_MAX_AGE_MS`, which after a clock correction can suppress
+ * the banner for FAR longer than the six months the policy allows — a
+ * compliance failure, since the re-solicitation cadence is the whole point of
+ * the expiry.
+ *
+ * A small tolerance is still allowed rather than rejecting `timestamp > now`
+ * outright: a couple of minutes of ordinary clock drift between the write and a
+ * later read must not discard a decision the visitor genuinely made.
+ */
+export const CONSENT_MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;

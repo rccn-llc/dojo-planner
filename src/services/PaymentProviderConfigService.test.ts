@@ -302,6 +302,119 @@ describe('PaymentProviderConfigService', () => {
       })).rejects.toBeInstanceOf(MissingClientSecretError);
     });
 
+    it('names the SQUARE field in the error, not an IQPro client secret', async () => {
+      // A Square org saving without an access token was told "A client secret
+      // is required ... IQPro credentials" — a credential its form does not
+      // even show, so the message was unactionable.
+      savedMethodRows = [];
+      orgFindFirst.mockResolvedValueOnce({ paymentProvider: 'square' });
+      const { updatePaymentProviderConfig } = await import('./PaymentProviderConfigService');
+
+      await expect(updatePaymentProviderConfig('org_x', {
+        provider: 'square',
+        applicationId: 'a',
+        locationId: 'l',
+        environment: 'sandbox',
+        webhookSignatureKey: 'wh',
+      })).rejects.toMatchObject({
+        field: 'squareAccessToken',
+        message: expect.stringContaining('access token'),
+      });
+    });
+
+    it('names the webhook signature key when THAT is what is missing', async () => {
+      savedMethodRows = [];
+      orgFindFirst.mockResolvedValueOnce({ paymentProvider: 'square' });
+      const { updatePaymentProviderConfig } = await import('./PaymentProviderConfigService');
+
+      await expect(updatePaymentProviderConfig('org_x', {
+        provider: 'square',
+        applicationId: 'a',
+        locationId: 'l',
+        environment: 'sandbox',
+        accessToken: 'tok',
+      })).rejects.toMatchObject({
+        field: 'squareWebhookSignatureKey',
+        message: expect.stringContaining('webhook signature key'),
+      });
+    });
+
+    it('still names the IQPro client secret for an IQPro save', async () => {
+      savedMethodRows = [];
+      orgFindFirst.mockResolvedValueOnce({});
+      const { updatePaymentProviderConfig } = await import('./PaymentProviderConfigService');
+
+      await expect(updatePaymentProviderConfig('org_x', {
+        provider: 'iqpro',
+        clientId: 'c',
+        gatewayId: 'g',
+      })).rejects.toMatchObject({
+        field: 'iqproClientSecret',
+        message: expect.stringContaining('client secret'),
+      });
+    });
+
+    it('reports secretChanged when ONLY the webhook signature key is rotated', async () => {
+      // The webhook key authenticates every inbound Square webhook. Reporting
+      // only the access token left the audit trail claiming the secret was
+      // unchanged after that key had just been rotated.
+      savedMethodRows = [];
+      const { encryptSecret } = await import('@/libs/Crypto');
+      orgFindFirst.mockResolvedValueOnce({
+        paymentProvider: 'square',
+        paymentProviderConfigEncrypted: encryptSecret(JSON.stringify({
+          provider: 'square',
+          credentials: {
+            accessToken: 'tok',
+            locationId: 'l',
+            applicationId: 'a',
+            environment: 'sandbox',
+            webhookSignatureKey: 'old-key',
+          },
+        })),
+      });
+      const { updatePaymentProviderConfig } = await import('./PaymentProviderConfigService');
+
+      const diff = await updatePaymentProviderConfig('org_x', {
+        provider: 'square',
+        applicationId: 'a',
+        locationId: 'l',
+        environment: 'sandbox',
+        webhookSignatureKey: 'rotated-key',
+      });
+
+      expect(diff.secretChanged).toBe(true);
+    });
+
+    it('reports secretChanged false when NEITHER Square secret is supplied', async () => {
+      savedMethodRows = [];
+      const { encryptSecret } = await import('@/libs/Crypto');
+      orgFindFirst.mockResolvedValueOnce({
+        paymentProvider: 'square',
+        paymentProviderConfigEncrypted: encryptSecret(JSON.stringify({
+          provider: 'square',
+          credentials: {
+            accessToken: 'tok',
+            locationId: 'l',
+            applicationId: 'a',
+            environment: 'sandbox',
+            webhookSignatureKey: 'key',
+          },
+        })),
+      });
+      const { updatePaymentProviderConfig } = await import('./PaymentProviderConfigService');
+
+      const diff = await updatePaymentProviderConfig('org_x', {
+        provider: 'square',
+        applicationId: 'a',
+        locationId: 'l-changed',
+        environment: 'sandbox',
+      });
+
+      expect(diff.secretChanged).toBe(false);
+      expect(diff.credentialsChanged).toBe(true);
+    });
+
     it('encrypts the credentials before persisting', async () => {
       orgFindFirst.mockResolvedValueOnce({});
       const { updatePaymentProviderConfig } = await import('./PaymentProviderConfigService');

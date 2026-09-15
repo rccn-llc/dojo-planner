@@ -15,6 +15,15 @@ describe('Audit Types', () => {
       expect(AUDIT_ACTION.MEMBER_CHANGE_MEMBERSHIP).toBe('member.changeMembership');
     });
 
+    // The count assertion below cannot catch a rename or a swap: replacing one
+    // action with another keeps the total at 100. These pin the exact values of
+    // the payment-configuration actions, where a silently renamed constant would
+    // break the audit trail for WHICH merchant account receives an org's money.
+    it('should have the payment configuration action types', () => {
+      expect(AUDIT_ACTION.IQPRO_CONFIG_UPDATE).toBe('iqproConfig.update');
+      expect(AUDIT_ACTION.PAYMENT_PROVIDER_CHANGE).toBe('paymentProvider.change');
+    });
+
     it('should have correct number of action types', () => {
       const actionCount = Object.keys(AUDIT_ACTION).length;
 
@@ -23,7 +32,7 @@ describe('Audit Types', () => {
       // + 3 membership plan + 3 program + 9 class (3+3+3 exception) + 6 event
       // + 4 coupon + 4 enrollment/registration + 2 attendance
       // + 4 transaction (create + refund + update + view) + 3 tag + 2 image
-      // + 12 catalog (6 item + 3 variant + 3 category + 1 stock + 2 image)
+      // + 12 catalog (3 item + 3 variant + 3 category + 1 stock + 2 image)
       // + 8 waiver (4 template + 1 signed + 3 membership waiver)
       // + 3 merge field + 1 payment
       // + 3 payment method (register + delete + set primary) + 1 payment method view
