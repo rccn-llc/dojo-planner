@@ -70,8 +70,6 @@ describe('MembershipProgramAssociationStep', () => {
     chargeSignUpFee: 'at-registration',
     monthlyFee: null,
     paymentFrequency: 'monthly',
-    membershipStartDate: 'same-as-registration',
-    customStartDate: '',
     proRateFirstPayment: false,
     contractLength: 'month-to-month',
     autoRenewal: 'none',

@@ -68,8 +68,6 @@ describe('MembershipSuccessStep', () => {
     chargeSignUpFee: 'at-registration',
     monthlyFee: 150,
     paymentFrequency: 'monthly',
-    membershipStartDate: 'same-as-registration',
-    customStartDate: '',
     proRateFirstPayment: false,
     contractLength: '12-months',
     autoRenewal: 'month-to-month',

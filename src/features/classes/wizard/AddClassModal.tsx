@@ -11,6 +11,7 @@ import { useAddClassWizard } from '@/hooks/useAddClassWizard';
 import { useInstructorsCache } from '@/hooks/useInstructorsCache';
 import { useTagsCache } from '@/hooks/useTagsCache';
 import { client } from '@/libs/Orpc';
+import { parseDateOnly } from '@/utils/DateHelpers';
 import { ClassBasicsStep } from './ClassBasicsStep';
 import { ClassScheduleStep } from './ClassScheduleStep';
 import { ClassSuccessStep } from './ClassSuccessStep';
@@ -104,7 +105,7 @@ export const AddClassModal = ({ isOpen, onCloseAction, onClassCreated, onEventCr
           const start = to24h(s.timeHour, s.timeMinute, s.timeAmPm);
           const end = addDuration(start, s.durationHours, s.durationMinutes);
           return {
-            sessionDate: new Date(s.date),
+            sessionDate: parseDateOnly(s.date),
             startTime: start,
             endTime: end,
             primaryInstructorClerkId: s.staffMember || null,
@@ -133,7 +134,7 @@ export const AddClassModal = ({ isOpen, onCloseAction, onClassCreated, onEventCr
             memberOnly: false,
             sortOrder: 1,
             ...(wizard.data.eventBilling.earlyBirdDeadline
-              ? { validUntil: new Date(wizard.data.eventBilling.earlyBirdDeadline) }
+              ? { validUntil: parseDateOnly(wizard.data.eventBilling.earlyBirdDeadline) }
               : {}),
           });
         }
@@ -164,11 +165,12 @@ export const AddClassModal = ({ isOpen, onCloseAction, onClassCreated, onEventCr
             const endMinute = (session.timeMinute + session.durationMinutes) % 60;
             const endAmPm = session.timeAmPm === 'AM' && endHour >= 12 ? 'PM' : session.timeAmPm;
             const displayEndHour = endHour > 12 ? endHour - 12 : endHour;
-            const dateObj = new Date(session.date);
+            const dateObj = parseDateOnly(session.date);
             const formattedDate = dateObj.toLocaleDateString('en-US', {
               month: 'long',
               day: 'numeric',
               year: 'numeric',
+              timeZone: 'UTC',
             });
             return {
               date: formattedDate,
@@ -184,8 +186,8 @@ export const AddClassModal = ({ isOpen, onCloseAction, onClassCreated, onEventCr
           .map(instructor => ({ name: instructor.name, photoUrl: instructor.photoUrl ?? '' }));
 
         const formatDate = (dateStr: string) => {
-          const dateObj = new Date(dateStr);
-          return dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+          const dateObj = parseDateOnly(dateStr);
+          return dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
         };
 
         const newEvent: EventCardProps = {

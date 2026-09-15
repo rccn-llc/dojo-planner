@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { formatRoleLabel } from '@/utils/RoleLabels';
 
 type StaffCardProps = {
   id: string;
@@ -64,28 +65,6 @@ function StatusBadge({
   );
 }
 
-function formatRole(role: string): string {
-  const roleMap: Record<string, string> = {
-    'org:admin': 'Admin',
-    'org:academy_owner': 'Academy Owner',
-    'org:front_desk': 'Front Desk',
-    'org:instructor': 'Instructor',
-    'org:member': 'Member',
-    'org:individual_member': 'Individual Member',
-    'front-desk': 'Front Desk',
-  };
-  if (roleMap[role]) {
-    return roleMap[role];
-  }
-
-  // Strip org: prefix, then capitalize words split by hyphens or underscores
-  return role
-    .replace(/^org:/, '')
-    .split(/[_-]/)
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
-}
-
 function getInitials(firstName: string | null, lastName: string | null) {
   const first = firstName?.[0] ?? '';
   const last = lastName?.[0] ?? '';
@@ -133,7 +112,7 @@ export function StaffCard({
             <div className="text-xs font-semibold text-muted-foreground">Role</div>
             <div className="mt-1">
               <Badge variant={getRoleColor(role)}>
-                {formatText ? formatRole(role) : role}
+                {formatText ? formatRoleLabel(role) : role}
               </Badge>
             </div>
           </div>

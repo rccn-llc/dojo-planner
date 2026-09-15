@@ -25,8 +25,6 @@ describe('useAddMembershipWizard types and exports', () => {
       chargeSignUpFee: 'at-registration',
       monthlyFee: 150,
       paymentFrequency: 'monthly',
-      membershipStartDate: 'same-as-registration',
-      customStartDate: '',
       proRateFirstPayment: false,
       contractLength: '12-months',
       autoRenewal: 'month-to-month',
@@ -127,8 +125,6 @@ describe('useAddMembershipWizard types and exports', () => {
       chargeSignUpFee: 'at-registration',
       monthlyFee: null,
       paymentFrequency: 'monthly',
-      membershipStartDate: 'same-as-registration',
-      customStartDate: '',
       proRateFirstPayment: false,
       contractLength: 'month-to-month',
       autoRenewal: 'none',
@@ -161,8 +157,6 @@ describe('useAddMembershipWizard types and exports', () => {
       chargeSignUpFee: 'at-registration',
       monthlyFee: 95,
       paymentFrequency: 'monthly',
-      membershipStartDate: 'same-as-registration',
-      customStartDate: '',
       proRateFirstPayment: false,
       contractLength: 'month-to-month',
       autoRenewal: 'none',
@@ -192,8 +186,6 @@ describe('useAddMembershipWizard types and exports', () => {
       chargeSignUpFee: 'at-registration',
       monthlyFee: null,
       paymentFrequency: 'monthly',
-      membershipStartDate: 'same-as-registration',
-      customStartDate: '',
       proRateFirstPayment: false,
       contractLength: 'month-to-month',
       autoRenewal: 'none',
@@ -210,38 +202,6 @@ describe('useAddMembershipWizard types and exports', () => {
     expect(trialData.monthlyFee).toBeNull();
   });
 
-  it('should allow custom start date', () => {
-    const customDateData: AddMembershipWizardData = {
-      membershipName: 'Custom Start',
-      status: 'active',
-      membershipType: 'standard',
-      description: 'With custom start date',
-      associatedProgramId: '1',
-      associatedProgramName: 'Adult Brazilian Jiu-jitsu',
-      associatedWaiverId: null,
-      associatedWaiverName: null,
-      signUpFee: 35,
-      chargeSignUpFee: 'at-registration',
-      monthlyFee: 150,
-      paymentFrequency: 'monthly',
-      membershipStartDate: 'custom',
-      customStartDate: '2024-02-01',
-      proRateFirstPayment: true,
-      contractLength: '12-months',
-      autoRenewal: 'month-to-month',
-      cancellationFee: 300,
-      holdLimitPerYear: 2,
-      holdFeeAmount: null,
-      holdFeeFrequency: null,
-      classesIncluded: null,
-      punchcardPrice: null,
-    };
-
-    expect(customDateData.membershipStartDate).toBe('custom');
-    expect(customDateData.customStartDate).toBe('2024-02-01');
-    expect(customDateData.proRateFirstPayment).toBe(true);
-  });
-
   it('should support weekly payment frequency', () => {
     const weeklyData: AddMembershipWizardData = {
       membershipName: 'Weekly Plan',
@@ -256,8 +216,6 @@ describe('useAddMembershipWizard types and exports', () => {
       chargeSignUpFee: 'at-registration',
       monthlyFee: 40,
       paymentFrequency: 'weekly',
-      membershipStartDate: 'same-as-registration',
-      customStartDate: '',
       proRateFirstPayment: false,
       contractLength: 'month-to-month',
       autoRenewal: 'none',
@@ -286,8 +244,6 @@ describe('useAddMembershipWizard types and exports', () => {
       chargeSignUpFee: 'at-registration',
       monthlyFee: 1200,
       paymentFrequency: 'annually',
-      membershipStartDate: 'same-as-registration',
-      customStartDate: '',
       proRateFirstPayment: false,
       contractLength: '12-months',
       autoRenewal: 'same-term',
@@ -317,8 +273,6 @@ describe('useAddMembershipWizard types and exports', () => {
       chargeSignUpFee: 'at-registration',
       monthlyFee: 165,
       paymentFrequency: 'monthly',
-      membershipStartDate: 'same-as-registration',
-      customStartDate: '',
       proRateFirstPayment: false,
       contractLength: '6-months',
       autoRenewal: 'none',
@@ -348,8 +302,6 @@ describe('useAddMembershipWizard types and exports', () => {
       chargeSignUpFee: 'first-payment',
       monthlyFee: 150,
       paymentFrequency: 'monthly',
-      membershipStartDate: 'same-as-registration',
-      customStartDate: '',
       proRateFirstPayment: false,
       contractLength: '12-months',
       autoRenewal: 'month-to-month',
@@ -378,8 +330,6 @@ describe('useAddMembershipWizard types and exports', () => {
       chargeSignUpFee: 'at-registration',
       monthlyFee: null,
       paymentFrequency: 'monthly',
-      membershipStartDate: 'same-as-registration',
-      customStartDate: '',
       proRateFirstPayment: false,
       contractLength: 'month-to-month',
       autoRenewal: 'none',

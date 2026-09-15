@@ -25,6 +25,7 @@ export type MembershipPlan = {
   holdFeeAmount: number;
   holdFeeFrequency: HoldFeeFrequency | null;
   holdLimitPerYear: number | null;
+  classAllowance?: number | null;
   frequency: MembershipPlanFrequency | null;
   contractLength: string;
   accessLevel: string;
@@ -47,6 +48,7 @@ export type MembershipPlanInput = {
   holdFeeAmount: number;
   holdFeeFrequency: HoldFeeFrequency | null;
   holdLimitPerYear: number | null;
+  classAllowance?: number | null;
   frequency: MembershipPlanFrequency | null;
   contractLength: string;
   accessLevel: string;
@@ -112,6 +114,7 @@ type MembershipPlanRow = {
   holdFeeAmount: number;
   holdFeeFrequency: string | null;
   holdLimitPerYear: number | null;
+  classAllowance: number | null;
   frequency: string | null;
   contractLength: string;
   accessLevel: string;
@@ -137,6 +140,7 @@ function toMembershipPlan(row: MembershipPlanRow): MembershipPlan {
     holdFeeAmount: row.holdFeeAmount,
     holdFeeFrequency: row.holdFeeFrequency as HoldFeeFrequency | null,
     holdLimitPerYear: row.holdLimitPerYear,
+    classAllowance: row.classAllowance,
     frequency: row.frequency as MembershipPlanFrequency | null,
     contractLength: row.contractLength,
     accessLevel: row.accessLevel,
@@ -181,6 +185,7 @@ export async function createMembershipPlan(input: MembershipPlanInput, organizat
         holdFeeAmount: input.holdFeeAmount,
         holdFeeFrequency: input.holdFeeFrequency,
         holdLimitPerYear: input.holdLimitPerYear,
+        classAllowance: input.classAllowance ?? null,
         frequency: input.frequency,
         contractLength: input.contractLength,
         accessLevel: input.accessLevel,
@@ -243,6 +248,7 @@ export async function updateMembershipPlan(
         holdFeeAmount: input.holdFeeAmount,
         holdFeeFrequency: input.holdFeeFrequency,
         holdLimitPerYear: input.holdLimitPerYear,
+        classAllowance: input.classAllowance ?? null,
         frequency: input.frequency,
         contractLength: input.contractLength,
         accessLevel: input.accessLevel,

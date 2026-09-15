@@ -146,7 +146,7 @@ export function EditProfileForm({ onCancel, onSuccess, initialData }: EditProfil
             disabled={isLoading}
           />
           {errors.firstName && (
-            <p className="mt-1 text-sm text-red-500">{errors.firstName}</p>
+            <p className="mt-1 text-sm text-destructive">{errors.firstName}</p>
           )}
         </div>
         <div>
@@ -161,7 +161,7 @@ export function EditProfileForm({ onCancel, onSuccess, initialData }: EditProfil
             disabled={isLoading}
           />
           {errors.lastName && (
-            <p className="mt-1 text-sm text-red-500">{errors.lastName}</p>
+            <p className="mt-1 text-sm text-destructive">{errors.lastName}</p>
           )}
         </div>
       </div>
@@ -179,7 +179,7 @@ export function EditProfileForm({ onCancel, onSuccess, initialData }: EditProfil
             disabled={isLoading}
           />
           {errors.phone && (
-            <p className="mt-1 text-sm text-red-500">{errors.phone}</p>
+            <p className="mt-1 text-sm text-destructive">{errors.phone}</p>
           )}
         </div>
         <div>
@@ -195,7 +195,7 @@ export function EditProfileForm({ onCancel, onSuccess, initialData }: EditProfil
             disabled={isLoading}
           />
           {errors.email && (
-            <p className="mt-1 text-sm text-red-500">{errors.email}</p>
+            <p className="mt-1 text-sm text-destructive">{errors.email}</p>
           )}
         </div>
       </div>

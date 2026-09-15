@@ -1,6 +1,6 @@
 import type { TransactionData } from '@/services/TransactionsService';
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, inArray, or } from 'drizzle-orm';
+import { and, count, desc, eq, gte, inArray, or } from 'drizzle-orm';
 import { db } from '@/libs/DB';
 import { logger } from '@/libs/Logger';
 import { addressSchema, attendanceSchema, classEnrollmentSchema, couponUsageSchema, eventRegistrationSchema, familyMemberSchema, memberMembershipSchema, memberSchema, membershipPlanSchema, noteSchema, paymentMethodSchema, signedWaiverSchema, transactionSchema } from '@/models/Schema';
@@ -17,6 +17,7 @@ export type MembershipPlanData = {
   holdFeeAmount: number;
   holdFeeFrequency: string | null;
   holdLimitPerYear: number | null;
+  classAllowance: number | null;
   frequency: string | null;
   contractLength: string;
   accessLevel: string;
@@ -46,6 +47,7 @@ type MembershipPlan = {
   holdFeeAmount: number;
   holdFeeFrequency: string | null;
   holdLimitPerYear: number | null;
+  classAllowance: number | null;
   frequency: string | null;
   contractLength: string;
   accessLevel: string;
@@ -193,6 +195,7 @@ export async function getOrganizationMembers(
       holdFeeAmount: plan.holdFeeAmount,
       holdFeeFrequency: plan.holdFeeFrequency,
       holdLimitPerYear: plan.holdLimitPerYear,
+      classAllowance: plan.classAllowance,
       frequency: plan.frequency,
       contractLength: plan.contractLength,
       accessLevel: plan.accessLevel,
@@ -310,6 +313,7 @@ export async function getMemberById(
       holdFeeAmount: plan.holdFeeAmount,
       holdFeeFrequency: plan.holdFeeFrequency,
       holdLimitPerYear: plan.holdLimitPerYear,
+      classAllowance: plan.classAllowance,
       frequency: plan.frequency,
       contractLength: plan.contractLength,
       accessLevel: plan.accessLevel,
@@ -374,6 +378,70 @@ export async function getMemberById(
     address,
     currentMembership,
     membershipHistory: history,
+  };
+}
+
+export type PunchcardUsage = {
+  totalClasses: number;
+  classesUsed: number;
+  classesRemaining: number;
+};
+
+/**
+ * Derive a member's punchcard balance for one membership.
+ *
+ * The allowance is stored on the plan (`membership_plan.class_allowance`);
+ * usage is DERIVED by counting attendance since the membership started rather
+ * than kept as a running total, so it can never drift out of step with the
+ * attendance records that back it.
+ *
+ * Returns `null` when the plan is not a punchcard (no allowance configured),
+ * which is what tells the UI to hide the punchcard card entirely. Before this
+ * existed the member detail page rendered a hardcoded 10 total / 4 used / 6
+ * remaining for EVERY punchcard member.
+ */
+export async function getPunchcardUsage(
+  memberId: string,
+  organizationId: string,
+  membershipPlanId: string,
+  membershipStartDate: Date,
+): Promise<PunchcardUsage | null> {
+  // Verify the plan belongs to this org before trusting its allowance, and
+  // read the allowance in the same query (org-scoping, per the multi-tenant
+  // convention — a plan id alone is satisfied by any org's row).
+  const [plan] = await db
+    .select({ classAllowance: membershipPlanSchema.classAllowance })
+    .from(membershipPlanSchema)
+    .where(and(
+      eq(membershipPlanSchema.id, membershipPlanId),
+      eq(membershipPlanSchema.organizationId, organizationId),
+    ))
+    .limit(1);
+
+  const allowance = plan?.classAllowance;
+  if (allowance === null || allowance === undefined) {
+    return null;
+  }
+
+  // Count in SQL — attendance rows are numerous and we only need the total.
+  const [used] = await db
+    .select({ value: count() })
+    .from(attendanceSchema)
+    .where(and(
+      eq(attendanceSchema.memberId, memberId),
+      eq(attendanceSchema.organizationId, organizationId),
+      gte(attendanceSchema.attendanceDate, membershipStartDate),
+    ));
+
+  const classesUsed = used?.value ?? 0;
+
+  return {
+    totalClasses: allowance,
+    classesUsed,
+    // Clamped: a member can attend more classes than the card bought (staff
+    // can check them in regardless), and a negative "remaining" would render
+    // as a nonsense figure on the detail page.
+    classesRemaining: Math.max(0, allowance - classesUsed),
   };
 }
 
@@ -717,6 +785,7 @@ export async function getMembershipPlans(organizationId: string): Promise<Member
     holdFeeAmount: plan.holdFeeAmount,
     holdFeeFrequency: plan.holdFeeFrequency,
     holdLimitPerYear: plan.holdLimitPerYear,
+    classAllowance: plan.classAllowance,
     frequency: plan.frequency,
     contractLength: plan.contractLength,
     accessLevel: plan.accessLevel,
@@ -749,6 +818,7 @@ export async function getAllMembershipPlans(organizationId: string): Promise<Mem
     holdFeeAmount: plan.holdFeeAmount,
     holdFeeFrequency: plan.holdFeeFrequency,
     holdLimitPerYear: plan.holdLimitPerYear,
+    classAllowance: plan.classAllowance,
     frequency: plan.frequency,
     contractLength: plan.contractLength,
     accessLevel: plan.accessLevel,

@@ -4,11 +4,9 @@ import type {
   AddMembershipWizardData,
   AutoRenewalOption,
   ContractLength,
-  MembershipStartDateOption,
 } from '@/hooks/useAddMembershipWizard';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -83,37 +81,6 @@ export const MembershipContractStep = ({ data, onUpdate, onNext, onBack, onCance
             </Select>
           </div>
         </div>
-
-        {/* Membership Start Date — moved here from Payments and Fees */}
-        {data.membershipType !== 'punchcard' && (
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">{t('start_date_label')}</label>
-              <Select
-                value={data.membershipStartDate}
-                onValueChange={(value: MembershipStartDateOption) => onUpdate({ membershipStartDate: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="same-as-registration">{t('start_date_same_as_registration')}</SelectItem>
-                  <SelectItem value="custom">{t('start_date_custom')}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {data.membershipStartDate === 'custom' && (
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">{t('custom_start_date_label')}</label>
-                <Input
-                  type="date"
-                  value={data.customStartDate}
-                  onChange={e => onUpdate({ customStartDate: e.target.value })}
-                />
-              </div>
-            )}
-          </div>
-        )}
 
       </div>
 

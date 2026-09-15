@@ -85,7 +85,7 @@ export function EmailSupportModal({ isOpen, onClose }: EmailSupportModalProps) {
               error={!!errors.subject}
             />
             {errors.subject && (
-              <p className="text-sm text-red-500">{errors.subject}</p>
+              <p className="text-sm text-destructive">{errors.subject}</p>
             )}
           </div>
 
@@ -100,7 +100,7 @@ export function EmailSupportModal({ isOpen, onClose }: EmailSupportModalProps) {
               error={!!errors.message}
             />
             {errors.message && (
-              <p className="text-sm text-red-500">{errors.message}</p>
+              <p className="text-sm text-destructive">{errors.message}</p>
             )}
           </div>
         </div>

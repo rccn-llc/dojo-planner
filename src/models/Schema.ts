@@ -247,6 +247,7 @@ export const membershipPlanSchema = pgTable(
     holdFeeAmount: real('hold_fee_amount').notNull().default(0), // Charged when member is placed on hold
     holdFeeFrequency: text('hold_fee_frequency'), // null | 'one-time' | 'Weekly' | 'Monthly' | 'Semi-Annual' | 'Annual'
     holdLimitPerYear: integer('hold_limit_per_year'), // null or 0 = unlimited; otherwise the max number of holds per year
+    classAllowance: integer('class_allowance'), // Punchcard plans only: number of classes the card buys. null = not a punchcard (unlimited / recurring plan)
     frequency: text('frequency'), // Monthly, Annual, Semi-Annual, Weekly, or null for one-time / punchcards
     contractLength: text('contract_length').notNull(), // e.g., '12 Months', 'Month-to-Month', '7 Days'
     accessLevel: text('access_level').notNull(), // e.g., 'Unlimited', '8 Classes/mo'

@@ -155,6 +155,11 @@ function reverseStatus(status: CouponStatus): 'active' | 'expired' | 'inactive' 
 function combineDateTime(date: string, time: string): Date {
   // Time defaults to start-of-day if missing — Zod will coerce.
   const safeTime = time && time.length > 0 ? time : '00:00:00';
+  // Deliberately parsed as LOCAL time, not UTC. A coupon's validity window is
+  // a wall-clock moment the operator picked ("expires at 5pm"), so it must be
+  // interpreted in their timezone. Do NOT switch this to `parseDateOnly` in
+  // `@/utils/DateHelpers` — that helper is UTC-anchored and is only for
+  // date-only values with no meaningful time component.
   return new Date(`${date}T${safeTime}`);
 }
 

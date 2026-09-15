@@ -123,13 +123,6 @@ type MemberData = {
   membershipDetails: MembershipDetailsData;
 };
 
-// Mock punchcard info for demonstration (used when member has punchcard membership)
-const MOCK_PUNCHCARD_INFO: PunchcardInfo = {
-  totalClasses: 10,
-  classesUsed: 4,
-  classesRemaining: 6,
-};
-
 // Build MemberData from API member data - use Member type from cache
 
 function getMembershipBadgeText(membershipType?: string, planName?: string | null): string {
@@ -478,6 +471,7 @@ export default function EditMemberPage() {
 
   // Member photo (large base64), loaded separately from the members list.
   const [memberPhoto, setMemberPhoto] = useState<string | undefined>(undefined);
+  const [punchcardInfo, setPunchcardInfo] = useState<PunchcardInfo | null>(null);
 
   // State for signed waivers
   const [signedWaivers, setSignedWaivers] = useState<SignedWaiverWithTemplateName[]>([]);
@@ -675,6 +669,9 @@ export default function EditMemberPage() {
     try {
       const result = await client.member.getById({ memberId });
       setMemberPhoto(result.member.photoUrl ?? undefined);
+      // Real punchcard balance, derived server-side from attendance. null when
+      // the plan is not a punchcard, which hides the card.
+      setPunchcardInfo(result.punchcardUsage ?? null);
     } catch (err) {
       console.warn('[Edit Member] Failed to fetch member photo:', err);
     }
@@ -1312,7 +1309,7 @@ export default function EditMemberPage() {
               </div>
               <div className="mt-auto flex justify-end pt-6">
                 <Button
-                  className="w-fit bg-foreground text-background hover:bg-foreground/90"
+                  className="w-fit"
                   onClick={() => setIsEditContactModalOpen(true)}
                 >
                   Edit Details
@@ -1467,7 +1464,7 @@ export default function EditMemberPage() {
                   ? (
                       <>
                         <Button
-                          className="w-fit bg-foreground text-background hover:bg-foreground/90"
+                          className="w-fit"
                           onClick={() => handleOpenMembershipModal('change')}
                         >
                           Change Membership
@@ -1489,7 +1486,7 @@ export default function EditMemberPage() {
                       )
                     : (
                         <Button
-                          className="w-fit bg-foreground text-background hover:bg-foreground/90"
+                          className="w-fit"
                           onClick={() => handleOpenMembershipModal('add')}
                         >
                           Add Membership
@@ -1657,7 +1654,7 @@ export default function EditMemberPage() {
                             <Button
                               size="sm"
                               onClick={() => handleDownloadWaiver(waiver)}
-                              className="w-fit gap-2 bg-foreground text-background hover:bg-foreground/90"
+                              className="w-fit gap-2"
                             >
                               <Download className="size-4" />
                               Download
@@ -1716,7 +1713,7 @@ export default function EditMemberPage() {
                                     size="sm"
                                     disabled={refundingId === item.id}
                                     onClick={() => handleRefund(item.id)}
-                                    className="w-fit bg-foreground text-background hover:bg-foreground/90"
+                                    className="w-fit"
                                   >
                                     {refundingId === item.id ? 'Refunding…' : 'Refund'}
                                   </Button>
@@ -1813,7 +1810,7 @@ export default function EditMemberPage() {
           memberName={state.currentData.memberName}
           attendanceRecords={attendance}
           isLoading={isLoadingAttendance}
-          punchcardInfo={currentMembership?.membershipPlan?.category === 'punchcard' ? MOCK_PUNCHCARD_INFO : null}
+          punchcardInfo={punchcardInfo}
         />
       )}
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useClerk } from '@clerk/nextjs';
-import { BarChart3, BookMarked, Briefcase, Building, CircleUser, Cookie, FileSignature, FileText, Home, LogOut, Mail, Map, Megaphone, Package, Settings, Shield, Users, Users2 } from 'lucide-react';
+import { BarChart3, BookMarked, Briefcase, Building, CircleUser, Cookie, FileSignature, FileText, Home, LogOut, Mail, Map, Megaphone, Package, Shield, Users, Users2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { Badge } from '@/components/ui/badge';
 import { Sidebar, SidebarContent, SidebarHeader, SidebarRail } from '@/components/ui/sidebar';
@@ -117,19 +117,6 @@ export const AppSidebar = ({ userRole, ...props }: AppSidebarProps) => {
               url: '/dashboard/messaging',
               icon: Mail,
               badge: <Badge variant="default">40</Badge>,
-              disabled: true,
-              hidden: true,
-            },
-          ]}
-        />
-        <AppSidebarNav
-          label={t('settings_section_label')}
-          hidden
-          items={[
-            {
-              title: t('preferences'),
-              url: '/dashboard/preferences',
-              icon: Settings,
               disabled: true,
               hidden: true,
             },

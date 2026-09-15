@@ -15,8 +15,6 @@ const baseWizard: AddMembershipWizardData = {
   chargeSignUpFee: 'at-registration',
   monthlyFee: 149,
   paymentFrequency: 'monthly',
-  membershipStartDate: 'same-as-registration',
-  customStartDate: '',
   proRateFirstPayment: false,
   contractLength: 'month-to-month',
   autoRenewal: 'none',

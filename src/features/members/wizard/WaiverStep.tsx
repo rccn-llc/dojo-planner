@@ -239,7 +239,7 @@ export function WaiverStep({
             </Button>
           </div>
           <Button onClick={handleContinueWithoutWaiver} disabled={isLoading}>
-            {isLoading ? `${t('continue_button')}...` : t('continue_button')}
+            {isLoading ? t('continuing_button') : t('continue_button')}
           </Button>
         </div>
       </div>
@@ -379,7 +379,7 @@ export function WaiverStep({
             {t('continue_without_signing_button')}
           </Button>
           <Button onClick={handleNext} disabled={isLoading}>
-            {isLoading ? `${t('continue_button')}...` : t('continue_button')}
+            {isLoading ? t('continuing_button') : t('continue_button')}
           </Button>
         </div>
       </div>

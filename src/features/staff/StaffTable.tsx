@@ -2,14 +2,16 @@
 
 import type { StaffFilters } from './StaffFilterBar';
 import type { StaffMemberData } from '@/hooks/useInviteStaffForm';
-import { ArrowDownAZ, ArrowUpZA, Edit, ImageIcon, Trash2 } from 'lucide-react';
+import { Edit, ImageIcon, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { SortableHeader } from '@/components/ui/table';
 import { StaffCard } from '@/templates/StaffCard';
+import { formatRoleLabel } from '@/utils/RoleLabels';
 import { EditInstructorPhotoModal } from './EditInstructorPhotoModal';
 import { StaffFilterBar } from './StaffFilterBar';
 
@@ -154,25 +156,6 @@ export function StaffTable({
     return `${firstName[0]}${lastName[0]}`.toUpperCase();
   };
 
-  const formatRole = (role: string): string => {
-    const roleMap: Record<string, string> = {
-      'org:admin': 'Admin',
-      'org:academy_owner': 'Academy Owner',
-      'org:front_desk': 'Front Desk',
-      'org:instructor': 'Instructor',
-      'org:member': 'Member',
-      'org:individual_member': 'Individual Member',
-    };
-    if (roleMap[role]) {
-      return roleMap[role];
-    }
-    return role
-      .replace(/^org:/, '')
-      .split(/[_-]/)
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  };
-
   const getRoleVariant = (role: string): 'default' | 'secondary' | 'destructive' | 'outline' => {
     if (role === 'org:admin') {
       return 'default';
@@ -227,32 +210,24 @@ export function StaffTable({
                       <thead>
                         <tr className="border-b border-border bg-secondary">
                           <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
-                            <button
-                              type="button"
-                              onClick={() => handleSort('firstName')}
-                              className="flex cursor-pointer items-center gap-2 hover:text-foreground/80"
+                            <SortableHeader
+                              field="firstName"
+                              activeField={sortField}
+                              direction={sortDirection}
+                              onSort={handleSort}
                             >
                               Staff member name
-                              {sortField === 'firstName' && (
-                                sortDirection === 'asc'
-                                  ? <ArrowDownAZ className="size-4" />
-                                  : <ArrowUpZA className="size-4" />
-                              )}
-                            </button>
+                            </SortableHeader>
                           </th>
                           <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
-                            <button
-                              type="button"
-                              onClick={() => handleSort('role')}
-                              className="flex cursor-pointer items-center gap-2 hover:text-foreground/80"
+                            <SortableHeader
+                              field="role"
+                              activeField={sortField}
+                              direction={sortDirection}
+                              onSort={handleSort}
                             >
                               Role
-                              {sortField === 'role' && (
-                                sortDirection === 'asc'
-                                  ? <ArrowDownAZ className="size-4" />
-                                  : <ArrowUpZA className="size-4" />
-                              )}
-                            </button>
+                            </SortableHeader>
                           </th>
                           <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
                             Status
@@ -287,7 +262,7 @@ export function StaffTable({
                             </td>
                             <td className="px-6 py-4">
                               <Badge variant={getRoleVariant(staff.role)}>
-                                {formatRole(staff.role)}
+                                {formatRoleLabel(staff.role)}
                               </Badge>
                             </td>
                             <td className="px-6 py-4">

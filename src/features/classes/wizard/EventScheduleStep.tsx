@@ -6,6 +6,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { DatePickerField } from '@/components/ui/date-picker/date-picker-field';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -174,22 +175,18 @@ export const EventScheduleStep = ({
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">{t('start_date_label')}</label>
-            <Input
-              type="date"
+            <DatePickerField
               value={data.eventSchedule.startDate}
-              onChange={e => handleDateChange('startDate', e.target.value)}
-              onBlur={() => handleBlur('startDate')}
+              onChange={value => handleDateChange('startDate', value)}
             />
           </div>
           {data.eventSchedule.isMultiDay && (
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">{t('end_date_label')}</label>
-              <Input
-                type="date"
+              <DatePickerField
                 value={data.eventSchedule.endDate}
-                onChange={e => handleDateChange('endDate', e.target.value)}
-                onBlur={() => handleBlur('endDate')}
-                min={data.eventSchedule.startDate}
+                onChange={value => handleDateChange('endDate', value)}
+                minDate={data.eventSchedule.startDate}
               />
             </div>
           )}
@@ -241,12 +238,11 @@ export const EventScheduleStep = ({
                           <div className="grid grid-cols-2 gap-2">
                             <div className="space-y-0.5">
                               <label className="text-[10px] text-muted-foreground">{t('column_date')}</label>
-                              <Input
-                                type="date"
+                              <DatePickerField
                                 value={session.date}
-                                onChange={e => handleUpdateSession(session.id, { date: e.target.value })}
-                                min={data.eventSchedule.startDate}
-                                max={data.eventSchedule.endDate || data.eventSchedule.startDate}
+                                onChange={value => handleUpdateSession(session.id, { date: value })}
+                                minDate={data.eventSchedule.startDate}
+                                maxDate={data.eventSchedule.endDate || data.eventSchedule.startDate}
                                 className="h-8 text-xs"
                               />
                             </div>

@@ -564,6 +564,9 @@ const membershipPlansData: Array<{
   holdFeeAmount: number;
   holdFeeFrequency: string | null;
   holdLimitPerYear: number | null;
+  // Punchcard plans only: the numeric class allowance. Omitted (undefined) for
+  // every recurring / unlimited plan, which stores null.
+  classAllowance?: number | null;
   frequency: string | null;
   contractLength: string;
   accessLevel: string;
@@ -579,7 +582,7 @@ const membershipPlansData: Array<{
   { name: 'Family Plan (HOH)', slug: 'family-plan', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', programSlug: 'adult-bjj', price: 299, signupFee: 150, cancellationFee: 250, holdFeeAmount: 30, holdFeeFrequency: 'Monthly', holdLimitPerYear: 2, frequency: 'Monthly', contractLength: '12 Months', accessLevel: 'Unlimited (HOH + dependents)', description: 'Head-of-household plan covering the primary member; dependents add on at family-member rates.', isTrial: false },
   { name: 'Weekly Drop-In', slug: 'weekly-dropin', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', programSlug: 'adult-bjj', price: 35, signupFee: 0, cancellationFee: 0, holdFeeAmount: 0, holdFeeFrequency: null, holdLimitPerYear: null, frequency: 'Weekly', contractLength: 'Week-to-Week', accessLevel: 'Unlimited', description: 'Weekly recurring drop-in for travelers and casual training.', isTrial: false },
   { name: 'Semi-Annual Pass', slug: 'semi-annual-pass', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', programSlug: 'adult-bjj', price: 800, signupFee: 100, cancellationFee: 50, holdFeeAmount: 0, holdFeeFrequency: null, holdLimitPerYear: null, frequency: 'Semi-Annual', contractLength: '6 Months', accessLevel: 'Unlimited', description: 'Pay every 6 months. No hold fee.', isTrial: false },
-  { name: '10-Class Punch Card', slug: '10-class-punchcard', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', programSlug: 'adult-bjj', price: 200, signupFee: 0, cancellationFee: 0, holdFeeAmount: 0, holdFeeFrequency: null, holdLimitPerYear: null, frequency: null, contractLength: 'N/A', accessLevel: '10 Classes', description: 'Pay-as-you-go punchcard for 10 classes. No expiration.', isTrial: false },
+  { name: '10-Class Punch Card', slug: '10-class-punchcard', category: 'Adult Brazilian Jiu-Jitsu', program: 'Adult', programSlug: 'adult-bjj', price: 200, signupFee: 0, cancellationFee: 0, holdFeeAmount: 0, holdFeeFrequency: null, holdLimitPerYear: null, classAllowance: 10, frequency: null, contractLength: 'N/A', accessLevel: '10 Classes', description: 'Pay-as-you-go punchcard for 10 classes. No expiration.', isTrial: false },
 ];
 
 // Catalog categories
@@ -1328,6 +1331,7 @@ async function seedOrganization(organizationId: string) {
       holdFeeAmount: plan.holdFeeAmount,
       holdFeeFrequency: plan.holdFeeFrequency,
       holdLimitPerYear: plan.holdLimitPerYear,
+      classAllowance: plan.classAllowance ?? null,
       frequency: plan.frequency,
       contractLength: plan.contractLength,
       accessLevel: plan.accessLevel,

@@ -5,7 +5,7 @@ import { logger } from '@/libs/Logger';
 import { audit } from '@/services/AuditService';
 import { sendMemberConfirmationEmail } from '@/services/EmailService';
 import { cancelMembershipLifecycle, getLifecycleContext, HoldLimitReachedError, holdMembershipLifecycle, reactivateMembershipLifecycle } from '@/services/MemberPaymentService';
-import { addMemberMembership, changeMemberMembership, createMember, deleteMemberPaymentMethod, getAllMembershipPlans, getFamilyMembers, getHeadOfHouseholdMembers, getHOHForFamilyMember, getMemberById, getMemberPaymentMethods, getMembershipPlans, getMemberTransactions, linkFamilyMember, MemberNotFoundError, MemberOnHoldError, removeFully, setPrimaryPaymentMethod as setPrimaryPaymentMethodService, unlinkFamilyMember, updateMember, updateMemberContactInfo, updateMemberPhoto, updateMemberStatus } from '@/services/MembersService';
+import { addMemberMembership, changeMemberMembership, createMember, deleteMemberPaymentMethod, getAllMembershipPlans, getFamilyMembers, getHeadOfHouseholdMembers, getHOHForFamilyMember, getMemberById, getMemberPaymentMethods, getMembershipPlans, getMemberTransactions, getPunchcardUsage, linkFamilyMember, MemberNotFoundError, MemberOnHoldError, removeFully, setPrimaryPaymentMethod as setPrimaryPaymentMethodService, unlinkFamilyMember, updateMember, updateMemberContactInfo, updateMemberPhoto, updateMemberStatus } from '@/services/MembersService';
 import { resolvePaymentProviderConfig } from '@/services/PaymentProviderConfigService';
 import { generatePdfFilename } from '@/services/WaiverPdfService';
 import { generateWaiverPdfBuffer } from '@/services/WaiverPdfService.server';
@@ -833,7 +833,19 @@ export const getById = os
     if (!member) {
       throw new ORPCError('Member not found', { status: 404 });
     }
-    return { member };
+
+    // Punchcard balance for the current membership, derived from attendance.
+    // null when the plan is not a punchcard, which hides the card in the UI.
+    const punchcardUsage = member.currentMembership
+      ? await getPunchcardUsage(
+          input.memberId,
+          orgId,
+          member.currentMembership.membershipPlanId,
+          member.currentMembership.startDate,
+        )
+      : null;
+
+    return { member, punchcardUsage };
   });
 
 export const sendConfirmationEmail = os

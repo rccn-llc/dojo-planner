@@ -24,13 +24,13 @@ function StatusBadge({ status }: { status: ProgramStatus }) {
 
   if (status === 'Active') {
     return (
-      <Badge className="bg-green-500 text-white hover:bg-green-600">
+      <Badge variant="success">
         {t('status_active')}
       </Badge>
     );
   }
   return (
-    <Badge className="bg-red-500 text-white hover:bg-red-600">
+    <Badge variant="destructive">
       {t('status_inactive')}
     </Badge>
   );

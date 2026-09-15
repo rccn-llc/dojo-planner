@@ -28,6 +28,7 @@ import { useProgramsCache } from '@/hooks/useProgramsCache';
 import { useTagsCache } from '@/hooks/useTagsCache';
 import { client } from '@/libs/Orpc';
 import { ORG_ROLE } from '@/types/Auth';
+import { parseDateOnly } from '@/utils/DateHelpers';
 
 // Convert wizard 12-hour {hour, minute, AM/PM} → DB 24-hour "HH:MM".
 function exceptionTo24h(hour: number | undefined, minute: number | undefined, amPm: 'AM' | 'PM' | undefined): string | null {
@@ -368,7 +369,7 @@ export default function ClassDetailPage({ params }: { params: Promise<PageParams
     try {
       await client.classes.upsertException({
         classScheduleInstanceId: exception.scheduleInstanceId,
-        exceptionDate: new Date(`${exception.date}T00:00:00Z`),
+        exceptionDate: parseDateOnly(exception.date),
         exceptionType: exception.type,
         newStartTime,
         newEndTime,
@@ -399,7 +400,7 @@ export default function ClassDetailPage({ params }: { params: Promise<PageParams
     try {
       await client.classes.upsertException({
         classScheduleInstanceId: exception.scheduleInstanceId,
-        exceptionDate: new Date(`${exception.date}T00:00:00Z`),
+        exceptionDate: parseDateOnly(exception.date),
         exceptionType: exception.type,
         newStartTime: null,
         newEndTime: null,

@@ -76,13 +76,13 @@ export const ActiveHighlight: Story = {
         icon: Home,
       },
       {
-        title: 'My Profile',
-        url: '/dashboard/my-profile',
+        title: 'Location Settings',
+        url: '/dashboard/location-settings',
         icon: Settings,
       },
       {
-        title: 'Preferences',
-        url: '/dashboard/preferences',
+        title: 'Security',
+        url: '/dashboard/security',
         icon: Settings,
       },
     ],
@@ -128,8 +128,8 @@ export const WithDisabledItems: Story = {
         disabled: true,
       },
       {
-        title: 'Preferences',
-        url: '/dashboard/preferences',
+        title: 'Security',
+        url: '/dashboard/security',
         icon: Settings,
       },
     ],

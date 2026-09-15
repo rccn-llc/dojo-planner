@@ -5,21 +5,27 @@ import { DatePicker, DateTimePicker } from './date-picker';
 
 describe('DatePicker', () => {
   describe('Rendering', () => {
-    it('should render with placeholder when no value', async () => {
-      await render(<DatePicker placeholder="Pick a date" />);
+    it('should show the MM/DD/YYYY format hint as the placeholder', async () => {
+      // The typed format must be discoverable — it is the accessible entry
+      // path, so the field advertises it rather than saying "Pick a date".
+      await render(<DatePicker data-testid="dp" />);
 
-      expect(page.getByText('Pick a date')).toBeInTheDocument();
+      expect((page.getByTestId('dp').element() as HTMLInputElement).placeholder).toBe('MM/DD/YYYY');
     });
 
-    it('should render formatted date when value is provided', async () => {
-      // Use a date at noon UTC to avoid timezone issues
-      await render(<DatePicker value={new Date(2024, 5, 15)} />);
+    it('should render the value as typed text, not button text', async () => {
+      await render(<DatePicker value={new Date(2024, 5, 15)} data-testid="dp" />);
 
-      // The date should be formatted as yyyy-MM-dd
-      const button = page.getByRole('button');
+      expect((page.getByTestId('dp').element() as HTMLInputElement).value).toBe('06/15/2024');
+    });
 
-      expect(button).toBeInTheDocument();
-      expect(button.element().textContent).toContain('2024-06-15');
+    it('should be a text input the user can type into', async () => {
+      await render(<DatePicker data-testid="dp" />);
+
+      const el = page.getByTestId('dp').element() as HTMLInputElement;
+
+      expect(el.tagName).toBe('INPUT');
+      expect(el.type).toBe('text');
     });
 
     it('should render calendar icon', async () => {
@@ -30,12 +36,13 @@ describe('DatePicker', () => {
       expect(button).toBeInTheDocument();
     });
 
-    it('should apply custom className', async () => {
-      await render(<DatePicker className="w-64" placeholder="Pick a date" />);
+    it('should apply custom className to the field wrapper', async () => {
+      await render(<DatePicker className="w-64" data-testid="dp" />);
 
-      const button = page.getByRole('button');
+      // className now lands on the wrapper holding input + calendar button.
+      const wrapper = page.getByTestId('dp').element().closest('.w-64');
 
-      expect(button).toHaveClass('w-64');
+      expect(wrapper).not.toBeNull();
     });
 
     it('should apply data-testid', async () => {
@@ -116,15 +123,17 @@ describe('DateTimePicker', () => {
   });
 
   describe('Rendering', () => {
-    it('should render date and time inputs', async () => {
+    it('should render a typed date field and a time input', async () => {
       await render(
-        <DateTimePicker
-          datePlaceholder="Pick a date"
-        />,
+        <DateTimePicker data-testid-date="dtp-date" data-testid-time="dtp-time" />,
       );
 
-      expect(page.getByText('Pick a date')).toBeInTheDocument();
-      expect(page.getByRole('textbox')).toBeInTheDocument();
+      const dateInput = page.getByTestId('dtp-date').element() as HTMLInputElement;
+
+      // The date half is a typed text field, not a button.
+      expect(dateInput.tagName).toBe('INPUT');
+      expect(dateInput.placeholder).toBe('MM/DD/YYYY');
+      expect(page.getByTestId('dtp-time')).toBeInTheDocument();
     });
 
     it('should render with date and time values', async () => {
@@ -132,14 +141,14 @@ describe('DateTimePicker', () => {
         <DateTimePicker
           date="2024-06-15"
           time="14:30:00"
+          data-testid-date="dtp-date"
+          data-testid-time="dtp-time"
         />,
       );
 
-      expect(page.getByText('2024-06-15')).toBeInTheDocument();
-
-      const timeInput = page.getByRole('textbox');
-
-      expect(timeInput).toHaveValue('14:30:00');
+      // State stays yyyy-MM-dd; the USER sees MM/DD/YYYY.
+      expect((page.getByTestId('dtp-date').element() as HTMLInputElement).value).toBe('06/15/2024');
+      expect(page.getByTestId('dtp-time')).toHaveValue('14:30:00');
     });
 
     it('should render labels when provided', async () => {
@@ -180,19 +189,14 @@ describe('DateTimePicker', () => {
   });
 
   describe('Disabled state', () => {
-    it('should disable both date and time inputs when disabled', async () => {
+    it('should disable the date field, its calendar trigger and the time input', async () => {
       await render(
-        <DateTimePicker
-          disabled
-          datePlaceholder="Pick a date"
-        />,
+        <DateTimePicker disabled data-testid-date="dtp-date" data-testid-time="dtp-time" />,
       );
 
-      const dateButton = page.getByRole('button');
-      const timeInput = page.getByRole('textbox');
-
-      expect(dateButton).toBeDisabled();
-      expect(timeInput).toBeDisabled();
+      expect(page.getByTestId('dtp-date')).toBeDisabled();
+      expect(page.getByTestId('dtp-date-calendar-trigger')).toBeDisabled();
+      expect(page.getByTestId('dtp-time')).toBeDisabled();
     });
   });
 
@@ -255,10 +259,11 @@ describe('DateTimePicker', () => {
         <DateTimePicker
           time="12:00:00"
           onTimeChange={onTimeChange}
+          data-testid-time="dtp-time"
         />,
       );
 
-      const timeInput = page.getByRole('textbox');
+      const timeInput = page.getByTestId('dtp-time');
       await userEvent.clear(timeInput.element());
       await userEvent.type(timeInput.element(), '14:30:00');
 
@@ -268,36 +273,125 @@ describe('DateTimePicker', () => {
 
   describe('Date parsing', () => {
     it('should handle empty date string', async () => {
-      await render(
-        <DateTimePicker
-          date=""
-          datePlaceholder="Pick a date"
-        />,
-      );
+      await render(<DateTimePicker date="" data-testid-date="dtp-date" />);
 
-      expect(page.getByText('Pick a date')).toBeInTheDocument();
+      expect((page.getByTestId('dtp-date').element() as HTMLInputElement).value).toBe('');
     });
 
     it('should handle invalid date string', async () => {
-      await render(
-        <DateTimePicker
-          date="invalid-date"
-          datePlaceholder="Pick a date"
-        />,
-      );
+      await render(<DateTimePicker date="invalid-date" data-testid-date="dtp-date" />);
 
-      // Should show placeholder for invalid date
-      expect(page.getByText('Pick a date')).toBeInTheDocument();
+      // An unparseable incoming value renders blank rather than echoing junk.
+      expect((page.getByTestId('dtp-date').element() as HTMLInputElement).value).toBe('');
     });
 
     it('should handle valid date string', async () => {
-      await render(
-        <DateTimePicker
-          date="2024-12-25"
-        />,
-      );
+      await render(<DateTimePicker date="2024-12-25" data-testid-date="dtp-date" />);
 
-      expect(page.getByText('2024-12-25')).toBeInTheDocument();
+      // yyyy-MM-dd in, MM/DD/YYYY shown to the user.
+      expect((page.getByTestId('dtp-date').element() as HTMLInputElement).value).toBe('12/25/2024');
     });
+  });
+});
+
+describe('DatePicker date bounds', () => {
+  it('disables days before minDate', async () => {
+    await render(
+      <DatePicker
+        value={new Date(2026, 5, 15)}
+        minDate={new Date(2026, 5, 10)}
+        data-testid="bounded"
+      />,
+    );
+
+    await userEvent.click(page.getByTestId('bounded-calendar-trigger').element());
+
+    // The 9th is before the bound; the 11th is inside it.
+    const before = document.querySelector('[data-day="2026-06-09"] button');
+    const inside = document.querySelector('[data-day="2026-06-11"] button');
+
+    expect(before?.hasAttribute('disabled')).toBe(true);
+    expect(inside?.hasAttribute('disabled')).toBe(false);
+  });
+
+  it('disables days after maxDate', async () => {
+    await render(
+      <DatePicker
+        value={new Date(2026, 5, 15)}
+        maxDate={new Date(2026, 5, 20)}
+        data-testid="bounded"
+      />,
+    );
+
+    await userEvent.click(page.getByTestId('bounded-calendar-trigger').element());
+
+    const after = document.querySelector('[data-day="2026-06-21"] button');
+    const inside = document.querySelector('[data-day="2026-06-19"] button');
+
+    expect(after?.hasAttribute('disabled')).toBe(true);
+    expect(inside?.hasAttribute('disabled')).toBe(false);
+  });
+
+  it('leaves every day selectable when unbounded', async () => {
+    await render(
+      <DatePicker value={new Date(2026, 5, 15)} data-testid="unbounded" />,
+    );
+
+    await userEvent.click(page.getByTestId('unbounded-calendar-trigger').element());
+
+    const first = document.querySelector('[data-day="2026-06-01"] button');
+
+    expect(first?.hasAttribute('disabled')).toBe(false);
+  });
+
+  it('offers month and year dropdowns for fast navigation', async () => {
+    // Regression: the default `label` caption showed only prev/next arrows, so
+    // a date years out took dozens of clicks.
+    await render(
+      <DatePicker value={new Date(2026, 5, 15)} data-testid="nav" />,
+    );
+
+    await userEvent.click(page.getByTestId('nav-calendar-trigger').element());
+
+    expect(page.getByRole('combobox').elements().length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('DateTimePicker date bounds', () => {
+  it('disables days outside the yyyy-MM-dd bounds', async () => {
+    await render(
+      <DateTimePicker
+        date="2026-06-15"
+        minDate="2026-06-10"
+        maxDate="2026-06-20"
+        data-testid-date="dtp"
+      />,
+    );
+
+    await userEvent.click(page.getByTestId('dtp-calendar-trigger').element());
+
+    const below = document.querySelector('[data-day="2026-06-09"] button');
+    const above = document.querySelector('[data-day="2026-06-21"] button');
+    const inside = document.querySelector('[data-day="2026-06-15"] button');
+
+    expect(below?.hasAttribute('disabled')).toBe(true);
+    expect(above?.hasAttribute('disabled')).toBe(true);
+    expect(inside?.hasAttribute('disabled')).toBe(false);
+  });
+
+  it('ignores a malformed bound instead of breaking the picker', async () => {
+    await render(
+      <DateTimePicker
+        date="2026-06-15"
+        minDate="not-a-date"
+        data-testid-date="dtp"
+      />,
+    );
+
+    await userEvent.click(page.getByTestId('dtp-calendar-trigger').element());
+
+    const day = document.querySelector('[data-day="2026-06-03"] button');
+
+    expect(day?.hasAttribute('disabled')).toBe(false);
   });
 });

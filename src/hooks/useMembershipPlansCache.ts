@@ -18,6 +18,7 @@ export type MembershipPlanData = {
   holdFeeAmount: number;
   holdFeeFrequency: string | null;
   holdLimitPerYear: number | null;
+  classAllowance: number | null;
   frequency: string | null;
   contractLength: string;
   accessLevel: string;

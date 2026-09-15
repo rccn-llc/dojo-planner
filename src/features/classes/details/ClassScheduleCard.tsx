@@ -7,7 +7,7 @@ import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { DatePickerField } from '@/components/ui/date-picker/date-picker-field';
 import { Label } from '@/components/ui/label';
 import {
   Popover,
@@ -21,6 +21,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { useInstructorsCache } from '@/hooks/useInstructorsCache';
+import { formatDateOnlyLocal } from '@/utils/DateHelpers';
 
 type ClassScheduleCardProps = {
   scheduleInstances: ScheduleInstance[];
@@ -66,7 +67,7 @@ export function ClassScheduleCard({
     }
     const nextDate = new Date(today);
     nextDate.setDate(today.getDate() + daysUntilTarget);
-    return nextDate.toISOString().split('T')[0] ?? '';
+    return formatDateOnlyLocal(nextDate);
   };
 
   const handleOpenDatePicker = (instanceId: string, dayOfWeek: DayOfWeek) => {
@@ -230,12 +231,10 @@ export function ClassScheduleCard({
                                         </p>
                                       </div>
                                       <div className="space-y-2">
-                                        <Label htmlFor={`date-${instance.id}`}>{t('select_date_label')}</Label>
-                                        <Input
-                                          id={`date-${instance.id}`}
-                                          type="date"
+                                        <Label>{t('select_date_label')}</Label>
+                                        <DatePickerField
                                           value={selectedDate}
-                                          onChange={e => setSelectedDate(e.target.value)}
+                                          onChange={setSelectedDate}
                                           data-testid={`date-input-${instance.id}`}
                                         />
                                       </div>

@@ -1,10 +1,11 @@
 'use client';
 
-import { ArrowDown01, ArrowDownAZ, ArrowUp10, ArrowUpZA, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useCallback, useMemo, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input/input';
+import { SortableHeader } from '@/components/ui/table';
 
 export type AttendanceRecord = {
   id: string;
@@ -109,23 +110,6 @@ export function MemberDetailAttendance({
     });
   }, [attendanceRecords, sortField, sortDirection, searchQuery]);
 
-  const renderSortIcon = (field: SortField) => {
-    if (sortField !== field) {
-      return null;
-    }
-
-    // Date field uses numeric icons, text fields use alphabetic icons
-    if (field === 'date') {
-      return sortDirection === 'asc'
-        ? <ArrowDown01 className="size-4" />
-        : <ArrowUp10 className="size-4" />;
-    }
-
-    return sortDirection === 'asc'
-      ? <ArrowDownAZ className="size-4" />
-      : <ArrowUpZA className="size-4" />;
-  };
-
   return (
     <div className="space-y-6">
       {/* Punchcard Status Section */}
@@ -197,44 +181,48 @@ export function MemberDetailAttendance({
                         <thead>
                           <tr className="border-b border-border bg-secondary">
                             <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
-                              <button
-                                type="button"
-                                onClick={() => handleSort('className')}
-                                className="flex cursor-pointer items-center gap-2 hover:text-foreground/80"
+                              <SortableHeader
+                                field="className"
+                                activeField={sortField}
+                                direction={sortDirection}
+                                onSort={handleSort}
+                                sortIcons="alpha"
                               >
                                 {t('table_class')}
-                                {renderSortIcon('className')}
-                              </button>
+                              </SortableHeader>
                             </th>
                             <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
-                              <button
-                                type="button"
-                                onClick={() => handleSort('date')}
-                                className="flex cursor-pointer items-center gap-2 hover:text-foreground/80"
+                              <SortableHeader
+                                field="date"
+                                activeField={sortField}
+                                direction={sortDirection}
+                                onSort={handleSort}
+                                sortIcons="numeric"
                               >
                                 {t('table_date')}
-                                {renderSortIcon('date')}
-                              </button>
+                              </SortableHeader>
                             </th>
                             <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
-                              <button
-                                type="button"
-                                onClick={() => handleSort('time')}
-                                className="flex cursor-pointer items-center gap-2 hover:text-foreground/80"
+                              <SortableHeader
+                                field="time"
+                                activeField={sortField}
+                                direction={sortDirection}
+                                onSort={handleSort}
+                                sortIcons="alpha"
                               >
                                 {t('table_time')}
-                                {renderSortIcon('time')}
-                              </button>
+                              </SortableHeader>
                             </th>
                             <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
-                              <button
-                                type="button"
-                                onClick={() => handleSort('instructor')}
-                                className="flex cursor-pointer items-center gap-2 hover:text-foreground/80"
+                              <SortableHeader
+                                field="instructor"
+                                activeField={sortField}
+                                direction={sortDirection}
+                                onSort={handleSort}
+                                sortIcons="alpha"
                               >
                                 {t('table_instructor')}
-                                {renderSortIcon('instructor')}
-                              </button>
+                              </SortableHeader>
                             </th>
                           </tr>
                         </thead>

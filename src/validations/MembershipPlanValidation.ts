@@ -32,6 +32,9 @@ const MembershipPlanShape = z.object({
   holdFeeAmount: z.number().min(0).default(0),
   holdFeeFrequency: HoldFeeFrequency.nullable().optional(),
   holdLimitPerYear: z.number().int().min(0).nullable().optional(),
+  // Punchcard plans only: how many classes the card buys. null = not a
+  // punchcard. Distinct from 0, which is an exhausted card.
+  classAllowance: z.number().int().min(0).nullable().optional(),
   frequency: MembershipPlanFrequency.nullable(),
   contractLength: z.string().min(1).max(CONTRACT_LENGTH_MAX),
   accessLevel: z.string().min(1).max(ACCESS_LEVEL_MAX),
