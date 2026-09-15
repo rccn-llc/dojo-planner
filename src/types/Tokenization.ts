@@ -5,11 +5,13 @@
  * ── Why one union rather than two endpoints ─────────────────────────────────
  *
  * The provider identity and its credentials are needed at the same instant, by
- * the same component. Splitting them across two calls means they can disagree:
- * `resolvePaymentProviderConfig` caches for 60s, so two requests straddling an
- * invalidation can report different providers, and on the payment path that
- * means tokenizing against the wrong merchant account. A discriminated union
- * makes that state unrepresentable.
+ * the same component. Splitting them across two calls means they can disagree,
+ * and on the payment path a disagreement means tokenizing against the wrong
+ * merchant account. A discriminated union makes that state unrepresentable.
+ *
+ * The same reasoning applies one level down: `resolvePaymentProviderConfig`
+ * reads the provider column and the credential blob from a SINGLE row
+ * snapshot, because two reads can straddle a provider switch.
  *
  * ⚠️ The Square branch carries ONLY browser-safe fields. `accessToken` and
  * `webhookSignatureKey` are merchant secrets and must never appear here — see

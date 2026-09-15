@@ -38,13 +38,68 @@ const insertFn = vi.fn().mockReturnValue({ values: insertValues });
  */
 let savedMethodRows: Array<{ id: string }> = [];
 const selectLimit = vi.fn(() => Promise.resolve(savedMethodRows));
+
+/**
+ * `updatePaymentProviderConfig` now locks the org row up front, so `select()`
+ * serves TWO different chains:
+ *
+ *   - `.from().where().for('update').limit()`  → the locked org row
+ *   - `.from().innerJoin().where().limit()`    → the saved-payment-method guard
+ *
+ * `forUpdateRows` is what the lock read resolves to; `lockedFor` records the
+ * lock strength actually requested, so a regression that drops `.for('update')`
+ * is caught rather than silently passing.
+ */
+let lockedFor: string | null = null;
+/**
+ * The org row the LOCKED read returns, set by `primeOrgRow` below.
+ *
+ * Deliberately NOT drained from `orgFindFirst`: the locked read and
+ * `query.findFirst` are different call sites, and sharing one queue let a test
+ * that never touches the update path consume another test's primed row — which
+ * surfaced as a resolver test silently falling back to env IQPro credentials.
+ */
+let lockedOrgRow: Record<string, unknown> | undefined;
+const forUpdateLimit = vi.fn(() =>
+  Promise.resolve(lockedOrgRow === undefined ? [] : [lockedOrgRow]));
+
+/**
+ * Prime the org row for BOTH read paths at once.
+ *
+ * `updatePaymentProviderConfig` reads it through `select(...).for('update')`
+ * while the resolvers use `query.findFirst`. Tests should not have to care
+ * which, so this sets both and each test keeps expressing one intent.
+ */
+function primeOrgRow(row: Record<string, unknown> | undefined): void {
+  lockedOrgRow = row;
+  orgFindFirst.mockResolvedValueOnce(row);
+}
 const selectFn = vi.fn((..._args: unknown[]) => ({
   from: () => ({
     innerJoin: () => ({
       where: () => ({ limit: selectLimit }),
     }),
+    where: () => ({
+      for: (strength: string) => {
+        lockedFor = strength;
+        return { limit: forUpdateLimit };
+      },
+    }),
   }),
 }));
+
+/**
+ * Runs the callback against the same spies, so assertions do not care whether a
+ * statement ran inside the transaction. `transactionCalls` proves one was
+ * opened at all — the whole point of the fix is that the check and the write
+ * share it.
+ */
+const txHandle = {
+  insert: (...args: unknown[]) => insertFn(...args),
+  select: (...args: unknown[]) => selectFn(...args),
+};
+
+const transactionFn = vi.fn(async (cb: (tx: unknown) => unknown) => cb(txHandle));
 
 vi.mock('@/libs/DB', () => ({
   db: {
@@ -54,6 +109,7 @@ vi.mock('@/libs/DB', () => ({
     },
     insert: (...args: unknown[]) => insertFn(...args),
     select: (...args: unknown[]) => selectFn(...args),
+    transaction: (cb: (tx: unknown) => unknown) => transactionFn(cb),
   },
 }));
 
@@ -82,6 +138,13 @@ vi.mock('@/libs/ControlPlaneReads', () => ({
 describe('PaymentProviderConfigService', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    // clearAllMocks() wipes implementations as well as calls, so both of these
+    // must be reinstated every test or they silently resolve to undefined.
+    lockedOrgRow = undefined;
+    lockedFor = null;
+    forUpdateLimit.mockImplementation(() =>
+      Promise.resolve(lockedOrgRow === undefined ? [] : [lockedOrgRow]));
+    transactionFn.mockImplementation(async (cb: (tx: unknown) => unknown) => cb(txHandle));
     // Several tests below call vi.resetModules() + vi.doMock('@/libs/Env') to
     // exercise a different env shape. Without restoring here, that override
     // leaks into every subsequent test — and because resetModules also hands
@@ -153,6 +216,26 @@ describe('PaymentProviderConfigService', () => {
       expect(config?.source).toBe('env');
     });
 
+    it('reports decryptable-but-invalid JSON as malformed, and LOGS it', async () => {
+      // `JSON.parse` used to sit outside the malformed-blob path, so a
+      // truncated or partially-written blob threw a raw SyntaxError straight
+      // out of the function: never logged, and surfaced to the caller as an
+      // opaque parse error instead of the documented "credentials are
+      // malformed". Both corruption modes must report identically.
+      const { encryptSecret } = await import('@/libs/Crypto');
+      const { logger } = await import('@/libs/Logger');
+      orgFindFirst.mockResolvedValueOnce({
+        paymentProviderConfigEncrypted: encryptSecret('{"provider":"iqpro"'),
+      });
+      const { resolveIQProConfig } = await import('./PaymentProviderConfigService');
+
+      await expect(resolveIQProConfig('org_badjson')).rejects.toThrow(/malformed/i);
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('not valid JSON'),
+        expect.anything(),
+      );
+    });
+
     it('throws on a structurally invalid blob rather than falling back', async () => {
       // Readable ciphertext but the wrong shape means corrupt or
       // partially-written data. Falling back to env here could silently charge
@@ -182,8 +265,13 @@ describe('PaymentProviderConfigService', () => {
       await updatePaymentProviderConfig('org_x', { provider: 'iqpro', clientId: 'new', clientSecret: 'new', gatewayId: 'new' });
       await resolveIQProConfig('org_x');
 
-      // 1 read for initial resolve, 1 read inside updatePaymentProviderConfig for diff, 1 for re-resolve
-      expect(orgFindFirst).toHaveBeenCalledTimes(3);
+      // 1 read for the initial resolve + 1 for the re-resolve. The update's own
+      // org read no longer goes through findFirst: it is the locked
+      // `select(...).for('update')` inside the transaction, counted separately
+      // below. The point of the test is that the re-resolve hit the DB at all,
+      // i.e. the cache was invalidated.
+      expect(orgFindFirst).toHaveBeenCalledTimes(2);
+      expect(forUpdateLimit).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -212,7 +300,7 @@ describe('PaymentProviderConfigService', () => {
       // settings form silently flipped a Square org back to IQPro and its next
       // member payment charged the wrong merchant account.
       savedMethodRows = [];
-      orgFindFirst.mockResolvedValueOnce({ paymentProvider: 'square' });
+      primeOrgRow({ paymentProvider: 'square' });
       const { updatePaymentProviderConfig } = await import('./PaymentProviderConfigService');
       await updatePaymentProviderConfig('org_x', {
         provider: 'square',
@@ -241,7 +329,7 @@ describe('PaymentProviderConfigService', () => {
       // Provider ids do not transfer: every saved card and autopay
       // subscription would be orphaned at the old processor.
       savedMethodRows = [{ id: 'pm_1' }, { id: 'pm_2' }];
-      orgFindFirst.mockResolvedValueOnce({ paymentProvider: 'iqpro' });
+      primeOrgRow({ paymentProvider: 'iqpro' });
       const { updatePaymentProviderConfig, ProviderSwitchBlockedError } = await import(
         './PaymentProviderConfigService',
       );
@@ -264,7 +352,7 @@ describe('PaymentProviderConfigService', () => {
     it('allows a credential rotation WITHIN a provider even with saved cards', async () => {
       // Only a switch strands saved methods; rotating keys does not.
       savedMethodRows = [{ id: 'pm_1' }];
-      orgFindFirst.mockResolvedValueOnce({ paymentProvider: 'iqpro' });
+      primeOrgRow({ paymentProvider: 'iqpro' });
       const { updatePaymentProviderConfig } = await import('./PaymentProviderConfigService');
       await updatePaymentProviderConfig('org_x', {
         provider: 'iqpro',
@@ -283,7 +371,7 @@ describe('PaymentProviderConfigService', () => {
       // merge — a first Square save must supply its own token.
       savedMethodRows = [];
       const { encryptSecret } = await import('@/libs/Crypto');
-      orgFindFirst.mockResolvedValueOnce({
+      primeOrgRow({
         paymentProvider: 'square',
         paymentProviderConfigEncrypted: encryptSecret(JSON.stringify({
           provider: 'iqpro',
@@ -307,7 +395,7 @@ describe('PaymentProviderConfigService', () => {
       // is required ... IQPro credentials" — a credential its form does not
       // even show, so the message was unactionable.
       savedMethodRows = [];
-      orgFindFirst.mockResolvedValueOnce({ paymentProvider: 'square' });
+      primeOrgRow({ paymentProvider: 'square' });
       const { updatePaymentProviderConfig } = await import('./PaymentProviderConfigService');
 
       await expect(updatePaymentProviderConfig('org_x', {
@@ -324,7 +412,7 @@ describe('PaymentProviderConfigService', () => {
 
     it('names the webhook signature key when THAT is what is missing', async () => {
       savedMethodRows = [];
-      orgFindFirst.mockResolvedValueOnce({ paymentProvider: 'square' });
+      primeOrgRow({ paymentProvider: 'square' });
       const { updatePaymentProviderConfig } = await import('./PaymentProviderConfigService');
 
       await expect(updatePaymentProviderConfig('org_x', {
@@ -341,7 +429,7 @@ describe('PaymentProviderConfigService', () => {
 
     it('still names the IQPro client secret for an IQPro save', async () => {
       savedMethodRows = [];
-      orgFindFirst.mockResolvedValueOnce({});
+      primeOrgRow({});
       const { updatePaymentProviderConfig } = await import('./PaymentProviderConfigService');
 
       await expect(updatePaymentProviderConfig('org_x', {
@@ -360,7 +448,7 @@ describe('PaymentProviderConfigService', () => {
       // unchanged after that key had just been rotated.
       savedMethodRows = [];
       const { encryptSecret } = await import('@/libs/Crypto');
-      orgFindFirst.mockResolvedValueOnce({
+      primeOrgRow({
         paymentProvider: 'square',
         paymentProviderConfigEncrypted: encryptSecret(JSON.stringify({
           provider: 'square',
@@ -389,7 +477,7 @@ describe('PaymentProviderConfigService', () => {
     it('reports secretChanged false when NEITHER Square secret is supplied', async () => {
       savedMethodRows = [];
       const { encryptSecret } = await import('@/libs/Crypto');
-      orgFindFirst.mockResolvedValueOnce({
+      primeOrgRow({
         paymentProvider: 'square',
         paymentProviderConfigEncrypted: encryptSecret(JSON.stringify({
           provider: 'square',
@@ -415,8 +503,53 @@ describe('PaymentProviderConfigService', () => {
       expect(diff.credentialsChanged).toBe(true);
     });
 
+    it('runs the saved-method check and the write in ONE locked transaction', async () => {
+      // The check and the write used to be independent statements, so a card
+      // registered between them was stranded at the old processor anyway —
+      // exactly what the check exists to prevent. The org row is locked FOR
+      // UPDATE so two concurrent saves serialise instead of both writing.
+      savedMethodRows = [];
+      primeOrgRow({ paymentProvider: 'iqpro' });
+      const { updatePaymentProviderConfig } = await import('./PaymentProviderConfigService');
+
+      await updatePaymentProviderConfig('org_x', {
+        provider: 'square',
+        applicationId: 'a',
+        locationId: 'l',
+        environment: 'sandbox',
+        accessToken: 'tok',
+        webhookSignatureKey: 'wh',
+      });
+
+      expect(transactionFn).toHaveBeenCalledTimes(1);
+      expect(lockedFor).toBe('update');
+      expect(insertValues).toHaveBeenCalled();
+    });
+
+    it('does NOT write when the switch is blocked by a saved method', async () => {
+      // The throw must abort the transaction, leaving the org exactly as it was.
+      savedMethodRows = [{ id: 'pm_1' }];
+      primeOrgRow({ paymentProvider: 'iqpro' });
+      const { updatePaymentProviderConfig, ProviderSwitchBlockedError } = await import(
+        './PaymentProviderConfigService',
+      );
+
+      await expect(updatePaymentProviderConfig('org_x', {
+        provider: 'square',
+        applicationId: 'a',
+        locationId: 'l',
+        environment: 'sandbox',
+        accessToken: 'tok',
+        webhookSignatureKey: 'wh',
+      })).rejects.toBeInstanceOf(ProviderSwitchBlockedError);
+
+      expect(insertValues).not.toHaveBeenCalled();
+
+      savedMethodRows = [];
+    });
+
     it('encrypts the credentials before persisting', async () => {
-      orgFindFirst.mockResolvedValueOnce({});
+      primeOrgRow({});
       const { updatePaymentProviderConfig } = await import('./PaymentProviderConfigService');
       await updatePaymentProviderConfig('org_x', { provider: 'iqpro', clientId: 'c', clientSecret: 'shhh', gatewayId: 'g' });
 
@@ -434,7 +567,7 @@ describe('PaymentProviderConfigService', () => {
       // blob is a single value, an overwrite would silently blank the secret
       // and break the org's payments — so the update MERGES.
       const { encryptSecret, decryptSecret } = await import('@/libs/Crypto');
-      orgFindFirst.mockResolvedValueOnce({
+      primeOrgRow({
         paymentProviderConfigEncrypted: encryptSecret(JSON.stringify({
           provider: 'iqpro',
           credentials: { clientId: 'old', clientSecret: 'keep-me', gatewayId: 'old-gw' },
@@ -454,7 +587,7 @@ describe('PaymentProviderConfigService', () => {
     it('refuses the first save when no secret is supplied', async () => {
       // No stored blob to merge with, so there is nothing to preserve — better
       // a clear error than writing credentials that cannot authenticate.
-      orgFindFirst.mockResolvedValueOnce({});
+      primeOrgRow({});
       const { updatePaymentProviderConfig } = await import('./PaymentProviderConfigService');
 
       await expect(updatePaymentProviderConfig('org_x', { provider: 'iqpro', clientId: 'c', gatewayId: 'g' }))
@@ -463,7 +596,7 @@ describe('PaymentProviderConfigService', () => {
     });
 
     it('reports clientSecretChanged=true when a new secret is provided', async () => {
-      orgFindFirst.mockResolvedValueOnce({});
+      primeOrgRow({});
       const { updatePaymentProviderConfig } = await import('./PaymentProviderConfigService');
       const diff = await updatePaymentProviderConfig('org_x', { provider: 'iqpro', clientId: 'c', clientSecret: 'new', gatewayId: 'g' });
 
@@ -530,13 +663,16 @@ describe('PaymentProviderConfigService', () => {
 
   describe('resolvePaymentProviderConfig (provider-aware union)', () => {
     it('returns the iqpro branch when payment_provider is iqpro', async () => {
-      // Two reads: the discriminator, then the credentials.
+      // ONE read. The provider column and the credential blob must come from
+      // the same row snapshot — a second read could straddle a provider switch
+      // and pair a fresh "iqpro" discriminator with another configuration's
+      // credentials (or, worse, the IQPRO_* env fallback on a Square org).
       orgFindFirst.mockResolvedValueOnce({ paymentProvider: 'iqpro' });
-      orgFindFirst.mockResolvedValueOnce({});
       const { resolvePaymentProviderConfig } = await import('./PaymentProviderConfigService');
       const config = await resolvePaymentProviderConfig('org_x');
 
       expect(config?.provider).toBe('iqpro');
+      expect(orgFindFirst).toHaveBeenCalledTimes(1);
 
       // Narrowing on the discriminant must expose the IQPro-only fields.
       if (config?.provider === 'iqpro') {
