@@ -17,7 +17,7 @@ function Input({ className, type, error, variant = 'default', ...props }: InputP
         variant === 'default' && 'border-neutral-600 bg-neutral-100 text-neutral-1500 disabled:bg-neutral-500 disabled:text-neutral-800 dark:text-foreground dark:disabled:text-muted-foreground',
         variant === 'highlight' && 'border-neutral-1500 bg-neutral-100 text-neutral-1500 disabled:bg-neutral-500 disabled:text-neutral-800 dark:text-foreground dark:disabled:text-muted-foreground',
         'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
-        'aria-invalid:border-red-500 aria-invalid:ring-red-500/20 dark:aria-invalid:ring-red-500/40',
+        'aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40',
         className,
       )}
       {...props}

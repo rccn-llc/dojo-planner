@@ -13,7 +13,7 @@ function Alert({ children, variant = 'error', className }: AlertProps) {
       role="alert"
       className={cn(
         'flex items-center gap-3 rounded-md px-4 py-3 text-sm font-medium',
-        variant === 'error' && 'bg-red-600 text-white',
+        variant === 'error' && 'bg-destructive text-white',
         variant === 'warning' && 'bg-yellow-500 text-white',
         variant === 'success' && 'bg-green-600 text-white',
         variant === 'info' && 'bg-blue-600 text-white',

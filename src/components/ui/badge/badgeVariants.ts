@@ -10,7 +10,7 @@ export const badgeVariants = cva(
         secondary:
           'border-transparent bg-neutral-1400 text-neutral-100 [a&]:hover:bg-neutral-1300',
         destructive:
-          'border-transparent bg-red-500 text-neutral-100 focus-visible:ring-red-500/20 [a&]:hover:bg-red-500/90',
+          'border-transparent bg-destructive text-white focus-visible:ring-destructive/20 [a&]:hover:bg-destructive/90',
         outline:
           'border-neutral-600 bg-transparent text-neutral-1500 dark:border-neutral-950 dark:text-neutral-100 [a&]:hover:bg-neutral-500 [a&]:hover:text-neutral-1500 [a&]:dark:hover:bg-neutral-1400 [a&]:dark:hover:text-neutral-100',
         warning:

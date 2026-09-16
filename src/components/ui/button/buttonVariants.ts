@@ -8,7 +8,7 @@ export const buttonVariants = cva(
         default:
           'bg-neutral-1500 text-neutral-100 enabled:hover:bg-neutral-1200 dark:bg-foreground dark:text-background enabled:dark:hover:bg-foreground/80',
         destructive:
-          'bg-red-500 text-neutral-100 enabled:hover:bg-red-600',
+          'bg-destructive text-white enabled:hover:bg-destructive/90',
         outline:
           'border border-border bg-background text-foreground shadow-xs enabled:hover:bg-accent enabled:hover:text-accent-foreground dark:border-input dark:bg-background dark:text-foreground enabled:dark:hover:bg-accent enabled:dark:hover:text-accent-foreground',
         secondary:
