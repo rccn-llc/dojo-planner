@@ -255,6 +255,57 @@ describe('MonthlyView', () => {
     });
   });
 
+  describe('Filtering', () => {
+    // The legend is a color key built from ALL classes and is deliberately not
+    // filtered, so these assertions read the calendar GRID only.
+    const gridText = () => page.getByRole('table').element().textContent ?? '';
+
+    it('renders an empty month when a search matches no class', async () => {
+      // Regression: an unmatched filter used to fall back to the unfiltered
+      // list, so a search with no hits rendered EVERY class and looked like
+      // the filter had been ignored.
+      await render(
+        <I18nWrapper>
+          <MonthlyView withFilters={{ search: 'zzz-no-such-class', tag: 'all', instructor: 'all' }} />
+        </I18nWrapper>,
+      );
+
+      expect(gridText()).not.toMatch(/Fundamentals/i);
+      expect(gridText()).not.toMatch(/Kids/i);
+    });
+
+    it('renders an empty month when a tag matches no class', async () => {
+      await render(
+        <I18nWrapper>
+          <MonthlyView withFilters={{ search: '', tag: 'no-such-tag', instructor: 'all' }} />
+        </I18nWrapper>,
+      );
+
+      expect(gridText()).not.toMatch(/Fundamentals/i);
+    });
+
+    it('renders an empty month when an instructor matches no class', async () => {
+      await render(
+        <I18nWrapper>
+          <MonthlyView withFilters={{ search: '', tag: 'all', instructor: 'Nobody At All' }} />
+        </I18nWrapper>,
+      );
+
+      expect(gridText()).not.toMatch(/Fundamentals/i);
+    });
+
+    it('renders only the matching class when a search does match', async () => {
+      await render(
+        <I18nWrapper>
+          <MonthlyView withFilters={{ search: 'Fundamentals', tag: 'all', instructor: 'all' }} />
+        </I18nWrapper>,
+      );
+
+      expect(gridText()).toMatch(/Fundamentals/i);
+      expect(gridText()).not.toMatch(/Kids Class/i);
+    });
+  });
+
   describe('Class Styling', () => {
     it('should render classes with color coding', async () => {
       await render(

@@ -262,9 +262,11 @@ export default function MembershipDetailPage({ params }: { params: Promise<PageP
 
     const merged = { ...membershipData, ...updates };
     const rawPlan = plans.find(p => p.id === resolvedParams.membershipId);
-    const fallbackContractLength = rawPlan?.contractLength ?? 'Month-to-Month';
-    const fallbackAccessLevel = rawPlan?.accessLevel ?? 'Unlimited';
-    const payload = transformDetailDataToDb(merged, fallbackContractLength, fallbackAccessLevel);
+    const payload = transformDetailDataToDb(merged, {
+      contractLength: rawPlan?.contractLength ?? 'Month-to-Month',
+      accessLevel: rawPlan?.accessLevel ?? 'Unlimited',
+      classAllowance: rawPlan?.classAllowance ?? null,
+    });
 
     try {
       await client.membershipPlans.update({ id: membershipData.id, ...payload });
