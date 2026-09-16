@@ -56,11 +56,12 @@ export function MonthlyView({ withFilters }: MonthlyViewProps = {}) {
   // Get filtered class IDs for schedule generation
   const filteredClassIds = useMemo(() => new Set(filteredClasses.map(c => c.id)), [filteredClasses]);
 
-  // Generate monthly events from filtered classes
+  // Generate monthly events from filtered classes.
+  // No "empty set means show everything" fallback: filters that match nothing
+  // must render an empty month, otherwise an unmatched search or tag looks
+  // like it was ignored. WeeklyView does the same.
   const classesToUse = useMemo(
-    () => filteredClassIds.size > 0
-      ? rawClasses.filter(c => filteredClassIds.has(c.id))
-      : rawClasses,
+    () => rawClasses.filter(c => filteredClassIds.has(c.id)),
     [rawClasses, filteredClassIds],
   );
   const monthlyClassEvents = useMemo(

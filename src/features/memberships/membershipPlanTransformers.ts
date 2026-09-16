@@ -213,13 +213,27 @@ export type DetailUpdatePayload = {
   description: string | null;
   isTrial: boolean;
   isActive: boolean;
+  classAllowance: number | null;
+};
+
+/**
+ * Values the detail form cannot express, carried over from the stored plan.
+ *
+ * `updateMembershipPlan` writes `input.classAllowance ?? null`, so omitting a
+ * field here does not leave the column alone — it CLEARS it. A punchcard saved
+ * from the detail page would lose its class count.
+ */
+export type DetailUpdateFallbacks = {
+  contractLength: string;
+  accessLevel: string;
+  classAllowance: number | null;
 };
 
 export function transformDetailDataToDb(
   data: MembershipDetailLikeData,
-  fallbackContractLength: string,
-  fallbackAccessLevel: string,
+  fallbacks: DetailUpdateFallbacks,
 ): DetailUpdatePayload {
+  const { contractLength: fallbackContractLength, accessLevel: fallbackAccessLevel } = fallbacks;
   const slug = slugify(data.membershipName);
   const programName = data.associatedProgramName ?? data.category ?? 'Uncategorized';
   const isPunchcard = data.membershipType === 'punchcard';
@@ -246,6 +260,8 @@ export function transformDetailDataToDb(
     description: data.description.trim() === '' ? null : data.description.trim(),
     isTrial: data.membershipType === 'trial',
     isActive: data.status === 'active',
+    // The detail form has no allowance input; only a punchcard has one at all.
+    classAllowance: isPunchcard ? fallbacks.classAllowance : null,
   };
 }
 

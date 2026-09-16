@@ -144,6 +144,10 @@ export function EditContactInfoModal({
   };
 
   const handleCancel = () => {
+    // The dialog stays mounted between opens, so every edited field must be
+    // reset here — a field left out keeps its unsaved value on reopen.
+    setFirstName(initialFirstName);
+    setLastName(initialLastName);
     setEmail(initialEmail);
     setPhone(initialPhone);
     setDateOfBirth(initialDateOfBirth);

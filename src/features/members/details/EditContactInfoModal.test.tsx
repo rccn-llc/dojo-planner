@@ -116,6 +116,54 @@ describe('EditContactInfoModal', () => {
       expect(mockProps.onClose).toHaveBeenCalled();
     });
 
+    it('discards unsaved name edits on cancel', async () => {
+      // Regression: the dialog stays mounted between opens, so a field the
+      // cancel handler forgets keeps its unsaved value the next time it opens.
+      // firstName/lastName were the two it forgot.
+      const onClose = vi.fn();
+      const screen = await render(
+        <I18nWrapper><EditContactInfoModal {...mockProps} onClose={onClose} /></I18nWrapper>,
+      );
+
+      await page.getByPlaceholder('John').fill('Edited');
+      await page.getByPlaceholder('Doe').fill('Alsoedited');
+      await page.getByRole('button', { name: 'Cancel' }).click();
+
+      expect(onClose).toHaveBeenCalled();
+
+      // Reopen the still-mounted dialog.
+      await screen.rerender(
+        <I18nWrapper><EditContactInfoModal {...mockProps} onClose={onClose} isOpen={false} /></I18nWrapper>,
+      );
+      await screen.rerender(
+        <I18nWrapper><EditContactInfoModal {...mockProps} onClose={onClose} /></I18nWrapper>,
+      );
+
+      expect((page.getByPlaceholder('John').element() as HTMLInputElement).value).toBe('Test');
+      expect((page.getByPlaceholder('Doe').element() as HTMLInputElement).value).toBe('Member');
+    });
+
+    it('discards unsaved email and phone edits on cancel', async () => {
+      const onClose = vi.fn();
+      const screen = await render(
+        <I18nWrapper><EditContactInfoModal {...mockProps} onClose={onClose} /></I18nWrapper>,
+      );
+
+      await page.getByPlaceholder('you@example.com').fill('edited@example.com');
+      await page.getByRole('button', { name: 'Cancel' }).click();
+
+      await screen.rerender(
+        <I18nWrapper><EditContactInfoModal {...mockProps} onClose={onClose} isOpen={false} /></I18nWrapper>,
+      );
+      await screen.rerender(
+        <I18nWrapper><EditContactInfoModal {...mockProps} onClose={onClose} /></I18nWrapper>,
+      );
+
+      expect((page.getByPlaceholder('you@example.com').element() as HTMLInputElement).value).toBe(
+        'test@example.com',
+      );
+    });
+
     it('should disable submit button when form is invalid', async () => {
       await render(<I18nWrapper><EditContactInfoModal {...mockProps} /></I18nWrapper>);
 

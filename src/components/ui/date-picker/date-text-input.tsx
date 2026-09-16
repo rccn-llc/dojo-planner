@@ -41,7 +41,31 @@ export type DateTextInputProps = {
   'autoComplete'?: string;
   /** Inline message shown when the typed text cannot be parsed. */
   'parseErrorMessage'?: string;
+  /**
+   * Inline message shown when the typed text parses but falls outside
+   * `minDate`/`maxDate`. Defaults to a message naming the allowed range.
+   */
+  'rangeErrorMessage'?: string;
 };
+
+/** Midnight local, so two dates compare as calendar days. */
+function startOfDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+/** Default inline message naming whichever bounds are configured. */
+function buildRangeErrorMessage(minDate?: Date, maxDate?: Date): string {
+  if (minDate && maxDate) {
+    return `Enter a date between ${dateToDisplay(minDate)} and ${dateToDisplay(maxDate)}.`;
+  }
+  if (minDate) {
+    return `Enter a date on or after ${dateToDisplay(minDate)}.`;
+  }
+  if (maxDate) {
+    return `Enter a date on or before ${dateToDisplay(maxDate)}.`;
+  }
+  return 'Enter a date within the allowed range.';
+}
 
 /**
  * The app's single date-entry control: a typeable MM/DD/YYYY field with a
@@ -67,6 +91,10 @@ export type DateTextInputProps = {
  * - An unparseable string shows an inline error on BLUR, not mid-keystroke,
  *   and never propagates an invalid Date to the parent.
  * - Roll-over dates (02/30/2020) are rejected rather than silently shifted.
+ * - A parseable date outside `minDate`/`maxDate` is rejected too. The bounds
+ *   must be enforced on the TYPED path and not only by the calendar's
+ *   disabled-day matcher: a calendar-only check is no check at all, since the
+ *   text field can submit any day the user types.
  * - Picking from the calendar syncs the typed text, and an external `value`
  *   change flows through without a mirroring effect.
  */
@@ -88,6 +116,7 @@ export function DateTextInput({
   defaultMonth,
   autoComplete,
   parseErrorMessage = 'Enter date as MM/DD/YYYY.',
+  rangeErrorMessage,
 }: DateTextInputProps) {
   const [open, setOpen] = React.useState(false);
   // `editingText` holds the in-flight typed string while the input is focused
@@ -96,8 +125,26 @@ export function DateTextInput({
   // parent reset) flow through with no mirroring useEffect.
   const [editingText, setEditingText] = React.useState<string | null>(null);
   const [parseError, setParseError] = React.useState<boolean>(false);
+  const [rangeError, setRangeError] = React.useState<boolean>(false);
 
   const displayedText = editingText ?? dateToDisplay(value);
+
+  // Compare on the calendar DAY, not the instant: `minDate`/`maxDate` are
+  // inclusive bounds, and a bound carrying a time component would otherwise
+  // reject the bound day itself.
+  const isOutOfRange = React.useCallback(
+    (date: Date) => {
+      const day = startOfDay(date);
+      if (minDate && day < startOfDay(minDate)) {
+        return true;
+      }
+      return Boolean(maxDate && day > startOfDay(maxDate));
+    },
+    [minDate, maxDate],
+  );
+
+  const resolvedRangeErrorMessage
+    = rangeErrorMessage ?? buildRangeErrorMessage(minDate, maxDate);
 
   const handleTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const next = e.target.value;
@@ -105,15 +152,25 @@ export function DateTextInput({
     const parsed = parseDisplay(next);
     if (parsed) {
       setParseError(false);
+      if (isOutOfRange(parsed)) {
+        // Do not propagate an out-of-range day to the parent. The error waits
+        // for blur like the parse error does, so it can't flash while the user
+        // is still typing the year.
+        setRangeError(false);
+        return;
+      }
+      setRangeError(false);
       onChange(parsed);
     } else if (next.trim() === '') {
       setParseError(false);
+      setRangeError(false);
       if (value !== undefined) {
         onChange(undefined);
       }
     } else {
       // Mid-edit — defer the error to blur so it doesn't flash per keystroke.
       setParseError(false);
+      setRangeError(false);
     }
   };
 
@@ -121,18 +178,26 @@ export function DateTextInput({
     const trimmed = (editingText ?? '').trim();
     if (!trimmed) {
       setParseError(false);
+      setRangeError(false);
       if (value !== undefined) {
         onChange(undefined);
       }
       setEditingText(null);
     } else {
       const parsed = parseDisplay(trimmed);
-      if (parsed) {
+      if (parsed && isOutOfRange(parsed)) {
+        // Parseable but outside the allowed window. Keep the text visible so
+        // the user can correct it, and leave `value` untouched.
         setParseError(false);
+        setRangeError(true);
+      } else if (parsed) {
+        setParseError(false);
+        setRangeError(false);
         onChange(parsed);
         setEditingText(null);
       } else {
         // Keep the user's text visible so they can correct it.
+        setRangeError(false);
         setParseError(true);
       }
     }
@@ -143,10 +208,11 @@ export function DateTextInput({
     onChange(date);
     setEditingText(null);
     setParseError(false);
+    setRangeError(false);
     setOpen(false);
   };
 
-  const isInvalid = ariaInvalid || parseError;
+  const isInvalid = ariaInvalid || parseError || rangeError;
 
   // Days outside [minDate, maxDate] are disabled. `{ before }` and `{ after }`
   // are separate matchers because DateInterval requires both bounds.
@@ -211,9 +277,9 @@ export function DateTextInput({
           </PopoverContent>
         </Popover>
       </div>
-      {parseError && (
+      {(parseError || rangeError) && (
         <p className="text-xs text-destructive" data-testid={dataTestId ? `${dataTestId}-error` : undefined}>
-          {parseErrorMessage}
+          {parseError ? parseErrorMessage : resolvedRangeErrorMessage}
         </p>
       )}
     </div>

@@ -36,6 +36,22 @@ describe('parseDateOnly', () => {
   it('returns an invalid Date for malformed input', () => {
     expect(Number.isNaN(parseDateOnly('not-a-date').getTime())).toBe(true);
   });
+
+  it('rejects an impossible calendar day rather than rolling it over', () => {
+    // `new Date('2026-02-30T00:00:00Z')` does not fail — it silently becomes
+    // March 2. A wrong day is worse than a rejected one.
+    expect(Number.isNaN(parseDateOnly('2026-02-30').getTime())).toBe(true);
+    expect(Number.isNaN(parseDateOnly('2025-02-29').getTime())).toBe(true);
+    expect(Number.isNaN(parseDateOnly('2026-04-31').getTime())).toBe(true);
+    expect(Number.isNaN(parseDateOnly('2026-13-01').getTime())).toBe(true);
+  });
+
+  it('rejects anything that is not exactly YYYY-MM-DD', () => {
+    expect(Number.isNaN(parseDateOnly('2026-3-14').getTime())).toBe(true);
+    expect(Number.isNaN(parseDateOnly('2026-03-14T12:00:00Z').getTime())).toBe(true);
+    expect(Number.isNaN(parseDateOnly('2026-03').getTime())).toBe(true);
+    expect(Number.isNaN(parseDateOnly(' 2026-03-14 ').getTime())).toBe(true);
+  });
 });
 
 describe('parseDateOnlyOrNull', () => {
@@ -47,6 +63,15 @@ describe('parseDateOnlyOrNull', () => {
 
   it('returns null for a malformed value instead of an Invalid Date', () => {
     expect(parseDateOnlyOrNull('2026-99-99')).toBeNull();
+  });
+
+  it('returns null for a roll-over date, per its documented contract', () => {
+    expect(parseDateOnlyOrNull('2026-02-30')).toBeNull();
+    expect(parseDateOnlyOrNull('2026-04-31')).toBeNull();
+  });
+
+  it('accepts a real leap day', () => {
+    expect(parseDateOnlyOrNull('2024-02-29')?.toISOString()).toBe('2024-02-29T00:00:00.000Z');
   });
 
   it('parses a valid value', () => {

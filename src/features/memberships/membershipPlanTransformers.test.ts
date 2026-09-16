@@ -173,8 +173,14 @@ describe('transformDetailDataToDb', () => {
     contractLength: 'month-to-month' as const,
   };
 
+  const baseFallbacks = {
+    contractLength: 'Month-to-Month',
+    accessLevel: 'Unlimited',
+    classAllowance: null,
+  };
+
   it('produces a DB shape with the existing fallbacks', () => {
-    const result = transformDetailDataToDb(baseDetail, 'Month-to-Month', 'Unlimited');
+    const result = transformDetailDataToDb(baseDetail, baseFallbacks);
 
     expect(result.name).toBe('Adult Monthly Gold');
     expect(result.programId).toBe('p-1');
@@ -185,11 +191,27 @@ describe('transformDetailDataToDb', () => {
   it('uses fallback contractLength for punchcard plans', () => {
     const result = transformDetailDataToDb(
       { ...baseDetail, membershipType: 'punchcard' },
-      '10 Classes',
-      '10 Classes Total',
+      { contractLength: '10 Classes', accessLevel: '10 Classes Total', classAllowance: 10 },
     );
 
     expect(result.contractLength).toBe('10 Classes');
     expect(result.accessLevel).toBe('10 Classes Total');
+  });
+
+  it('preserves the stored classAllowance for a punchcard', () => {
+    // The detail form has no allowance input, and the update service writes
+    // `classAllowance ?? null` — so omitting it here would clear the column.
+    const result = transformDetailDataToDb(
+      { ...baseDetail, membershipType: 'punchcard' },
+      { contractLength: '10 Classes', accessLevel: '10 Classes Total', classAllowance: 10 },
+    );
+
+    expect(result.classAllowance).toBe(10);
+  });
+
+  it('leaves classAllowance null for non-punchcard plans', () => {
+    const result = transformDetailDataToDb(baseDetail, { ...baseFallbacks, classAllowance: 10 });
+
+    expect(result.classAllowance).toBeNull();
   });
 });

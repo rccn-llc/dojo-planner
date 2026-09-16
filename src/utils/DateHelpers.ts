@@ -18,9 +18,45 @@ import { format as formatFns, parse as parseFns } from 'date-fns';
 // their own timezone (e.g. a coupon's expiry instant). Those must stay local —
 // see `combineDateTime` in `couponDataTransformers.ts`.
 
-/** Parse a `YYYY-MM-DD` date-only string into a Date at UTC midnight. */
+/**
+ * Parse a `YYYY-MM-DD` date-only string into a Date at UTC midnight, or
+ * `null` when the string is not exactly that shape or is not a real calendar
+ * day.
+ *
+ * The shape check is not redundant with the `Invalid Date` check: the Date
+ * constructor ROLLS OVER out-of-range components rather than rejecting them,
+ * so `2026-02-30` would silently read back as March 2 and `2026-13-01` as
+ * January 2027. Both are wrong days, not invalid dates, so the only way to
+ * catch them is to confirm the parsed UTC fields match what was asked for.
+ */
+function parseDateOnlyStrict(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) {
+    return null;
+  }
+  const [, y, m, d] = match;
+  const year = Number(y);
+  const month = Number(m);
+  const day = Number(d);
+  const date = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+    return null;
+  }
+  return date;
+}
+
+/**
+ * Parse a `YYYY-MM-DD` date-only string into a Date at UTC midnight.
+ *
+ * Returns an `Invalid Date` for malformed input or an impossible calendar day
+ * (`2026-02-30`), so a caller that does not check gets a value that fails
+ * loudly downstream rather than a silently shifted day.
+ */
 export function parseDateOnly(value: string): Date {
-  return new Date(`${value}T00:00:00Z`);
+  return parseDateOnlyStrict(value) ?? new Date(Number.NaN);
 }
 
 /**
@@ -32,8 +68,7 @@ export function parseDateOnlyOrNull(value: string | null | undefined): Date | nu
   if (!value) {
     return null;
   }
-  const parsed = parseDateOnly(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+  return parseDateOnlyStrict(value);
 }
 
 /** Format a Date as a `YYYY-MM-DD` date-only string, read in UTC. */

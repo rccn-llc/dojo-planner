@@ -157,6 +157,109 @@ describe('DateTextInput', () => {
     });
   });
 
+  describe('Range bounds on the typed path', () => {
+    // The calendar's disabled-day matcher is not a check: the text field can
+    // submit any day the user types, so the bounds must hold there too.
+    const MIN = new Date(2026, 0, 10);
+    const MAX = new Date(2026, 0, 20);
+
+    it('does not emit a typed date earlier than minDate', async () => {
+      const onChange = vi.fn();
+      await render(
+        <DateTextInput value={undefined} onChange={onChange} minDate={MIN} data-testid="d" />,
+      );
+
+      await userEvent.type(page.getByTestId('d').element(), '01/05/2026');
+      await userEvent.tab();
+
+      expect(onChange).not.toHaveBeenCalled();
+      expect(page.getByTestId('d-error')).toBeInTheDocument();
+    });
+
+    it('does not emit a typed date later than maxDate', async () => {
+      const onChange = vi.fn();
+      await render(
+        <DateTextInput value={undefined} onChange={onChange} maxDate={MAX} data-testid="d" />,
+      );
+
+      await userEvent.type(page.getByTestId('d').element(), '01/25/2026');
+      await userEvent.tab();
+
+      expect(onChange).not.toHaveBeenCalled();
+      expect(page.getByTestId('d-error')).toBeInTheDocument();
+    });
+
+    it('accepts a date inside the range', async () => {
+      const onChange = vi.fn();
+      await render(
+        <DateTextInput
+          value={undefined}
+          onChange={onChange}
+          minDate={MIN}
+          maxDate={MAX}
+          data-testid="d"
+        />,
+      );
+
+      await userEvent.type(page.getByTestId('d').element(), '01/15/2026');
+      await userEvent.tab();
+
+      const last = onChange.mock.calls.at(-1)?.[0] as Date;
+
+      expect(last.getDate()).toBe(15);
+      expect(page.getByTestId('d-error').elements()).toHaveLength(0);
+    });
+
+    it('treats both bounds as inclusive', async () => {
+      const onChange = vi.fn();
+      await render(
+        <DateTextInput
+          value={undefined}
+          onChange={onChange}
+          minDate={MIN}
+          maxDate={MAX}
+          data-testid="d"
+        />,
+      );
+
+      await userEvent.type(page.getByTestId('d').element(), '01/10/2026');
+      await userEvent.tab();
+
+      expect(onChange).toHaveBeenCalled();
+      expect(page.getByTestId('d-error').elements()).toHaveLength(0);
+    });
+
+    it('does not flag the range error mid-type', async () => {
+      // "01/2" parses as nothing yet; the year is still being typed.
+      await render(
+        <DateTextInput value={undefined} onChange={() => {}} maxDate={MAX} data-testid="d" />,
+      );
+
+      await userEvent.type(page.getByTestId('d').element(), '01/25/20');
+
+      expect(page.getByTestId('d-error').elements()).toHaveLength(0);
+    });
+
+    it('supports a caller-supplied range message', async () => {
+      await render(
+        <DateTextInput
+          value={undefined}
+          onChange={() => {}}
+          maxDate={MAX}
+          rangeErrorMessage="Date of birth cannot be in the future."
+          data-testid="d"
+        />,
+      );
+
+      await userEvent.type(page.getByTestId('d').element(), '01/25/2026');
+      await userEvent.tab();
+
+      expect(page.getByTestId('d-error').element().textContent).toBe(
+        'Date of birth cannot be in the future.',
+      );
+    });
+  });
+
   describe('Disabled state', () => {
     it('disables both the input and the calendar trigger', async () => {
       await render(<DateTextInput value={undefined} onChange={() => {}} disabled data-testid="d" />);
