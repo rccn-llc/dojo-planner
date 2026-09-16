@@ -115,6 +115,10 @@ export function transformWizardDataToDb(
     holdFeeAmount: isPunchcard ? 0 : (data.holdFeeAmount ?? 0),
     holdFeeFrequency: holdFeeFrequencyFromWizard(data),
     holdLimitPerYear: isPunchcard ? null : (data.holdLimitPerYear ?? null),
+    // Store the punchcard allowance numerically. It was previously only baked
+    // into the `accessLevel` display string ("10 Classes Total"), so the
+    // member detail page had no real number to show and used a mock.
+    classAllowance: isPunchcard ? (data.classesIncluded ?? null) : null,
     frequency: frequencyFromWizard(data),
     contractLength: contractLengthFromWizard(data),
     accessLevel: accessLevelFromWizard(data),

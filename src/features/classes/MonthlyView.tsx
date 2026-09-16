@@ -2,10 +2,8 @@
 
 import type { ClassFilters } from './ClassFilterBar';
 import { useOrganization } from '@clerk/nextjs';
-import { Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { ButtonGroupItem, ButtonGroupRoot } from '@/components/ui/button-group';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useClassesCache } from '@/hooks/useClassesCache';
@@ -14,7 +12,8 @@ import { useOrganizationLocation } from '@/hooks/useOrganizationLocation';
 import { CalendarDateNav } from './CalendarDateNav';
 import { buildClassColorLegend, generateMonthlyEventScheduleFromData, generateMonthlyScheduleFromData, transformClassesToCardProps } from './classDataTransformers';
 import { ClassEventHoverCard } from './ClassEventHoverCard';
-import { ClassFilterBar } from './ClassFilterBar';
+
+const NO_FILTERS: ClassFilters = { search: '', tag: 'all', instructor: 'all' };
 
 const DAYS_OF_WEEK = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
@@ -31,27 +30,18 @@ export function MonthlyView({ withFilters }: MonthlyViewProps = {}) {
   const loading = classesLoading || eventsLoading;
 
   const [currentDate, setCurrentDate] = useState(() => new Date());
-  const [localFilters, setLocalFilters] = useState<ClassFilters>({
-    search: '',
-    tag: 'all',
-    instructor: 'all',
-  });
 
   // Transform database data to card props for filtering
   const classes = useMemo(() => transformClassesToCardProps(rawClasses, locationLabel), [rawClasses, locationLabel]);
 
-  // Use parent filters if provided, otherwise use local filters
-  const filters = withFilters || localFilters;
-  const setFilters = withFilters ? () => {} : setLocalFilters;
+  // The parent (ClassesPage) owns the filter UI and always supplies filters.
+  // The fallback keeps the component renderable on its own (as tests do).
+  const filters = withFilters ?? NO_FILTERS;
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
 
   // Get unique instructors from classes
-  const allInstructors = useMemo(
-    () => Array.from(new Set(classes.flatMap(cls => cls.instructors.map(i => i.name)))),
-    [classes],
-  );
 
   // Filter classes based on filters
   const filteredClasses = useMemo(() => classes.filter((cls) => {
@@ -141,49 +131,6 @@ export function MonthlyView({ withFilters }: MonthlyViewProps = {}) {
 
   return (
     <div className="space-y-6">
-      {/* Header - Only show when not embedded */}
-      {!withFilters && (
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Class Calendar</h1>
-        </div>
-      )}
-
-      {/* Controls - Only show when not embedded */}
-      {!withFilters && (
-        <div className="space-y-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-            {/* Filter Bar */}
-            <div className="flex-1">
-              <ClassFilterBar
-                onFiltersChangeAction={setFilters}
-                instructors={allInstructors}
-              />
-            </div>
-
-            <div className="flex items-center gap-2 sm:gap-3">
-              {/* View Toggle Button Group */}
-              <ButtonGroupRoot value="monthly" onValueChange={() => {}}>
-                <ButtonGroupItem value="cards" title="Cards view">
-                  <span className="text-xs">Cards</span>
-                </ButtonGroupItem>
-                <ButtonGroupItem value="weekly" title="Weekly view">
-                  <span className="text-xs">Weekly</span>
-                </ButtonGroupItem>
-                <ButtonGroupItem value="monthly" title="Monthly view">
-                  <span className="text-xs">Monthly</span>
-                </ButtonGroupItem>
-              </ButtonGroupRoot>
-
-              {/* Add New Class Button */}
-              <Button>
-                <Plus className="size-4" />
-                <span className="ml-1 hidden sm:inline">Add New Class</span>
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Navigation */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
@@ -207,7 +154,7 @@ export function MonthlyView({ withFilters }: MonthlyViewProps = {}) {
             Next →
           </button>
         </div>
-        <Button onClick={handleToday} className="bg-blue-600 hover:bg-blue-700">
+        <Button onClick={handleToday}>
           Today
         </Button>
       </div>

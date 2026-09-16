@@ -25,7 +25,7 @@ function Label({
     >
       {children}
       {required && (
-        <span className="ml-1 text-red-500" aria-label="required">
+        <span className="ml-1 text-destructive" aria-label="required">
           *
         </span>
       )}

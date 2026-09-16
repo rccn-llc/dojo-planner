@@ -6,6 +6,8 @@ import { Plus, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { TimePicker } from '@/components/ui/date-picker';
+import { DatePickerField } from '@/components/ui/date-picker/date-picker-field';
 import {
   Dialog,
   DialogContent,
@@ -25,6 +27,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { invalidateEventsCache } from '@/hooks/useEventsCache';
 import { useInstructorsCache } from '@/hooks/useInstructorsCache';
 import { client } from '@/libs/Orpc';
+import { formatDateOnly, parseDateOnly } from '@/utils/DateHelpers';
 
 const MAX_DESCRIPTION_LENGTH = 2000;
 const MAX_NOTE_LENGTH = 2000;
@@ -62,13 +65,6 @@ type EditEventModalProps = {
   onSavedAction?: () => void;
 };
 
-function dateToInputValue(date: Date): string {
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const d = String(date.getUTCDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
 function emptySession(): SessionRow {
   return { id: crypto.randomUUID(), sessionDate: '', startTime: '10:00', endTime: '12:00', primaryInstructorClerkId: null };
 }
@@ -104,7 +100,7 @@ function buildFormState(event: EventData, initialTab: EditEventModalTab): FormSt
     sessions: event.sessions.length > 0
       ? event.sessions.map(s => ({
           id: crypto.randomUUID(),
-          sessionDate: dateToInputValue(new Date(s.sessionDate)),
+          sessionDate: formatDateOnly(new Date(s.sessionDate)),
           startTime: s.startTime,
           endTime: s.endTime,
           primaryInstructorClerkId: s.instructorClerkId ?? null,
@@ -115,7 +111,7 @@ function buildFormState(event: EventData, initialTab: EditEventModalTab): FormSt
           id: crypto.randomUUID(),
           name: b.name,
           price: String(b.price),
-          validUntil: b.validUntil ? dateToInputValue(new Date(b.validUntil)) : '',
+          validUntil: b.validUntil ? formatDateOnly(new Date(b.validUntil)) : '',
         }))
       : [emptyBilling()],
     tab: initialTab,
@@ -176,7 +172,7 @@ export function EditEventModal({
         isPublic: true,
         isActive: event.isActive ?? true,
         sessions: form.sessions.map(s => ({
-          sessionDate: new Date(`${s.sessionDate}T00:00:00Z`),
+          sessionDate: parseDateOnly(s.sessionDate),
           startTime: s.startTime,
           endTime: s.endTime,
           primaryInstructorClerkId: s.primaryInstructorClerkId,
@@ -187,7 +183,7 @@ export function EditEventModal({
           name: b.name.trim(),
           price: Number.parseFloat(b.price) || 0,
           memberOnly: false,
-          validUntil: b.validUntil ? new Date(`${b.validUntil}T00:00:00Z`) : null,
+          validUntil: b.validUntil ? parseDateOnly(b.validUntil) : null,
           sortOrder: idx,
         })),
         tagIds: event.tags.map(tg => tg.id),
@@ -320,10 +316,9 @@ export function EditEventModal({
                   </div>
                   <div className="w-40 space-y-1.5">
                     <label className="text-sm font-medium">{t('early_bird_deadline_label')}</label>
-                    <Input
-                      type="date"
+                    <DatePickerField
                       value={b.validUntil}
-                      onChange={e => updateForm('billing', form.billing.map(row => (row.id === b.id ? { ...row, validUntil: e.target.value } : row)))}
+                      onChange={value => updateForm('billing', form.billing.map(row => (row.id === b.id ? { ...row, validUntil: value } : row)))}
                     />
                   </div>
                   <Button
@@ -355,26 +350,23 @@ export function EditEventModal({
                   <div className="flex items-end gap-2">
                     <div className="flex-1 space-y-1.5">
                       <label className="text-sm font-medium">{t('session_date_label')}</label>
-                      <Input
-                        type="date"
+                      <DatePickerField
                         value={s.sessionDate}
-                        onChange={e => updateForm('sessions', form.sessions.map(row => (row.id === s.id ? { ...row, sessionDate: e.target.value } : row)))}
+                        onChange={value => updateForm('sessions', form.sessions.map(row => (row.id === s.id ? { ...row, sessionDate: value } : row)))}
                       />
                     </div>
                     <div className="w-28 space-y-1.5">
                       <label className="text-sm font-medium">{t('session_start_label')}</label>
-                      <Input
-                        type="time"
+                      <TimePicker
                         value={s.startTime}
-                        onChange={e => updateForm('sessions', form.sessions.map(row => (row.id === s.id ? { ...row, startTime: e.target.value } : row)))}
+                        onChange={value => updateForm('sessions', form.sessions.map(row => (row.id === s.id ? { ...row, startTime: value } : row)))}
                       />
                     </div>
                     <div className="w-28 space-y-1.5">
                       <label className="text-sm font-medium">{t('session_end_label')}</label>
-                      <Input
-                        type="time"
+                      <TimePicker
                         value={s.endTime}
-                        onChange={e => updateForm('sessions', form.sessions.map(row => (row.id === s.id ? { ...row, endTime: e.target.value } : row)))}
+                        onChange={value => updateForm('sessions', form.sessions.map(row => (row.id === s.id ? { ...row, endTime: value } : row)))}
                       />
                     </div>
                     <Button

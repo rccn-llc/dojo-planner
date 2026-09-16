@@ -31,14 +31,14 @@ function StatusBadge({ status }: { status: MembershipStatus }) {
 
   if (status === 'Active') {
     return (
-      <Badge className="bg-green-500 text-white hover:bg-green-600">
+      <Badge variant="success">
         {t('status_active')}
       </Badge>
     );
   }
   if (status === 'Inactive') {
     return (
-      <Badge className="bg-red-500 text-white hover:bg-red-600">
+      <Badge variant="destructive">
         {t('status_inactive')}
       </Badge>
     );
@@ -50,7 +50,7 @@ function TrialBadge() {
   const t = useTranslations('MembershipCard');
 
   return (
-    <Badge className="bg-amber-500 text-gray-900 hover:bg-amber-600">
+    <Badge variant="warning">
       {t('trial_badge')}
     </Badge>
   );

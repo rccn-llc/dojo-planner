@@ -3,6 +3,7 @@
 import type { AddClassWizardData, EventBilling } from '@/hooks/useAddClassWizard';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
+import { DatePickerField } from '@/components/ui/date-picker/date-picker-field';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -169,10 +170,9 @@ export const EventBillingStep = ({
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-foreground">{t('early_bird_deadline_label')}</label>
-                    <Input
-                      type="date"
+                    <DatePickerField
                       value={data.eventBilling.earlyBirdDeadline ?? ''}
-                      onChange={e => onUpdateEventBilling({ earlyBirdDeadline: e.target.value || null })}
+                      onChange={value => onUpdateEventBilling({ earlyBirdDeadline: value || null })}
                     />
                   </div>
                 </div>

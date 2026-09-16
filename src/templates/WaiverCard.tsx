@@ -28,14 +28,14 @@ function StatusBadge({ status }: { status: WaiverStatus }) {
 
   if (status === 'Active') {
     return (
-      <Badge className="bg-green-500 text-white hover:bg-green-600">
+      <Badge variant="success">
         {t('status_active')}
       </Badge>
     );
   }
   if (status === 'Inactive') {
     return (
-      <Badge className="bg-red-500 text-white hover:bg-red-600">
+      <Badge variant="destructive">
         {t('status_inactive')}
       </Badge>
     );
@@ -61,7 +61,7 @@ function GuardianRequiredBadge({ ageThreshold }: { ageThreshold: number }) {
   const t = useTranslations('WaiverCard');
 
   return (
-    <Badge className="bg-amber-500 text-gray-900 hover:bg-amber-600">
+    <Badge variant="warning">
       {t('guardian_required_badge', { age: ageThreshold })}
     </Badge>
   );

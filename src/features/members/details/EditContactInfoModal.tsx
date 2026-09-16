@@ -94,6 +94,11 @@ export function EditContactInfoModal({
   const isLastNameInvalid = touched.lastName && !lastName.trim();
   const isEmailInvalid = touched.email && (email ? !isValidEmail(email) : true);
   const isPhoneInvalid = touched.phone && !phone;
+  // Advisory only: the column is nullable and the update payload treats
+  // dateOfBirth as optional, so legacy members without one stay editable. This
+  // surfaces the same inline feedback the create wizard gives without blocking
+  // Save on a record that predates the requirement.
+  const isDateOfBirthInvalid = Boolean(touched.dateOfBirth) && !dateOfBirth;
 
   const isAddressComplete = address.street && address.city && address.state && address.zipCode && address.country;
   const isAddressPartiallyFilled = address.street || address.city || address.state || address.zipCode;
@@ -237,8 +242,13 @@ export function EditContactInfoModal({
                 id="edit-contact-dob"
                 value={dateOfBirth}
                 onChange={setDateOfBirth}
+                onBlur={() => handleInputBlur('dateOfBirth')}
+                aria-invalid={isDateOfBirthInvalid}
                 data-testid="edit-contact-dob-input"
               />
+              {isDateOfBirthInvalid && (
+                <p className="text-xs text-destructive">{t('date_of_birth_error')}</p>
+              )}
             </div>
 
             <div className="border-t border-border pt-4">

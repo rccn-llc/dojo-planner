@@ -17,10 +17,6 @@ const translationKeys: Record<string, string> = {
   auto_renewal_none: 'No auto-renewal',
   auto_renewal_month_to_month: 'Month-to-Month after contract',
   auto_renewal_same_term: 'Same term renewal',
-  start_date_label: 'Membership Start Date',
-  start_date_same_as_registration: 'Same as registration date',
-  start_date_custom: 'Custom date',
-  custom_start_date_label: 'Custom Start Date',
   cancel_button: 'Cancel',
   back_button: 'Back',
   create_button: 'Create Membership',
@@ -53,8 +49,6 @@ describe('MembershipContractStep', () => {
     chargeSignUpFee: 'at-registration',
     monthlyFee: 150,
     paymentFrequency: 'monthly',
-    membershipStartDate: 'same-as-registration',
-    customStartDate: '',
     proRateFirstPayment: false,
     contractLength: 'month-to-month',
     autoRenewal: 'none',
@@ -125,7 +119,7 @@ describe('MembershipContractStep', () => {
     expect(autoRenewalLabel).toBeTruthy();
   });
 
-  it('should render Membership Start Date select (moved here from Payments and Fees)', async () => {
+  it('should NOT render a plan-level Membership Start Date (a membership starts when it is created)', async () => {
     await render(
       <MembershipContractStep
         data={mockData}
@@ -136,30 +130,11 @@ describe('MembershipContractStep', () => {
       />,
     );
 
-    const startDateLabel = page.getByText('Membership Start Date');
-
-    expect(startDateLabel).toBeTruthy();
-  });
-
-  it('should show custom date input when custom start date is selected', async () => {
-    const customDateData: AddMembershipWizardData = {
-      ...mockData,
-      membershipStartDate: 'custom',
-    };
-
-    await render(
-      <MembershipContractStep
-        data={customDateData}
-        onUpdate={mockHandlers.onUpdate}
-        onNext={mockHandlers.onNext}
-        onBack={mockHandlers.onBack}
-        onCancel={mockHandlers.onCancel}
-      />,
-    );
-
-    const customDateLabel = page.getByText('Custom Start Date');
-
-    expect(customDateLabel).toBeTruthy();
+    // A membership plan is a pricing template; the start date belongs to each
+    // member's enrollment and is set to now() on insert. This control collected
+    // a value that no transformer or API call ever read.
+    expect(page.getByText('Membership Start Date').elements()).toHaveLength(0);
+    expect(page.getByText('Custom Start Date').elements()).toHaveLength(0);
   });
 
   it('should NOT render Cancellation Fee on this step (moved to Payments and Fees)', async () => {

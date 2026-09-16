@@ -5,7 +5,6 @@ export type MembershipStatus = 'active' | 'inactive';
 export type ChargeSignUpFeeOption = 'at-registration' | 'first-payment';
 export type PaymentFrequency = 'monthly' | 'weekly' | 'semi-annually' | 'annually';
 export type HoldFeeFrequencyOption = 'one-time' | 'weekly' | 'monthly' | 'semi-annually' | 'annually';
-export type MembershipStartDateOption = 'same-as-registration' | 'custom';
 export type ContractLength = 'month-to-month' | '3-months' | '6-months' | '12-months';
 export type AutoRenewalOption = 'none' | 'month-to-month' | 'same-term';
 
@@ -27,8 +26,6 @@ export type AddMembershipWizardData = {
   chargeSignUpFee: ChargeSignUpFeeOption;
   monthlyFee: number | null;
   paymentFrequency: PaymentFrequency;
-  membershipStartDate: MembershipStartDateOption;
-  customStartDate: string;
   proRateFirstPayment: boolean;
 
   // Step 4: Contract Terms
@@ -59,8 +56,6 @@ const initialData: AddMembershipWizardData = {
   chargeSignUpFee: 'at-registration',
   monthlyFee: null,
   paymentFrequency: 'monthly',
-  membershipStartDate: 'same-as-registration',
-  customStartDate: '',
   proRateFirstPayment: false,
   contractLength: 'month-to-month',
   autoRenewal: 'none',

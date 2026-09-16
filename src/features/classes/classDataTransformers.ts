@@ -7,6 +7,7 @@ import type { ClassData, ClassSchedule } from '@/services/ClassesService';
 import type { EventData } from '@/services/EventsService';
 import type { ClassCardProps, ScheduleItem } from '@/templates/ClassCard';
 import type { EventCardProps, EventSession as EventCardSession } from '@/templates/EventCard';
+import { formatDateOnly } from '@/utils/DateHelpers';
 
 // =============================================================================
 // CONSTANTS
@@ -164,10 +165,10 @@ export function transformEventToCardProps(
   );
 
   const startDate = sortedSessions[0]?.sessionDate
-    ? new Date(sortedSessions[0].sessionDate).toISOString().split('T')[0] ?? ''
+    ? formatDateOnly(new Date(sortedSessions[0].sessionDate))
     : '';
   const endDate = sortedSessions.at(-1)?.sessionDate
-    ? new Date(sortedSessions.at(-1)!.sessionDate).toISOString().split('T')[0] ?? startDate
+    ? formatDateOnly(new Date(sortedSessions.at(-1)!.sessionDate))
     : startDate;
 
   // Transform sessions
@@ -319,16 +320,6 @@ function getClassColor(classData: ClassData): string {
 }
 
 /**
- * Format date as YYYY-MM-DD
- */
-function formatDateStr(date: Date): string {
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const d = String(date.getUTCDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-/**
  * Transform database schedule exceptions to calendar format
  */
 function transformExceptions(classData: ClassData): CalendarScheduleException[] {
@@ -344,7 +335,7 @@ function transformExceptions(classData: ClassData): CalendarScheduleException[] 
 
     return {
       classId: classData.id,
-      date: formatDateStr(new Date(exc.exceptionDate)),
+      date: formatDateOnly(new Date(exc.exceptionDate)),
       type: exc.exceptionType as ScheduleExceptionType,
       originalHour: originalTime.hour,
       originalMinute: originalTime.minute,
@@ -393,7 +384,7 @@ export function generateWeeklyScheduleFromData(
         weekStart.getUTCMonth(),
         weekStart.getUTCDate() + schedule.dayOfWeek,
       ));
-      const dateStr = formatDateStr(eventDate);
+      const dateStr = formatDateOnly(eventDate);
 
       // Check if there's an exception for this class on this date
       const exception = allExceptions.find(
@@ -473,7 +464,7 @@ export function generateMonthlyScheduleFromData(
   for (let day = 1; day <= daysInMonth; day++) {
     const date = new Date(Date.UTC(year, month, day));
     const dayOfWeek = date.getUTCDay();
-    const dateStr = formatDateStr(date);
+    const dateStr = formatDateOnly(date);
     monthlyEvents[day.toString()] = [];
 
     const classesForDay = classesByDayOfWeek.get(dayOfWeek) || [];
@@ -559,7 +550,7 @@ export function generateWeeklyEventScheduleFromData(
 
     for (const session of eventData.sessions) {
       const sessionDate = new Date(session.sessionDate);
-      const dateStr = formatDateStr(sessionDate);
+      const dateStr = formatDateOnly(sessionDate);
 
       // Check if session falls within the current week
       if (sessionDate >= weekStart && sessionDate < weekEnd) {
@@ -614,7 +605,7 @@ export function generateMonthlyEventScheduleFromData(
       if (sessionYear === year && sessionMonth === month) {
         const { hour, minute } = parseTime(session.startTime);
         const duration = calculateDuration(session.startTime, session.endTime);
-        const dateStr = formatDateStr(sessionDate);
+        const dateStr = formatDateOnly(sessionDate);
         const dayKey = sessionDay.toString();
 
         if (!monthlyEvents[dayKey]) {

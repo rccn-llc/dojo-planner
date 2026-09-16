@@ -40,6 +40,7 @@ vi.mock('@/services/MembersService', () => ({
   getHOHForFamilyMember: vi.fn(),
   getFamilyMembers: vi.fn(),
   getMemberById: vi.fn(),
+  getPunchcardUsage: vi.fn(),
   getMemberPaymentMethods: vi.fn(),
   createMember: vi.fn(),
   updateMember: vi.fn(),
@@ -689,7 +690,44 @@ describe('Member Router', () => {
       const result = await callHandler(getById, { memberId: 'member-1' });
 
       expect(getMemberById).toHaveBeenCalledWith('member-1', 'test-org-456');
-      expect(result).toEqual({ member: mockMember });
+      // No current membership -> no punchcard lookup, and a null balance.
+      expect(result).toEqual({ member: mockMember, punchcardUsage: null });
+    });
+
+    it('returns the derived punchcard balance for the current membership', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { getMemberById, getPunchcardUsage } = await import('@/services/MembersService');
+
+      const startDate = new Date('2026-01-01T00:00:00Z');
+      const mockMember = {
+        id: 'member-1',
+        firstName: 'Jane',
+        lastName: 'Doe',
+        email: 'jane@test.com',
+        phone: null,
+        dateOfBirth: null,
+        photoUrl: null,
+        memberType: 'individual',
+        lastAccessedAt: null,
+        status: 'active',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        currentMembership: { membershipPlanId: 'plan-punch', startDate },
+      };
+
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
+      vi.mocked(getMemberById).mockResolvedValue(mockMember as never);
+      vi.mocked(getPunchcardUsage).mockResolvedValue({ totalClasses: 10, classesUsed: 4, classesRemaining: 6 });
+
+      const { getById } = await import('./Member');
+      const result = await callHandler(getById, { memberId: 'member-1' });
+
+      // Org-scoped, and keyed to the membership's own plan + start date.
+      expect(getPunchcardUsage).toHaveBeenCalledWith('member-1', 'test-org-456', 'plan-punch', startDate);
+      expect(result).toEqual({
+        member: mockMember,
+        punchcardUsage: { totalClasses: 10, classesUsed: 4, classesRemaining: 6 },
+      });
     });
 
     it('maps a missing / cross-tenant member to a 404', async () => {

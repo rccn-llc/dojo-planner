@@ -130,7 +130,7 @@ export function EditLocationForm({ onCancel, onSuccess, initialData, onSave, err
             rows={2}
           />
           {errors.address && (
-            <p className="mt-1 text-sm text-red-500">{errors.address}</p>
+            <p className="mt-1 text-sm text-destructive">{errors.address}</p>
           )}
         </div>
         <div>
@@ -145,7 +145,7 @@ export function EditLocationForm({ onCancel, onSuccess, initialData, onSave, err
             disabled={isLoading}
           />
           {errors.phone && (
-            <p className="mt-1 text-sm text-red-500">{errors.phone}</p>
+            <p className="mt-1 text-sm text-destructive">{errors.phone}</p>
           )}
         </div>
         <div>
@@ -161,7 +161,7 @@ export function EditLocationForm({ onCancel, onSuccess, initialData, onSave, err
             disabled={isLoading}
           />
           {errors.email && (
-            <p className="mt-1 text-sm text-red-500">{errors.email}</p>
+            <p className="mt-1 text-sm text-destructive">{errors.email}</p>
           )}
         </div>
         <div>
@@ -184,12 +184,12 @@ export function EditLocationForm({ onCancel, onSuccess, initialData, onSave, err
           </div>
           <p className="mt-1 text-xs text-muted-foreground">{t('tax_rate_helper')}</p>
           {errors.taxRate && (
-            <p className="mt-1 text-sm text-red-500">{errors.taxRate}</p>
+            <p className="mt-1 text-sm text-destructive">{errors.taxRate}</p>
           )}
         </div>
       </div>
       {errorMessage && (
-        <p className="text-sm text-red-500">{errorMessage}</p>
+        <p className="text-sm text-destructive">{errorMessage}</p>
       )}
       <div className="flex justify-between pt-2">
         <Button

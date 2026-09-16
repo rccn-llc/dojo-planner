@@ -26,6 +26,7 @@ const translationKeys: Record<string, string> = {
   back_button: 'Back',
   cancel_button: 'Cancel',
   continue_button: 'Continue',
+  continuing_button: 'Continuing…',
   continue_without_signing_button: 'Continue without signing',
   signature_required_error: 'Please provide your signature',
   name_required_error: 'Please enter your full name',
@@ -788,7 +789,7 @@ describe('WaiverStep', () => {
 
       await expect.element(page.getByText('Sign Waiver')).toBeInTheDocument();
 
-      await expect.element(page.getByText('Continue...')).toBeInTheDocument();
+      await expect.element(page.getByText('Continuing…')).toBeInTheDocument();
     });
 
     it('should disable Continue button when isLoading is true', async () => {
@@ -805,7 +806,7 @@ describe('WaiverStep', () => {
 
       await expect.element(page.getByText('Sign Waiver')).toBeInTheDocument();
 
-      const continueButton = page.getByRole('button', { name: 'Continue...' });
+      const continueButton = page.getByRole('button', { name: 'Continuing…' });
 
       expect(continueButton.element()).toBeDisabled();
     });

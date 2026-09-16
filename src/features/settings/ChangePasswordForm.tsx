@@ -115,7 +115,7 @@ export function ChangePasswordForm({ onCancel, onSuccess }: ChangePasswordFormPr
           disabled={isLoading}
         />
         {errors.currentPassword && (
-          <p className="mt-1 text-sm text-red-500">{errors.currentPassword}</p>
+          <p className="mt-1 text-sm text-destructive">{errors.currentPassword}</p>
         )}
       </div>
       <div>
@@ -131,7 +131,7 @@ export function ChangePasswordForm({ onCancel, onSuccess }: ChangePasswordFormPr
           disabled={isLoading}
         />
         {errors.newPassword && (
-          <p className="mt-1 text-sm text-red-500">{errors.newPassword}</p>
+          <p className="mt-1 text-sm text-destructive">{errors.newPassword}</p>
         )}
       </div>
       <div>
@@ -147,7 +147,7 @@ export function ChangePasswordForm({ onCancel, onSuccess }: ChangePasswordFormPr
           disabled={isLoading}
         />
         {errors.confirmPassword && (
-          <p className="mt-1 text-sm text-red-500">{errors.confirmPassword}</p>
+          <p className="mt-1 text-sm text-destructive">{errors.confirmPassword}</p>
         )}
       </div>
       {successMessage && (

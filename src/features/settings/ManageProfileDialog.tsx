@@ -1,6 +1,6 @@
 'use client';
 
-import { useUser } from '@clerk/nextjs';
+import { useOrganization, useUser } from '@clerk/nextjs';
 import { Pencil } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
@@ -11,6 +11,7 @@ import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useHasPasswordAuth } from '@/hooks/useHasPasswordAuth';
+import { formatRoleLabel } from '@/utils/RoleLabels';
 import { ChangePasswordForm } from './ChangePasswordForm';
 import { Disable2FADialog } from './Disable2FADialog';
 import { EditProfileForm } from './EditProfileForm';
@@ -31,6 +32,7 @@ export function ManageProfileDialog({ open, onOpenChange }: ManageProfileDialogP
   const [showDisable2FA, setShowDisable2FA] = useState(false);
 
   const { user, isLoaded } = useUser();
+  const { membership } = useOrganization();
   const { hasPasswordAuth, isLoadingAuth } = useHasPasswordAuth();
 
   const firstName = user?.firstName ?? '';
@@ -38,7 +40,9 @@ export function ManageProfileDialog({ open, onOpenChange }: ManageProfileDialogP
   const email = user?.primaryEmailAddress?.emailAddress ?? '';
   const phone = user?.primaryPhoneNumber?.phoneNumber ?? '';
   const photoUrl = user?.imageUrl ?? '';
-  const role = 'Account Owner';
+  // The signed-in user's ACTUAL org role. This was hardcoded to
+  // 'Account Owner', so every user saw that badge regardless of role.
+  const role = formatRoleLabel(membership?.role);
 
   const userInitials = `${firstName[0] ?? ''}${lastName[0] ?? ''}`;
 

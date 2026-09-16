@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select/select';
+import { formatDateOnlyLocal } from '@/utils/DateHelpers';
 
 type AddEditCouponModalProps = {
   isOpen: boolean;
@@ -64,7 +65,7 @@ function getInitialFormData(coupon?: Coupon | null): CouponFormData {
 
   // Default startDate = today so validFrom < validUntil even when the user
   // doesn't explicitly pick a start date.
-  const today = new Date().toISOString().split('T')[0]!;
+  const today = formatDateOnlyLocal(new Date());
   return {
     code: '',
     description: '',

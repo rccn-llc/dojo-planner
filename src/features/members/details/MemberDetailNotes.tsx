@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowDown01, ArrowDownAZ, ArrowUp10, ArrowUpZA, Pencil, Search, Trash2 } from 'lucide-react';
+import { Pencil, Search, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useCallback, useMemo, useState } from 'react';
 import {
@@ -16,6 +16,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input/input';
+import { SortableHeader } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 
 export type MemberNote = {
@@ -191,22 +192,6 @@ export function MemberDetailNotes({
     });
   }, [notes, sortField, sortDirection, searchQuery]);
 
-  const renderSortIcon = (field: SortField) => {
-    if (sortField !== field) {
-      return null;
-    }
-
-    if (field === 'date') {
-      return sortDirection === 'asc'
-        ? <ArrowDown01 className="size-4" />
-        : <ArrowUp10 className="size-4" />;
-    }
-
-    return sortDirection === 'asc'
-      ? <ArrowDownAZ className="size-4" />
-      : <ArrowUpZA className="size-4" />;
-  };
-
   return (
     <div className="space-y-6">
       <Card className="p-6">
@@ -283,34 +268,37 @@ export function MemberDetailNotes({
                         <thead>
                           <tr className="border-b border-border bg-secondary">
                             <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
-                              <button
-                                type="button"
-                                onClick={() => handleSort('date')}
-                                className="flex cursor-pointer items-center gap-2 hover:text-foreground/80"
+                              <SortableHeader
+                                field="date"
+                                activeField={sortField}
+                                direction={sortDirection}
+                                onSort={handleSort}
+                                sortIcons="numeric"
                               >
                                 {t('table_date')}
-                                {renderSortIcon('date')}
-                              </button>
+                              </SortableHeader>
                             </th>
                             <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
-                              <button
-                                type="button"
-                                onClick={() => handleSort('author')}
-                                className="flex cursor-pointer items-center gap-2 hover:text-foreground/80"
+                              <SortableHeader
+                                field="author"
+                                activeField={sortField}
+                                direction={sortDirection}
+                                onSort={handleSort}
+                                sortIcons="alpha"
                               >
                                 {t('table_author')}
-                                {renderSortIcon('author')}
-                              </button>
+                              </SortableHeader>
                             </th>
                             <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
-                              <button
-                                type="button"
-                                onClick={() => handleSort('content')}
-                                className="flex cursor-pointer items-center gap-2 hover:text-foreground/80"
+                              <SortableHeader
+                                field="content"
+                                activeField={sortField}
+                                direction={sortDirection}
+                                onSort={handleSort}
+                                sortIcons="alpha"
                               >
                                 {t('table_note')}
-                                {renderSortIcon('content')}
-                              </button>
+                              </SortableHeader>
                             </th>
                             {(onEditNote || onDeleteNote) && (
                               <th className="px-6 py-3 text-right text-sm font-semibold text-foreground">

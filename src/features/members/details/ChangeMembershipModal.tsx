@@ -17,125 +17,6 @@ import { dedupeRequest } from '@/hooks/dedupeRequest';
 import { invalidateMembersCache } from '@/hooks/useMembersCache';
 import { client } from '@/libs/Orpc';
 
-// Mock membership plans matching the Memberships landing page (6 active plans)
-// These are used as fallback when the API returns no plans
-const mockMembershipPlans: MembershipPlanData[] = [
-  {
-    id: 'mock-plan-1',
-    name: '12 Month Commitment (Gold)',
-    slug: '12_month_commitment_gold',
-    category: 'Adult Brazilian Jiu-Jitsu',
-    program: 'Adult',
-    price: 150,
-    signupFee: 35,
-    cancellationFee: 0,
-    holdFeeAmount: 0,
-    holdFeeFrequency: null,
-    holdLimitPerYear: null,
-    frequency: 'Monthly',
-    contractLength: '12 Months',
-    accessLevel: 'Unlimited',
-    description: '12 month contract with unlimited access',
-    isTrial: false,
-    isActive: true,
-  },
-  {
-    id: 'mock-plan-2',
-    name: 'Month to Month (Gold)',
-    slug: 'month_to_month_gold',
-    category: 'Adult Brazilian Jiu-Jitsu',
-    program: 'Adult',
-    price: 170,
-    signupFee: 35,
-    cancellationFee: 0,
-    holdFeeAmount: 0,
-    holdFeeFrequency: null,
-    holdLimitPerYear: null,
-    frequency: 'Monthly',
-    contractLength: 'Month-to-Month',
-    accessLevel: 'Unlimited',
-    description: 'No commitment, month-to-month with unlimited access',
-    isTrial: false,
-    isActive: true,
-  },
-  {
-    id: 'mock-plan-3',
-    name: '7-Day Free Trial',
-    slug: '7_day_free_trial',
-    category: 'Adult Brazilian Jiu-Jitsu',
-    program: 'Adult',
-    price: 0,
-    signupFee: 0,
-    cancellationFee: 0,
-    holdFeeAmount: 0,
-    holdFeeFrequency: null,
-    holdLimitPerYear: null,
-    frequency: 'None',
-    contractLength: '7 Days',
-    accessLevel: '3 Classes Total',
-    description: '7-day trial with 3 classes',
-    isTrial: true,
-    isActive: true,
-  },
-  {
-    id: 'mock-plan-4',
-    name: 'Kids Monthly',
-    slug: 'kids_monthly',
-    category: 'Kids Program',
-    program: 'Kids',
-    price: 95,
-    signupFee: 25,
-    cancellationFee: 0,
-    holdFeeAmount: 0,
-    holdFeeFrequency: null,
-    holdLimitPerYear: null,
-    frequency: 'Monthly',
-    contractLength: 'Month-to-Month',
-    accessLevel: '8 Classes/mo',
-    description: 'Monthly membership for kids program',
-    isTrial: false,
-    isActive: true,
-  },
-  {
-    id: 'mock-plan-5',
-    name: 'Kids Free Trial Week',
-    slug: 'kids_free_trial_week',
-    category: 'Kids Program',
-    program: 'Kids',
-    price: 0,
-    signupFee: 0,
-    cancellationFee: 0,
-    holdFeeAmount: 0,
-    holdFeeFrequency: null,
-    holdLimitPerYear: null,
-    frequency: 'None',
-    contractLength: '7 Days',
-    accessLevel: '2 Classes Total',
-    description: '7-day trial with 2 classes for kids',
-    isTrial: true,
-    isActive: true,
-  },
-  {
-    id: 'mock-plan-6',
-    name: 'Competition Team',
-    slug: 'competition_team',
-    category: 'Competition Team',
-    program: 'Competition',
-    price: 200,
-    signupFee: 50,
-    cancellationFee: 0,
-    holdFeeAmount: 0,
-    holdFeeFrequency: null,
-    holdLimitPerYear: null,
-    frequency: 'Monthly',
-    contractLength: '6 Months',
-    accessLevel: 'Unlimited',
-    description: '6 month commitment for competition team members',
-    isTrial: false,
-    isActive: true,
-  },
-];
-
 type ChangeMembershipModalProps = {
   isOpen: boolean;
   onClose: () => void;
@@ -165,27 +46,26 @@ export function ChangeMembershipModal({
     if (isOpen) {
       const fetchPlans = async () => {
         setIsFetchingPlans(true);
+        setError(null);
         try {
           const result = await dedupeRequest('member.listMembershipPlans', async () => client.member.listMembershipPlans());
-          // Filter to only show active plans and use mocks as fallback
-          const activePlans = result.plans.filter(plan => plan.isActive);
-          if (activePlans.length > 0) {
-            setMembershipPlans(activePlans);
-          } else {
-            // Use mock plans if no plans in database
-            setMembershipPlans(mockMembershipPlans);
-          }
+          // Only active plans are selectable. An empty result renders the
+          // `no_plans_available` empty state — this previously fell back to six
+          // hardcoded `mock-plan-N` fixtures, whose ids are not real rows, so
+          // selecting one sent a non-existent FK to addMembership/changeMembership
+          // and failed with a 500.
+          setMembershipPlans(result.plans.filter(plan => plan.isActive));
         } catch (err) {
-          console.error('Failed to fetch membership plans, using mocks:', err);
-          // Fall back to mock plans on error
-          setMembershipPlans(mockMembershipPlans);
+          console.error('Failed to fetch membership plans:', err);
+          setMembershipPlans([]);
+          setError(err instanceof Error ? err.message : t('submit_error'));
         } finally {
           setIsFetchingPlans(false);
         }
       };
       fetchPlans();
     }
-  }, [isOpen]);
+  }, [isOpen, t]);
 
   const handleSelectPlan = (planId: string) => {
     setSelectedPlanId(planId);

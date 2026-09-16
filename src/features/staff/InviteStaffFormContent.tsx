@@ -67,8 +67,8 @@ export const InviteStaffFormContent = ({
       </div>
 
       {error && (
-        <div className="rounded-lg bg-red-50 p-4 dark:bg-red-950/30">
-          <p className="text-sm text-red-900 dark:text-red-200">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4">
+          <p className="text-sm text-destructive">
             {error}
           </p>
         </div>

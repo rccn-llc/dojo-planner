@@ -8,6 +8,7 @@ import type { MemberPaymentMethodData } from '@/services/MembersService';
 import type { SignedWaiverWithTemplateName } from '@/services/WaiversService';
 import { useOrganization } from '@clerk/nextjs';
 import { Archive, ArchiveRestore, ArrowRightLeft, Download, MoreVertical, Pencil, Plus, Trash2, Unlink } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
@@ -123,54 +124,7 @@ type MemberData = {
   membershipDetails: MembershipDetailsData;
 };
 
-// Mock punchcard info for demonstration (used when member has punchcard membership)
-const MOCK_PUNCHCARD_INFO: PunchcardInfo = {
-  totalClasses: 10,
-  classesUsed: 4,
-  classesRemaining: 6,
-};
-
 // Build MemberData from API member data - use Member type from cache
-
-function getMembershipBadgeText(membershipType?: string, planName?: string | null): string {
-  // If we have an actual plan name, use it
-  if (planName) {
-    return planName;
-  }
-  // Fallback to legacy membership type mapping
-  switch (membershipType) {
-    case 'free':
-      return 'Free Member';
-    case 'free-trial':
-      return 'Free Trial';
-    case 'annual':
-      return 'Annual Member';
-    case 'monthly':
-      return 'Monthly Member';
-    default:
-      return 'No Membership';
-  }
-}
-
-function getSubscriptionMembershipType(membershipType?: string, planName?: string | null): string {
-  // If we have an actual plan name, use it
-  if (planName) {
-    return planName;
-  }
-  // Fallback to legacy membership type mapping
-  switch (membershipType) {
-    case 'free':
-      return 'Free Membership';
-    case 'free-trial':
-      return 'Free Trial Membership';
-    case 'annual':
-      return 'Annual Membership';
-    case 'monthly':
-      return 'Monthly Membership';
-    default:
-      return 'No Membership';
-  }
-}
 
 function getSubscriptionAmount(membershipType?: string, planPrice?: number | null): number {
   // If we have an actual plan price, use it
@@ -223,7 +177,21 @@ function formatMembershipDate(date?: Date | null): string {
   });
 }
 
+/**
+ * Labels the caller resolves via `useTranslations` and passes in, so this
+ * stays a pure function and every `t('...')` call remains inside the
+ * component's namespace scope.
+ */
+type MembershipLabels = {
+  notAvailable: string;
+  annual: string;
+  monthly: string;
+  monthToMonth: string;
+  planFallback: string;
+};
+
 function buildMembershipDetails(
+  labels: MembershipLabels,
   membershipType?: string,
   status?: string,
   program?: string,
@@ -267,7 +235,7 @@ function buildMembershipDetails(
   if (isFreeOrTrial) {
     return {
       ...baseDetails,
-      membershipType: getSubscriptionMembershipType(membershipType),
+      membershipType: labels.planFallback,
       membershipFee: 0,
       signupFee: 0,
       paymentFrequency: 'N/A',
@@ -292,17 +260,17 @@ function buildMembershipDetails(
   // Fallback for legacy paid memberships
   return {
     ...baseDetails,
-    membershipType: membershipType === 'annual' ? 'Annual' : 'Month-to-Month',
+    membershipType: membershipType === 'annual' ? labels.annual : labels.monthToMonth,
     membershipFee: membershipType === 'annual' ? 1800 : 300,
     signupFee: 0,
-    paymentFrequency: membershipType === 'annual' ? 'Annual' : 'Monthly',
+    paymentFrequency: membershipType === 'annual' ? labels.annual : labels.monthly,
     nextPaymentDate: formatMembershipDate(dates?.nextPaymentDate),
     nextPaymentAmount: membershipType === 'annual' ? 1800 : 300,
   };
 }
 
-function buildMemberDataFromAPI(apiMember: Member & { membershipType?: string; program?: string }): MemberData {
-  const memberName = `${apiMember.firstName || ''} ${apiMember.lastName || ''}`.trim() || 'Member';
+function buildMemberDataFromAPI(labels: MembershipLabels & { memberFallback: string; badgeFallback: string }, apiMember: Member & { membershipType?: string; program?: string }): MemberData {
+  const memberName = `${apiMember.firstName || ''} ${apiMember.lastName || ''}`.trim() || labels.memberFallback;
   const memberStatus = getMemberStatus(apiMember.status);
   const membershipTypeStr = apiMember.membershipType || '';
 
@@ -322,7 +290,7 @@ function buildMemberDataFromAPI(apiMember: Member & { membershipType?: string; p
     lastName: apiMember.lastName || '',
     photoUrl: apiMember.photoUrl || undefined,
     billingContactRole: 'Billing Contact',
-    membershipBadge: getMembershipBadgeText(membershipTypeStr, planName),
+    membershipBadge: planName || labels.badgeFallback,
     amountOverdue: '$0',
     contactInfo: {
       phone: apiMember.phone || '',
@@ -337,14 +305,14 @@ function buildMemberDataFromAPI(apiMember: Member & { membershipType?: string; p
       country: apiMember.address?.country || 'US',
     },
     subscriptionDetails: {
-      membershipType: getSubscriptionMembershipType(membershipTypeStr, planName),
+      membershipType: planName || labels.planFallback,
       status: memberStatus,
       amount: getSubscriptionAmount(membershipTypeStr, planPrice),
       pastDuePayments: 0,
       lastPayment: isFreeOrTrial ? undefined : 'Last payment: N/A',
     },
     familyMembers: [],
-    membershipDetails: buildMembershipDetails(membershipTypeStr, apiMember.status, planProgram, currentPlan, {
+    membershipDetails: buildMembershipDetails(labels, membershipTypeStr, apiMember.status, planProgram, currentPlan, {
       startDate: apiMember.currentMembership?.startDate,
       createdAt: apiMember.currentMembership?.createdAt,
       nextPaymentDate: apiMember.currentMembership?.nextPaymentDate,
@@ -408,7 +376,7 @@ function pageReducer(state: PageState, action: PageAction): PageState {
         return state;
       }
       const { firstName, lastName } = action.payload;
-      const memberName = `${firstName} ${lastName}`.trim() || 'Member';
+      const memberName = `${firstName} ${lastName}`.trim();
       return {
         ...state,
         currentData: {
@@ -438,6 +406,7 @@ function pageReducer(state: PageState, action: PageAction): PageState {
 }
 
 export default function EditMemberPage() {
+  const t = useTranslations('MemberDetailPage');
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -478,6 +447,7 @@ export default function EditMemberPage() {
 
   // Member photo (large base64), loaded separately from the members list.
   const [memberPhoto, setMemberPhoto] = useState<string | undefined>(undefined);
+  const [punchcardInfo, setPunchcardInfo] = useState<PunchcardInfo | null>(null);
 
   // State for signed waivers
   const [signedWaivers, setSignedWaivers] = useState<SignedWaiverWithTemplateName[]>([]);
@@ -633,6 +603,40 @@ export default function EditMemberPage() {
   }, [organization?.id, locale]);
 
   // Handler to load member data from cache
+  // Legacy membership-type labels, for rows predating real plan records.
+  // Defined inside the component so each literal t('...') sits in this
+  // namespace's scope — check:i18n cannot trace keys used by a module-level
+  // helper that merely receives `t`.
+  const legacyBadgeLabel = useCallback((membershipType?: string): string => {
+    switch (membershipType) {
+      case 'free':
+        return t('badge_free_member');
+      case 'free-trial':
+        return t('badge_free_trial');
+      case 'annual':
+        return t('badge_annual_member');
+      case 'monthly':
+        return t('badge_monthly_member');
+      default:
+        return t('badge_no_membership');
+    }
+  }, [t]);
+
+  const legacyPlanLabel = useCallback((membershipType?: string): string => {
+    switch (membershipType) {
+      case 'free':
+        return t('plan_free');
+      case 'free-trial':
+        return t('plan_free_trial');
+      case 'annual':
+        return t('plan_annual');
+      case 'monthly':
+        return t('plan_monthly');
+      default:
+        return t('plan_none');
+    }
+  }, [t]);
+
   const loadMemberData = useCallback(() => {
     try {
       if (members && members.length > 0) {
@@ -641,7 +645,17 @@ export default function EditMemberPage() {
           // Use organization subscription type if available, otherwise use member's individual type
           const membershipTypeToUse = (state.subscriptionType || member.membershipType) as 'free' | 'free-trial' | 'monthly' | 'annual' | undefined;
           const memberWithType = { ...member, membershipType: membershipTypeToUse };
-          const memberData = buildMemberDataFromAPI(memberWithType);
+          // Resolved here so every t() call sits inside this component's
+          // useTranslations scope, which is what check:i18n traces.
+          const memberData = buildMemberDataFromAPI({
+            notAvailable: 'N/A',
+            annual: t('frequency_annual'),
+            monthly: t('frequency_monthly'),
+            monthToMonth: t('contract_month_to_month'),
+            planFallback: legacyPlanLabel(membershipTypeToUse),
+            memberFallback: t('member_column'),
+            badgeFallback: legacyBadgeLabel(membershipTypeToUse),
+          }, memberWithType);
           dispatch({ type: 'SET_MEMBER_DATA', payload: memberData });
           console.info('[Edit Member] Member data loaded from cache:', {
             timestamp: new Date().toISOString(),
@@ -657,7 +671,7 @@ export default function EditMemberPage() {
     } finally {
       dispatch({ type: 'SET_LOADING_MEMBER', payload: false });
     }
-  }, [members, memberId, state.subscriptionType]);
+  }, [members, memberId, state.subscriptionType, t, legacyBadgeLabel, legacyPlanLabel]);
 
   // Load member data from cache
   useEffect(() => {
@@ -675,6 +689,9 @@ export default function EditMemberPage() {
     try {
       const result = await client.member.getById({ memberId });
       setMemberPhoto(result.member.photoUrl ?? undefined);
+      // Real punchcard balance, derived server-side from attendance. null when
+      // the plan is not a punchcard, which hides the card.
+      setPunchcardInfo(result.punchcardUsage ?? null);
     } catch (err) {
       console.warn('[Edit Member] Failed to fetch member photo:', err);
     }
@@ -1055,7 +1072,7 @@ export default function EditMemberPage() {
           </div>
         )}
         <div className="flex items-center justify-center py-12">
-          <p className="text-muted-foreground">Loading member data...</p>
+          <p className="text-muted-foreground">{t('loading_member')}</p>
         </div>
       </div>
     );
@@ -1084,7 +1101,7 @@ export default function EditMemberPage() {
           <button
             type="button"
             onClick={() => setIsEditPhotoModalOpen(true)}
-            aria-label="Edit photo"
+            aria-label={t('edit_photo_aria')}
             className="absolute -right-1 -bottom-1 cursor-pointer rounded-full border border-border bg-background p-1 shadow-sm hover:bg-accent"
           >
             <Pencil className="size-3.5" />
@@ -1097,14 +1114,14 @@ export default function EditMemberPage() {
               {currentMember?.memberType === 'head-of-household'
                 ? 'Head of Household'
                 : currentMember?.memberType === 'family-member'
-                  ? 'Family Member'
-                  : 'Individual'}
+                  ? t('member_type_family_member')
+                  : t('member_type_individual')}
             </Badge>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="h-8 gap-1 text-sm">
                   <ArrowRightLeft className="size-3.5" />
-                  Convert
+                  {t('convert_button')}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start">
@@ -1117,13 +1134,13 @@ export default function EditMemberPage() {
                             disabled={familyMembersData.length > 0}
                             onClick={() => handleOpenConvertModal('hoh-to-individual')}
                           >
-                            Convert to Individual
+                            {t('convert_to_individual')}
                           </DropdownMenuItem>
                         </span>
                       </TooltipTrigger>
                       {familyMembersData.length > 0 && (
                         <TooltipContent>
-                          Remove all family members before converting to Individual
+                          {t('convert_blocked_family')}
                         </TooltipContent>
                       )}
                     </Tooltip>
@@ -1131,12 +1148,12 @@ export default function EditMemberPage() {
                 )}
                 {currentMember?.memberType === 'individual' && (
                   <DropdownMenuItem onClick={() => handleOpenConvertModal('individual-to-hoh')}>
-                    Convert to Head of Household
+                    {t('convert_to_hoh')}
                   </DropdownMenuItem>
                 )}
                 {currentMember?.memberType === 'family-member' && (
                   <DropdownMenuItem onClick={() => handleOpenConvertModal('family-to-individual')}>
-                    Convert to Individual
+                    {t('convert_to_individual')}
                   </DropdownMenuItem>
                 )}
               </DropdownMenuContent>
@@ -1146,20 +1163,20 @@ export default function EditMemberPage() {
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm" className="h-8 gap-1 text-sm">
                     <MoreVertical className="size-3.5" />
-                    Actions
+                    {t('actions_button')}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start">
                   {currentMembership.status === 'active' && (
                     <>
                       <DropdownMenuItem onClick={() => setIsHoldMembershipOpen(true)}>
-                        Place on Hold
+                        {t('place_on_hold_action')}
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="text-destructive focus:text-destructive"
                         onClick={() => setIsCancelMembershipOpen(true)}
                       >
-                        Cancel Membership
+                        {t('cancel_membership_action')}
                       </DropdownMenuItem>
                     </>
                   )}
@@ -1169,13 +1186,13 @@ export default function EditMemberPage() {
                         disabled={isReactivateLoading}
                         onClick={handleReactivate}
                       >
-                        {isReactivateLoading ? 'Reactivating…' : 'Reactivate'}
+                        {isReactivateLoading ? t('reactivating_action') : t('reactivate_action')}
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="text-destructive focus:text-destructive"
                         onClick={() => setIsCancelMembershipOpen(true)}
                       >
-                        Cancel Membership
+                        {t('cancel_membership_action')}
                       </DropdownMenuItem>
                     </>
                   )}
@@ -1192,7 +1209,7 @@ export default function EditMemberPage() {
                       onClick={() => setArchiveModalMode('restore')}
                     >
                       <ArchiveRestore className="size-3.5" />
-                      Restore Member
+                      {t('restore_member_button')}
                     </Button>
                   )
                 : (
@@ -1203,7 +1220,7 @@ export default function EditMemberPage() {
                       onClick={() => setArchiveModalMode('archive')}
                     >
                       <Archive className="size-3.5" />
-                      Archive Member
+                      {t('archive_member_button')}
                     </Button>
                   )
             )}
@@ -1248,7 +1265,7 @@ export default function EditMemberPage() {
                 : 'border-b-2 border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
-            Overview
+            {t('tab_overview')}
           </button>
           <button
             type="button"
@@ -1259,7 +1276,7 @@ export default function EditMemberPage() {
                 : 'border-b-2 border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
-            Attendance
+            {t('tab_attendance')}
           </button>
           <button
             type="button"
@@ -1270,7 +1287,7 @@ export default function EditMemberPage() {
                 : 'border-b-2 border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
-            Notes
+            {t('tab_notes')}
           </button>
         </div>
       </div>
@@ -1283,10 +1300,10 @@ export default function EditMemberPage() {
             {/* Contact Information - Read Only Display */}
             <Card className="flex flex-col p-6">
               <div>
-                <h2 className="mb-6 text-lg font-semibold text-foreground">Contact Information</h2>
+                <h2 className="mb-6 text-lg font-semibold text-foreground">{t('contact_information_title')}</h2>
                 <div className="space-y-4">
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground">Address:</p>
+                    <p className="text-xs font-medium text-muted-foreground">{t('address_label')}</p>
                     <p className="text-sm text-foreground">
                       {state.currentData.contactInfo.street && `${state.currentData.contactInfo.street}, `}
                       {state.currentData.contactInfo.city && `${state.currentData.contactInfo.city} `}
@@ -1295,16 +1312,16 @@ export default function EditMemberPage() {
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground">Phone:</p>
+                    <p className="text-xs font-medium text-muted-foreground">{t('phone_label')}</p>
                     <p className="text-sm text-foreground">{state.currentData.contactInfo.phone || '—'}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground">Email:</p>
+                    <p className="text-xs font-medium text-muted-foreground">{t('email_label')}</p>
                     <p className="text-sm text-foreground">{state.currentData.contactInfo.email || '—'}</p>
                   </div>
                   {state.currentData.contactInfo.dateOfBirth && (
                     <div>
-                      <p className="text-xs font-medium text-muted-foreground">Date of Birth:</p>
+                      <p className="text-xs font-medium text-muted-foreground">{t('date_of_birth_label')}</p>
                       <p className="text-sm text-foreground">{state.currentData.contactInfo.dateOfBirth}</p>
                     </div>
                   )}
@@ -1312,10 +1329,10 @@ export default function EditMemberPage() {
               </div>
               <div className="mt-auto flex justify-end pt-6">
                 <Button
-                  className="w-fit bg-foreground text-background hover:bg-foreground/90"
+                  className="w-fit"
                   onClick={() => setIsEditContactModalOpen(true)}
                 >
-                  Edit Details
+                  {t('edit_details_button')}
                 </Button>
               </div>
             </Card>
@@ -1376,31 +1393,31 @@ export default function EditMemberPage() {
             {/* Membership Details - Comprehensive */}
             <Card className="flex flex-col p-6">
               <div>
-                <h2 className="mb-6 text-lg font-semibold text-foreground">Membership Details</h2>
+                <h2 className="mb-6 text-lg font-semibold text-foreground">{t('membership_details_title')}</h2>
                 {hasActiveMembership
                   ? (
                       <div className="space-y-4">
                         <div className="flex items-start justify-between">
-                          <p className="text-sm text-muted-foreground">Status</p>
+                          <p className="text-sm text-muted-foreground">{t('status_label')}</p>
                           <Badge variant={getStatusColor(state.currentData.membershipDetails.status)}>
                             {getStatusLabel(state.currentData.membershipDetails.status)}
                           </Badge>
                         </div>
                         <div className="flex items-start justify-between">
-                          <p className="text-sm text-muted-foreground">Program</p>
+                          <p className="text-sm text-muted-foreground">{t('program_label')}</p>
                           <p className={`text-right text-sm ${state.currentData.membershipDetails.program === 'N/A' ? 'text-muted-foreground' : 'text-foreground'}`}>
                             {state.currentData.membershipDetails.program}
                           </p>
                         </div>
                         <div className="flex items-start justify-between">
-                          <p className="text-sm text-muted-foreground">Membership Type</p>
+                          <p className="text-sm text-muted-foreground">{t('membership_type_label')}</p>
                           <p className={`text-right text-sm ${state.currentData.membershipDetails.membershipType === 'N/A' ? 'text-muted-foreground' : 'text-foreground'}`}>
                             {state.currentData.membershipDetails.membershipType}
                           </p>
                         </div>
                         {state.currentData.membershipDetails.membershipFee > 0 && (
                           <div className="flex items-start justify-between">
-                            <p className="text-sm text-muted-foreground">Membership Fee</p>
+                            <p className="text-sm text-muted-foreground">{t('membership_fee_label')}</p>
                             <p className="text-right text-sm font-semibold text-foreground">
                               {formatCurrency(state.currentData.membershipDetails.membershipFee)}
                             </p>
@@ -1408,7 +1425,7 @@ export default function EditMemberPage() {
                         )}
                         {state.currentData.membershipDetails.signupFee > 0 && (
                           <div className="flex items-start justify-between">
-                            <p className="text-sm text-muted-foreground">Signup Fee</p>
+                            <p className="text-sm text-muted-foreground">{t('signup_fee_label')}</p>
                             <p className="text-right text-sm font-semibold text-foreground">
                               {formatCurrency(state.currentData.membershipDetails.signupFee)}
                             </p>
@@ -1416,27 +1433,27 @@ export default function EditMemberPage() {
                         )}
                         {state.currentData.membershipDetails.paymentFrequency !== 'N/A' && (
                           <div className="flex items-start justify-between">
-                            <p className="text-sm text-muted-foreground">Payment Frequency</p>
+                            <p className="text-sm text-muted-foreground">{t('payment_frequency_label')}</p>
                             <p className="text-right text-sm text-foreground">{state.currentData.membershipDetails.paymentFrequency}</p>
                           </div>
                         )}
                         <div className="flex items-start justify-between border-t border-border pt-4">
-                          <p className="text-sm text-muted-foreground">Registration Date</p>
+                          <p className="text-sm text-muted-foreground">{t('registration_date_label')}</p>
                           <p className="text-right text-sm text-foreground">{state.currentData.membershipDetails.registrationDate}</p>
                         </div>
                         <div className="flex items-start justify-between">
-                          <p className="text-sm text-muted-foreground">Start Date</p>
+                          <p className="text-sm text-muted-foreground">{t('start_date_label')}</p>
                           <p className="text-right text-sm text-foreground">{state.currentData.membershipDetails.startDate}</p>
                         </div>
                         {state.currentData.membershipDetails.nextPaymentDate !== 'N/A' && (
                           <div className="flex items-start justify-between">
-                            <p className="text-sm text-muted-foreground">Next Payment Date</p>
+                            <p className="text-sm text-muted-foreground">{t('next_payment_date_label')}</p>
                             <p className="text-right text-sm text-foreground">{state.currentData.membershipDetails.nextPaymentDate}</p>
                           </div>
                         )}
                         {state.currentData.membershipDetails.nextPaymentAmount > 0 && (
                           <div className="flex items-start justify-between">
-                            <p className="text-sm text-muted-foreground">Next Payment Amount</p>
+                            <p className="text-sm text-muted-foreground">{t('next_payment_amount_label')}</p>
                             <p className="text-right text-sm font-semibold text-foreground">
                               {formatCurrency(state.currentData.membershipDetails.nextPaymentAmount)}
                             </p>
@@ -1445,7 +1462,7 @@ export default function EditMemberPage() {
                         {state.currentData.subscriptionDetails.pastDuePayments > 0 && (
                           <div className="flex items-start justify-between border-t border-border pt-4">
                             <div>
-                              <p className="text-sm font-semibold text-destructive">Past Due Payments</p>
+                              <p className="text-sm font-semibold text-destructive">{t('past_due_payments_label')}</p>
                               <p className="text-xs text-muted-foreground">{state.currentData.subscriptionDetails.lastPayment}</p>
                             </div>
                             <p className="text-lg font-bold text-destructive">
@@ -1457,8 +1474,8 @@ export default function EditMemberPage() {
                     )
                   : (
                       <div className="flex flex-col items-center justify-center py-6 text-center">
-                        <p className="text-muted-foreground">No membership assigned</p>
-                        <p className="mt-1 text-sm text-muted-foreground">Add a membership plan for this member</p>
+                        <p className="text-muted-foreground">{t('no_membership_assigned')}</p>
+                        <p className="mt-1 text-sm text-muted-foreground">{t('add_membership_description')}</p>
                       </div>
                     )}
               </div>
@@ -1467,10 +1484,10 @@ export default function EditMemberPage() {
                   ? (
                       <>
                         <Button
-                          className="w-fit bg-foreground text-background hover:bg-foreground/90"
+                          className="w-fit"
                           onClick={() => handleOpenMembershipModal('change')}
                         >
-                          Change Membership
+                          {t('change_membership_button')}
                         </Button>
                         <Button
                           variant="destructive"
@@ -1484,15 +1501,15 @@ export default function EditMemberPage() {
                   : isOnHold
                     ? (
                         <p className="text-sm text-muted-foreground">
-                          Reactivate this member's membership before adding a new one.
+                          {t('reactivate_before_adding')}
                         </p>
                       )
                     : (
                         <Button
-                          className="w-fit bg-foreground text-background hover:bg-foreground/90"
+                          className="w-fit"
                           onClick={() => handleOpenMembershipModal('add')}
                         >
-                          Add Membership
+                          {t('add_membership_button')}
                         </Button>
                       )}
               </div>
@@ -1514,13 +1531,13 @@ export default function EditMemberPage() {
             <Card className="flex flex-col p-6">
               <div>
                 <div className="mb-6 flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-foreground">Payment Method</h2>
+                  <h2 className="text-lg font-semibold text-foreground">{t('payment_method_title')}</h2>
                   {!isLoadingPayment && (
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => setIsEditPaymentMethodOpen(true)}
-                      aria-label="Add payment method"
+                      aria-label={t('add_payment_method_aria')}
                     >
                       <Plus className="mr-1 size-4" />
                       {' '}
@@ -1530,11 +1547,11 @@ export default function EditMemberPage() {
                 </div>
                 {isLoadingPayment
                   ? (
-                      <p className="text-sm text-muted-foreground">Loading payment methods...</p>
+                      <p className="text-sm text-muted-foreground">{t('loading_payment_methods')}</p>
                     )
                   : paymentMethods.length === 0
                     ? (
-                        <p className="text-sm text-muted-foreground">No payment method on file</p>
+                        <p className="text-sm text-muted-foreground">{t('no_payment_method')}</p>
                       )
                     : (
                         <>
@@ -1558,13 +1575,13 @@ export default function EditMemberPage() {
                                     )}
                                   </p>
                                   {pm.isDefault && (
-                                    <p className="mt-1 text-xs text-muted-foreground">Default payment method</p>
+                                    <p className="mt-1 text-xs text-muted-foreground">{t('default_payment_method')}</p>
                                   )}
                                 </div>
                                 <div className="flex shrink-0 items-center gap-2">
                                   {pm.isDefault
                                     ? (
-                                        <Badge variant="secondary">Default</Badge>
+                                        <Badge variant="secondary">{t('default_badge')}</Badge>
                                       )
                                     : (
                                         <Button
@@ -1573,14 +1590,14 @@ export default function EditMemberPage() {
                                           disabled={pmActionId === pm.id}
                                           onClick={() => handleSetPrimaryPaymentMethod(pm.id)}
                                         >
-                                          Set as primary
+                                          {t('set_as_primary')}
                                         </Button>
                                       )}
                                   <Button
                                     variant="outline"
                                     size="sm"
                                     disabled={pmActionId === pm.id}
-                                    aria-label="Delete payment method"
+                                    aria-label={t('delete_payment_method_aria')}
                                     onClick={() => handleDeletePaymentMethod(pm.id)}
                                   >
                                     <Trash2 className="size-4" />
@@ -1621,14 +1638,14 @@ export default function EditMemberPage() {
 
             {/* Agreement & Waiver */}
             <Card className={`flex flex-col p-6 ${signedWaivers.length > 0 ? 'border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950' : ''}`}>
-              <h2 className="mb-2 text-lg font-semibold text-foreground">Agreement & Waiver</h2>
+              <h2 className="mb-2 text-lg font-semibold text-foreground">{t('waiver_title')}</h2>
               {isLoadingWaivers
                 ? (
-                    <p className="text-sm text-muted-foreground">Loading waivers...</p>
+                    <p className="text-sm text-muted-foreground">{t('loading_waivers')}</p>
                   )
                 : signedWaivers.length === 0
                   ? (
-                      <p className="text-sm text-muted-foreground">No waivers signed</p>
+                      <p className="text-sm text-muted-foreground">{t('no_waivers_signed')}</p>
                     )
                   : (
                       <div className="space-y-3">
@@ -1657,10 +1674,10 @@ export default function EditMemberPage() {
                             <Button
                               size="sm"
                               onClick={() => handleDownloadWaiver(waiver)}
-                              className="w-fit gap-2 bg-foreground text-background hover:bg-foreground/90"
+                              className="w-fit gap-2"
                             >
                               <Download className="size-4" />
-                              Download
+                              {t('download_button')}
                             </Button>
                           </div>
                         ))}
@@ -1671,18 +1688,18 @@ export default function EditMemberPage() {
 
           {/* Billing History */}
           <Card className="p-6">
-            <h2 className="mb-6 text-lg font-semibold text-foreground">Billing History</h2>
+            <h2 className="mb-6 text-lg font-semibold text-foreground">{t('billing_history_title')}</h2>
             {refundError && (
               <p className="mb-4 text-sm text-destructive">{refundError}</p>
             )}
             {isLoadingBilling
               ? (
-                  <p className="text-sm text-muted-foreground">Loading billing history...</p>
+                  <p className="text-sm text-muted-foreground">{t('loading_billing_history')}</p>
                 )
               : billingHistory.length === 0
                 ? (
                     <div className="flex items-center justify-center py-12">
-                      <p className="text-muted-foreground">No billing history</p>
+                      <p className="text-muted-foreground">{t('no_billing_history')}</p>
                     </div>
                   )
                 : (
@@ -1690,12 +1707,12 @@ export default function EditMemberPage() {
                       <table className="w-full">
                         <thead>
                           <tr className="border-b border-border">
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">Member</th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">Date</th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">Amount</th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">Purpose</th>
-                            <th className="hidden px-4 py-3 text-left text-sm font-semibold text-foreground sm:table-cell">Method</th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">Actions</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">{t('member_column')}</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">{t('table_date')}</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">{t('table_amount')}</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">{t('table_purpose')}</th>
+                            <th className="hidden px-4 py-3 text-left text-sm font-semibold text-foreground sm:table-cell">{t('table_method')}</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">{t('actions_button')}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1716,9 +1733,9 @@ export default function EditMemberPage() {
                                     size="sm"
                                     disabled={refundingId === item.id}
                                     onClick={() => handleRefund(item.id)}
-                                    className="w-fit bg-foreground text-background hover:bg-foreground/90"
+                                    className="w-fit"
                                   >
-                                    {refundingId === item.id ? 'Refunding…' : 'Refund'}
+                                    {refundingId === item.id ? t('refunding_button') : t('refund_button')}
                                   </Button>
                                 )}
                               </td>
@@ -1733,7 +1750,7 @@ export default function EditMemberPage() {
           {/* Family Members Section - Only shown for HOH members */}
           {isHOH && (
             <div className="space-y-6">
-              <h2 className="text-lg font-semibold text-foreground">Family Members</h2>
+              <h2 className="text-lg font-semibold text-foreground">{t('family_members_title')}</h2>
 
               {familyMembersData.length > 0 && (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -1748,7 +1765,7 @@ export default function EditMemberPage() {
                         title={`Unlink ${member.name} from this household`}
                       >
                         <Unlink className="mr-1 size-4" />
-                        Unlink
+                        {t('unlink_button')}
                       </Button>
 
                       <div className="mb-4 flex flex-col gap-3 pr-10">
@@ -1785,7 +1802,7 @@ export default function EditMemberPage() {
               )}
 
               {familyMembersData.length === 0 && (
-                <p className="text-sm text-muted-foreground">No family members linked yet.</p>
+                <p className="text-sm text-muted-foreground">{t('no_family_members')}</p>
               )}
 
               {/* Add Family Member Card */}
@@ -1794,10 +1811,10 @@ export default function EditMemberPage() {
                   <div className="rounded-lg bg-secondary p-3">
                     <Plus className="size-6 text-muted-foreground" />
                   </div>
-                  <h3 className="font-semibold text-foreground">Add Family Member</h3>
-                  <p className="text-sm text-muted-foreground">Create a new family membership</p>
+                  <h3 className="font-semibold text-foreground">{t('add_family_member_button')}</h3>
+                  <p className="text-sm text-muted-foreground">{t('create_family_membership')}</p>
                   <Button variant="outline" className="mt-2" disabled={isLoadingPayment} onClick={() => setIsAddFamilyModalOpen(true)}>
-                    Add Family Member
+                    {t('add_family_member_button')}
                   </Button>
                 </div>
               </Card>
@@ -1813,7 +1830,7 @@ export default function EditMemberPage() {
           memberName={state.currentData.memberName}
           attendanceRecords={attendance}
           isLoading={isLoadingAttendance}
-          punchcardInfo={currentMembership?.membershipPlan?.category === 'punchcard' ? MOCK_PUNCHCARD_INFO : null}
+          punchcardInfo={punchcardInfo}
         />
       )}
 

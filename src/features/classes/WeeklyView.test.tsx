@@ -182,20 +182,6 @@ describe('WeeklyView', () => {
     });
   });
 
-  describe('Page Header', () => {
-    it('should render the page title', async () => {
-      await render(
-        <I18nWrapper>
-          <WeeklyView />
-        </I18nWrapper>,
-      );
-
-      const heading = page.getByRole('heading', { name: /Class Calendar/i }).first();
-
-      expect(heading).toBeInTheDocument();
-    });
-  });
-
   describe('Filter Controls', () => {
     it('should render location dropdown button', async () => {
       await render(
@@ -207,30 +193,6 @@ describe('WeeklyView', () => {
       const button = page.getByRole('button').first();
 
       expect(button).toBeInTheDocument();
-    });
-
-    it('should render Add New Class button', async () => {
-      await render(
-        <I18nWrapper>
-          <WeeklyView />
-        </I18nWrapper>,
-      );
-
-      const addButton = page.getByRole('button', { name: /Add New Class/i });
-
-      expect(addButton).toBeInTheDocument();
-    });
-
-    it('should render view toggle buttons', async () => {
-      await render(
-        <I18nWrapper>
-          <WeeklyView />
-        </I18nWrapper>,
-      );
-
-      const monthlyButton = page.getByRole('button', { name: /Monthly/i });
-
-      expect(monthlyButton).toBeInTheDocument();
     });
   });
 

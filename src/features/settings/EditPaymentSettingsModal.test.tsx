@@ -1,7 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-react';
 import { page, userEvent } from 'vitest/browser';
+import en from '@/locales/en.json';
 import { EditPaymentSettingsModal } from './EditPaymentSettingsModal';
+
+// Resolve keys from the real en.json so the test cannot drift from the
+// shipped copy — a stale inline table would let a renamed key pass silently.
+const messages = en.LocationSettings.EditPaymentSettingsModal as Record<string, string>;
+
+vi.mock('next-intl', () => ({
+  useTranslations: () => (key: string) => messages[key] ?? key,
+}));
 
 const defaultProps = {
   isOpen: true,

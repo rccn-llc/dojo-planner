@@ -2,6 +2,7 @@
 
 import type { PaymentProvider } from '@/types/PaymentProvider';
 import type { UpdatePaymentProviderConfigInput } from '@/validations/PaymentSettingsValidation';
+import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -45,8 +46,9 @@ export function EditPaymentSettingsModal({
   square,
   onSave,
   errorMessage,
-  title = 'Edit Payment Credentials',
+  title,
 }: EditPaymentSettingsModalProps) {
+  const t = useTranslations('LocationSettings.EditPaymentSettingsModal');
   const [provider, setProvider] = useState<PaymentProvider>(initialProvider);
   const [clientId, setClientId] = useState(iqpro.clientId);
   const [clientSecret, setClientSecret] = useState('');
@@ -159,25 +161,23 @@ export function EditPaymentSettingsModal({
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-lg overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+          <DialogTitle>{title ?? t('title')}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6 py-4">
           <div className="space-y-1.5">
-            <label htmlFor="payment-provider" className="text-sm font-medium text-foreground">Payment Provider</label>
+            <label htmlFor="payment-provider" className="text-sm font-medium text-foreground">{t('provider_label')}</label>
             <Select value={provider} onValueChange={value => setProvider(value as PaymentProvider)}>
               <SelectTrigger id="payment-provider">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={PAYMENT_PROVIDER.IQPRO}>IQPro</SelectItem>
-                <SelectItem value={PAYMENT_PROVIDER.SQUARE}>Square</SelectItem>
+                <SelectItem value={PAYMENT_PROVIDER.IQPRO}>{t('provider_iqpro')}</SelectItem>
+                <SelectItem value={PAYMENT_PROVIDER.SQUARE}>{t('provider_square')}</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Determines which merchant account receives this organization&apos;s member payments.
-              {' '}
-              Square accepts cards only — bank transfers are unavailable on Square.
+              {t('provider_description')}
             </p>
           </div>
 
@@ -185,10 +185,10 @@ export function EditPaymentSettingsModal({
             ? (
                 <>
                   <div className="space-y-1.5">
-                    <label htmlFor="square-application-id" className="text-sm font-medium text-foreground">Application ID</label>
+                    <label htmlFor="square-application-id" className="text-sm font-medium text-foreground">{t('application_id_label')}</label>
                     <Input
                       id="square-application-id"
-                      placeholder="e.g. sandbox-sq0idb-..."
+                      placeholder={t('application_id_placeholder')}
                       value={applicationId}
                       onChange={e => setApplicationId(e.target.value)}
                       onBlur={() => handleInputBlur('applicationId')}
@@ -196,15 +196,15 @@ export function EditPaymentSettingsModal({
                       maxLength={200}
                     />
                     {isApplicationInvalid && (
-                      <p className="text-xs text-destructive">Application ID is required.</p>
+                      <p className="text-xs text-destructive">{t('application_id_error')}</p>
                     )}
                   </div>
 
                   <div className="space-y-1.5">
-                    <label htmlFor="square-location-id" className="text-sm font-medium text-foreground">Location ID</label>
+                    <label htmlFor="square-location-id" className="text-sm font-medium text-foreground">{t('location_id_label')}</label>
                     <Input
                       id="square-location-id"
-                      placeholder="Square location identifier"
+                      placeholder={t('location_id_placeholder')}
                       value={locationId}
                       onChange={e => setLocationId(e.target.value)}
                       onBlur={() => handleInputBlur('locationId')}
@@ -212,29 +212,29 @@ export function EditPaymentSettingsModal({
                       maxLength={100}
                     />
                     {isLocationInvalid && (
-                      <p className="text-xs text-destructive">Location ID is required.</p>
+                      <p className="text-xs text-destructive">{t('location_id_error')}</p>
                     )}
                   </div>
 
                   <div className="space-y-1.5">
-                    <label htmlFor="square-environment" className="text-sm font-medium text-foreground">Environment</label>
+                    <label htmlFor="square-environment" className="text-sm font-medium text-foreground">{t('environment_label')}</label>
                     <Select value={environment} onValueChange={value => setEnvironment(value as 'sandbox' | 'production')}>
                       <SelectTrigger id="square-environment">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="sandbox">Sandbox</SelectItem>
-                        <SelectItem value="production">Production</SelectItem>
+                        <SelectItem value="sandbox">{t('environment_sandbox')}</SelectItem>
+                        <SelectItem value="production">{t('environment_production')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div className="space-y-1.5">
-                    <label htmlFor="square-access-token" className="text-sm font-medium text-foreground">Access Token</label>
+                    <label htmlFor="square-access-token" className="text-sm font-medium text-foreground">{t('access_token_label')}</label>
                     <Input
                       id="square-access-token"
                       type="password"
-                      placeholder={square.hasAccessToken ? '••••••••  Leave blank to keep current token' : 'Enter access token'}
+                      placeholder={square.hasAccessToken ? t('access_token_placeholder_existing') : t('access_token_placeholder_new')}
                       value={accessToken}
                       onChange={e => setAccessToken(e.target.value)}
                       onBlur={() => handleInputBlur('accessToken')}
@@ -243,20 +243,20 @@ export function EditPaymentSettingsModal({
                     />
                     <p className="text-xs text-muted-foreground">
                       {square.hasAccessToken
-                        ? 'Leave blank to keep the existing token unchanged.'
-                        : 'An access token has not been saved yet.'}
+                        ? t('access_token_hint_existing')
+                        : t('access_token_hint_new')}
                     </p>
                     {isTokenInvalid && (
-                      <p className="text-xs text-destructive">Access Token is required.</p>
+                      <p className="text-xs text-destructive">{t('access_token_error')}</p>
                     )}
                   </div>
 
                   <div className="space-y-1.5">
-                    <label htmlFor="square-webhook-key" className="text-sm font-medium text-foreground">Webhook Signature Key</label>
+                    <label htmlFor="square-webhook-key" className="text-sm font-medium text-foreground">{t('webhook_key_label')}</label>
                     <Input
                       id="square-webhook-key"
                       type="password"
-                      placeholder={square.hasWebhookKey ? '••••••••  Leave blank to keep current key' : 'Enter webhook signature key'}
+                      placeholder={square.hasWebhookKey ? t('webhook_key_placeholder_existing') : t('webhook_key_placeholder_new')}
                       value={webhookSignatureKey}
                       onChange={e => setWebhookSignatureKey(e.target.value)}
                       onBlur={() => handleInputBlur('webhookSignatureKey')}
@@ -264,10 +264,10 @@ export function EditPaymentSettingsModal({
                       maxLength={500}
                     />
                     <p className="text-xs text-muted-foreground">
-                      Used to verify that incoming Square webhooks are genuine.
+                      {t('webhook_key_hint')}
                     </p>
                     {isWebhookInvalid && (
-                      <p className="text-xs text-destructive">Webhook Signature Key is required.</p>
+                      <p className="text-xs text-destructive">{t('webhook_key_error')}</p>
                     )}
                   </div>
                 </>
@@ -275,10 +275,10 @@ export function EditPaymentSettingsModal({
             : (
                 <>
                   <div className="space-y-1.5">
-                    <label htmlFor="iqpro-client-id" className="text-sm font-medium text-foreground">Client ID</label>
+                    <label htmlFor="iqpro-client-id" className="text-sm font-medium text-foreground">{t('client_id_label')}</label>
                     <Input
                       id="iqpro-client-id"
-                      placeholder="e.g. abc123-..."
+                      placeholder={t('client_id_placeholder')}
                       value={clientId}
                       onChange={e => setClientId(e.target.value)}
                       onBlur={() => handleInputBlur('clientId')}
@@ -286,16 +286,16 @@ export function EditPaymentSettingsModal({
                       maxLength={200}
                     />
                     {isClientIdInvalid && (
-                      <p className="text-xs text-destructive">Client ID is required.</p>
+                      <p className="text-xs text-destructive">{t('client_id_error')}</p>
                     )}
                   </div>
 
                   <div className="space-y-1.5">
-                    <label htmlFor="iqpro-client-secret" className="text-sm font-medium text-foreground">Client Secret</label>
+                    <label htmlFor="iqpro-client-secret" className="text-sm font-medium text-foreground">{t('client_secret_label')}</label>
                     <Input
                       id="iqpro-client-secret"
                       type="password"
-                      placeholder={iqpro.hasSecret ? '••••••••  Leave blank to keep current secret' : 'Enter client secret'}
+                      placeholder={iqpro.hasSecret ? t('client_secret_placeholder_existing') : t('client_secret_placeholder_new')}
                       value={clientSecret}
                       onChange={e => setClientSecret(e.target.value)}
                       onBlur={() => handleInputBlur('clientSecret')}
@@ -304,19 +304,19 @@ export function EditPaymentSettingsModal({
                     />
                     <p className="text-xs text-muted-foreground">
                       {iqpro.hasSecret
-                        ? 'Leave blank to keep the existing secret unchanged.'
-                        : 'A client secret has not been saved yet.'}
+                        ? t('client_secret_hint_existing')
+                        : t('client_secret_hint_new')}
                     </p>
                     {isSecretInvalid && (
-                      <p className="text-xs text-destructive">Client Secret is required.</p>
+                      <p className="text-xs text-destructive">{t('client_secret_error')}</p>
                     )}
                   </div>
 
                   <div className="space-y-1.5">
-                    <label htmlFor="iqpro-gateway-id" className="text-sm font-medium text-foreground">Gateway ID</label>
+                    <label htmlFor="iqpro-gateway-id" className="text-sm font-medium text-foreground">{t('gateway_id_label')}</label>
                     <Input
                       id="iqpro-gateway-id"
-                      placeholder="IQPro merchant gateway identifier"
+                      placeholder={t('gateway_id_placeholder')}
                       value={gatewayId}
                       onChange={e => setGatewayId(e.target.value)}
                       onBlur={() => handleInputBlur('gatewayId')}
@@ -324,7 +324,7 @@ export function EditPaymentSettingsModal({
                       maxLength={100}
                     />
                     {isGatewayIdInvalid && (
-                      <p className="text-xs text-destructive">Gateway ID is required.</p>
+                      <p className="text-xs text-destructive">{t('gateway_id_error')}</p>
                     )}
                   </div>
                 </>
@@ -332,9 +332,7 @@ export function EditPaymentSettingsModal({
 
           {provider !== initialProvider && (
             <p className="text-xs text-muted-foreground">
-              Switching providers is refused if this organization already has saved payment methods —
-              {' '}
-              provider ids do not transfer between processors.
+              {t('provider_switch_warning')}
             </p>
           )}
 
@@ -344,10 +342,10 @@ export function EditPaymentSettingsModal({
 
           <div className="flex justify-end gap-3 pt-4">
             <Button variant="outline" onClick={handleCancel} disabled={isLoading}>
-              Cancel
+              {t('cancel_button')}
             </Button>
             <Button onClick={handleSubmit} disabled={!isFormValid || isLoading}>
-              {isLoading ? 'Saving…' : 'Save'}
+              {isLoading ? t('saving_button') : t('save_button')}
             </Button>
           </div>
         </div>

@@ -1,7 +1,6 @@
 'use client';
 
 import type { MemberFilters } from './MemberFilterBar';
-import { ArrowDown01, ArrowDownAZ, ArrowUp10, ArrowUpZA } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
+import { SortableHeader } from '@/components/ui/table';
 import { MemberCard } from '@/templates/MemberCard';
 import { StatsCards } from '@/templates/StatsCards';
 import { compareMembersAlphabetically, memberSearchRank } from '@/utils/MemberSearch';
@@ -343,88 +343,65 @@ export function MembersTable({
                       <thead>
                         <tr className="border-b border-border bg-secondary">
                           <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
-                            <button
-                              type="button"
-                              onClick={() => handleSort('firstName')}
-                              className="flex cursor-pointer items-center gap-2 hover:text-foreground/80"
+                            <SortableHeader
+                              field="firstName"
+                              activeField={sortField}
+                              direction={sortDirection}
+                              onSort={handleSort}
                             >
                               Member name
-                              {sortField === 'firstName' && (
-                                sortDirection === 'asc'
-                                  ? <ArrowDownAZ className="size-4" />
-                                  : <ArrowUpZA className="size-4" />
-                              )}
-                            </button>
+                            </SortableHeader>
                           </th>
                           <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
-                            <button
-                              type="button"
-                              onClick={() => handleSort('membershipType')}
-                              className="flex cursor-pointer items-center gap-2 hover:text-foreground/80"
+                            <SortableHeader
+                              field="membershipType"
+                              activeField={sortField}
+                              direction={sortDirection}
+                              onSort={handleSort}
                             >
                               Member type
-                              {sortField === 'membershipType' && (
-                                sortDirection === 'asc'
-                                  ? <ArrowDownAZ className="size-4" />
-                                  : <ArrowUpZA className="size-4" />
-                              )}
-                            </button>
+                            </SortableHeader>
                           </th>
                           <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
-                            <button
-                              type="button"
-                              onClick={() => handleSort('amountDue')}
-                              className="flex cursor-pointer items-center gap-2 hover:text-foreground/80"
+                            <SortableHeader
+                              field="amountDue"
+                              activeField={sortField}
+                              direction={sortDirection}
+                              onSort={handleSort}
+                              sortIcons="numeric"
                             >
                               Amount due
-                              {sortField === 'amountDue' && (
-                                sortDirection === 'asc'
-                                  ? <ArrowDown01 className="size-4" />
-                                  : <ArrowUp10 className="size-4" />
-                              )}
-                            </button>
+                            </SortableHeader>
                           </th>
                           <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
-                            <button
-                              type="button"
-                              onClick={() => handleSort('nextPayment')}
-                              className="flex cursor-pointer items-center gap-2 hover:text-foreground/80"
+                            <SortableHeader
+                              field="nextPayment"
+                              activeField={sortField}
+                              direction={sortDirection}
+                              onSort={handleSort}
                             >
                               Next payment
-                              {sortField === 'nextPayment' && (
-                                sortDirection === 'asc'
-                                  ? <ArrowDownAZ className="size-4" />
-                                  : <ArrowUpZA className="size-4" />
-                              )}
-                            </button>
+                            </SortableHeader>
                           </th>
                           <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
-                            <button
-                              type="button"
-                              onClick={() => handleSort('status')}
-                              className="flex cursor-pointer items-center gap-2 hover:text-foreground/80"
+                            <SortableHeader
+                              field="status"
+                              activeField={sortField}
+                              direction={sortDirection}
+                              onSort={handleSort}
                             >
                               Status
-                              {sortField === 'status' && (
-                                sortDirection === 'asc'
-                                  ? <ArrowDownAZ className="size-4" />
-                                  : <ArrowUpZA className="size-4" />
-                              )}
-                            </button>
+                            </SortableHeader>
                           </th>
                           <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
-                            <button
-                              type="button"
-                              onClick={() => handleSort('lastAccessedAt')}
-                              className="flex cursor-pointer items-center gap-2 hover:text-foreground/80"
+                            <SortableHeader
+                              field="lastAccessedAt"
+                              activeField={sortField}
+                              direction={sortDirection}
+                              onSort={handleSort}
                             >
                               Last visited
-                              {sortField === 'lastAccessedAt' && (
-                                sortDirection === 'asc'
-                                  ? <ArrowDownAZ className="size-4" />
-                                  : <ArrowUpZA className="size-4" />
-                              )}
-                            </button>
+                            </SortableHeader>
                           </th>
                         </tr>
                       </thead>

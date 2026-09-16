@@ -20,7 +20,6 @@ vi.mock('next-intl', () => ({
       academy_section_label: 'Academy',
       cookie_preferences: 'Cookie preferences',
       business_section_label: 'Business',
-      settings_section_label: 'Settings',
       performance: 'Performance',
       classes: 'Classes',
       members: 'Members',
@@ -35,7 +34,6 @@ vi.mock('next-intl', () => ({
       catalog: 'Catalog',
       waivers: 'Waivers',
       location: 'Location',
-      preferences: 'Preferences',
       log_out: 'Log Out',
     };
     return translations[key] || key;
@@ -133,16 +131,10 @@ describe('AppSidebar - Translation Keys', () => {
       expect(dashboardLayout.marketing).toBe('Marketing');
     });
 
-    it('should have Settings section with correct navigation items (hidden but keys exist)', () => {
+    it('should have the Location navigation key', () => {
       const dashboardLayout = messages.DashboardLayout;
 
-      // Check Settings section label exists
-      expect(dashboardLayout.settings_section_label).toBe('Settings');
-
-      // Check Settings items exist and have correct values
-      // Note: Settings section is now hidden in the UI but keys are kept for future use
       expect(dashboardLayout.location).toBe('Location');
-      expect(dashboardLayout.preferences).toBe('Preferences');
     });
 
     it('should have Log Out option', () => {
@@ -159,7 +151,6 @@ describe('AppSidebar - Translation Keys', () => {
       const requiredKeys = [
         'academy_section_label',
         'business_section_label',
-        'settings_section_label',
         'performance',
         'classes',
         'members',
@@ -172,7 +163,6 @@ describe('AppSidebar - Translation Keys', () => {
         'programs',
         'marketing',
         'location',
-        'preferences',
         'log_out',
       ];
 

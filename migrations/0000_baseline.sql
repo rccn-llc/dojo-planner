@@ -356,6 +356,7 @@ CREATE TABLE "membership_plan" (
 	"hold_fee_amount" real DEFAULT 0 NOT NULL,
 	"hold_fee_frequency" text,
 	"hold_limit_per_year" integer,
+	"class_allowance" integer,
 	"frequency" text,
 	"contract_length" text NOT NULL,
 	"access_level" text NOT NULL,

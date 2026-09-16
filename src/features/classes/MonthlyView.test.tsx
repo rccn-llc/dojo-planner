@@ -129,20 +129,6 @@ vi.mock('@/hooks/useEventsCache', () => ({
 }));
 
 describe('MonthlyView', () => {
-  describe('Page Header', () => {
-    it('should render the page title', async () => {
-      await render(
-        <I18nWrapper>
-          <MonthlyView />
-        </I18nWrapper>,
-      );
-
-      const heading = page.getByRole('heading', { name: /Class Calendar/i }).first();
-
-      expect(heading).toBeInTheDocument();
-    });
-  });
-
   describe('Filter Controls', () => {
     it('should render location dropdown button', async () => {
       await render(
@@ -154,30 +140,6 @@ describe('MonthlyView', () => {
       const button = page.getByRole('button').first();
 
       expect(button).toBeInTheDocument();
-    });
-
-    it('should render Add New Class button', async () => {
-      await render(
-        <I18nWrapper>
-          <MonthlyView />
-        </I18nWrapper>,
-      );
-
-      const addButton = page.getByRole('button', { name: /Add New Class/i });
-
-      expect(addButton).toBeInTheDocument();
-    });
-
-    it('should render view toggle buttons', async () => {
-      await render(
-        <I18nWrapper>
-          <MonthlyView />
-        </I18nWrapper>,
-      );
-
-      const weeklyButton = page.getByRole('button', { name: /Weekly/i });
-
-      expect(weeklyButton).toBeInTheDocument();
     });
   });
 

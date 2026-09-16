@@ -36,13 +36,17 @@ vi.mock('@/libs/Logger', () => ({
   },
 }));
 
-// Mock Clerk useUser hook
+// The signed-in user's org role, overridable per test.
+const mockMembership = { role: 'org:front_desk' };
+
+// Mock Clerk useUser / useOrganization hooks
 vi.mock('@clerk/nextjs', () => ({
   useUser: () => ({
     user: mockUser,
     isLoaded: true,
     isSignedIn: true,
   }),
+  useOrganization: () => ({ membership: mockMembership }),
   useReverification: (fn: () => unknown) => fn,
 }));
 
@@ -128,7 +132,23 @@ describe('ManageProfileDialog', () => {
     await render(<ManageProfileDialog open onOpenChange={() => {}} />);
 
     expect(page.getByText('John Doe')).toBeDefined();
-    expect(page.getByText('Account Owner')).toBeDefined();
+  });
+
+  it('should display the user\'s ACTUAL org role, not a hardcoded one', async () => {
+    // Regression: `role` was hardcoded to 'Account Owner', so every user saw
+    // that badge no matter their real role.
+    mockMembership.role = 'org:front_desk';
+    await render(<ManageProfileDialog open onOpenChange={() => {}} />);
+
+    expect(page.getByText('Front Desk')).toBeDefined();
+    expect(page.getByText('Account Owner').elements()).toHaveLength(0);
+  });
+
+  it('should display the academy-owner role when that is the real role', async () => {
+    mockMembership.role = 'org:academy_owner';
+    await render(<ManageProfileDialog open onOpenChange={() => {}} />);
+
+    expect(page.getByText('Academy Owner')).toBeDefined();
   });
 
   it('should display user details in the profile section', async () => {

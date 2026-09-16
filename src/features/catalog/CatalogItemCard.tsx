@@ -15,16 +15,16 @@ type CatalogItemCardProps = {
   onDelete: (itemId: string) => void;
 };
 
-function getStatusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
+function getStatusVariant(status: string): 'secondary' | 'destructive' | 'outline' | 'warning' | 'success' {
   switch (status) {
     case 'Active':
-      return 'outline';
+      return 'success';
     case 'Inactive':
       return 'secondary';
     case 'Out of Stock':
       return 'destructive';
     case 'Low Stock':
-      return 'default';
+      return 'warning';
     default:
       return 'outline';
   }
@@ -81,25 +81,14 @@ export function CatalogItemCard({
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <Badge
-              variant={getStatusVariant(status)}
-              className={
-                status === 'Active'
-                  ? 'bg-green-500 text-white hover:bg-green-600'
-                  : status === 'Low Stock'
-                    ? 'bg-amber-500 text-gray-900 hover:bg-amber-600'
-                    : status === 'Out of Stock'
-                      ? 'bg-red-500 text-white hover:bg-red-600'
-                      : undefined
-              }
-            >
+            <Badge variant={getStatusVariant(status)}>
               {status === 'Active' && tPage('status_active')}
               {status === 'Inactive' && tPage('status_inactive')}
               {status === 'Out of Stock' && tPage('status_out_of_stock')}
               {status === 'Low Stock' && t('low_stock', { count: item.totalStock })}
             </Badge>
             {item.isFeatured && (
-              <Badge className="bg-yellow-500 text-gray-900 hover:bg-yellow-600">
+              <Badge variant="warning">
                 <Star className="mr-1 size-3" />
                 {t('featured_badge')}
               </Badge>

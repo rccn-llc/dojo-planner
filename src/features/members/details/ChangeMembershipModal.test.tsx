@@ -317,8 +317,12 @@ describe('ChangeMembershipModal', () => {
     });
   });
 
-  describe('Fallback behavior', () => {
-    it('should show mock plans when fetch fails', async () => {
+  describe('Empty and error states', () => {
+    // These previously asserted a fallback to six hardcoded `mock-plan-N`
+    // fixtures. Those ids are not real rows, so selecting one sent a
+    // non-existent FK to addMembership/changeMembership and 500'd. The modal
+    // now shows a real empty state / error instead of fake selectable plans.
+    it('shows an error and no plans when the fetch fails', async () => {
       mockListMembershipPlans.mockRejectedValue(new Error('Network error'));
 
       await render(
@@ -332,12 +336,11 @@ describe('ChangeMembershipModal', () => {
         </I18nWrapper>,
       );
 
-      // Should fall back to mock plans instead of showing error
-      await expect.element(page.getByText('12 Month Commitment (Gold)')).toBeInTheDocument();
-      await expect.element(page.getByText('Month to Month (Gold)')).toBeInTheDocument();
+      await expect.element(page.getByText('Network error')).toBeInTheDocument();
+      expect(page.getByText('12 Month Commitment (Gold)').elements()).toHaveLength(0);
     });
 
-    it('should show mock plans when API returns empty list', async () => {
+    it('shows the empty state when the API returns no plans', async () => {
       mockListMembershipPlans.mockResolvedValue({ plans: [] });
 
       await render(
@@ -351,9 +354,28 @@ describe('ChangeMembershipModal', () => {
         </I18nWrapper>,
       );
 
-      // Should fall back to mock plans instead of showing empty state
-      await expect.element(page.getByText('12 Month Commitment (Gold)')).toBeInTheDocument();
-      await expect.element(page.getByText('Month to Month (Gold)')).toBeInTheDocument();
+      await expect.element(page.getByText('No membership plans available. Please create membership plans first.')).toBeInTheDocument();
+      expect(page.getByText('12 Month Commitment (Gold)').elements()).toHaveLength(0);
+    });
+
+    it('does not offer inactive plans', async () => {
+      mockListMembershipPlans.mockResolvedValue({
+        plans: [{ ...mockMembershipPlans[0], id: 'plan-inactive', name: 'Retired Plan', isActive: false }],
+      });
+
+      await render(
+        <I18nWrapper>
+          <ChangeMembershipModal
+            isOpen={true}
+            onClose={vi.fn()}
+            memberId="member-1"
+            mode="add"
+          />
+        </I18nWrapper>,
+      );
+
+      await expect.element(page.getByText('No membership plans available. Please create membership plans first.')).toBeInTheDocument();
+      expect(page.getByText('Retired Plan').elements()).toHaveLength(0);
     });
   });
 });

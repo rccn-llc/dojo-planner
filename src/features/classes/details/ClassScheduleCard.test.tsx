@@ -630,11 +630,13 @@ describe('ClassScheduleCard', () => {
         await userEvent.click(addButton);
       }
 
+      // The date field is a typed MM/DD/YYYY input (accessibility requirement),
+      // so type into it rather than assigning `.value`, which React ignores.
       const dateInput = document.querySelector('[data-testid="date-input-test-instance-1"]') as HTMLInputElement;
-      if (dateInput) {
-        dateInput.value = '2025-02-10';
-        dateInput.dispatchEvent(new Event('input', { bubbles: true }));
-      }
+
+      expect(dateInput).not.toBeNull();
+
+      await userEvent.type(dateInput, '02/10/2025');
 
       const confirmButton = document.querySelector('[data-testid="confirm-date-test-instance-1"]');
       if (confirmButton) {
