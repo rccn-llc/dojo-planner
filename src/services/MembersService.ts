@@ -1,9 +1,9 @@
 import type { TransactionData } from '@/services/TransactionsService';
 import { randomUUID } from 'node:crypto';
-import { and, count, desc, eq, gte, inArray, or } from 'drizzle-orm';
+import { and, count, desc, eq, gte, inArray, max, or } from 'drizzle-orm';
 import { db } from '@/libs/DB';
 import { logger } from '@/libs/Logger';
-import { addressSchema, attendanceSchema, classEnrollmentSchema, couponUsageSchema, eventRegistrationSchema, familyMemberSchema, memberMembershipSchema, memberSchema, membershipPlanSchema, noteSchema, paymentMethodSchema, signedWaiverSchema, transactionSchema } from '@/models/Schema';
+import { addressSchema, attendanceSchema, couponUsageSchema, eventRegistrationSchema, familyMemberSchema, memberMembershipSchema, memberSchema, membershipPlanSchema, noteSchema, paymentMethodSchema, signedWaiverSchema, transactionSchema } from '@/models/Schema';
 
 export type MembershipPlanData = {
   id: string;
@@ -128,9 +128,28 @@ type UpdateMemberInput = {
 export async function getOrganizationMembers(
   organizationId: string,
 ): Promise<MemberWithCustomData[]> {
-  // Fetch all members for the organization from the database
+  // Fetch all members for the organization from the database.
+  //
+  // The projection is EXPLICIT and deliberately omits `photo_url`: it holds a
+  // large base64 data URL, and `.select()` with no projection emits `SELECT *`,
+  // which reads every member's image off disk and ships it to Node only for the
+  // mapper below to discard it. Keeping the list's response shape photo-less
+  // (see `photoUrl: null` below) is only half the optimization — without this
+  // projection the cost is still paid in the database and on the wire. The
+  // detail page fetches the photo via `getMemberById`.
   const members = await db
-    .select()
+    .select({
+      id: memberSchema.id,
+      firstName: memberSchema.firstName,
+      lastName: memberSchema.lastName,
+      email: memberSchema.email,
+      phone: memberSchema.phone,
+      dateOfBirth: memberSchema.dateOfBirth,
+      memberType: memberSchema.memberType,
+      status: memberSchema.status,
+      createdAt: memberSchema.createdAt,
+      updatedAt: memberSchema.updatedAt,
+    })
     .from(memberSchema)
     .where(eq(memberSchema.organizationId, organizationId));
 
@@ -170,6 +189,31 @@ export async function getOrganizationMembers(
         .from(memberMembershipSchema)
         .where(inArray(memberMembershipSchema.memberId, memberIds))
     : [];
+
+  // Last visit per member, derived from ATTENDANCE.
+  //
+  // `member.last_accessed_at` cannot answer this: it has no explicit writer
+  // and is only ever set by drizzle's `$onUpdate` hook, so it advances on any
+  // UPDATE to the row — an email correction, a status change, a photo upload.
+  // It means "last modified". The members table labels this column
+  // "Last visited", so it is sourced from the check-in record, which is what a
+  // visit actually is. One grouped query, matching the batch-fetch shape of
+  // the address/membership lookups above.
+  const lastVisits = memberIds.length > 0
+    ? await db
+        .select({
+          memberId: attendanceSchema.memberId,
+          lastVisit: max(attendanceSchema.attendanceDate),
+        })
+        .from(attendanceSchema)
+        .where(inArray(attendanceSchema.memberId, memberIds))
+        .groupBy(attendanceSchema.memberId)
+    : [];
+  const lastVisitMap = new Map<string, Date>(
+    lastVisits
+      .filter((r): r is { memberId: string; lastVisit: Date } => r.lastVisit != null)
+      .map(r => [r.memberId, r.lastVisit]),
+  );
 
   // Fetch all membership plans for the organization to join with memberships
   const membershipPlanIds = [...new Set(memberships.map(m => m.membershipPlanId))];
@@ -258,7 +302,7 @@ export async function getOrganizationMembers(
     // shape as null so downstream types don't change.
     photoUrl: null,
     memberType: member.memberType || null,
-    lastAccessedAt: member.lastAccessedAt || null,
+    lastAccessedAt: lastVisitMap.get(member.id) ?? null,
     status: member.status,
     createdAt: member.createdAt,
     updatedAt: member.updatedAt,
@@ -1169,7 +1213,6 @@ export type RemoveFullyResult = {
     paymentMethod: number;
     transaction: number;
     couponUsage: number;
-    classEnrollment: number;
     eventRegistration: number;
     attendance: number;
     note: number;
@@ -1214,7 +1257,6 @@ export async function removeFully(
         paymentMethod: 0,
         transaction: 0,
         couponUsage: 0,
-        classEnrollment: 0,
         eventRegistration: 0,
         attendance: 0,
         note: 0,
@@ -1241,9 +1283,6 @@ export async function removeFully(
     const cu = await tx.delete(couponUsageSchema)
       .where(eq(couponUsageSchema.memberId, memberId))
       .returning({ id: couponUsageSchema.id });
-    const ce = await tx.delete(classEnrollmentSchema)
-      .where(eq(classEnrollmentSchema.memberId, memberId))
-      .returning({ id: classEnrollmentSchema.id });
     const er = await tx.delete(eventRegistrationSchema)
       .where(eq(eventRegistrationSchema.memberId, memberId))
       .returning({ id: eventRegistrationSchema.id });
@@ -1280,7 +1319,6 @@ export async function removeFully(
         paymentMethod: pm.length,
         transaction: tr.length,
         couponUsage: cu.length,
-        classEnrollment: ce.length,
         eventRegistration: er.length,
         attendance: at.length,
         note: no.length,

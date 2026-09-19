@@ -3,6 +3,7 @@ import { audit } from '@/services/AuditService';
 import {
   cancelEventRegistration,
   createEvent,
+  EventFullError,
   EventNotFoundError,
   EventSlugAlreadyExistsError,
   getEventRegistrations,
@@ -10,6 +11,7 @@ import {
   MemberAlreadyRegisteredError,
   MemberNotFoundError,
   registerMemberForEvent,
+  RegistrationClosedError,
   softDeleteEvent,
   updateEvent,
 } from '@/services/EventsService';
@@ -185,7 +187,13 @@ export const register = os
         status: 'failure',
         error: error instanceof Error ? error.message : 'Unknown error',
       });
-      if (error instanceof MemberAlreadyRegisteredError) {
+      // 409 Conflict for all three: the request is well-formed, but the
+      // event's current state (already registered / closed / full) refuses it.
+      if (
+        error instanceof MemberAlreadyRegisteredError
+        || error instanceof RegistrationClosedError
+        || error instanceof EventFullError
+      ) {
         throw new ORPCError('Conflict', { status: 409, message: error.message });
       }
       if (error instanceof EventNotFoundError || error instanceof MemberNotFoundError) {

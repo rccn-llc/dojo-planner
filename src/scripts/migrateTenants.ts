@@ -51,6 +51,15 @@ import { TENANT_STATUS, tenantSchema } from '../models/ControlSchema';
 
 const MIGRATIONS_FOLDER = 'migrations';
 
+/**
+ * Advisory-lock key for schema migrations, namespaced to this application.
+ *
+ * Arbitrary but FIXED: every migrator must pick the same number or the lock
+ * serializes nothing. Advisory locks share one global space per database, so
+ * the value is chosen to be unlikely to collide with anything else.
+ */
+const MIGRATION_ADVISORY_LOCK_KEY = 4027615283;
+
 type TenantTarget = {
   /** Label for output. The sentinel below during the shared-database phase. */
   orgId: string;
@@ -240,11 +249,48 @@ async function recordSchemaVersion(orgId: string, version: string): Promise<void
 async function migrateOne(target: TenantTarget): Promise<MigrationResult> {
   const startedAt = Date.now();
   const pool = new Pool({ connectionString: target.connectionString, max: 1 });
+  let lockHeld = false;
 
   try {
-    const db = drizzle({ client: pool });
-    await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
-    return { orgId: target.orgId, ok: true, durationMs: Date.now() - startedAt };
+    // Serialize concurrent migrators against THIS database.
+    //
+    // Two deploys running at once would otherwise both see an unapplied
+    // migration and both try to apply it; drizzle's journal check is not
+    // atomic across connections, so the loser fails partway with a duplicate
+    // object. The lock is advisory and session-scoped, taken on a dedicated
+    // client so the pool cannot hand the migration a different connection and
+    // leave the lock stranded on an idle one.
+    //
+    // `pg_try_advisory_lock` rather than the blocking form: a second migrator
+    // should report that one is already running, not queue behind it for an
+    // unbounded time and then apply migrations to a database the first one has
+    // already moved forward.
+    const lockClient = await pool.connect();
+    try {
+      const { rows } = await lockClient.query<{ locked: boolean }>(
+        'select pg_try_advisory_lock($1) as locked',
+        [MIGRATION_ADVISORY_LOCK_KEY],
+      );
+      lockHeld = rows[0]?.locked === true;
+      if (!lockHeld) {
+        return {
+          orgId: target.orgId,
+          ok: false,
+          error: 'another migration is already running against this database (advisory lock held)',
+          durationMs: Date.now() - startedAt,
+        };
+      }
+
+      const db = drizzle({ client: lockClient });
+      await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+      return { orgId: target.orgId, ok: true, durationMs: Date.now() - startedAt };
+    } finally {
+      if (lockHeld) {
+        await lockClient.query('select pg_advisory_unlock($1)', [MIGRATION_ADVISORY_LOCK_KEY])
+          .catch(() => {});
+      }
+      lockClient.release();
+    }
   } catch (error) {
     return {
       orgId: target.orgId,

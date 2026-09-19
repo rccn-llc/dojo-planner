@@ -1,4 +1,5 @@
 import { and, count, eq, gte, inArray, lte, ne, sql, sum } from 'drizzle-orm';
+import { cache } from 'react';
 import { db } from '@/libs/DB';
 import { memberMembershipSchema, memberSchema, membershipPlanSchema, transactionSchema } from '@/models/Schema';
 
@@ -189,7 +190,21 @@ export async function getMembershipStats(organizationId: string): Promise<Member
   };
 }
 
-export async function getFinancialStats(organizationId: string): Promise<FinancialStats> {
+/**
+ * Financial stats for one organization.
+ *
+ * Wrapped in React `cache()` because a single report render calls this TWICE —
+ * once via `getReportCurrentValues` and again via `getReportInsights` — and
+ * each call fires 7 queries, two of which duplicate counts `getMembershipStats`
+ * already ran. Deduping per request halves that. Same pattern as the
+ * subscription gate's `orgExists` in `src/utils/Auth.ts`.
+ *
+ * `cache()` is per-request in an RSC render and a no-op elsewhere, so this is
+ * safe for the RPC handler path too — it never caches across requests.
+ */
+export const getFinancialStats = cache(_getFinancialStats);
+
+async function _getFinancialStats(organizationId: string): Promise<FinancialStats> {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 

@@ -180,6 +180,7 @@ type CouponRow = {
   discountValue: number;
   applicableTo: string;
   maxDiscountAmount: number | null;
+  minPurchaseAmount: number | null;
   usageLimit: number | null;
   usageCount: number | null;
   perUserLimit: number | null;
@@ -197,6 +198,7 @@ function defaultCouponRow(overrides: Partial<CouponRow> = {}): CouponRow {
     discountValue: 0,
     applicableTo: 'all',
     maxDiscountAmount: null,
+    minPurchaseAmount: null,
     usageLimit: null,
     usageCount: 0,
     perUserLimit: null,
@@ -709,6 +711,50 @@ describe('processMemberPayment', () => {
     });
 
     expect(computeFeeBreakdown).toHaveBeenCalledWith(transportConfig, 90, false, 0, expect.any(Object));
+  });
+
+  it('rejects a coupon when the purchase is below its minimum spend', async () => {
+    // `min_purchase_amount` was enforced by the kiosk but NOT by the server,
+    // so the same coupon was refused at the kiosk and accepted here.
+    resetDbMock({
+      couponRow: defaultCouponRow({
+        id: 'cpn_min',
+        discountType: 'fixed',
+        discountValue: 10,
+        minPurchaseAmount: 150,
+      }),
+    });
+
+    const { processMemberPayment } = await import('./MemberPaymentService');
+    const result = await processMemberPayment(testConfig, {
+      ...baseParams, // amount: 100
+      appliedCoupon: { id: 'cpn_min', code: 'BIGSPEND', type: 'Fixed Amount', amount: '10', description: '$10 off' },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.status).toBe('declined');
+    expect(result.error).toContain('150.00');
+  });
+
+  it('accepts a coupon when the purchase meets its minimum spend', async () => {
+    resetDbMock({
+      couponRow: defaultCouponRow({
+        id: 'cpn_min_ok',
+        discountType: 'fixed',
+        discountValue: 10,
+        minPurchaseAmount: 100,
+      }),
+    });
+    const { computeFeeBreakdown } = await import('@/libs/IQPro');
+    vi.mocked(computeFeeBreakdown).mockResolvedValueOnce({ ...baseFees, baseAmount: 90, amount: 93.75 });
+
+    const { processMemberPayment } = await import('./MemberPaymentService');
+    const result = await processMemberPayment(testConfig, {
+      ...baseParams, // amount: 100, exactly the minimum
+      appliedCoupon: { id: 'cpn_min_ok', code: 'OK', type: 'Fixed Amount', amount: '10', description: '$10 off' },
+    });
+
+    expect(result.status).not.toBe('declined');
   });
 
   it('rejects a coupon that is not found in the org (no cross-tenant/invalid redemption)', async () => {

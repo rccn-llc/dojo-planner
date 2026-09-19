@@ -1,5 +1,5 @@
 import type { PaymentProvider } from '@/types/PaymentProvider';
-import { bigint, boolean, index, integer, pgTable, primaryKey, real, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import { bigint, boolean, index, integer, numeric, pgTable, primaryKey, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 import { PAYMENT_PROVIDER } from '@/types/PaymentProvider';
 
 // This file defines the structure of your database tables using the Drizzle ORM.
@@ -57,7 +57,7 @@ export const organizationSchema = pgTable(
     locationAddress: text('location_address'),
     locationPhone: text('location_phone'),
     locationEmail: text('location_email'),
-    locationTaxRate: real('location_tax_rate').default(0).notNull(),
+    locationTaxRate: numeric('location_tax_rate', { precision: 5, scale: 2, mode: 'number' }).default(0).notNull(),
     // ---- Member payments (this org charging its own members) ----
     // Which processor handles memberships, lifecycle fees, events, and the
     // kiosk store for this organization. Values are constrained by a CHECK in
@@ -143,28 +143,6 @@ export const tagSchema = pgTable(
   ],
 );
 
-// Cloud-stored images with thumbnail URLs (Vercel Blob)
-export const imageSchema = pgTable(
-  'image',
-  {
-    id: text('id').primaryKey(), // UUID v4
-    organizationId: text('organization_id').notNull(),
-    entityType: text('entity_type').notNull(), // 'member', 'class', 'event', 'organization'
-    entityId: text('entity_id').notNull(), // ID of related entity
-    originalUrl: text('original_url').notNull(), // Full-size image URL
-    thumbnailSmUrl: text('thumbnail_sm_url'), // 48px thumbnail (avatars in lists)
-    thumbnailMdUrl: text('thumbnail_md_url'), // 200px thumbnail (cards)
-    thumbnailLgUrl: text('thumbnail_lg_url'), // 400px thumbnail (detail views)
-    mimeType: text('mime_type'), // 'image/jpeg', 'image/png', etc.
-    sizeBytes: bigint('size_bytes', { mode: 'number' }),
-    uploadedAt: timestamp('uploaded_at', { mode: 'date' }).defaultNow().notNull(),
-  },
-  table => [
-    index('image_entity_idx').on(table.entityType, table.entityId),
-    index('image_org_idx').on(table.organizationId),
-  ],
-);
-
 // SOC2 compliance audit logging
 export const auditEventSchema = pgTable(
   'audit_event',
@@ -201,15 +179,13 @@ export const memberSchema = pgTable(
   {
     id: text('id').primaryKey(), // UUID v4
     organizationId: text('organization_id').notNull(),
-    clerkUserId: text('clerk_user_id'), // Links to Clerk for kiosk auth (nullable for legacy members)
     firstName: text('first_name').notNull(),
     lastName: text('last_name').notNull(),
     email: text('email').notNull(),
     memberType: text('member_type'), // individual, family-member, head-of-household
     phone: text('phone'),
     dateOfBirth: timestamp('date_of_birth', { mode: 'date' }),
-    photoUrl: text('photo_url'), // Legacy field - use imageId for new uploads
-    imageId: text('image_id'), // FK to image table for profile photos
+    photoUrl: text('photo_url'), // Base64 data URL. Deliberately excluded from the members-LIST projection.
     lastAccessedAt: timestamp('last_accessed_at', { mode: 'date' })
       .$onUpdate(() => new Date()),
     status: text('status').notNull().default('active'), // active, hold, trial, cancelled, past_due
@@ -225,7 +201,10 @@ export const memberSchema = pgTable(
     index('member_org_idx').on(table.organizationId),
     index('member_org_status_idx').on(table.organizationId, table.status),
     index('member_org_email_idx').on(table.organizationId, table.email),
-    uniqueIndex('member_clerk_user_idx').on(table.clerkUserId),
+    // Serves the dashboard's "new members in the last 30 days" count and the
+    // as-of member counts behind the charts, which filter on
+    // (organization_id, created_at).
+    index('member_org_created_idx').on(table.organizationId, table.createdAt),
     uniqueIndex('member_provider_customer_idx').on(table.providerCustomerId),
   ],
 );
@@ -241,10 +220,10 @@ export const membershipPlanSchema = pgTable(
     slug: text('slug').notNull(), // e.g., '12_month_commitment_gold' - used for identification
     category: text('category').notNull(), // e.g., 'Adult Brazilian Jiu-Jitsu'
     program: text('program').notNull(), // Legacy field - e.g., 'Adult', 'Kids', 'Competition'
-    price: real('price').notNull().default(0), // Monthly price amount
-    signupFee: real('signup_fee').notNull().default(0),
-    cancellationFee: real('cancellation_fee').notNull().default(0), // Charged via IQPro when membership is cancelled
-    holdFeeAmount: real('hold_fee_amount').notNull().default(0), // Charged when member is placed on hold
+    price: numeric('price', { precision: 12, scale: 2, mode: 'number' }).notNull().default(0), // Monthly price amount
+    signupFee: numeric('signup_fee', { precision: 12, scale: 2, mode: 'number' }).notNull().default(0),
+    cancellationFee: numeric('cancellation_fee', { precision: 12, scale: 2, mode: 'number' }).notNull().default(0), // Charged via IQPro when membership is cancelled
+    holdFeeAmount: numeric('hold_fee_amount', { precision: 12, scale: 2, mode: 'number' }).notNull().default(0), // Charged when member is placed on hold
     holdFeeFrequency: text('hold_fee_frequency'), // null | 'one-time' | 'Weekly' | 'Monthly' | 'Semi-Annual' | 'Annual'
     holdLimitPerYear: integer('hold_limit_per_year'), // null or 0 = unlimited; otherwise the max number of holds per year
     classAllowance: integer('class_allowance'), // Punchcard plans only: number of classes the card buys. null = not a punchcard (unlimited / recurring plan)
@@ -341,17 +320,17 @@ export const signedWaiverSchema = pgTable(
 
     // Membership plan details at time of signing (snapshot for legal compliance)
     membershipPlanName: text('membership_plan_name'), // e.g., '12 Month Commitment (Gold)'
-    membershipPlanPrice: real('membership_plan_price'), // e.g., 150.00
+    membershipPlanPrice: numeric('membership_plan_price', { precision: 12, scale: 2, mode: 'number' }), // e.g., 150.00
     membershipPlanFrequency: text('membership_plan_frequency'), // e.g., 'Monthly', 'Annual', 'None'
     membershipPlanContractLength: text('membership_plan_contract_length'), // e.g., '12 Months', 'Month-to-Month'
-    membershipPlanSignupFee: real('membership_plan_signup_fee'), // e.g., 35.00
+    membershipPlanSignupFee: numeric('membership_plan_signup_fee', { precision: 12, scale: 2, mode: 'number' }), // e.g., 35.00
     membershipPlanIsTrial: boolean('membership_plan_is_trial'), // e.g., false
 
     // Coupon/discount details at time of signing (snapshot for legal compliance)
     couponCode: text('coupon_code'), // e.g., 'SAVE15'
     couponType: text('coupon_type'), // 'Percentage' | 'Fixed Amount' | 'Free Trial'
     couponAmount: text('coupon_amount'), // Display string: '15%', '$50', '7 Days'
-    couponDiscountedPrice: real('coupon_discounted_price'), // Final price after discount
+    couponDiscountedPrice: numeric('coupon_discounted_price', { precision: 12, scale: 2, mode: 'number' }), // Final price after discount
 
     // Signature data. `signatureDataUrl` is the primary signer — for a minor
     // requiring a guardian this is the GUARDIAN's signature (the legal signer);
@@ -462,7 +441,6 @@ export const noteSchema = pgTable('note', {
 export const paymentMethodSchema = pgTable('payment_method', {
   id: text('id').primaryKey(),
   memberId: text('member_id').references(() => memberSchema.id).notNull(),
-  stripePaymentMethodId: text('stripe_payment_method_id'),
   providerPaymentMethodId: text('provider_payment_method_id'), // Payment method ID at the org's payment provider
   type: text('type').notNull(),
   firstSix: text('first_six'), // Card BIN — first 6 digits, for the BIN(6)+last4 masked display. Null for ACH.
@@ -697,7 +675,7 @@ export const eventBillingSchema = pgTable(
     id: text('id').primaryKey(), // UUID v4
     eventId: text('event_id').references(() => eventSchema.id).notNull(),
     name: text('name').notNull(), // e.g., 'Early Bird', 'Member Price', 'Non-Member'
-    price: real('price').notNull(),
+    price: numeric('price', { precision: 12, scale: 2, mode: 'number' }).notNull(),
     memberOnly: boolean('member_only').default(false),
     validFrom: timestamp('valid_from', { mode: 'date' }),
     validUntil: timestamp('valid_until', { mode: 'date' }),
@@ -724,10 +702,10 @@ export const couponSchema = pgTable(
     name: text('name').notNull(), // Display name
     description: text('description'),
     discountType: text('discount_type').notNull(), // 'percentage', 'fixed', 'free_days'
-    discountValue: real('discount_value').notNull(), // Amount (percent or dollars or days)
+    discountValue: numeric('discount_value', { precision: 12, scale: 2, mode: 'number' }).notNull(), // Amount (percent or dollars or days)
     applicableTo: text('applicable_to').notNull(), // 'membership', 'event', 'all'
-    minPurchaseAmount: real('min_purchase_amount'),
-    maxDiscountAmount: real('max_discount_amount'), // Cap for percentage discounts
+    minPurchaseAmount: numeric('min_purchase_amount', { precision: 12, scale: 2, mode: 'number' }),
+    maxDiscountAmount: numeric('max_discount_amount', { precision: 12, scale: 2, mode: 'number' }), // Cap for percentage discounts
     usageLimit: integer('usage_limit'), // null = unlimited
     usageCount: integer('usage_count').default(0),
     perUserLimit: integer('per_user_limit').default(1),
@@ -755,7 +733,7 @@ export const couponUsageSchema = pgTable(
     couponId: text('coupon_id').references(() => couponSchema.id).notNull(),
     memberId: text('member_id').references(() => memberSchema.id).notNull(),
     transactionId: text('transaction_id'), // FK to transaction if applicable
-    discountApplied: real('discount_applied').notNull(), // Actual discount amount
+    discountApplied: numeric('discount_applied', { precision: 12, scale: 2, mode: 'number' }).notNull(), // Actual discount amount
     usedAt: timestamp('used_at', { mode: 'date' }).defaultNow().notNull(),
   },
   table => [
@@ -802,8 +780,8 @@ export const catalogItemSchema = pgTable(
     description: text('description'), // Full product description
     shortDescription: text('short_description'), // For list views/cards
     sku: text('sku'), // Stock keeping unit
-    basePrice: real('base_price').notNull().default(0),
-    compareAtPrice: real('compare_at_price'), // Original price for sale display
+    basePrice: numeric('base_price', { precision: 12, scale: 2, mode: 'number' }).notNull().default(0),
+    compareAtPrice: numeric('compare_at_price', { precision: 12, scale: 2, mode: 'number' }), // Original price for sale display
     eventId: text('event_id').references(() => eventSchema.id), // For event_access type
     maxPerOrder: integer('max_per_order').default(10),
     trackInventory: boolean('track_inventory').default(true),
@@ -833,7 +811,7 @@ export const catalogItemVariantSchema = pgTable(
     id: text('id').primaryKey(), // UUID v4
     catalogItemId: text('catalog_item_id').references(() => catalogItemSchema.id).notNull(),
     name: text('name').notNull(), // e.g., 'A2 White', 'Large Blue', 'Standard'
-    price: real('price').notNull().default(0), // Variant-specific price (can override base price)
+    price: numeric('price', { precision: 12, scale: 2, mode: 'number' }).notNull().default(0), // Variant-specific price (can override base price)
     stockQuantity: integer('stock_quantity').default(0),
     sortOrder: integer('sort_order').default(0),
     createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
@@ -882,34 +860,6 @@ export const catalogItemCategorySchema = pgTable(
 // JUNCTION TABLES (M:N Relationships)
 // =============================================================================
 
-// Class-to-Instructor (M:N) - for listing multiple instructors per class
-export const classInstructorSchema = pgTable(
-  'class_instructor',
-  {
-    classId: text('class_id').references(() => classSchema.id).notNull(),
-    instructorClerkId: text('instructor_clerk_id').notNull(), // Clerk user ID
-    isPrimary: boolean('is_primary').default(false),
-    createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
-  },
-  table => [
-    primaryKey({ columns: [table.classId, table.instructorClerkId] }),
-  ],
-);
-
-// Event-to-Instructor (M:N)
-export const eventInstructorSchema = pgTable(
-  'event_instructor',
-  {
-    eventId: text('event_id').references(() => eventSchema.id).notNull(),
-    instructorClerkId: text('instructor_clerk_id').notNull(), // Clerk user ID
-    isPrimary: boolean('is_primary').default(false),
-    createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
-  },
-  table => [
-    primaryKey({ columns: [table.eventId, table.instructorClerkId] }),
-  ],
-);
-
 // Class-to-Tag (M:N)
 export const classTagSchema = pgTable(
   'class_tag',
@@ -950,24 +900,6 @@ export const eventTagSchema = pgTable(
 // MEMBER ACTIVITY TABLES
 // =============================================================================
 
-// Member class enrollments (which classes a member is enrolled in)
-export const classEnrollmentSchema = pgTable(
-  'class_enrollment',
-  {
-    id: text('id').primaryKey(), // UUID v4
-    memberId: text('member_id').references(() => memberSchema.id).notNull(),
-    classId: text('class_id').references(() => classSchema.id).notNull(),
-    status: text('status').notNull().default('active'), // 'active', 'waitlist', 'dropped'
-    enrolledAt: timestamp('enrolled_at', { mode: 'date' }).defaultNow().notNull(),
-    droppedAt: timestamp('dropped_at', { mode: 'date' }),
-  },
-  table => [
-    index('class_enrollment_member_idx').on(table.memberId),
-    index('class_enrollment_class_idx').on(table.classId),
-    uniqueIndex('class_enrollment_member_class_idx').on(table.memberId, table.classId),
-  ],
-);
-
 // Member event registrations
 export const eventRegistrationSchema = pgTable(
   'event_registration',
@@ -977,7 +909,7 @@ export const eventRegistrationSchema = pgTable(
     eventId: text('event_id').references(() => eventSchema.id).notNull(),
     eventBillingId: text('event_billing_id').references(() => eventBillingSchema.id),
     status: text('status').notNull().default('registered'), // 'registered', 'waitlist', 'cancelled', 'attended'
-    amountPaid: real('amount_paid'),
+    amountPaid: numeric('amount_paid', { precision: 12, scale: 2, mode: 'number' }),
     registeredAt: timestamp('registered_at', { mode: 'date' }).defaultNow().notNull(),
     cancelledAt: timestamp('cancelled_at', { mode: 'date' }),
   },
@@ -1029,10 +961,9 @@ export const transactionSchema = pgTable(
     memberId: text('member_id').references(() => memberSchema.id),
     memberMembershipId: text('member_membership_id').references(() => memberMembershipSchema.id),
     eventRegistrationId: text('event_registration_id').references(() => eventRegistrationSchema.id),
-    stripePaymentIntentId: text('stripe_payment_intent_id'),
     providerTransactionId: text('provider_transaction_id'), // Transaction ID at the org's payment provider
     transactionType: text('transaction_type').notNull(), // 'membership_payment', 'event_registration', 'signup_fee', 'refund', 'adjustment'
-    amount: real('amount').notNull(),
+    amount: numeric('amount', { precision: 12, scale: 2, mode: 'number' }).notNull(),
     currency: text('currency').notNull().default('USD'),
     status: text('status').notNull().default('pending'), // 'pending', 'paid', 'declined', 'refunded', 'processing'
     paymentMethod: text('payment_method'), // 'card', 'cash', 'check', 'bank_transfer'
@@ -1052,7 +983,6 @@ export const transactionSchema = pgTable(
     // Serves the hot org-scoped, date-ordered transaction list (WHERE
     // organization_id = ? ORDER BY created_at DESC) from one index.
     index('transaction_org_created_idx').on(table.organizationId, table.createdAt),
-    uniqueIndex('transaction_stripe_idx').on(table.stripePaymentIntentId),
     // FKs joined from the membership / event-registration detail views.
     index('transaction_member_membership_idx').on(table.memberMembershipId),
     index('transaction_event_registration_idx').on(table.eventRegistrationId),

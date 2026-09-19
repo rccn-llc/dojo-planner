@@ -37,7 +37,10 @@ export type EventData = {
   eventType: string;
   location: string | null;
   note: string | null;
+  imageUrl: string | null;
   maxCapacity: number | null;
+  registrationDeadline: Date | null;
+  isPublic: boolean | null;
   isActive: boolean | null;
   tags: EventTag[];
   sessions: EventSession[];

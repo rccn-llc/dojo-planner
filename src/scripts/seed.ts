@@ -49,8 +49,6 @@ import {
   catalogItemImageSchema,
   catalogItemSchema,
   catalogItemVariantSchema,
-  classEnrollmentSchema,
-  classInstructorSchema,
   classScheduleExceptionSchema,
   classScheduleInstanceSchema,
   classSchema,
@@ -58,7 +56,6 @@ import {
   couponSchema,
   couponUsageSchema,
   eventBillingSchema,
-  eventInstructorSchema,
   eventRegistrationSchema,
   eventSchema,
   eventSessionSchema,
@@ -1095,18 +1092,15 @@ async function clearSeededData(organizationId: string) {
   await db.delete(attendanceSchema).where(eq(attendanceSchema.organizationId, organizationId));
 
   // class_enrollment references member + class.
-  await db.delete(classEnrollmentSchema).where(sql`${classEnrollmentSchema.classId} IN (SELECT id FROM class WHERE organization_id = ${organizationId})`);
 
   // class_schedule_exception references class_schedule_instance.
   await db.delete(classScheduleExceptionSchema).where(sql`${classScheduleExceptionSchema.classScheduleInstanceId} IN (SELECT csi.id FROM class_schedule_instance csi JOIN class c ON csi.class_id = c.id WHERE c.organization_id = ${organizationId})`);
 
   // 2) Now safe to clear the schedule instances and event sessions/billings.
   await db.delete(classScheduleInstanceSchema).where(sql`${classScheduleInstanceSchema.classId} IN (SELECT id FROM class WHERE organization_id = ${organizationId})`);
-  await db.delete(classInstructorSchema).where(sql`${classInstructorSchema.classId} IN (SELECT id FROM class WHERE organization_id = ${organizationId})`);
   await db.delete(classTagSchema).where(sql`${classTagSchema.classId} IN (SELECT id FROM class WHERE organization_id = ${organizationId})`);
   await db.delete(eventSessionSchema).where(sql`${eventSessionSchema.eventId} IN (SELECT id FROM event WHERE organization_id = ${organizationId})`);
   await db.delete(eventBillingSchema).where(sql`${eventBillingSchema.eventId} IN (SELECT id FROM event WHERE organization_id = ${organizationId})`);
-  await db.delete(eventInstructorSchema).where(sql`${eventInstructorSchema.eventId} IN (SELECT id FROM event WHERE organization_id = ${organizationId})`);
   await db.delete(eventTagSchema).where(sql`${eventTagSchema.eventId} IN (SELECT id FROM event WHERE organization_id = ${organizationId})`);
 
   // 3) Member-side: coupon_usage and family_member reference member; clear
@@ -1380,7 +1374,6 @@ async function seedOrganization(organizationId: string) {
       statusChangedAt,
       memberType: member.memberType,
       providerCustomerId: `seed_cus_${randomUUID()}`,
-      clerkUserId: null,
     }).onConflictDoNothing();
 
     // Assign a membership for every member that has a planSlug. Trial =
