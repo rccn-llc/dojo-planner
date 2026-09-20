@@ -35,7 +35,7 @@ export type TenantTable = {
   /**
    * How rows are attributed to an organization.
    *
-   * `direct` — the table carries `organization_id` itself (18 tables).
+   * `direct` — the table carries `organization_id` itself (17 tables).
    * `via`    — reachable only through a parent; the SQL fragment is the
    *            subquery that selects this table's rows for one org.
    */
@@ -47,17 +47,16 @@ export type TenantTable = {
 };
 
 /**
- * All 38 copyable tables, in INSERT order.
+ * All 34 copyable tables, in INSERT order.
  *
- * NOTE: `image` and `instructor_profile` are org-scoped but are NOT cleared by
- * `seed.ts`'s teardown — it covers 36 of 40. Copying only what the seed clears
- * would silently drop both. They are included here.
+ * NOTE: `instructor_profile` is org-scoped but is NOT cleared by `seed.ts`'s
+ * teardown. Copying only what the seed clears would silently drop it, so it is
+ * included here.
  */
 export const TENANT_TABLES: readonly TenantTable[] = [
   // ── L1: no dependencies beyond organization ──
   { table: 'program', scope: 'direct' },
   { table: 'tag', scope: 'direct' },
-  { table: 'image', scope: 'direct' },
   { table: 'instructor_profile', scope: 'direct' },
   { table: 'audit_event', scope: 'direct' },
   { table: 'waiver_merge_field', scope: 'direct' },
@@ -87,12 +86,9 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   { table: 'family_member', scope: 'via', parentColumn: 'member_id', parentSelect: 'SELECT id FROM member WHERE organization_id = $1' },
   { table: 'coupon_usage', scope: 'via', parentColumn: 'member_id', parentSelect: 'SELECT id FROM member WHERE organization_id = $1' },
   { table: 'class_schedule_instance', scope: 'via', parentColumn: 'class_id', parentSelect: 'SELECT id FROM class WHERE organization_id = $1' },
-  { table: 'class_instructor', scope: 'via', parentColumn: 'class_id', parentSelect: 'SELECT id FROM class WHERE organization_id = $1' },
   { table: 'class_tag', scope: 'via', parentColumn: 'class_id', parentSelect: 'SELECT id FROM class WHERE organization_id = $1' },
-  { table: 'class_enrollment', scope: 'via', parentColumn: 'class_id', parentSelect: 'SELECT id FROM class WHERE organization_id = $1' },
   { table: 'event_session', scope: 'via', parentColumn: 'event_id', parentSelect: 'SELECT id FROM event WHERE organization_id = $1' },
   { table: 'event_billing', scope: 'via', parentColumn: 'event_id', parentSelect: 'SELECT id FROM event WHERE organization_id = $1' },
-  { table: 'event_instructor', scope: 'via', parentColumn: 'event_id', parentSelect: 'SELECT id FROM event WHERE organization_id = $1' },
   { table: 'event_tag', scope: 'via', parentColumn: 'event_id', parentSelect: 'SELECT id FROM event WHERE organization_id = $1' },
   { table: 'membership_tag', scope: 'via', parentColumn: 'membership_plan_id', parentSelect: 'SELECT id FROM membership_plan WHERE organization_id = $1' },
   { table: 'membership_waiver', scope: 'via', parentColumn: 'waiver_template_id', parentSelect: 'SELECT id FROM waiver_template WHERE organization_id = $1' },

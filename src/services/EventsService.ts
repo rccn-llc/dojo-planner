@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq, inArray, ne } from 'drizzle-orm';
+import { and, count, eq, inArray, ne } from 'drizzle-orm';
 import { db } from '@/libs/DB';
 import {
   attendanceSchema,
@@ -50,7 +50,13 @@ export type EventData = {
   eventType: string;
   location: string | null;
   note: string | null;
+  imageUrl: string | null;
   maxCapacity: number | null;
+  // Previously written by the editor but never mapped out, so nothing could
+  // display or enforce them. `registrationDeadline` is now enforced in
+  // `registerMemberForEvent`.
+  registrationDeadline: Date | null;
+  isPublic: boolean | null;
   isActive: boolean | null;
   tags: EventTag[];
   sessions: EventSession[];
@@ -163,7 +169,10 @@ function assembleEventData(
     eventType: event.eventType,
     location: event.location,
     note: event.note,
+    imageUrl: event.imageUrl,
     maxCapacity: event.maxCapacity,
+    registrationDeadline: event.registrationDeadline,
+    isPublic: event.isPublic,
     isActive: event.isActive,
     tags: tagsByEvent.get(event.id) || [],
     sessions: sessionsByEvent.get(event.id) || [],
@@ -553,6 +562,20 @@ export type RegisterMemberInput = {
   transactionId?: string | null;
 };
 
+export class RegistrationClosedError extends Error {
+  constructor() {
+    super('Registration for this event has closed.');
+    this.name = 'RegistrationClosedError';
+  }
+}
+
+export class EventFullError extends Error {
+  constructor() {
+    super('This event has reached its maximum capacity.');
+    this.name = 'EventFullError';
+  }
+}
+
 export class MemberAlreadyRegisteredError extends Error {
   constructor() {
     super('This member is already registered for this event.');
@@ -614,6 +637,31 @@ export async function registerMemberForEvent(
     .limit(1);
   if (existing.length > 0) {
     throw new MemberAlreadyRegisteredError();
+  }
+
+  // Enforce the registration deadline.
+  //
+  // `registration_deadline` and `max_capacity` are both collected in the event
+  // editor and stored, but nothing used to consult either one at registration
+  // time — an admin could set a deadline or a cap and watch registrations sail
+  // past it. Checked here, after dedupe, so a member who is already registered
+  // still gets that clearer error rather than a capacity rejection.
+  if (event.registrationDeadline && new Date() > event.registrationDeadline) {
+    throw new RegistrationClosedError();
+  }
+
+  // Enforce capacity. `max_capacity` null means unlimited.
+  if (event.maxCapacity !== null && event.maxCapacity !== undefined) {
+    const [{ current } = { current: 0 }] = await db
+      .select({ current: count() })
+      .from(eventRegistrationSchema)
+      .where(and(
+        eq(eventRegistrationSchema.eventId, input.eventId),
+        ne(eventRegistrationSchema.status, 'cancelled'),
+      ));
+    if (current >= event.maxCapacity) {
+      throw new EventFullError();
+    }
   }
 
   // Resolve the tier price when a tier is chosen but no explicit amount passed.

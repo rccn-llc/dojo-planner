@@ -6,12 +6,14 @@ const eqMock = vi.fn((col: unknown, value: unknown) => ({ __op: 'eq', col, value
 const andMock = vi.fn((...conds: unknown[]) => ({ __op: 'and', conds }));
 const inArrayMock = vi.fn((col: unknown, values: unknown) => ({ __op: 'inArray', col, values }));
 const neMock = vi.fn((col: unknown, value: unknown) => ({ __op: 'ne', col, value }));
+const countMock = vi.fn(() => ({ __op: 'count' }));
 
 vi.mock('drizzle-orm', () => ({
   and: (...args: unknown[]) => andMock(...args),
   eq: (col: unknown, value: unknown) => eqMock(col, value),
   inArray: (col: unknown, values: unknown) => inArrayMock(col, values),
   ne: (col: unknown, value: unknown) => neMock(col, value),
+  count: () => countMock(),
 }));
 
 const dbMock = {
@@ -139,7 +141,7 @@ describe('EventsService.getOrganizationEvents', () => {
   });
 });
 
-const EVENT = { id: 'ev-1', name: 'Seminar', slug: 'seminar', description: null, eventType: 'seminar', location: null, note: null, maxCapacity: 50 };
+const EVENT = { id: 'ev-1', name: 'Seminar', slug: 'seminar', description: null, eventType: 'seminar', location: null, note: null, imageUrl: null, maxCapacity: null, registrationDeadline: null, isPublic: true };
 const MEMBER = { id: 'mem-1', firstName: 'Jane', lastName: 'Doe', email: 'jane@example.com', photoUrl: null };
 const TIER = { id: 'tier-1', eventId: 'ev-1', name: 'Early Bird', price: 40, memberOnly: false, validUntil: null };
 
@@ -147,6 +149,90 @@ describe('EventsService.registerMemberForEvent', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
+  });
+
+  // ── Deadline + capacity enforcement ───────────────────────────────────────
+  // Both columns were collected by the event editor and stored, but nothing
+  // consulted either at registration time, so a deadline or a cap could be set
+  // and silently sailed past.
+
+  it('refuses a registration after the deadline has passed', async () => {
+    const past = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    queueGetEventById({ ...EVENT, registrationDeadline: past }, [TIER]);
+    dbMock.select
+      .mockReturnValueOnce({ from: () => ({ where: () => ({ limit: () => Promise.resolve([MEMBER]) }) }) })
+      .mockReturnValueOnce({ from: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }) });
+    const insertValues = vi.fn().mockResolvedValue(undefined);
+    dbMock.insert.mockReturnValue({ values: insertValues });
+
+    const { registerMemberForEvent, RegistrationClosedError } = await import('./EventsService');
+
+    await expect(
+      registerMemberForEvent({ eventId: 'ev-1', memberId: 'mem-1' }, 'org-1'),
+    ).rejects.toBeInstanceOf(RegistrationClosedError);
+    // The rejection must happen BEFORE the row is written.
+    expect(insertValues).not.toHaveBeenCalled();
+  });
+
+  it('allows a registration before the deadline', async () => {
+    const future = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    queueGetEventById({ ...EVENT, registrationDeadline: future }, [TIER]);
+    dbMock.select
+      .mockReturnValueOnce({ from: () => ({ where: () => ({ limit: () => Promise.resolve([MEMBER]) }) }) })
+      .mockReturnValueOnce({ from: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }) });
+    const insertValues = vi.fn().mockResolvedValue(undefined);
+    dbMock.insert.mockReturnValue({ values: insertValues });
+
+    const { registerMemberForEvent } = await import('./EventsService');
+    await registerMemberForEvent({ eventId: 'ev-1', memberId: 'mem-1' }, 'org-1');
+
+    expect(insertValues).toHaveBeenCalled();
+  });
+
+  it('refuses a registration when the event is at capacity', async () => {
+    queueGetEventById({ ...EVENT, maxCapacity: 2 }, [TIER]);
+    dbMock.select
+      .mockReturnValueOnce({ from: () => ({ where: () => ({ limit: () => Promise.resolve([MEMBER]) }) }) })
+      .mockReturnValueOnce({ from: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }) })
+      .mockReturnValueOnce({ from: () => ({ where: () => Promise.resolve([{ current: 2 }]) }) });
+    const insertValues = vi.fn().mockResolvedValue(undefined);
+    dbMock.insert.mockReturnValue({ values: insertValues });
+
+    const { registerMemberForEvent, EventFullError } = await import('./EventsService');
+
+    await expect(
+      registerMemberForEvent({ eventId: 'ev-1', memberId: 'mem-1' }, 'org-1'),
+    ).rejects.toBeInstanceOf(EventFullError);
+    expect(insertValues).not.toHaveBeenCalled();
+  });
+
+  it('allows a registration when the event is below capacity', async () => {
+    queueGetEventById({ ...EVENT, maxCapacity: 5 }, [TIER]);
+    dbMock.select
+      .mockReturnValueOnce({ from: () => ({ where: () => ({ limit: () => Promise.resolve([MEMBER]) }) }) })
+      .mockReturnValueOnce({ from: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }) })
+      .mockReturnValueOnce({ from: () => ({ where: () => Promise.resolve([{ current: 4 }]) }) });
+    const insertValues = vi.fn().mockResolvedValue(undefined);
+    dbMock.insert.mockReturnValue({ values: insertValues });
+
+    const { registerMemberForEvent } = await import('./EventsService');
+    await registerMemberForEvent({ eventId: 'ev-1', memberId: 'mem-1' }, 'org-1');
+
+    expect(insertValues).toHaveBeenCalled();
+  });
+
+  it('does not count registrations when capacity is unlimited (null)', async () => {
+    queueGetEventById({ ...EVENT, maxCapacity: null }, [TIER]);
+    dbMock.select
+      .mockReturnValueOnce({ from: () => ({ where: () => ({ limit: () => Promise.resolve([MEMBER]) }) }) })
+      .mockReturnValueOnce({ from: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }) });
+    dbMock.insert.mockReturnValue({ values: vi.fn().mockResolvedValue(undefined) });
+
+    const { registerMemberForEvent } = await import('./EventsService');
+    await registerMemberForEvent({ eventId: 'ev-1', memberId: 'mem-1' }, 'org-1');
+
+    // 5 for getEventById + member + dedupe. No capacity count query.
+    expect(dbMock.select).toHaveBeenCalledTimes(7);
   });
 
   it('inserts a registration and returns the registrant (with tier price)', async () => {

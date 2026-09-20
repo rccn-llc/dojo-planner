@@ -171,6 +171,7 @@ export async function processMemberPayment(
       params.organizationId,
       params.memberId,
       params.isTaxable ? 'event' : 'membership',
+      params.amount,
     );
     if (!validated.ok) {
       logger.warn('[MemberPayment] Coupon rejected', {
@@ -1083,6 +1084,7 @@ async function validateCouponForCharge(
   organizationId: string,
   memberId: string,
   context: 'membership' | 'event',
+  purchaseAmount: number,
   now: Date = new Date(),
 ): Promise<CouponValidationResult> {
   const rows = await db
@@ -1094,6 +1096,7 @@ async function validateCouponForCharge(
       discountValue: couponSchema.discountValue,
       applicableTo: couponSchema.applicableTo,
       maxDiscountAmount: couponSchema.maxDiscountAmount,
+      minPurchaseAmount: couponSchema.minPurchaseAmount,
       usageLimit: couponSchema.usageLimit,
       usageCount: couponSchema.usageCount,
       perUserLimit: couponSchema.perUserLimit,
@@ -1121,6 +1124,16 @@ async function validateCouponForCharge(
   }
   if (coupon.applicableTo !== 'all' && coupon.applicableTo !== context) {
     return { ok: false, reason: 'not_applicable', userMessage: 'This coupon does not apply to this purchase.' };
+  }
+  // Minimum spend. The kiosk already refused a coupon below this threshold,
+  // but the server — the only place that actually moves money — did not, so
+  // the rule was enforced on one surface and not the other.
+  if (coupon.minPurchaseAmount != null && purchaseAmount < coupon.minPurchaseAmount) {
+    return {
+      ok: false,
+      reason: 'below_min_purchase',
+      userMessage: `This coupon requires a minimum purchase of $${coupon.minPurchaseAmount.toFixed(2)}.`,
+    };
   }
   if (coupon.usageLimit != null && (coupon.usageCount ?? 0) >= coupon.usageLimit) {
     return { ok: false, reason: 'global_limit', userMessage: 'This coupon has reached its usage limit.' };

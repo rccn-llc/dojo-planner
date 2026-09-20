@@ -80,8 +80,8 @@ CREATE TABLE "catalog_item" (
 	"description" text,
 	"short_description" text,
 	"sku" text,
-	"base_price" real DEFAULT 0 NOT NULL,
-	"compare_at_price" real,
+	"base_price" numeric(12, 2) DEFAULT 0 NOT NULL,
+	"compare_at_price" numeric(12, 2),
 	"event_id" text,
 	"max_per_order" integer DEFAULT 10,
 	"track_inventory" boolean DEFAULT true,
@@ -98,29 +98,14 @@ CREATE TABLE "catalog_item_variant" (
 	"id" text PRIMARY KEY NOT NULL,
 	"catalog_item_id" text NOT NULL,
 	"name" text NOT NULL,
-	"price" real DEFAULT 0 NOT NULL,
+	"price" numeric(12, 2) DEFAULT 0 NOT NULL,
 	"stock_quantity" integer DEFAULT 0,
 	"sort_order" integer DEFAULT 0,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "class_enrollment" (
-	"id" text PRIMARY KEY NOT NULL,
-	"member_id" text NOT NULL,
-	"class_id" text NOT NULL,
-	"status" text DEFAULT 'active' NOT NULL,
-	"enrolled_at" timestamp DEFAULT now() NOT NULL,
-	"dropped_at" timestamp
-);
 --> statement-breakpoint
-CREATE TABLE "class_instructor" (
-	"class_id" text NOT NULL,
-	"instructor_clerk_id" text NOT NULL,
-	"is_primary" boolean DEFAULT false,
-	"created_at" timestamp DEFAULT now() NOT NULL,
-	CONSTRAINT "class_instructor_class_id_instructor_clerk_id_pk" PRIMARY KEY("class_id","instructor_clerk_id")
-);
 --> statement-breakpoint
 CREATE TABLE "class_schedule_exception" (
 	"id" text PRIMARY KEY NOT NULL,
@@ -191,10 +176,10 @@ CREATE TABLE "coupon" (
 	"name" text NOT NULL,
 	"description" text,
 	"discount_type" text NOT NULL,
-	"discount_value" real NOT NULL,
+	"discount_value" numeric(12, 2) NOT NULL,
 	"applicable_to" text NOT NULL,
-	"min_purchase_amount" real,
-	"max_discount_amount" real,
+	"min_purchase_amount" numeric(12, 2),
+	"max_discount_amount" numeric(12, 2),
 	"usage_limit" integer,
 	"usage_count" integer DEFAULT 0,
 	"per_user_limit" integer DEFAULT 1,
@@ -210,7 +195,7 @@ CREATE TABLE "coupon_usage" (
 	"coupon_id" text NOT NULL,
 	"member_id" text NOT NULL,
 	"transaction_id" text,
-	"discount_applied" real NOT NULL,
+	"discount_applied" numeric(12, 2) NOT NULL,
 	"used_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
@@ -218,7 +203,7 @@ CREATE TABLE "event_billing" (
 	"id" text PRIMARY KEY NOT NULL,
 	"event_id" text NOT NULL,
 	"name" text NOT NULL,
-	"price" real NOT NULL,
+	"price" numeric(12, 2) NOT NULL,
 	"member_only" boolean DEFAULT false,
 	"valid_from" timestamp,
 	"valid_until" timestamp,
@@ -227,13 +212,6 @@ CREATE TABLE "event_billing" (
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "event_instructor" (
-	"event_id" text NOT NULL,
-	"instructor_clerk_id" text NOT NULL,
-	"is_primary" boolean DEFAULT false,
-	"created_at" timestamp DEFAULT now() NOT NULL,
-	CONSTRAINT "event_instructor_event_id_instructor_clerk_id_pk" PRIMARY KEY("event_id","instructor_clerk_id")
-);
 --> statement-breakpoint
 CREATE TABLE "event_registration" (
 	"id" text PRIMARY KEY NOT NULL,
@@ -241,7 +219,7 @@ CREATE TABLE "event_registration" (
 	"event_id" text NOT NULL,
 	"event_billing_id" text,
 	"status" text DEFAULT 'registered' NOT NULL,
-	"amount_paid" real,
+	"amount_paid" numeric(12, 2),
 	"registered_at" timestamp DEFAULT now() NOT NULL,
 	"cancelled_at" timestamp
 );
@@ -292,19 +270,6 @@ CREATE TABLE "family_member" (
 	CONSTRAINT "family_member_member_id_related_member_id_pk" PRIMARY KEY("member_id","related_member_id")
 );
 --> statement-breakpoint
-CREATE TABLE "image" (
-	"id" text PRIMARY KEY NOT NULL,
-	"organization_id" text NOT NULL,
-	"entity_type" text NOT NULL,
-	"entity_id" text NOT NULL,
-	"original_url" text NOT NULL,
-	"thumbnail_sm_url" text,
-	"thumbnail_md_url" text,
-	"thumbnail_lg_url" text,
-	"mime_type" text,
-	"size_bytes" bigint,
-	"uploaded_at" timestamp DEFAULT now() NOT NULL
-);
 --> statement-breakpoint
 CREATE TABLE "member_membership" (
 	"id" text PRIMARY KEY NOT NULL,
@@ -325,7 +290,6 @@ CREATE TABLE "member_membership" (
 CREATE TABLE "member" (
 	"id" text PRIMARY KEY NOT NULL,
 	"organization_id" text NOT NULL,
-	"clerk_user_id" text,
 	"first_name" text NOT NULL,
 	"last_name" text NOT NULL,
 	"email" text NOT NULL,
@@ -333,7 +297,6 @@ CREATE TABLE "member" (
 	"phone" text,
 	"date_of_birth" timestamp,
 	"photo_url" text,
-	"image_id" text,
 	"last_accessed_at" timestamp,
 	"status" text DEFAULT 'active' NOT NULL,
 	"status_changed_at" timestamp,
@@ -350,10 +313,10 @@ CREATE TABLE "membership_plan" (
 	"slug" text NOT NULL,
 	"category" text NOT NULL,
 	"program" text NOT NULL,
-	"price" real DEFAULT 0 NOT NULL,
-	"signup_fee" real DEFAULT 0 NOT NULL,
-	"cancellation_fee" real DEFAULT 0 NOT NULL,
-	"hold_fee_amount" real DEFAULT 0 NOT NULL,
+	"price" numeric(12, 2) DEFAULT 0 NOT NULL,
+	"signup_fee" numeric(12, 2) DEFAULT 0 NOT NULL,
+	"cancellation_fee" numeric(12, 2) DEFAULT 0 NOT NULL,
+	"hold_fee_amount" numeric(12, 2) DEFAULT 0 NOT NULL,
 	"hold_fee_frequency" text,
 	"hold_limit_per_year" integer,
 	"class_allowance" integer,
@@ -411,7 +374,7 @@ CREATE TABLE "organization" (
 	"location_address" text,
 	"location_phone" text,
 	"location_email" text,
-	"location_tax_rate" real DEFAULT 0 NOT NULL,
+	"location_tax_rate" numeric(5, 2) DEFAULT 0 NOT NULL,
 	"payment_provider" text DEFAULT 'iqpro' NOT NULL,
 	"payment_provider_config_enc" text,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
@@ -432,7 +395,6 @@ CREATE TABLE "platform_config" (
 CREATE TABLE "payment_method" (
 	"id" text PRIMARY KEY NOT NULL,
 	"member_id" text NOT NULL,
-	"stripe_payment_method_id" text,
 	"provider_payment_method_id" text,
 	"type" text NOT NULL,
 	"first_six" text,
@@ -462,15 +424,15 @@ CREATE TABLE "signed_waiver" (
 	"member_id" text NOT NULL,
 	"member_membership_id" text,
 	"membership_plan_name" text,
-	"membership_plan_price" real,
+	"membership_plan_price" numeric(12, 2),
 	"membership_plan_frequency" text,
 	"membership_plan_contract_length" text,
-	"membership_plan_signup_fee" real,
+	"membership_plan_signup_fee" numeric(12, 2),
 	"membership_plan_is_trial" boolean,
 	"coupon_code" text,
 	"coupon_type" text,
 	"coupon_amount" text,
-	"coupon_discounted_price" real,
+	"coupon_discounted_price" numeric(12, 2),
 	"signature_data_url" text NOT NULL,
 	"signed_by_name" text NOT NULL,
 	"signed_by_email" text,
@@ -504,10 +466,9 @@ CREATE TABLE "transaction" (
 	"member_id" text,
 	"member_membership_id" text,
 	"event_registration_id" text,
-	"stripe_payment_intent_id" text,
 	"provider_transaction_id" text,
 	"transaction_type" text NOT NULL,
-	"amount" real NOT NULL,
+	"amount" numeric(12, 2) NOT NULL,
 	"currency" text DEFAULT 'USD' NOT NULL,
 	"status" text DEFAULT 'pending' NOT NULL,
 	"payment_method" text,
@@ -556,9 +517,6 @@ ALTER TABLE "catalog_item_category" ADD CONSTRAINT "catalog_item_category_catego
 ALTER TABLE "catalog_item_image" ADD CONSTRAINT "catalog_item_image_catalog_item_id_catalog_item_id_fk" FOREIGN KEY ("catalog_item_id") REFERENCES "public"."catalog_item"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "catalog_item" ADD CONSTRAINT "catalog_item_event_id_event_id_fk" FOREIGN KEY ("event_id") REFERENCES "public"."event"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "catalog_item_variant" ADD CONSTRAINT "catalog_item_variant_catalog_item_id_catalog_item_id_fk" FOREIGN KEY ("catalog_item_id") REFERENCES "public"."catalog_item"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "class_enrollment" ADD CONSTRAINT "class_enrollment_member_id_member_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."member"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "class_enrollment" ADD CONSTRAINT "class_enrollment_class_id_class_id_fk" FOREIGN KEY ("class_id") REFERENCES "public"."class"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "class_instructor" ADD CONSTRAINT "class_instructor_class_id_class_id_fk" FOREIGN KEY ("class_id") REFERENCES "public"."class"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "class_schedule_exception" ADD CONSTRAINT "class_schedule_exception_class_schedule_instance_id_class_schedule_instance_id_fk" FOREIGN KEY ("class_schedule_instance_id") REFERENCES "public"."class_schedule_instance"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "class_schedule_instance" ADD CONSTRAINT "class_schedule_instance_class_id_class_id_fk" FOREIGN KEY ("class_id") REFERENCES "public"."class"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "class" ADD CONSTRAINT "class_program_id_program_id_fk" FOREIGN KEY ("program_id") REFERENCES "public"."program"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -567,7 +525,6 @@ ALTER TABLE "class_tag" ADD CONSTRAINT "class_tag_tag_id_tag_id_fk" FOREIGN KEY 
 ALTER TABLE "coupon_usage" ADD CONSTRAINT "coupon_usage_coupon_id_coupon_id_fk" FOREIGN KEY ("coupon_id") REFERENCES "public"."coupon"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "coupon_usage" ADD CONSTRAINT "coupon_usage_member_id_member_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."member"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "event_billing" ADD CONSTRAINT "event_billing_event_id_event_id_fk" FOREIGN KEY ("event_id") REFERENCES "public"."event"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "event_instructor" ADD CONSTRAINT "event_instructor_event_id_event_id_fk" FOREIGN KEY ("event_id") REFERENCES "public"."event"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "event_registration" ADD CONSTRAINT "event_registration_member_id_member_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."member"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "event_registration" ADD CONSTRAINT "event_registration_event_id_event_id_fk" FOREIGN KEY ("event_id") REFERENCES "public"."event"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "event_registration" ADD CONSTRAINT "event_registration_event_billing_id_event_billing_id_fk" FOREIGN KEY ("event_billing_id") REFERENCES "public"."event_billing"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -610,9 +567,6 @@ CREATE UNIQUE INDEX "catalog_item_org_slug_idx" ON "catalog_item" USING btree ("
 CREATE INDEX "catalog_item_event_idx" ON "catalog_item" USING btree ("event_id");--> statement-breakpoint
 CREATE INDEX "catalog_variant_item_idx" ON "catalog_item_variant" USING btree ("catalog_item_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "catalog_variant_item_name_idx" ON "catalog_item_variant" USING btree ("catalog_item_id","name");--> statement-breakpoint
-CREATE INDEX "class_enrollment_member_idx" ON "class_enrollment" USING btree ("member_id");--> statement-breakpoint
-CREATE INDEX "class_enrollment_class_idx" ON "class_enrollment" USING btree ("class_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "class_enrollment_member_class_idx" ON "class_enrollment" USING btree ("member_id","class_id");--> statement-breakpoint
 CREATE INDEX "class_exception_schedule_idx" ON "class_schedule_exception" USING btree ("class_schedule_instance_id");--> statement-breakpoint
 CREATE INDEX "class_exception_date_idx" ON "class_schedule_exception" USING btree ("exception_date");--> statement-breakpoint
 CREATE INDEX "class_schedule_class_idx" ON "class_schedule_instance" USING btree ("class_id");--> statement-breakpoint
@@ -634,14 +588,12 @@ CREATE INDEX "event_org_idx" ON "event" USING btree ("organization_id");--> stat
 CREATE UNIQUE INDEX "event_org_slug_idx" ON "event" USING btree ("organization_id","slug");--> statement-breakpoint
 CREATE INDEX "event_session_event_idx" ON "event_session" USING btree ("event_id");--> statement-breakpoint
 CREATE INDEX "event_session_date_idx" ON "event_session" USING btree ("session_date");--> statement-breakpoint
-CREATE INDEX "image_entity_idx" ON "image" USING btree ("entity_type","entity_id");--> statement-breakpoint
-CREATE INDEX "image_org_idx" ON "image" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "member_membership_member_idx" ON "member_membership" USING btree ("member_id");--> statement-breakpoint
 CREATE INDEX "member_membership_member_status_idx" ON "member_membership" USING btree ("member_id","status");--> statement-breakpoint
 CREATE INDEX "member_org_idx" ON "member" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "member_org_status_idx" ON "member" USING btree ("organization_id","status");--> statement-breakpoint
 CREATE INDEX "member_org_email_idx" ON "member" USING btree ("organization_id","email");--> statement-breakpoint
-CREATE UNIQUE INDEX "member_clerk_user_idx" ON "member" USING btree ("clerk_user_id");--> statement-breakpoint
+CREATE INDEX "member_org_created_idx" ON "member" USING btree ("organization_id","created_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "member_provider_customer_idx" ON "member" USING btree ("provider_customer_id");--> statement-breakpoint
 CREATE INDEX "membership_plan_org_idx" ON "membership_plan" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "membership_plan_program_idx" ON "membership_plan" USING btree ("program_id");--> statement-breakpoint
@@ -662,7 +614,6 @@ CREATE INDEX "transaction_member_idx" ON "transaction" USING btree ("member_id")
 CREATE INDEX "transaction_status_idx" ON "transaction" USING btree ("status");--> statement-breakpoint
 CREATE INDEX "transaction_date_idx" ON "transaction" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "transaction_org_created_idx" ON "transaction" USING btree ("organization_id","created_at");--> statement-breakpoint
-CREATE UNIQUE INDEX "transaction_stripe_idx" ON "transaction" USING btree ("stripe_payment_intent_id");--> statement-breakpoint
 CREATE INDEX "transaction_member_membership_idx" ON "transaction" USING btree ("member_membership_id");--> statement-breakpoint
 CREATE INDEX "transaction_event_registration_idx" ON "transaction" USING btree ("event_registration_id");--> statement-breakpoint
 CREATE INDEX "waiver_merge_field_org_idx" ON "waiver_merge_field" USING btree ("organization_id");--> statement-breakpoint

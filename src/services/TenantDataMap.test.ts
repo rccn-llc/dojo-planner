@@ -3,10 +3,19 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { EXCLUDED_TABLES, orgScopePredicate, TENANT_TABLES } from './TenantDataMap';
 
-/** Physical table names declared in Schema.ts. */
+/**
+ * Physical table names declared in Schema.ts.
+ *
+ * The character class MUST include digits. With `[a-z_]+` a table whose name
+ * contains one (`member_2fa`, say) matches nothing, so it is silently absent
+ * from `declared` and the drift guard below passes while that table is never
+ * copied — a cutover would drop its data and `db:verify-copy` would still
+ * report parity, because the omission and the verification share this source.
+ * `checkSchemaSync.ts` and the kiosk's parity test both use `[a-z0-9_]`.
+ */
 function declaredTables(): string[] {
   const src = readFileSync(path.join(process.cwd(), 'src/models/Schema.ts'), 'utf8');
-  return [...src.matchAll(/pgTable\(\s*'([a-z_]+)'/g)].map(m => m[1]!);
+  return [...src.matchAll(/pgTable\(\s*'([a-z0-9_]+)'/g)].map(m => m[1]!);
 }
 
 describe('tenantDataMap', () => {
@@ -54,12 +63,11 @@ describe('tenantDataMap', () => {
     }
   });
 
-  it('includes the two org-scoped tables the seed teardown misses', () => {
-    // `clearSeededData` covers 36 of 40. Building the copy from it directly
-    // would silently drop these two.
+  it('includes the org-scoped table the seed teardown misses', () => {
+    // `clearSeededData` does not clear `instructor_profile`. Building the copy
+    // from the seed's teardown directly would silently drop it.
     const copied = TENANT_TABLES.map(t => t.table);
 
-    expect(copied).toContain('image');
     expect(copied).toContain('instructor_profile');
   });
 
