@@ -8,6 +8,26 @@
  *   npx tsx src/scripts/seed.ts              # Seed all organizations
  *   npx tsx src/scripts/seed.ts --orgId=org_xxx  # Seed specific organization
  *   npx tsx src/scripts/seed.ts --reset      # Clear and re-seed
+ *   npx tsx src/scripts/seed.ts --orgId=org_xxx --referenceDataOnly
+ *                                            # Onboard a REAL org: sample setup only
+ *
+ * --referenceDataOnly (onboarding a real organization):
+ *   Seeds programs, tags, classes + schedules, events, coupons, membership
+ *   plans, catalog, waiver templates and merge fields — and NOTHING derived from
+ *   members: no members, family links, signed waivers, payment methods, notes,
+ *   transactions, event registrations, audit events, or attendance.
+ *   It also:
+ *     - refuses --reset (which deletes ALL of an org's rows),
+ *     - never overwrites an existing `tenant` row (db:provision-tenant created
+ *       it; db:cutover-tenant --activate-only is what activates it),
+ *     - always writes the synthetic SaaS trial — it never calls the real
+ *       subscribe(), so it cannot charge a card against the platform account.
+ *       Pass --ownerClerkId=<a real Clerk user id> so the trial names a person.
+ *
+ * Every --orgId run ensures the CONTROL-plane `organization` row exists. The
+ * SaaS columns are written with UPDATEs, which silently match nothing without
+ * it — and the access gate treats an org with no control row as "fresh" and
+ * skips subscription enforcement entirely.
  *
  * SaaS subscription provisioning (for --orgId):
  *   By default the seed writes an ACTIVE SaaS subscription onto the org so the
@@ -26,7 +46,7 @@
  *     --saasCycle=monthly|annual (default: monthly)
  *     --saasEmail=<email>      Billing email for the IQPro customer
  *     --saasOrgName=<name>     Org display name for the IQPro customer
- *     --ownerClerkId=<id>      Synthetic responsible owner userId for the fallback
+ *     --ownerClerkId=<id>      Responsible owner userId written by the synthetic trial
  *     --saasCard=<pan>         Sandbox test PAN for real provisioning (default 4111...)
  *     --saasExpiry=<MMYY>      Card expiry for real provisioning (default 1230)
  */
@@ -83,6 +103,15 @@ const args = process.argv.slice(2);
 const orgIdArg = args.find(arg => arg.startsWith('--orgId='));
 const specificOrgId = orgIdArg ? orgIdArg.split('=')[1] : undefined;
 const shouldReset = args.includes('--reset');
+const referenceDataOnly = args.includes('--referenceDataOnly');
+
+// `--referenceDataOnly` exists for onboarding a REAL organization. `--reset`
+// deletes every org-scoped row (not just seeded ones), so the combination would
+// wipe a live org's data before re-seeding. Refuse it outright.
+if (referenceDataOnly && shouldReset) {
+  console.error('❌ --referenceDataOnly cannot be combined with --reset (reset deletes ALL of the org\'s data).');
+  process.exit(1);
+}
 
 // SaaS-subscription seed options
 function argValue(name: string): string | undefined {
@@ -1335,6 +1364,144 @@ async function seedOrganization(organizationId: string) {
     }).onConflictDoNothing();
   }
 
+  // 8. Seed Catalog Categories
+  console.info('  🏷️  Seeding catalog categories...');
+  const categoryIdMap: Record<string, string> = {};
+  for (const category of catalogCategoriesData) {
+    const id = randomUUID();
+    categoryIdMap[category.slug] = id;
+    await db.insert(catalogCategorySchema).values({
+      id,
+      organizationId,
+      name: category.name,
+      slug: category.slug,
+      description: category.description,
+    }).onConflictDoNothing();
+  }
+
+  // 9. Seed Catalog Items with Sizes and Images
+  console.info('  📦 Seeding catalog items...');
+
+  for (const item of catalogItemsData) {
+    const itemId = randomUUID();
+
+    await db.insert(catalogItemSchema).values({
+      id: itemId,
+      organizationId,
+      type: item.type,
+      name: item.name,
+      slug: item.slug,
+      description: item.description,
+      shortDescription: item.shortDescription,
+      sku: item.sku,
+      basePrice: item.basePrice,
+      compareAtPrice: item.compareAtPrice,
+      eventId: item.eventSlug ? eventIdMap[item.eventSlug] : null,
+      maxPerOrder: item.maxPerOrder,
+      trackInventory: item.trackInventory,
+      lowStockThreshold: item.lowStockThreshold,
+      isFeatured: item.isFeatured,
+    }).onConflictDoNothing();
+
+    // Link item to categories
+    for (const catSlug of item.categories) {
+      const catId = categoryIdMap[catSlug];
+      if (catId) {
+        await db.insert(catalogItemCategorySchema).values({
+          catalogItemId: itemId,
+          categoryId: catId,
+        }).onConflictDoNothing();
+      }
+    }
+
+    // Create variants with stock
+    for (const [i, variant] of item.variants.entries()) {
+      await db.insert(catalogItemVariantSchema).values({
+        id: randomUUID(),
+        catalogItemId: itemId,
+        name: variant.name,
+        price: variant.price,
+        stockQuantity: variant.stockQuantity,
+        sortOrder: i,
+      }).onConflictDoNothing();
+    }
+
+    // Create primary image
+    if (item.imageUrl) {
+      await db.insert(catalogItemImageSchema).values({
+        id: randomUUID(),
+        catalogItemId: itemId,
+        url: item.imageUrl,
+        thumbnailUrl: item.imageUrl.replace('600x600', '200x200'),
+        altText: item.name,
+        isPrimary: true,
+        sortOrder: 0,
+      }).onConflictDoNothing();
+    }
+  }
+
+  // 10. Seed Waiver Templates
+  console.info('  📜 Seeding waiver templates...');
+  const waiverIdMap: Record<string, string> = {};
+  for (const waiver of waiverTemplatesData) {
+    const id = randomUUID();
+    waiverIdMap[waiver.slug] = id;
+    await db.insert(waiverTemplateSchema).values({
+      id,
+      organizationId,
+      name: waiver.name,
+      slug: waiver.slug,
+      version: waiver.version,
+      content: waiver.content,
+      description: waiver.description,
+      isActive: waiver.isActive,
+      isDefault: waiver.isDefault,
+      requiresGuardian: waiver.requiresGuardian,
+      guardianAgeThreshold: waiver.guardianAgeThreshold,
+    }).onConflictDoNothing();
+
+    // Link waiver to membership plans
+    for (const membershipSlug of waiver.membershipSlugs) {
+      const membershipPlanId = membershipPlanIdMap[membershipSlug];
+      const waiverTemplateId = waiverIdMap[waiver.slug];
+      if (membershipPlanId && waiverTemplateId) {
+        await db.insert(membershipWaiverSchema).values({
+          membershipPlanId,
+          waiverTemplateId,
+          isRequired: true,
+          sortOrder: 0,
+        }).onConflictDoNothing();
+      }
+    }
+  }
+
+  // 12. Seed Waiver Merge Fields
+  console.info('  🔖 Seeding waiver merge fields...');
+  const mergeFieldsData = [
+    { key: 'academy', label: 'Academy Name', defaultValue: 'Your Academy', description: 'The name of your martial arts academy' },
+    { key: 'academy_owners', label: 'Academy Owners', defaultValue: 'Academy Owners', description: 'Names of the academy owner(s)' },
+  ];
+  for (const field of mergeFieldsData) {
+    await db.insert(waiverMergeFieldSchema).values({
+      id: randomUUID(),
+      organizationId,
+      key: field.key,
+      label: field.label,
+      defaultValue: field.defaultValue,
+      description: field.description,
+    }).onConflictDoNothing();
+  }
+
+  // Everything above is REFERENCE data (programs, classes, events, coupons,
+  // plans, catalog, waiver templates, merge fields) — none of it references a
+  // member. Everything below is member-derived history. `--referenceDataOnly`
+  // stops here so a real organization starts with sample setup but no fake
+  // members, attendance, payment methods, transactions, or audit history.
+  if (referenceDataOnly) {
+    console.info(`  ✅ Seeded REFERENCE DATA ONLY: ${programsData.length} programs, ${allTags.length} tags, ${classesData.length} classes, ${eventsData.length} events, ${couponsData.length} coupons, ${membershipPlansData.length} membership plans, ${catalogCategoriesData.length} catalog categories, ${catalogItemsData.length} catalog items, ${waiverTemplatesData.length} waiver templates, ${mergeFieldsData.length} merge fields (no members, attendance, payment methods, transactions, or audit events)`);
+    return;
+  }
+
   // 7. Seed Members + member_memberships
   //
   // Each member gets a synthetic providerCustomerId so vaulted-charge code paths
@@ -1448,117 +1615,6 @@ async function seedOrganization(organizationId: string) {
     familyLinkCount += 2;
   }
 
-  // 8. Seed Catalog Categories
-  console.info('  🏷️  Seeding catalog categories...');
-  const categoryIdMap: Record<string, string> = {};
-  for (const category of catalogCategoriesData) {
-    const id = randomUUID();
-    categoryIdMap[category.slug] = id;
-    await db.insert(catalogCategorySchema).values({
-      id,
-      organizationId,
-      name: category.name,
-      slug: category.slug,
-      description: category.description,
-    }).onConflictDoNothing();
-  }
-
-  // 9. Seed Catalog Items with Sizes and Images
-  console.info('  📦 Seeding catalog items...');
-
-  for (const item of catalogItemsData) {
-    const itemId = randomUUID();
-
-    await db.insert(catalogItemSchema).values({
-      id: itemId,
-      organizationId,
-      type: item.type,
-      name: item.name,
-      slug: item.slug,
-      description: item.description,
-      shortDescription: item.shortDescription,
-      sku: item.sku,
-      basePrice: item.basePrice,
-      compareAtPrice: item.compareAtPrice,
-      eventId: item.eventSlug ? eventIdMap[item.eventSlug] : null,
-      maxPerOrder: item.maxPerOrder,
-      trackInventory: item.trackInventory,
-      lowStockThreshold: item.lowStockThreshold,
-      isFeatured: item.isFeatured,
-    }).onConflictDoNothing();
-
-    // Link item to categories
-    for (const catSlug of item.categories) {
-      const catId = categoryIdMap[catSlug];
-      if (catId) {
-        await db.insert(catalogItemCategorySchema).values({
-          catalogItemId: itemId,
-          categoryId: catId,
-        }).onConflictDoNothing();
-      }
-    }
-
-    // Create variants with stock
-    for (const [i, variant] of item.variants.entries()) {
-      await db.insert(catalogItemVariantSchema).values({
-        id: randomUUID(),
-        catalogItemId: itemId,
-        name: variant.name,
-        price: variant.price,
-        stockQuantity: variant.stockQuantity,
-        sortOrder: i,
-      }).onConflictDoNothing();
-    }
-
-    // Create primary image
-    if (item.imageUrl) {
-      await db.insert(catalogItemImageSchema).values({
-        id: randomUUID(),
-        catalogItemId: itemId,
-        url: item.imageUrl,
-        thumbnailUrl: item.imageUrl.replace('600x600', '200x200'),
-        altText: item.name,
-        isPrimary: true,
-        sortOrder: 0,
-      }).onConflictDoNothing();
-    }
-  }
-
-  // 10. Seed Waiver Templates
-  console.info('  📜 Seeding waiver templates...');
-  const waiverIdMap: Record<string, string> = {};
-  for (const waiver of waiverTemplatesData) {
-    const id = randomUUID();
-    waiverIdMap[waiver.slug] = id;
-    await db.insert(waiverTemplateSchema).values({
-      id,
-      organizationId,
-      name: waiver.name,
-      slug: waiver.slug,
-      version: waiver.version,
-      content: waiver.content,
-      description: waiver.description,
-      isActive: waiver.isActive,
-      isDefault: waiver.isDefault,
-      requiresGuardian: waiver.requiresGuardian,
-      guardianAgeThreshold: waiver.guardianAgeThreshold,
-    }).onConflictDoNothing();
-
-    // Link waiver to membership plans
-    for (const membershipSlug of waiver.membershipSlugs) {
-      const membershipPlanId = membershipPlanIdMap[membershipSlug];
-      const waiverTemplateId = waiverIdMap[waiver.slug];
-      if (membershipPlanId && waiverTemplateId) {
-        await db.insert(membershipWaiverSchema).values({
-          membershipPlanId,
-          waiverTemplateId,
-          isRequired: true,
-          sortOrder: 0,
-        }).onConflictDoNothing();
-      }
-    }
-  }
-
   // 11. Seed Signed Waivers for every member with a membership.
   //
   // The waiver template matches the plan (kids → kids waiver, trial → trial
@@ -1656,23 +1712,6 @@ async function seedOrganization(organizationId: string) {
     }).onConflictDoNothing();
 
     signedWaiverCount++;
-  }
-
-  // 12. Seed Waiver Merge Fields
-  console.info('  🔖 Seeding waiver merge fields...');
-  const mergeFieldsData = [
-    { key: 'academy', label: 'Academy Name', defaultValue: 'Your Academy', description: 'The name of your martial arts academy' },
-    { key: 'academy_owners', label: 'Academy Owners', defaultValue: 'Academy Owners', description: 'Names of the academy owner(s)' },
-  ];
-  for (const field of mergeFieldsData) {
-    await db.insert(waiverMergeFieldSchema).values({
-      id: randomUUID(),
-      organizationId,
-      key: field.key,
-      label: field.label,
-      defaultValue: field.defaultValue,
-      description: field.description,
-    }).onConflictDoNothing();
   }
 
   // 13. Seed Payment Methods
@@ -2429,7 +2468,7 @@ async function provisionLocalTenant(orgId: string): Promise<void> {
 
   const encrypted = encryptConnectionString(connectionString, Buffer.from(keyHex, 'hex'));
 
-  await controlDb
+  const insert = controlDb
     .insert(tenantSchema)
     .values({
       orgId,
@@ -2439,15 +2478,31 @@ async function provisionLocalTenant(orgId: string): Promise<void> {
       status: TENANT_STATUS.ACTIVE,
       schemaVersion: '0000_baseline',
       schemaVersionAppliedAt: new Date(),
-    })
-    .onConflictDoUpdate({
-      target: tenantSchema.orgId,
-      set: {
-        connectionStringEncrypted: encrypted,
-        status: TENANT_STATUS.ACTIVE,
-        updatedAt: new Date(),
-      },
     });
+
+  // A real organization's row was written by db:provision-tenant (with its
+  // Clerk display name, region and `provisioning` status) and is activated
+  // ONLY by db:cutover-tenant, after its guards pass. Overwriting it here would
+  // flip it ACTIVE behind those guards' backs, so --referenceDataOnly only ever
+  // inserts a MISSING row (fresh local databases) and leaves an existing one alone.
+  if (referenceDataOnly) {
+    const inserted = await insert
+      .onConflictDoNothing({ target: tenantSchema.orgId })
+      .returning({ orgId: tenantSchema.orgId });
+    if (inserted.length === 0) {
+      console.info('      ↳ tenant row already exists — left untouched (--referenceDataOnly)');
+    }
+    return;
+  }
+
+  await insert.onConflictDoUpdate({
+    target: tenantSchema.orgId,
+    set: {
+      connectionStringEncrypted: encrypted,
+      status: TENANT_STATUS.ACTIVE,
+      updatedAt: new Date(),
+    },
+  });
 }
 
 async function provisionSaasSubscription(orgId: string): Promise<void> {
@@ -2456,10 +2511,15 @@ async function provisionSaasSubscription(orgId: string): Promise<void> {
     return;
   }
 
-  // Try real provisioning only when the prerequisite env is present. The
-  // SaaS-service imports are lazy so the common synthetic path doesn't require
-  // full app env validation.
-  if (hasRealSaasPrereqs()) {
+  // A real organization being onboarded must never get the real subscribe():
+  // it would charge the seed's test card against the PLATFORM IQPro account.
+  // Its admins subscribe through the app's card-collecting flow instead.
+  if (referenceDataOnly) {
+    console.info('  ℹ️  --referenceDataOnly: writing a synthetic SaaS trial (real subscribe() is never called)');
+  } else if (hasRealSaasPrereqs()) {
+    // Try real provisioning only when the prerequisite env is present. The
+    // SaaS-service imports are lazy so the common synthetic path doesn't require
+    // full app env validation.
     try {
       const { resolvePlatformIQProConfig } = await import('../services/PaymentProviderConfigService');
       const { getAcademyOwner } = await import('../services/ClerkRolesService');
@@ -2543,6 +2603,12 @@ async function main() {
         console.info(`  📝 Creating organization record for ${specificOrgId}...`);
         await db.insert(organizationSchema).values({ id: specificOrgId }).onConflictDoNothing();
       }
+      // The CONTROL-plane copy of the row. In production the planes are
+      // separate databases, and every SaaS write below (the synthetic trial,
+      // subscribe()) is an UPDATE against this row — without it they match
+      // nothing, and the access gate treats the org as "fresh" and skips
+      // subscription enforcement entirely. A no-op when the planes share a DB.
+      await controlDb.insert(organizationSchema).values({ id: specificOrgId }).onConflictDoNothing();
       await provisionLocalTenant(specificOrgId);
       await provisionSaasSubscription(specificOrgId);
       organizations = [{ id: specificOrgId }];
