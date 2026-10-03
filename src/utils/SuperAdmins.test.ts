@@ -36,8 +36,17 @@ describe('isSuperAdmin', () => {
 });
 
 describe('isExemptOrg', () => {
-  it('returns true for Dojo Planner Admins org', () => {
+  it('returns true for the Dojo Planner Admins org on the development instance', () => {
     expect(isExemptOrg('org_36AnfhskOn2N0uZFE3NuaQQESHt')).toBe(true);
+  });
+
+  it('returns true for the Dojo Planner Admins org on the production instance', () => {
+    expect(isExemptOrg('org_3KCWKiMlcYUnxXCDXLC0gXkXdys')).toBe(true);
+  });
+
+  it('does not exempt customer dojos on the production instance', () => {
+    expect(isExemptOrg('org_3KCVDkBEWLMBptH0rNPtmkrE95f')).toBe(false); // CTA HQ
+    expect(isExemptOrg('org_3KCVHiTKIlgZ8KcaHuDczedTUYB')).toBe(false); // CTA San Carlos
   });
 
   it('returns false for other org IDs', () => {

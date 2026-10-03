@@ -2,6 +2,7 @@ import type { NextConfig } from 'next';
 import withBundleAnalyzer from '@next/bundle-analyzer';
 import { withSentryConfig } from '@sentry/nextjs';
 import createNextIntlPlugin from 'next-intl/plugin';
+import { getClerkFrontendApiOrigin } from './src/utils/ClerkFrontendApi';
 import './src/libs/Env';
 
 // Content Security Policy for SOC2 compliance (CC6.6)
@@ -9,15 +10,28 @@ import './src/libs/Env';
 // Note: Clerk uses dynamic subdomains like *.clerk.accounts.dev for each instance
 const isDev = process.env.NODE_ENV === 'development';
 
+// A Clerk PRODUCTION instance serves its Frontend API from `clerk.<our-domain>`,
+// which the `*.clerk.accounts.dev` wildcard (dev instances) does not cover. The
+// host is encoded in the publishable key, so derive it rather than hardcoding a
+// domain — Production (prod instance) and Preview/local (dev instance) each get
+// the right source. Empty when the key is a dev key already covered above.
+const clerkFrontendApiOrigin = getClerkFrontendApiOrigin(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+const clerkFrontendApi = clerkFrontendApiOrigin && !clerkFrontendApiOrigin.endsWith('.clerk.accounts.dev')
+  ? ` ${clerkFrontendApiOrigin}`
+  : '';
+// Clerk bot protection renders a Cloudflare Turnstile challenge on sign-up
+// (enabled by default on production instances).
+const turnstile = ' https://challenges.cloudflare.com';
+
 const contentSecurityPolicy = [
   'default-src \'self\'',
   // Scripts: self + Clerk + Sentry + TokenEx/BasysPro (payment iframe) + unsafe-inline (required for Next.js theme/RSC scripts).
   // `unsafe-eval` is added in dev only — React/Turbopack use eval() for debugging features (callstack reconstruction); React never uses eval() in production.
   // Square's SDK host differs per environment and the org's environment is only
   // known at request time, so BOTH are listed — this header is built once.
-  `script-src 'self' 'unsafe-inline'${isDev ? ' \'unsafe-eval\'' : ''} https://cdn.clerk.com https://*.clerk.accounts.dev https://www.sentry-cdn.com https://sandbox.api.basyspro.com https://api.basyspro.com https://sandbox.web.squarecdn.com https://web.squarecdn.com`,
+  `script-src 'self' 'unsafe-inline'${isDev ? ' \'unsafe-eval\'' : ''} https://cdn.clerk.com https://*.clerk.accounts.dev${clerkFrontendApi}${turnstile} https://www.sentry-cdn.com https://sandbox.api.basyspro.com https://api.basyspro.com https://sandbox.web.squarecdn.com https://web.squarecdn.com`,
   // Styles: self + unsafe-inline (required by Clerk inline styles - cannot be avoided) + Clerk domains
-  'style-src \'self\' \'unsafe-inline\' https://cdn.clerk.com https://*.clerk.accounts.dev https://sandbox.web.squarecdn.com https://web.squarecdn.com',
+  `style-src 'self' 'unsafe-inline' https://cdn.clerk.com https://*.clerk.accounts.dev${clerkFrontendApi} https://sandbox.web.squarecdn.com https://web.squarecdn.com`,
   // Fonts: self (Inter is self-hosted via next/font) plus the two hosts
   // Square's Web Payments SDK loads its own typography from. Inter stays
   // self-hosted, so the property CLAUDE.md cares about — no external fonts for
@@ -28,7 +42,7 @@ const contentSecurityPolicy = [
   // placehold.co and user-supplied hosts) + data URIs + blob (Clerk avatar processing).
   'img-src \'self\' https: data: blob:',
   // Frames: self + Clerk for OAuth flows + TokenEx/BasysPro for payment iframe
-  'frame-src \'self\' https://*.clerk.com https://*.clerk.accounts.dev https://sandbox.api.basyspro.com https://api.basyspro.com https://*.tokenex.com https://sandbox.web.squarecdn.com https://web.squarecdn.com',
+  `frame-src 'self' https://*.clerk.com https://*.clerk.accounts.dev${clerkFrontendApi}${turnstile} https://sandbox.api.basyspro.com https://api.basyspro.com https://*.tokenex.com https://sandbox.web.squarecdn.com https://web.squarecdn.com`,
   // Workers: self + blob (for Clerk)
   'worker-src \'self\' blob:',
   // child-src is the fallback some engines consult for nested browsing
@@ -36,13 +50,13 @@ const contentSecurityPolicy = [
   // iframes, and a blocked one surfaces only as a generic UnexpectedError.
   'child-src \'self\' blob: https://sandbox.web.squarecdn.com https://web.squarecdn.com',
   // Connections: self + Clerk API + Sentry + Upstash + Better Stack + TokenEx/BasysPro
-  'connect-src \'self\' https://api.clerk.com https://*.clerk.com https://*.clerk.accounts.dev https://clerk-telemetry.com https://*.ingest.sentry.io https://o-*.ingest.sentry.io https://sentry.io https://*.upstash.io https://*.betterstack.com https://logs.betterstack.com https://sandbox.api.basyspro.com https://api.basyspro.com https://*.tokenex.com https://pci-connect.squareupsandbox.com https://pci-connect.squareup.com',
+  `connect-src 'self' https://api.clerk.com https://*.clerk.com https://*.clerk.accounts.dev${clerkFrontendApi} https://clerk-telemetry.com https://*.ingest.sentry.io https://o-*.ingest.sentry.io https://sentry.io https://*.upstash.io https://*.betterstack.com https://logs.betterstack.com https://sandbox.api.basyspro.com https://api.basyspro.com https://*.tokenex.com https://pci-connect.squareupsandbox.com https://pci-connect.squareup.com`,
   // NOTE: Square's SDK also reports to https://o160250.ingest.sentry.io, which
   // the https://*.ingest.sentry.io entry above already covers. Do not re-add it.
   // Base URI: restrict to self
   'base-uri \'self\'',
   // Form actions: self + Clerk for OAuth/social login flows
-  'form-action \'self\' https://*.clerk.com https://*.clerk.accounts.dev',
+  `form-action 'self' https://*.clerk.com https://*.clerk.accounts.dev${clerkFrontendApi}`,
   // Upgrade HTTP to HTTPS (skip in dev — breaks TokenEx iframe postMessage on http://localhost)
   ...(!isDev ? ['upgrade-insecure-requests'] : []),
 ].join('; ');

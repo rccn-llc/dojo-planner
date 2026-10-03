@@ -441,6 +441,8 @@ if (!has({ role: ORG_ROLE.ADMIN })) redirect('/dashboard')
 
 **Test Email:** `user+clerk_test@example.com` (code: `424242`)
 
+**Instances:** Vercel **Production** uses the Clerk **production** instance (`pk_live_`/`sk_live_`); **Preview, CI E2E and local dev stay on the development instance** (`pk_test_`/`sk_test_`) — `setupClerkTestingToken` and `+clerk_test` users only work on dev instances. Clerk org/user IDs are per-instance, so a production org has its own `tenant` row and tenant database, and `EXEMPT_ORG_IDS` lists each instance's admin org separately. The kiosk's `CLERK_SECRET_KEY` must point at the same instance as the planner it shares a control plane with. The prod instance must define the same role keys (below) and the `username` session claim.
+
 ### Stripe (Billing)
 
 **Package:** `stripe` v18.5.0
@@ -597,7 +599,7 @@ Organization-level SaaS subscriptions use IQPro (same SDK as member payments). A
 
 **Plans:** Basic ($49/mo, $29/mo annual), Growth ($125/mo, $99/mo annual), Enterprise (contact us)
 
-**Super admins:** `aguilanegra`, `richardhoppes`, `nhaloski`, `rtoupin` — auto-granted Basic plan for free (no IQPro API call, written directly to DB).
+**Super admins:** `aguilanegra`, `nhaloski`, `rtoupin` (matched by **username** via the `username` session-token claim — the Clerk instance must customize its session token with `{"username": "{{user.username}}"}` or every super admin is silently gated) — auto-granted Basic plan for free (no IQPro API call, written directly to DB).
 
 **Responsible academy owner:** Each org's SaaS subscription is tied to a **responsible academy owner** — the Clerk user with the `org:academy_owner` role (academy owners are NOT `member` rows). `getAcademyOwner(orgId)` in `ClerkRolesService.ts` resolves them via Clerk's org-membership API. `subscribeToPlan` requires an academy owner to exist (else 409), bills the IQPro SaaS customer to the owner's email, and stores the owner's Clerk userId in `organization.saasResponsibleClerkUserId`. The subscription page (`getCurrentPlan` → `responsibleOwner`) displays the owner's name/email.
 
@@ -1687,7 +1689,8 @@ This approach:
 
 | Vendor | Domains | Directives |
 |--------|---------|------------|
-| **Clerk** | `api.clerk.com`, `cdn.clerk.com`, `*.clerk.com`, `*.clerk.accounts.dev` | script-src, style-src, connect-src, frame-src, form-action |
+| **Clerk** | `api.clerk.com`, `cdn.clerk.com`, `*.clerk.com`, `*.clerk.accounts.dev`, plus the production Frontend API (`clerk.<domain>`) **derived from `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`** by `getClerkFrontendApiOrigin` (`src/utils/ClerkFrontendApi.ts`) — never hardcode it | script-src, style-src, connect-src, frame-src, form-action |
+| **Cloudflare Turnstile** (Clerk bot protection) | `challenges.cloudflare.com` | script-src, frame-src |
 | **Sentry** | `*.ingest.sentry.io`, `o-*.ingest.sentry.io`, `sentry.io`, `www.sentry-cdn.com` | connect-src, script-src |
 | **Better Stack** | `*.betterstack.com`, `logs.betterstack.com` | connect-src |
 | **Upstash** | `*.upstash.io` | connect-src |
