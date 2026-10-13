@@ -23,11 +23,14 @@ const findFirst = vi.fn();
 const onConflictDoNothing = vi.fn().mockResolvedValue(undefined);
 const values = vi.fn((_row: InsertedTenantRow) => ({ onConflictDoNothing }));
 const insert = vi.fn(() => ({ values }));
+const selectWhere = vi.fn();
+const select = vi.fn(() => ({ from: () => ({ where: (...args: unknown[]) => selectWhere(...args) }) }));
 
 vi.mock('@/libs/ControlDb', () => ({
   controlDb: {
     query: { tenantSchema: { findFirst: (...args: unknown[]) => findFirst(...args) } },
     insert: (...args: unknown[]) => insert(...(args as [])),
+    select: (...args: unknown[]) => select(...(args as [])),
   },
 }));
 
@@ -347,6 +350,43 @@ describe('connectionHost', () => {
 });
 
 describe('filterProvisionedOrgs', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    for (const key of Object.keys(envValues)) {
+      delete envValues[key];
+    }
+    envValues.NODE_ENV = 'test';
+  });
+
+  it('returns only orgs with an active directory row', async () => {
+    selectWhere.mockResolvedValueOnce([{ orgId: 'org_a' }]);
+    const { filterProvisionedOrgs } = await import('./TenantDirectoryService');
+
+    await expect(filterProvisionedOrgs(['org_a', 'org_b'])).resolves.toEqual(['org_a']);
+    expect(select).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns every org outside production when DEFAULT_TENANT_DATABASE_URL serves them all', async () => {
+    // Mirrors resolveTenant's escape hatch: locally every org is served from
+    // the default database, so hiding them from the switcher was a dead end
+    // in the other direction — servable orgs with no way to select them.
+    envValues.DEFAULT_TENANT_DATABASE_URL = 'postgres://local';
+    const { filterProvisionedOrgs } = await import('./TenantDirectoryService');
+
+    await expect(filterProvisionedOrgs(['org_a', 'org_b'])).resolves.toEqual(['org_a', 'org_b']);
+    expect(select).not.toHaveBeenCalled();
+  });
+
+  it('ignores DEFAULT_TENANT_DATABASE_URL in production and still consults the directory', async () => {
+    envValues.NODE_ENV = 'production';
+    envValues.DEFAULT_TENANT_DATABASE_URL = 'postgres://should-be-ignored';
+    selectWhere.mockResolvedValueOnce([]);
+    const { filterProvisionedOrgs } = await import('./TenantDirectoryService');
+
+    await expect(filterProvisionedOrgs(['org_a'])).resolves.toEqual([]);
+    expect(select).toHaveBeenCalledTimes(1);
+  });
+
   it('returns an empty list without querying when given no orgs', async () => {
     // The switcher calls this on every mount; a user with no memberships
     // should not cost a control-plane round trip.

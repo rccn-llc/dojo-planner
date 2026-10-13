@@ -1,7 +1,8 @@
 import { ORPCError, os } from '@orpc/server';
 import { logger } from '@/libs/Logger';
 import { audit } from '@/services/AuditService';
-import { refundTransaction as refundTransactionService, TransactionAlreadyRefundedError, TransactionNotFoundError } from '@/services/MemberPaymentService';
+import { refundTransaction as refundTransactionService, TransactionAlreadyRefundedError, TransactionNotFoundError, TransactionNotRefundableError, TransactionReversalFailedError } from '@/services/MemberPaymentService';
+import { resolvePaymentProviderConfig } from '@/services/PaymentProviderConfigService';
 import { getOrganizationTransactions, getTransactionById } from '@/services/TransactionsService';
 import { AUDIT_ACTION, AUDIT_ENTITY_TYPE } from '@/types/Audit';
 import { ORG_ROLE } from '@/types/Auth';
@@ -40,10 +41,9 @@ export const get = os
   });
 
 /**
- * Bookkeeping refund. Inserts a refund transaction row, marks the original
- * refunded, and reverses any coupon redemption tied to it. Does NOT call the
- * payment provider — operators handle the IQPro-side refund manually until
- * that automation lands.
+ * Full-amount refund. Reverses the charge at the org's payment provider first
+ * (void if unsettled, refund if settled), then records it locally. A provider
+ * refusal leaves the books untouched and is surfaced to the caller as a 422.
  */
 export const refund = os
   .input(RefundTransactionValidation)
@@ -51,7 +51,8 @@ export const refund = os
     const context = await guardRole(ORG_ROLE.ADMIN);
 
     try {
-      const result = await refundTransactionService(input.transactionId, context.orgId);
+      const paymentConfig = await resolvePaymentProviderConfig(context.orgId);
+      const result = await refundTransactionService(input.transactionId, context.orgId, paymentConfig);
 
       await audit(context, AUDIT_ACTION.TRANSACTION_REFUND, AUDIT_ENTITY_TYPE.TRANSACTION, {
         entityId: input.transactionId,
@@ -68,8 +69,11 @@ export const refund = os
       if (error instanceof TransactionNotFoundError) {
         throw new ORPCError('Not Found', { status: 404, message: error.message });
       }
-      if (error instanceof TransactionAlreadyRefundedError) {
+      if (error instanceof TransactionAlreadyRefundedError || error instanceof TransactionNotRefundableError) {
         throw new ORPCError('Conflict', { status: 409, message: error.message });
+      }
+      if (error instanceof TransactionReversalFailedError) {
+        throw new ORPCError('Unprocessable Content', { status: 422, message: error.message });
       }
       throw error;
     }

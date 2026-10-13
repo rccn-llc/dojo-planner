@@ -198,9 +198,12 @@ async function handlePaymentCompleted(data: Record<string, unknown>): Promise<vo
       .set({ status: 'paid', processedAt: new Date() })
       // Org predicate added with the scope: a provider id is unique per
       // merchant, not globally, so keying on it alone could cross tenants.
+      // A refunded row stays refunded: a late payment event for a charge we
+      // have since voided/refunded must not resurrect it as paid.
       .where(and(
         eq(transactionSchema.providerTransactionId, transactionId),
         eq(transactionSchema.organizationId, orgId),
+        ne(transactionSchema.status, 'refunded'),
       ));
 
     logger.info('[IQPro Webhook] Payment completed', { transactionId, orgId });
@@ -221,6 +224,7 @@ async function handlePaymentFailed(data: Record<string, unknown>): Promise<void>
       .where(and(
         eq(transactionSchema.providerTransactionId, transactionId),
         eq(transactionSchema.organizationId, orgId),
+        ne(transactionSchema.status, 'refunded'),
       ));
 
     logger.info('[IQPro Webhook] Payment failed', { transactionId, orgId });

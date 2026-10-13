@@ -40,6 +40,7 @@ import type {
   LifecycleActionResult,
   PaymentResult,
   ProcessPaymentParams,
+  ReverseTransactionResult,
   SubscriptionFrequency,
   SubscriptionPaymentMethod,
   SubscriptionResult,
@@ -760,4 +761,85 @@ export class SquarePaymentProvider implements IPaymentProvider {
       return null;
     }
   }
+
+  /**
+   * Reverse a payment for its full amount. An `APPROVED` payment (authorised,
+   * not captured) is cancelled — no money moves. A `COMPLETED` one is refunded
+   * for whatever has not been refunded yet.
+   *
+   * Amounts stay in Square's integer minor units end to end: the refund is
+   * sized from the payment's own `total_money`, so no dollars↔cents crossing
+   * happens here at all.
+   *
+   * ⚠️ Not yet verified against the Square sandbox — unlike the subscription
+   * and lifecycle calls above, which each turned up a documentation error.
+   */
+  async reverseTransaction(
+    config: PaymentProviderConfig,
+    providerTransactionId: string,
+  ): Promise<ReverseTransactionResult> {
+    const square = requireSquare(config);
+
+    try {
+      const { payment } = await squareGet<{ payment?: SquarePaymentRecord }>(
+        square,
+        `/v2/payments/${providerTransactionId}`,
+      );
+      const total = payment?.total_money?.amount ?? 0;
+      const refunded = payment?.refunded_money?.amount ?? 0;
+
+      switch (payment?.status) {
+        case 'APPROVED': {
+          const res = await squarePost<{ payment?: SquarePaymentRecord }>(
+            square,
+            `/v2/payments/${providerTransactionId}/cancel`,
+            {},
+          );
+          return res.payment?.status === 'CANCELED'
+            ? { success: true, method: 'void' }
+            : { success: false, error: `Square did not cancel the payment (${res.payment?.status ?? 'unknown'}).` };
+        }
+        case 'CANCELED':
+          return { success: true, method: 'void', alreadyReversed: true };
+        case 'COMPLETED': {
+          if (total > 0 && refunded >= total) {
+            return { success: true, method: 'refund', alreadyReversed: true };
+          }
+          const remaining = total - refunded;
+          if (remaining <= 0) {
+            return { success: false, error: 'Square reports no refundable amount on this payment.' };
+          }
+          const res = await squarePost<{ refund?: { id?: string; status?: string } }>(square, '/v2/refunds', {
+            idempotency_key: idempotencyKey(),
+            payment_id: providerTransactionId,
+            amount_money: { amount: remaining, currency: payment.total_money?.currency ?? 'USD' },
+          });
+          const status = res.refund?.status;
+          return status === 'PENDING' || status === 'COMPLETED'
+            ? { success: true, method: 'refund', refundTransactionId: res.refund?.id }
+            : { success: false, error: `Square did not refund the payment (${status ?? 'unknown'}).` };
+        }
+        default:
+          return {
+            success: false,
+            error: `This payment is "${payment?.status ?? 'unknown'}" at Square and cannot be voided or refunded.`,
+          };
+      }
+    } catch (error) {
+      logger.error('[Square] payment reversal failed', {
+        providerTransactionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Square payment reversal failed.',
+      };
+    }
+  }
 }
+
+type SquarePaymentRecord = {
+  status?: string;
+  total_money?: { amount?: number; currency?: string };
+  refunded_money?: { amount?: number; currency?: string };
+};

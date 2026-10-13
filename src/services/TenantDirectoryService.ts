@@ -322,10 +322,20 @@ export async function getDbForOrg(orgId: string): Promise<TenantDb> {
  *
  * Reads the CONTROL plane, so it needs no tenant scope and works during an RSC
  * render.
+ *
+ * Honours the same local-dev escape hatch as `resolveTenant`: when
+ * `defaultTenantRecord` would serve every org from DEFAULT_TENANT_DATABASE_URL,
+ * every org IS servable, so all are returned. Without this the switcher hid
+ * every org locally (the directory is usually empty there) while the dashboard
+ * served them fine. Inert in production, by the same guard.
  */
 export async function filterProvisionedOrgs(orgIds: string[]): Promise<string[]> {
   if (orgIds.length === 0) {
     return [];
+  }
+
+  if (defaultTenantRecord(orgIds[0]!)) {
+    return orgIds;
   }
 
   const rows = await controlDb

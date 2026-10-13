@@ -258,6 +258,10 @@ async function handlePaymentUpdated(orgId: string, payload: SquareWebhookPayload
     .where(and(
       eq(transactionSchema.providerTransactionId, payment.id),
       eq(transactionSchema.organizationId, orgId),
+      // A refund leaves the payment COMPLETED and a void makes it CANCELED, and
+      // Square sends payment.updated for both — neither may overwrite the
+      // 'refunded' status our own reversal already recorded.
+      ne(transactionSchema.status, 'refunded'),
     ));
 }
 

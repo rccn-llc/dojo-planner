@@ -12,6 +12,7 @@ vi.mock('@/libs/Env', () => ({
 vi.mock('@/libs/IQPro', () => ({
   iqproPost: vi.fn(),
   iqproGet: vi.fn(),
+  iqproPut: vi.fn(),
   tokenizeAch: vi.fn().mockResolvedValue({ achToken: 'ach-tok-test-001' }),
   getGatewayProcessors: vi.fn().mockResolvedValue({
     cardProcessorId: 'test-card-processor-001',
@@ -611,6 +612,177 @@ describe('IQProPaymentProvider', () => {
       expect(p.recurrence.billingPeriodId).toBe(6);
       expect(p.recurrence.schedule).toEqual({ minutes: [0], hours: [0], daysOfMonth: [15], monthsOfYear: [4] });
       expect(p.lineItems[0].unitOfMeasureId).toBe(4); // YEAR
+    });
+  });
+
+  describe('reverseTransaction', () => {
+    const txPath = '/api/gateway/test-gateway-001/transaction/iq-tx-1';
+
+    async function load() {
+      const loaded = await loadProvider();
+      const { iqproPut } = await import('@/libs/IQPro');
+      return { ...loaded, iqproPut: vi.mocked(iqproPut) };
+    }
+
+    it.each(['Pending', 'PendingSettlement'])('voids a %s transaction with an empty body', async (status) => {
+      const { provider, iqproGet, iqproPut, iqproPost } = await load();
+      iqproGet.mockResolvedValueOnce({ data: { status } });
+      iqproPut.mockResolvedValueOnce({ data: { transactionId: 'iq-tx-1', status: 'Voided' } });
+
+      const result = await provider.reverseTransaction(testConfig, 'iq-tx-1');
+
+      expect(iqproGet).toHaveBeenCalledWith(transportConfig, txPath);
+      expect(iqproPut).toHaveBeenCalledWith(transportConfig, `${txPath}/void`, {});
+      expect(iqproPost).not.toHaveBeenCalled();
+      expect(result).toEqual({ success: true, method: 'void' });
+    });
+
+    it('refunds a Settled transaction for the full settled amount (incl. fees), not the local base', async () => {
+      const { provider, iqproGet, iqproPut, iqproPost } = await load();
+      iqproGet.mockResolvedValueOnce({
+        data: { status: 'Settled', remit: { baseAmount: 100, amountSettled: 103.75, amountRefunded: 0 } },
+      });
+      iqproPost.mockResolvedValueOnce({ data: { transactionId: 'iq-refund-9', status: 'PendingSettlement' } });
+
+      const result = await provider.reverseTransaction(testConfig, 'iq-tx-1');
+
+      expect(iqproPost).toHaveBeenCalledWith(transportConfig, `${txPath}/refund`, { amount: 103.75 });
+      expect(iqproPut).not.toHaveBeenCalled();
+      expect(result).toEqual({ success: true, method: 'refund', refundTransactionId: 'iq-refund-9' });
+    });
+
+    it('rounds the refund amount to cents (IQPro rejects more than 2 decimals)', async () => {
+      const { provider, iqproGet, iqproPost } = await load();
+      iqproGet.mockResolvedValueOnce({ data: { status: 'Settled', remit: { amountSettled: 0.1 + 0.2 } } });
+      iqproPost.mockResolvedValueOnce({ data: { transactionId: 'r', status: 'Approved' } });
+
+      await provider.reverseTransaction(testConfig, 'iq-tx-1');
+
+      expect(iqproPost.mock.calls[0]![2]).toEqual({ amount: 0.3 });
+    });
+
+    it.each([
+      ['Voided', 'void'],
+      ['Refunded', 'refund'],
+    ])('reports an already-%s transaction as reversed without calling IQPro again', async (status, method) => {
+      const { provider, iqproGet, iqproPut, iqproPost } = await load();
+      iqproGet.mockResolvedValueOnce({ data: { status } });
+
+      const result = await provider.reverseTransaction(testConfig, 'iq-tx-1');
+
+      expect(result).toEqual({ success: true, method, alreadyReversed: true });
+      expect(iqproPut).not.toHaveBeenCalled();
+      expect(iqproPost).not.toHaveBeenCalled();
+    });
+
+    it.each(['Declined', 'PartiallyRefunded', 'Authorized', 'Unknown'])(
+      'refuses a %s transaction without calling void or refund',
+      async (status) => {
+        const { provider, iqproGet, iqproPut, iqproPost } = await load();
+        iqproGet.mockResolvedValueOnce({ data: { status } });
+
+        const result = await provider.reverseTransaction(testConfig, 'iq-tx-1');
+
+        expect(result).toEqual({ success: false, error: expect.stringContaining(status) });
+        expect(iqproPut).not.toHaveBeenCalled();
+        expect(iqproPost).not.toHaveBeenCalled();
+      },
+    );
+
+    it('confirms a status-less void response by re-reading the charge (sandbox shape)', async () => {
+      // Sandbox finding: a successful void answers 200 with ONLY the id.
+      const { provider, iqproGet, iqproPut } = await load();
+      iqproGet
+        .mockResolvedValueOnce({ statusCode: 'OK', data: { status: 'PendingSettlement' } })
+        .mockResolvedValueOnce({ statusCode: 'OK', data: { status: 'Voided' } });
+      iqproPut.mockResolvedValueOnce({ statusCode: 'OK', data: { transactionId: 'iq-tx-1' } });
+
+      const result = await provider.reverseTransaction(testConfig, 'iq-tx-1');
+
+      expect(iqproGet).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({ success: true, method: 'void' });
+    });
+
+    it('fails a status-less void when the re-read shows the charge unchanged, naming its real status', async () => {
+      const { provider, iqproGet, iqproPut } = await load();
+      iqproGet
+        .mockResolvedValueOnce({ data: { status: 'PendingSettlement', processorResponseText: 'Approved' } })
+        .mockResolvedValueOnce({ data: { status: 'PendingSettlement', processorResponseText: 'Approved' } });
+      iqproPut.mockResolvedValueOnce({ data: { transactionId: 'iq-tx-1' } });
+
+      const result = await provider.reverseTransaction(testConfig, 'iq-tx-1');
+
+      expect(result).toEqual({
+        success: false,
+        error: 'IQPro did not void the transaction: the transaction is still "PendingSettlement".',
+      });
+    });
+
+    it('confirms a status-less refund by re-reading, and never reports the original id as the refund id', async () => {
+      const { provider, iqproGet, iqproPost } = await load();
+      iqproGet
+        .mockResolvedValueOnce({ data: { status: 'Settled', remit: { amountSettled: 31.11 } } })
+        .mockResolvedValueOnce({ data: { status: 'Refunded' } });
+      iqproPost.mockResolvedValueOnce({ data: { transactionId: 'iq-tx-1' } });
+
+      const result = await provider.reverseTransaction(testConfig, 'iq-tx-1');
+
+      expect(result).toEqual({ success: true, method: 'refund', refundTransactionId: undefined });
+    });
+
+    it('falls back to amountCaptured when amountSettled is reported as 0', async () => {
+      const { provider, iqproGet, iqproPost } = await load();
+      iqproGet.mockResolvedValueOnce({ data: { status: 'Settled', remit: { amountSettled: 0, amountCaptured: 31.11 } } });
+      iqproPost.mockResolvedValueOnce({ data: { transactionId: 'iq-refund-9', status: 'Approved' } });
+
+      await provider.reverseTransaction(testConfig, 'iq-tx-1');
+
+      expect(iqproPost.mock.calls[0]![2]).toEqual({ amount: 31.11 });
+    });
+
+    it('fails when the void response does not report Voided, surfacing the processor text', async () => {
+      const { provider, iqproGet, iqproPut } = await load();
+      iqproGet.mockResolvedValueOnce({ data: { status: 'PendingSettlement' } });
+      iqproPut.mockResolvedValueOnce({ data: { status: 'Declined', processorResponseText: 'Too late to void' } });
+
+      const result = await provider.reverseTransaction(testConfig, 'iq-tx-1');
+
+      expect(result).toEqual({ success: false, error: 'IQPro did not void the transaction: Too late to void' });
+    });
+
+    it('fails when the refund is declined', async () => {
+      const { provider, iqproGet, iqproPost } = await load();
+      iqproGet.mockResolvedValueOnce({ data: { status: 'Settled', remit: { amountSettled: 50 } } });
+      iqproPost.mockResolvedValueOnce({ data: { status: 'Declined' } });
+
+      const result = await provider.reverseTransaction(testConfig, 'iq-tx-1');
+
+      expect(result).toEqual({ success: false, error: 'IQPro did not refund the transaction.' });
+    });
+
+    it('fails without calling refund when nothing remains to refund', async () => {
+      const { provider, iqproGet, iqproPost } = await load();
+      iqproGet.mockResolvedValueOnce({ data: { status: 'Settled', remit: { amountSettled: 50, amountRefunded: 50 } } });
+
+      const result = await provider.reverseTransaction(testConfig, 'iq-tx-1');
+
+      expect(result.success).toBe(false);
+      expect(iqproPost).not.toHaveBeenCalled();
+    });
+
+    it('returns transport errors rather than throwing', async () => {
+      const { provider, iqproGet } = await load();
+      iqproGet.mockRejectedValueOnce(new Error('IQPro API GET failed: 404'));
+
+      const result = await provider.reverseTransaction(testConfig, 'iq-tx-1');
+
+      expect(result).toEqual({ success: false, error: 'IQPro API GET failed: 404' });
+    });
+
+    it('rejects a non-IQPro config at the boundary', async () => {
+      const { provider } = await load();
+
+      await expect(provider.reverseTransaction({ provider: 'square' } as any, 'iq-tx-1')).rejects.toThrow();
     });
   });
 });
