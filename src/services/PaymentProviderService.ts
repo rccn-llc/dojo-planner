@@ -319,6 +319,26 @@ export type SubscriptionPaymentMethod = {
 
 export type LifecycleActionResult = { success: boolean; error?: string };
 
+/**
+ * Outcome of reversing a charge for its FULL amount.
+ *
+ * `method` records what the provider actually did: `void` cancels a charge
+ * that has not settled (no money moves), `refund` returns money from a settled
+ * one. `alreadyReversed` means the provider reported the charge as
+ * voided/refunded before we asked — typically an operator who reversed it in
+ * the provider's own console — so the caller should reconcile its books
+ * rather than fail.
+ */
+export type ReverseTransactionResult
+  = | {
+    success: true;
+    method: 'void' | 'refund';
+    /** The provider's id for the refund, when it creates one. Voids do not. */
+    refundTransactionId?: string;
+    alreadyReversed?: boolean;
+  }
+  | { success: false; error: string };
+
 // ===== Provider interface =====
 //
 // Every method takes the org's resolved `PaymentProviderConfig`, so the
@@ -370,6 +390,18 @@ export type IPaymentProvider = {
     config: PaymentProviderConfig,
     subscriptionId: string,
   ) => Promise<SubscriptionPaymentMethod | null>;
+
+  /**
+   * Reverse a charge for its full amount: void it if it has not settled yet,
+   * refund it if it has. The provider decides which from the charge's live
+   * status, because only the provider knows whether settlement has happened.
+   * Returns failures rather than throwing, so the caller can leave its books
+   * untouched and surface the reason.
+   */
+  reverseTransaction: (
+    config: PaymentProviderConfig,
+    providerTransactionId: string,
+  ) => Promise<ReverseTransactionResult>;
 };
 
 // ===== Factory =====

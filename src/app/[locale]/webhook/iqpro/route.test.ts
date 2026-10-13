@@ -140,4 +140,17 @@ describe('iQPro webhook tenant routing', () => {
       expect.objectContaining({ refId: 'tx_orphan' }),
     );
   });
+
+  it('never resurrects a refunded charge: the paid update skips refunded rows', async () => {
+    // A late payment.completed for a charge we have since voided/refunded must
+    // not flip the row back to 'paid'.
+    resolveOrgByExternalRef.mockResolvedValue('org_resolved');
+    const { POST } = await import('./route');
+
+    await POST(paymentCompleted('tx_1'));
+
+    expect(tenantUpdateWhere).toHaveBeenCalledWith(
+      expect.objectContaining({ _and: expect.arrayContaining([{ _ne: ['status', 'refunded'] }]) }),
+    );
+  });
 });

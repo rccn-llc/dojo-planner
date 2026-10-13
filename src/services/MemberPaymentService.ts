@@ -1238,6 +1238,18 @@ export type RefundTransactionResult = {
   refundTransactionId: string;
   originalTransactionId: string;
   decrementedCoupons: number;
+  /**
+   * What happened at the payment provider: `void` (unsettled charge cancelled),
+   * `refund` (settled charge refunded), or `none` (no provider charge to
+   * reverse — cash/check/manual rows, or seed data — so this was bookkeeping).
+   */
+  providerReversal: 'void' | 'refund' | 'none';
+  /**
+   * Every local row reversed. More than one when a single provider charge was
+   * recorded as several rows (membership + signup fee): the provider can only
+   * reverse the whole charge, so all of its rows are reversed together.
+   */
+  reversedTransactionIds: string[];
 };
 
 export class TransactionNotFoundError extends Error {
@@ -1254,70 +1266,165 @@ export class TransactionAlreadyRefundedError extends Error {
   }
 }
 
+/** A row that never took money (declined) or is itself a refund. */
+export class TransactionNotRefundableError extends Error {
+  constructor(id: string, reason: string) {
+    super(`Transaction ${id} cannot be refunded: ${reason}`);
+    this.name = 'TransactionNotRefundableError';
+  }
+}
+
+/** The payment provider refused (or could not be asked) to reverse the charge. */
+export class TransactionReversalFailedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TransactionReversalFailedError';
+  }
+}
+
 /**
- * Bookkeeping refund: inserts a refund transaction row, flips the original to
- * status='refunded', and reverses any coupon redemption tied to the original
- * transaction (deletes coupon_usage row + decrements couponSchema.usageCount).
+ * Whether a stored provider id refers to a real charge at the processor.
+ * The seed script writes synthetic `seed_*` ids; asking the processor about
+ * those would only 404, so they are reversed in the books alone.
+ */
+function isRealProviderTransactionId(id: string | null): id is string {
+  return !!id && !id.startsWith('seed_');
+}
+
+/**
+ * Full-amount refund. Reverses the charge at the payment provider FIRST — a
+ * void if it has not settled, a refund if it has — and only then records it:
+ * flips the original row(s) to 'refunded', inserts matching refund rows, and
+ * reverses any coupon redemption.
  *
- * NOTE: this does NOT call IQPro's refund API. The operator who triggers this
- * is expected to also process the IQPro-side refund manually (or build that
- * automation in a separate ticket).
+ * Ordering is the safety property. If the provider refuses, nothing local
+ * changes and the operator sees why. If the provider succeeds but the DB write
+ * then fails, a retry is safe: the provider reports the charge as already
+ * reversed (`alreadyReversed`) and the books are reconciled without moving
+ * money twice. The same path also reconciles a charge an operator already
+ * reversed by hand in the provider's console.
+ *
+ * Rows with no provider charge (cash, check, manual adjustments, seed data)
+ * are reversed in the books only, as before.
  */
 export async function refundTransaction(
   transactionId: string,
   organizationId: string,
+  config: PaymentProviderConfig | null,
 ): Promise<RefundTransactionResult> {
-  const refundId = randomUUID();
+  const [row] = await db
+    .select()
+    .from(transactionSchema)
+    .where(and(eq(transactionSchema.id, transactionId), eq(transactionSchema.organizationId, organizationId)))
+    .limit(1);
+  if (!row) {
+    throw new TransactionNotFoundError(transactionId);
+  }
+  if (row.status === 'refunded') {
+    throw new TransactionAlreadyRefundedError(transactionId);
+  }
+  if (row.transactionType === 'refund') {
+    throw new TransactionNotRefundableError(transactionId, 'it is itself a refund.');
+  }
+  if (row.status === 'declined') {
+    throw new TransactionNotRefundableError(transactionId, 'it was declined, so no money was taken.');
+  }
 
-  // The refund-row insert and the original-status flip must be atomic:
-  // otherwise a crash between them would leave an orphan refund row while the
-  // original still looks refundable, and the caller could refund it a second
-  // time (#WS3 double-refund). We flip FIRST, guarded on the row still being
-  // non-refunded, so two racing refunds can't both create a refund row.
-  const originalTx = await db.transaction(async (tx) => {
-    const original = await tx
-      .select()
-      .from(transactionSchema)
-      .where(and(eq(transactionSchema.id, transactionId), eq(transactionSchema.organizationId, organizationId)))
-      .limit(1);
-    const row = original[0];
-    if (!row) {
-      throw new TransactionNotFoundError(transactionId);
+  const providerTransactionId = isRealProviderTransactionId(row.providerTransactionId)
+    ? row.providerTransactionId
+    : null;
+
+  // ── Step 1: reverse at the provider ──────────────────────────────────────
+  let providerReversal: RefundTransactionResult['providerReversal'] = 'none';
+  let providerRefundId: string | undefined;
+  if (providerTransactionId) {
+    if (!config) {
+      throw new TransactionReversalFailedError(
+        'Payments are not configured for this organization, so the charge cannot be reversed at the payment provider.',
+      );
     }
-    if (row.status === 'refunded') {
-      throw new TransactionAlreadyRefundedError(transactionId);
+    const provider = await getPaymentProvider(config);
+    const reversal = await provider.reverseTransaction(config, providerTransactionId);
+    if (!reversal.success) {
+      throw new TransactionReversalFailedError(`The payment provider did not reverse this charge. ${reversal.error}`);
     }
-
-    const flipped = await tx
-      .update(transactionSchema)
-      .set({ status: 'refunded' })
-      .where(and(
-        eq(transactionSchema.id, transactionId),
-        sql`${transactionSchema.status} != 'refunded'`,
-      ))
-      .returning({ id: transactionSchema.id });
-
-    if (flipped.length === 0) {
-      // A concurrent refund already flipped it between our read and update.
-      throw new TransactionAlreadyRefundedError(transactionId);
-    }
-
-    await tx.insert(transactionSchema).values({
-      id: refundId,
-      organizationId,
-      memberId: row.memberId,
-      memberMembershipId: row.memberMembershipId,
-      transactionType: 'refund',
-      amount: -Math.abs(row.amount),
-      currency: row.currency,
-      status: 'paid',
-      paymentMethod: row.paymentMethod,
-      description: `Refund for transaction ${row.id}`,
-      processedAt: new Date(),
+    providerReversal = reversal.method;
+    providerRefundId = reversal.refundTransactionId;
+    logger.info('[MemberPayment] Charge reversed at provider', {
+      transactionId,
+      providerTransactionId,
+      method: reversal.method,
+      alreadyReversed: !!reversal.alreadyReversed,
+      providerRefundId,
     });
+  }
 
-    return row;
-  });
+  // ── Step 2: record it ────────────────────────────────────────────────────
+  // The provider reversed the WHOLE charge, so every local row sharing its id
+  // (membership + signup fee from one Sale) is reversed together. Without a
+  // provider id the row stands alone.
+  const refundIdByOriginal = new Map<string, string>();
+  try {
+    await db.transaction(async (tx) => {
+      // Flip FIRST, guarded on the rows still being non-refunded, so two racing
+      // refunds can't both insert refund rows (#WS3 double-refund).
+      const flipped = await tx
+        .update(transactionSchema)
+        .set({ status: 'refunded' })
+        .where(and(
+          eq(transactionSchema.organizationId, organizationId),
+          providerTransactionId
+            ? eq(transactionSchema.providerTransactionId, providerTransactionId)
+            : eq(transactionSchema.id, transactionId),
+          sql`${transactionSchema.transactionType} != 'refund'`,
+          sql`${transactionSchema.status} NOT IN ('refunded', 'declined')`,
+        ))
+        .returning();
+
+      if (!flipped.some(r => r.id === transactionId)) {
+        // A concurrent refund already flipped it between our read and update.
+        throw new TransactionAlreadyRefundedError(transactionId);
+      }
+
+      const verb = providerReversal === 'void' ? 'Void of' : 'Refund for';
+      await tx.insert(transactionSchema).values(flipped.map((original) => {
+        const refundId = randomUUID();
+        refundIdByOriginal.set(original.id, refundId);
+        return {
+          id: refundId,
+          organizationId,
+          memberId: original.memberId,
+          memberMembershipId: original.memberMembershipId,
+          providerTransactionId: providerRefundId ?? null,
+          transactionType: 'refund',
+          amount: -Math.abs(original.amount),
+          currency: original.currency,
+          status: 'paid',
+          paymentMethod: original.paymentMethod,
+          description: `${verb} transaction ${original.id}`,
+          processedAt: new Date(),
+        };
+      }));
+    });
+  } catch (error) {
+    if (providerReversal !== 'none' && !(error instanceof TransactionAlreadyRefundedError)) {
+      // Money has moved but the books do not show it. Retrying is safe — the
+      // provider will report the charge as already reversed — but make this
+      // loud so it is never silently left behind.
+      logger.error('[MemberPayment] Charge reversed at provider but local refund failed to record', {
+        transactionId,
+        providerTransactionId,
+        providerReversal,
+        providerRefundId,
+        error,
+      });
+    }
+    throw error;
+  }
+
+  await recordExternalRef(REF_TYPE.PROVIDER_TRANSACTION, providerRefundId, organizationId);
+
+  const reversedTransactionIds = [...refundIdByOriginal.keys()];
 
   // Coupon reversal is intentionally best-effort and runs AFTER the refund
   // commits: a stuck coupon counter must not roll back (or block) a completed
@@ -1328,7 +1435,7 @@ export async function refundTransaction(
     const usages = await db
       .select({ id: couponUsageSchema.id, couponId: couponUsageSchema.couponId })
       .from(couponUsageSchema)
-      .where(eq(couponUsageSchema.transactionId, transactionId));
+      .where(inArray(couponUsageSchema.transactionId, reversedTransactionIds));
 
     if (usages.length > 0) {
       await db.delete(couponUsageSchema).where(inArray(couponUsageSchema.id, usages.map(u => u.id)));
@@ -1358,16 +1465,22 @@ export async function refundTransaction(
     });
   }
 
+  const refundTransactionId = refundIdByOriginal.get(transactionId)!;
+
   logger.info('[MemberPayment] Refund processed', {
-    refundTransactionId: refundId,
-    originalTransactionId: originalTx.id,
+    refundTransactionId,
+    originalTransactionId: transactionId,
+    reversedTransactionIds,
+    providerReversal,
     decrementedCoupons,
   });
 
   return {
-    refundTransactionId: refundId,
+    refundTransactionId,
     originalTransactionId: transactionId,
     decrementedCoupons,
+    providerReversal,
+    reversedTransactionIds,
   };
 }
 

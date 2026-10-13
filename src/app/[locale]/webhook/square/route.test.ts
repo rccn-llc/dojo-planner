@@ -224,6 +224,20 @@ describe('square webhook', () => {
     expect(tenantUpdateWhere).toHaveBeenCalled();
   });
 
+  it.each(['COMPLETED', 'CANCELED'])('never overwrites a refunded row on payment.updated (%s)', async (status) => {
+    // Square sends payment.updated when a refund lands (status stays COMPLETED)
+    // and when a void cancels it (CANCELED). Neither may overwrite 'refunded'.
+    const body = JSON.stringify({
+      type: 'payment.updated',
+      data: { object: { payment: { id: 'pay_1', status } } },
+    });
+    signatureHeader = sign(body);
+
+    await post(body);
+
+    expect(JSON.stringify(tenantUpdateWhere.mock.calls[0])).toContain('"refunded"');
+  });
+
   it('does not record an uncaptured APPROVED payment as paid', async () => {
     // APPROVED is authorised-but-not-captured. Only COMPLETED has settled.
     const body = JSON.stringify({

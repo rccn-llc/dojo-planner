@@ -29,6 +29,7 @@ import type {
   LifecycleActionResult,
   PaymentResult,
   ProcessPaymentParams,
+  ReverseTransactionResult,
   SubscriptionPaymentMethod,
   SubscriptionResult,
 } from './PaymentProviderService';
@@ -47,6 +48,23 @@ import {
 } from '@/libs/IQPro';
 import { logger } from '@/libs/Logger';
 import { PAYMENT_PROVIDER } from '@/types/PaymentProvider';
+
+// IQPro transaction statuses (lowercased) that decide how a charge is reversed.
+// Per the API reference, `/void` accepts only Pending / PendingSettlement and
+// `/refund` only a Settled transaction.
+const IQPRO_VOIDABLE_STATUSES = new Set(['pending', 'pendingsettlement']);
+const IQPRO_REFUNDABLE_STATUSES = new Set(['settled']);
+const IQPRO_REVERSED_STATUSES = new Set(['voided', 'refunded']);
+// What a void / refund call MAY report for the resulting transaction. Sandbox
+// finding: a successful void answers 200 with only `{ transactionId }` — no
+// status at all — so a missing status is NOT a failure; it is confirmed by
+// re-reading the charge (see `confirmReversal`).
+const IQPRO_VOID_OK_STATUSES = new Set(['voided']);
+const IQPRO_REFUND_OK_STATUSES = new Set(['approved', 'pending', 'pendingsettlement', 'settled', 'refunded']);
+
+function roundToCents(n: number): number {
+  return Math.round(n * 100) / 100;
+}
 
 /**
  * Narrow the union at the provider boundary.
@@ -853,6 +871,80 @@ export class IQProPaymentProvider implements IPaymentProvider {
   }
 
   /**
+   * Reverse a charge for its full amount. Reads the charge first, because
+   * IQPro only voids an unsettled charge and only refunds a settled one —
+   * calling the wrong endpoint just fails.
+   *
+   * The refund amount is the amount IQPro SETTLED, not our local row's amount:
+   * our rows record the pre-fee base (and one Sale can be split across two
+   * rows), whereas the member was charged the total incl. service fee and tax.
+   */
+  async reverseTransaction(
+    config: PaymentProviderConfig,
+    providerTransactionId: string,
+  ): Promise<ReverseTransactionResult> {
+    const iqpro = requireIQPro(config);
+    const txPath = `/api/gateway/${iqpro.gatewayId}/transaction/${providerTransactionId}`;
+
+    try {
+      const getRes = await iqproGet<{ data?: Record<string, unknown> }>(iqpro, txPath);
+      const current = (getRes.data ?? getRes) as Record<string, unknown>;
+      const currentStatus = String(current.status ?? '').toLowerCase();
+
+      if (IQPRO_REVERSED_STATUSES.has(currentStatus)) {
+        logger.info('[IQPro] Transaction already reversed at the processor', { providerTransactionId, currentStatus });
+        return { success: true, method: currentStatus === 'voided' ? 'void' : 'refund', alreadyReversed: true };
+      }
+
+      if (IQPRO_VOIDABLE_STATUSES.has(currentStatus)) {
+        const res = await iqproPut<{ data?: Record<string, unknown> }>(iqpro, `${txPath}/void`, {});
+        const data = (res.data ?? res) as Record<string, unknown>;
+        const confirmed = await confirmReversal(iqpro, txPath, data, IQPRO_VOID_OK_STATUSES, ['voided']);
+        if (!confirmed.ok) {
+          return { success: false, error: `IQPro did not void the transaction${confirmed.reason}` };
+        }
+        return { success: true, method: 'void' };
+      }
+
+      if (IQPRO_REFUNDABLE_STATUSES.has(currentStatus)) {
+        const remit = (current.remit ?? {}) as Record<string, unknown>;
+        // `amountSettled` is reported as 0 (not null) until settlement, so fall
+        // through on zero rather than relying on `??`.
+        const settled = firstPositive(remit.amountSettled, remit.amountCaptured, remit.amount);
+        const alreadyRefunded = Number(remit.amountRefunded ?? 0);
+        const amount = roundToCents(settled - alreadyRefunded);
+        if (!(amount > 0)) {
+          return { success: false, error: 'IQPro reports no refundable amount on this transaction.' };
+        }
+
+        const res = await iqproPost<{ data?: Record<string, unknown> }>(iqpro, `${txPath}/refund`, { amount });
+        const data = (res.data ?? res) as Record<string, unknown>;
+        const confirmed = await confirmReversal(iqpro, txPath, data, IQPRO_REFUND_OK_STATUSES, ['refunded']);
+        if (!confirmed.ok) {
+          return { success: false, error: `IQPro did not refund the transaction${confirmed.reason}` };
+        }
+        // The refund is a NEW transaction; the response's id is the refund's
+        // only when it differs from the charge being refunded.
+        const refundId = data.transactionId as string | undefined;
+        return {
+          success: true,
+          method: 'refund',
+          refundTransactionId: refundId && refundId !== providerTransactionId ? refundId : undefined,
+        };
+      }
+
+      return {
+        success: false,
+        error: `This transaction is "${String(current.status ?? 'unknown')}" at IQPro and cannot be voided or refunded.`,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      logger.error('[IQPro] Transaction reversal failed', { providerTransactionId, error: message });
+      return { success: false, error: message };
+    }
+  }
+
+  /**
    * Resolve the saved payment method on a subscription. IQPro lets us
    * reference it by `customerPaymentMethodId` on a later Sale.
    *
@@ -888,4 +980,51 @@ export class IQProPaymentProvider implements IPaymentProvider {
       cardBin,
     };
   }
+}
+
+function processorReason(data: Record<string, unknown>): string {
+  const reason = data.processorResponseText ?? data.responseMessage ?? data.statusDescription ?? data.response;
+  return typeof reason === 'string' && reason ? `: ${reason}` : '.';
+}
+
+/**
+ * Decide whether a void / refund call succeeded.
+ *
+ * When IQPro's response carries a status, it is authoritative. When it does
+ * not — a successful void answers with only `{ transactionId }` — re-read the
+ * original charge and require it to have reached `expectedAfter`. Trusting a
+ * bare 200 would record a reversal IQPro may not have made; treating it as a
+ * failure (the first sandbox run) leaves the books saying "paid" for money
+ * that was returned.
+ */
+async function confirmReversal(
+  iqpro: IQProConfig,
+  txPath: string,
+  response: Record<string, unknown>,
+  okStatuses: Set<string>,
+  expectedAfter: string[],
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const status = String(response.status ?? '').toLowerCase();
+  if (status) {
+    return okStatuses.has(status) ? { ok: true } : { ok: false, reason: processorReason(response) };
+  }
+
+  const reread = await iqproGet<{ data?: Record<string, unknown> }>(iqpro, txPath);
+  const after = (reread.data ?? reread) as Record<string, unknown>;
+  if (expectedAfter.includes(String(after.status ?? '').toLowerCase())) {
+    return { ok: true };
+  }
+  // Report the charge's actual state — its processor text describes the
+  // ORIGINAL sale ("Approved"), which would read as nonsense here.
+  return { ok: false, reason: `: the transaction is still "${String(after.status ?? 'unknown')}".` };
+}
+
+function firstPositive(...values: unknown[]): number {
+  for (const value of values) {
+    const n = Number(value);
+    if (Number.isFinite(n) && n > 0) {
+      return n;
+    }
+  }
+  return 0;
 }

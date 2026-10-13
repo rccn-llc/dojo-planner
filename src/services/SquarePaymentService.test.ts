@@ -607,4 +607,87 @@ describe('squarePaymentService', () => {
         .toBeNull();
     });
   });
+
+  describe('reverseTransaction', () => {
+    it('cancels an APPROVED (uncaptured) payment — a void, no money moves', async () => {
+      const provider = await loadProvider();
+      squareGet.mockResolvedValueOnce({ payment: { status: 'APPROVED', total_money: { amount: 10375, currency: 'USD' } } });
+      squarePost.mockResolvedValueOnce({ payment: { status: 'CANCELED' } });
+
+      const result = await provider.reverseTransaction(squareConfig, 'sq-pay-1');
+
+      expect(squareGet).toHaveBeenCalledWith(expect.anything(), '/v2/payments/sq-pay-1');
+      expect(squarePost).toHaveBeenCalledWith(expect.anything(), '/v2/payments/sq-pay-1/cancel', {});
+      expect(result).toEqual({ success: true, method: 'void' });
+    });
+
+    it('refunds a COMPLETED payment for its full total, in minor units, with an idempotency key', async () => {
+      const provider = await loadProvider();
+      squareGet.mockResolvedValueOnce({ payment: { status: 'COMPLETED', total_money: { amount: 10375, currency: 'USD' } } });
+      squarePost.mockResolvedValueOnce({ refund: { id: 'sq-ref-1', status: 'PENDING' } });
+
+      const result = await provider.reverseTransaction(squareConfig, 'sq-pay-1');
+
+      expect(squarePost).toHaveBeenCalledWith(expect.anything(), '/v2/refunds', {
+        idempotency_key: expect.any(String),
+        payment_id: 'sq-pay-1',
+        amount_money: { amount: 10375, currency: 'USD' },
+      });
+      expect(result).toEqual({ success: true, method: 'refund', refundTransactionId: 'sq-ref-1' });
+    });
+
+    it('refunds only what remains after an earlier partial refund', async () => {
+      const provider = await loadProvider();
+      squareGet.mockResolvedValueOnce({
+        payment: { status: 'COMPLETED', total_money: { amount: 10000, currency: 'USD' }, refunded_money: { amount: 2500 } },
+      });
+      squarePost.mockResolvedValueOnce({ refund: { id: 'sq-ref-2', status: 'COMPLETED' } });
+
+      await provider.reverseTransaction(squareConfig, 'sq-pay-1');
+
+      expect(squarePost.mock.calls[0]![2]).toMatchObject({ amount_money: { amount: 7500 } });
+    });
+
+    it.each([
+      ['CANCELED', { status: 'CANCELED' }, 'void'],
+      ['fully refunded', { status: 'COMPLETED', total_money: { amount: 500 }, refunded_money: { amount: 500 } }, 'refund'],
+    ])('reports an already-%s payment as reversed without a second call', async (_label, payment, method) => {
+      const provider = await loadProvider();
+      squareGet.mockResolvedValueOnce({ payment });
+
+      const result = await provider.reverseTransaction(squareConfig, 'sq-pay-1');
+
+      expect(result).toEqual({ success: true, method, alreadyReversed: true });
+      expect(squarePost).not.toHaveBeenCalled();
+    });
+
+    it('refuses a FAILED payment', async () => {
+      const provider = await loadProvider();
+      squareGet.mockResolvedValueOnce({ payment: { status: 'FAILED' } });
+
+      const result = await provider.reverseTransaction(squareConfig, 'sq-pay-1');
+
+      expect(result).toEqual({ success: false, error: expect.stringContaining('FAILED') });
+      expect(squarePost).not.toHaveBeenCalled();
+    });
+
+    it('fails when Square rejects the refund', async () => {
+      const provider = await loadProvider();
+      squareGet.mockResolvedValueOnce({ payment: { status: 'COMPLETED', total_money: { amount: 100 } } });
+      squarePost.mockResolvedValueOnce({ refund: { status: 'REJECTED' } });
+
+      const result = await provider.reverseTransaction(squareConfig, 'sq-pay-1');
+
+      expect(result).toEqual({ success: false, error: 'Square did not refund the payment (REJECTED).' });
+    });
+
+    it('returns transport errors rather than throwing', async () => {
+      const provider = await loadProvider();
+      squareGet.mockRejectedValueOnce(new Error('NOT_FOUND'));
+
+      const result = await provider.reverseTransaction(squareConfig, 'sq-pay-1');
+
+      expect(result).toEqual({ success: false, error: 'NOT_FOUND' });
+    });
+  });
 });

@@ -16,6 +16,10 @@ vi.mock('@/services/TransactionsService', () => ({
   getTransactionById: vi.fn(),
 }));
 vi.mock('@/services/AuditService', () => ({ audit: vi.fn() }));
+const mockPaymentConfig = { provider: 'iqpro' as const, gatewayId: 'test-gateway' };
+vi.mock('@/services/PaymentProviderConfigService', () => ({
+  resolvePaymentProviderConfig: vi.fn(async () => mockPaymentConfig),
+}));
 vi.mock('@/services/MemberPaymentService', async () => {
   const actual = await vi.importActual<typeof import('@/services/MemberPaymentService')>('@/services/MemberPaymentService');
   return {
@@ -298,13 +302,19 @@ describe('Transactions Router', () => {
         refundTransactionId: 'refund-tx-1',
         originalTransactionId: '11111111-1111-1111-1111-111111111111',
         decrementedCoupons: 1,
+        providerReversal: 'void',
+        reversedTransactionIds: ['11111111-1111-1111-1111-111111111111'],
       });
 
       const { refund } = await import('./Transactions');
       const result = await callHandler(refund, { transactionId: '11111111-1111-1111-1111-111111111111' });
 
       expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.ADMIN);
-      expect(refundTransaction).toHaveBeenCalledWith('11111111-1111-1111-1111-111111111111', 'test-org-456');
+
+      const { resolvePaymentProviderConfig } = await import('@/services/PaymentProviderConfigService');
+
+      expect(resolvePaymentProviderConfig).toHaveBeenCalledWith('test-org-456');
+      expect(refundTransaction).toHaveBeenCalledWith('11111111-1111-1111-1111-111111111111', 'test-org-456', mockPaymentConfig);
       expect(audit).toHaveBeenCalledWith(
         adminContext,
         'transaction.refund',
@@ -318,6 +328,8 @@ describe('Transactions Router', () => {
         refundTransactionId: 'refund-tx-1',
         originalTransactionId: '11111111-1111-1111-1111-111111111111',
         decrementedCoupons: 1,
+        providerReversal: 'void',
+        reversedTransactionIds: ['11111111-1111-1111-1111-111111111111'],
       });
     });
 
@@ -345,6 +357,32 @@ describe('Transactions Router', () => {
       await expect(callHandler(refund, { transactionId: '11111111-1111-1111-1111-111111111111' }))
         .rejects
         .toBeInstanceOf(ORPCError);
+    });
+
+    it.each([
+      ['TransactionNotRefundableError', 409, 'TransactionNotRefundableError'],
+      ['TransactionReversalFailedError', 422, 'TransactionReversalFailedError'],
+    ] as const)('maps %s to a %i ORPCError and audits the failure', async (_label, status, errorName) => {
+      const { guardRole } = await import('./AuthGuards');
+      const service = await import('@/services/MemberPaymentService');
+      const { audit } = await import('@/services/AuditService');
+      vi.mocked(guardRole).mockResolvedValue(adminContext);
+      const error = errorName === 'TransactionNotRefundableError'
+        ? new service.TransactionNotRefundableError('11111111-1111-1111-1111-111111111111', 'it was declined.')
+        : new service.TransactionReversalFailedError('The payment provider did not reverse this charge. Processor said no');
+      vi.mocked(service.refundTransaction).mockRejectedValue(error);
+
+      const { refund } = await import('./Transactions');
+      const promise = callHandler(refund, { transactionId: '11111111-1111-1111-1111-111111111111' });
+
+      await expect(promise).rejects.toBeInstanceOf(ORPCError);
+      await expect(promise).rejects.toMatchObject({ status, message: error.message });
+      expect(audit).toHaveBeenCalledWith(
+        adminContext,
+        'transaction.refund',
+        'transaction',
+        expect.objectContaining({ status: 'failure', error: error.message }),
+      );
     });
   });
 });

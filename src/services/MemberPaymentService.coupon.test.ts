@@ -114,7 +114,18 @@ const mockProvider = {
   cancelSubscription: vi.fn().mockResolvedValue({ success: true }),
   setSubscriptionAutoRenewal: vi.fn().mockResolvedValue({ success: true }),
   getSubscriptionPaymentMethod: vi.fn().mockResolvedValue(null),
+  reverseTransaction: vi.fn(),
 };
+
+const recordExternalRefMock = vi.fn().mockResolvedValue(undefined);
+vi.mock('./TenantExternalRefService', () => ({
+  REF_TYPE: {
+    PROVIDER_SUBSCRIPTION: 'provider_subscription',
+    PROVIDER_TRANSACTION: 'provider_transaction',
+    PROVIDER_CUSTOMER: 'provider_customer',
+  },
+  recordExternalRef: (...args: unknown[]) => recordExternalRefMock(...args),
+}));
 
 vi.mock('./PaymentProviderService', async () => {
   const actual = await vi.importActual<typeof import('./PaymentProviderService')>('./PaymentProviderService');
@@ -232,6 +243,11 @@ describe('refundTransaction', () => {
     // clearAllMocks() clears call history but NOT implementations set via
     // mockReturnValue; reset the select impl so no per-test mock leaks in.
     dbMocks.select.mockReset();
+    dbMocks.update.mockReset();
+    dbMocks.insert.mockReset();
+    dbMocks.delete.mockReset();
+    dbMocks.transaction.mockReset();
+    mockProvider.reverseTransaction.mockReset();
   });
 
   const originalTx = {
@@ -239,6 +255,7 @@ describe('refundTransaction', () => {
     organizationId: 'org-1',
     memberId: 'mem-1',
     memberMembershipId: null,
+    providerTransactionId: null as string | null,
     transactionType: 'membership_payment',
     amount: 100,
     currency: 'USD',
@@ -246,77 +263,49 @@ describe('refundTransaction', () => {
     paymentMethod: 'card',
   };
 
-  // db.transaction(cb) runs the callback with a `tx` that reuses the same
-  // recorders, mirroring how the refund flow reads/writes inside the transaction
-  // (original lookup + guarded status flip + refund-row insert).
-  function wireTransaction() {
-    dbMocks.transaction.mockImplementation(async (cb: any) =>
-      cb({
-        select: dbMocks.select,
-        update: dbMocks.update,
-        insert: dbMocks.insert,
-        delete: dbMocks.delete,
-      }),
-    );
-  }
-
-  it('throws TransactionNotFoundError when the transaction is not in the org', async () => {
-    wireTransaction();
+  /**
+   * Wires the refund flow's DB calls, in order:
+   *  1. original lookup (select … limit)
+   *  2. inside db.transaction: guarded flip (update … returning) + batch insert
+   *  3. coupon_usage lookup (select … where) + delete + grouped decrement
+   */
+  function wire(opts: {
+    original?: Record<string, unknown> | null;
+    flipped?: Array<Record<string, unknown>>;
+    usages?: Array<{ id: string; couponId: string }>;
+    insertError?: Error;
+  } = {}) {
+    const original = opts.original === undefined ? originalTx : opts.original;
     dbMocks.select.mockReturnValueOnce({
-      from: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
+      from: () => ({ where: () => ({ limit: () => Promise.resolve(original ? [original] : []) }) }),
+    });
+    dbMocks.select.mockReturnValueOnce({
+      from: () => ({ where: () => Promise.resolve(opts.usages ?? []) }),
     });
 
-    const { refundTransaction, TransactionNotFoundError } = await import('./MemberPaymentService');
-
-    await expect(refundTransaction('tx-missing', 'org-1')).rejects.toBeInstanceOf(TransactionNotFoundError);
-  });
-
-  it('throws TransactionAlreadyRefundedError when the transaction is already refunded', async () => {
-    wireTransaction();
-    dbMocks.select.mockReturnValueOnce({
-      from: () => ({ where: () => ({ limit: () => Promise.resolve([{ ...originalTx, status: 'refunded' }]) }) }),
-    });
-
-    const { refundTransaction, TransactionAlreadyRefundedError } = await import('./MemberPaymentService');
-
-    await expect(refundTransaction('tx-original', 'org-1')).rejects.toBeInstanceOf(TransactionAlreadyRefundedError);
-  });
-
-  it('inserts a refund row, marks original refunded, and reverses linked coupon usage', async () => {
-    wireTransaction();
-    // 1) Original transaction lookup (inside the transaction)
-    dbMocks.select.mockReturnValueOnce({
-      from: () => ({ where: () => ({ limit: () => Promise.resolve([originalTx]) }) }),
-    });
-
-    const insertCalls: Array<Record<string, unknown>> = [];
+    const insertCalls: Array<Array<Record<string, unknown>>> = [];
     dbMocks.insert.mockReturnValue({
-      values: vi.fn((vals: Record<string, unknown>) => {
+      values: vi.fn((vals: Array<Record<string, unknown>>) => {
         insertCalls.push(vals);
-        return Promise.resolve();
+        return opts.insertError ? Promise.reject(opts.insertError) : Promise.resolve();
       }),
     });
 
     const updateSetCalls: Array<Record<string, unknown>> = [];
+    const flipped = opts.flipped ?? (original ? [original] : []);
     dbMocks.update.mockReturnValue({
       set: vi.fn((vals: Record<string, unknown>) => {
         updateSetCalls.push(vals);
-        // The guarded status flip calls `.returning()`; return one row so the
-        // flip is treated as successful. The coupon-decrement update calls
-        // `.where()` and awaits it directly.
+        // The guarded status flip calls `.returning()`; the coupon decrement
+        // awaits `.where()` directly.
         return {
           where: vi.fn(() => {
             const p: any = Promise.resolve();
-            p.returning = () => Promise.resolve([{ id: 'tx-original' }]);
+            p.returning = () => Promise.resolve(flipped);
             return p;
           }),
         };
       }),
-    });
-
-    // 2) coupon_usage rows tied to this transaction (one redemption to reverse)
-    dbMocks.select.mockReturnValueOnce({
-      from: () => ({ where: () => Promise.resolve([{ id: 'usage-1', couponId: 'cpn-1' }]) }),
     });
 
     const deleteWhereCalls: unknown[] = [];
@@ -327,108 +316,185 @@ describe('refundTransaction', () => {
       }),
     });
 
+    dbMocks.transaction.mockImplementation(async (cb: any) =>
+      cb({ select: dbMocks.select, update: dbMocks.update, insert: dbMocks.insert, delete: dbMocks.delete }),
+    );
+
+    return { insertCalls, updateSetCalls, deleteWhereCalls };
+  }
+
+  it('throws TransactionNotFoundError when the transaction is not in the org', async () => {
+    wire({ original: null });
+    const { refundTransaction, TransactionNotFoundError } = await import('./MemberPaymentService');
+
+    await expect(refundTransaction('tx-missing', 'org-1', testConfig)).rejects.toBeInstanceOf(TransactionNotFoundError);
+  });
+
+  it('throws TransactionAlreadyRefundedError when the transaction is already refunded', async () => {
+    wire({ original: { ...originalTx, status: 'refunded' } });
+    const { refundTransaction, TransactionAlreadyRefundedError } = await import('./MemberPaymentService');
+
+    await expect(refundTransaction('tx-original', 'org-1', testConfig)).rejects.toBeInstanceOf(TransactionAlreadyRefundedError);
+  });
+
+  it.each([
+    ['declined charge', { status: 'declined' }],
+    ['refund row', { transactionType: 'refund', amount: -100 }],
+  ])('refuses to refund a %s without calling the provider', async (_label, overrides) => {
+    wire({ original: { ...originalTx, providerTransactionId: 'iq-tx-1', ...overrides } });
+    const { refundTransaction, TransactionNotRefundableError } = await import('./MemberPaymentService');
+
+    await expect(refundTransaction('tx-original', 'org-1', testConfig)).rejects.toBeInstanceOf(TransactionNotRefundableError);
+    expect(mockProvider.reverseTransaction).not.toHaveBeenCalled();
+    expect(dbMocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it('bookkeeping-only for a row with no provider charge: inserts a refund row, flips the original, reverses coupons', async () => {
+    const { insertCalls, updateSetCalls, deleteWhereCalls } = wire({
+      usages: [{ id: 'usage-1', couponId: 'cpn-1' }],
+    });
     const { refundTransaction } = await import('./MemberPaymentService');
-    const result = await refundTransaction('tx-original', 'org-1');
+    const result = await refundTransaction('tx-original', 'org-1', testConfig);
 
-    expect(result.refundTransactionId).toBe('uuid-test-stub');
-    expect(result.originalTransactionId).toBe('tx-original');
-    expect(result.decrementedCoupons).toBe(1);
-
-    // Refund insert payload — negative amount, status='paid', refund type
-    expect(insertCalls[0]).toMatchObject({
+    expect(mockProvider.reverseTransaction).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      refundTransactionId: 'uuid-test-stub',
+      originalTransactionId: 'tx-original',
+      decrementedCoupons: 1,
+      providerReversal: 'none',
+      reversedTransactionIds: ['tx-original'],
+    });
+    expect(insertCalls[0]).toHaveLength(1);
+    expect(insertCalls[0]![0]).toMatchObject({
       transactionType: 'refund',
       amount: -100,
       status: 'paid',
+      providerTransactionId: null,
+      description: 'Refund for transaction tx-original',
     });
-
-    // Original was flipped to status: refunded
     expect(updateSetCalls[0]).toMatchObject({ status: 'refunded' });
-
-    // Decrement update fired on couponSchema (any usageCount-related set)
     expect(updateSetCalls.some(call => 'usageCount' in call)).toBe(true);
-
-    // coupon_usage row was deleted
     expect(deleteWhereCalls.length).toBeGreaterThan(0);
   });
 
-  it('rejects a concurrent double-refund: the guarded status flip updates 0 rows', async () => {
-    wireTransaction();
-    // Original read still shows a refundable row (the race partner flipped it
-    // AFTER our read)...
-    dbMocks.select.mockReturnValueOnce({
-      from: () => ({ where: () => ({ limit: () => Promise.resolve([originalTx]) }) }),
-    });
-    dbMocks.insert.mockReturnValue({ values: vi.fn(() => Promise.resolve()) });
-    // ...but the guarded flip (WHERE status != 'refunded') returns 0 rows,
-    // proving another refund already committed → we must abort, not insert.
-    const insertSpy = vi.fn(() => Promise.resolve());
-    dbMocks.insert.mockReturnValue({ values: insertSpy });
-    dbMocks.update.mockReturnValue({
-      set: vi.fn(() => ({ where: vi.fn(() => ({ returning: () => Promise.resolve([]) })) })),
-    });
+  it('treats synthetic seed_ provider ids as bookkeeping-only', async () => {
+    wire({ original: { ...originalTx, providerTransactionId: 'seed_tx_abc' } });
+    const { refundTransaction } = await import('./MemberPaymentService');
+    const result = await refundTransaction('tx-original', 'org-1', testConfig);
 
+    expect(mockProvider.reverseTransaction).not.toHaveBeenCalled();
+    expect(result.providerReversal).toBe('none');
+  });
+
+  it('voids an unsettled charge at the provider before writing the books', async () => {
+    const original = { ...originalTx, providerTransactionId: 'iq-tx-1' };
+    const { insertCalls } = wire({ original });
+    mockProvider.reverseTransaction.mockResolvedValue({ success: true, method: 'void' });
+
+    const { refundTransaction } = await import('./MemberPaymentService');
+    const result = await refundTransaction('tx-original', 'org-1', testConfig);
+
+    expect(mockProvider.reverseTransaction).toHaveBeenCalledWith(testConfig, 'iq-tx-1');
+    // Provider first, books second.
+    expect(mockProvider.reverseTransaction.mock.invocationCallOrder[0]!)
+      .toBeLessThan(dbMocks.transaction.mock.invocationCallOrder[0]!);
+    expect(result.providerReversal).toBe('void');
+    expect(insertCalls[0]![0]).toMatchObject({
+      providerTransactionId: null,
+      description: 'Void of transaction tx-original',
+    });
+    expect(recordExternalRefMock).toHaveBeenCalledWith('provider_transaction', undefined, 'org-1');
+  });
+
+  it('refunds a settled charge and links the provider refund id for webhook routing', async () => {
+    const original = { ...originalTx, providerTransactionId: 'iq-tx-1' };
+    const { insertCalls } = wire({ original });
+    mockProvider.reverseTransaction.mockResolvedValue({ success: true, method: 'refund', refundTransactionId: 'iq-refund-9' });
+
+    const { refundTransaction } = await import('./MemberPaymentService');
+    const result = await refundTransaction('tx-original', 'org-1', testConfig);
+
+    expect(result.providerReversal).toBe('refund');
+    expect(insertCalls[0]![0]).toMatchObject({
+      providerTransactionId: 'iq-refund-9',
+      description: 'Refund for transaction tx-original',
+    });
+    expect(recordExternalRefMock).toHaveBeenCalledWith('provider_transaction', 'iq-refund-9', 'org-1');
+  });
+
+  it('reverses every local row of a split Sale (membership + signup fee) together', async () => {
+    const membershipRow = { ...originalTx, providerTransactionId: 'iq-tx-1' };
+    const signupRow = { ...membershipRow, id: 'tx-signup', transactionType: 'signup_fee', amount: 50 };
+    const { insertCalls } = wire({ original: membershipRow, flipped: [membershipRow, signupRow] });
+    mockProvider.reverseTransaction.mockResolvedValue({ success: true, method: 'refund', refundTransactionId: 'iq-refund-9' });
+
+    const { refundTransaction } = await import('./MemberPaymentService');
+    const result = await refundTransaction('tx-original', 'org-1', testConfig);
+
+    expect(mockProvider.reverseTransaction).toHaveBeenCalledTimes(1);
+    expect(result.reversedTransactionIds).toEqual(['tx-original', 'tx-signup']);
+    expect(insertCalls[0]!.map(r => r.amount)).toEqual([-100, -50]);
+  });
+
+  it('leaves the books untouched when the provider refuses', async () => {
+    wire({ original: { ...originalTx, providerTransactionId: 'iq-tx-1' } });
+    mockProvider.reverseTransaction.mockResolvedValue({ success: false, error: 'Processor said no' });
+
+    const { refundTransaction, TransactionReversalFailedError } = await import('./MemberPaymentService');
+    const promise = refundTransaction('tx-original', 'org-1', testConfig);
+
+    await expect(promise).rejects.toBeInstanceOf(TransactionReversalFailedError);
+    await expect(promise).rejects.toThrow('Processor said no');
+    expect(dbMocks.transaction).not.toHaveBeenCalled();
+    expect(dbMocks.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses a provider-backed charge when the org has no payment config', async () => {
+    wire({ original: { ...originalTx, providerTransactionId: 'iq-tx-1' } });
+    const { refundTransaction, TransactionReversalFailedError } = await import('./MemberPaymentService');
+
+    await expect(refundTransaction('tx-original', 'org-1', null)).rejects.toBeInstanceOf(TransactionReversalFailedError);
+    expect(dbMocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it('logs loudly and rethrows when the books fail to record a provider reversal', async () => {
+    wire({ original: { ...originalTx, providerTransactionId: 'iq-tx-1' }, insertError: new Error('db down') });
+    mockProvider.reverseTransaction.mockResolvedValue({ success: true, method: 'void' });
+
+    const { refundTransaction } = await import('./MemberPaymentService');
+    const { logger } = await import('@/libs/Logger');
+
+    await expect(refundTransaction('tx-original', 'org-1', testConfig)).rejects.toThrow('db down');
+    expect(logger.error).toHaveBeenCalledWith(
+      '[MemberPayment] Charge reversed at provider but local refund failed to record',
+      expect.objectContaining({ providerTransactionId: 'iq-tx-1', providerReversal: 'void' }),
+    );
+  });
+
+  it('rejects a concurrent double-refund: the guarded status flip updates 0 rows', async () => {
+    const { insertCalls } = wire({ flipped: [] });
     const { refundTransaction, TransactionAlreadyRefundedError } = await import('./MemberPaymentService');
 
-    await expect(refundTransaction('tx-original', 'org-1')).rejects.toBeInstanceOf(TransactionAlreadyRefundedError);
+    await expect(refundTransaction('tx-original', 'org-1', testConfig)).rejects.toBeInstanceOf(TransactionAlreadyRefundedError);
     // No refund row was inserted — the flip failing aborts the transaction.
-    expect(insertSpy).not.toHaveBeenCalled();
+    expect(insertCalls).toHaveLength(0);
   });
 
   it('groups the decrement per coupon: two usages of the same coupon → one -2 update', async () => {
-    wireTransaction();
-    dbMocks.select.mockReturnValueOnce({
-      from: () => ({ where: () => ({ limit: () => Promise.resolve([originalTx]) }) }),
+    const { updateSetCalls } = wire({
+      usages: [{ id: 'usage-1', couponId: 'cpn-1' }, { id: 'usage-2', couponId: 'cpn-1' }],
     });
-    dbMocks.insert.mockReturnValue({ values: vi.fn(() => Promise.resolve()) });
-
-    const updateSetCalls: Array<Record<string, unknown>> = [];
-    dbMocks.update.mockReturnValue({
-      set: vi.fn((vals: Record<string, unknown>) => {
-        updateSetCalls.push(vals);
-        return {
-          where: vi.fn(() => {
-            const p: any = Promise.resolve();
-            p.returning = () => Promise.resolve([{ id: 'tx-original' }]);
-            return p;
-          }),
-        };
-      }),
-    });
-    dbMocks.delete.mockReturnValue({ where: vi.fn(() => Promise.resolve()) });
-    // Same coupon redeemed twice on the one transaction.
-    dbMocks.select.mockReturnValueOnce({
-      from: () => ({ where: () => Promise.resolve([
-        { id: 'usage-1', couponId: 'cpn-1' },
-        { id: 'usage-2', couponId: 'cpn-1' },
-      ]) }),
-    });
-
     const { refundTransaction } = await import('./MemberPaymentService');
-    const result = await refundTransaction('tx-original', 'org-1');
+    const result = await refundTransaction('tx-original', 'org-1', testConfig);
 
     expect(result.decrementedCoupons).toBe(2);
-
-    // Exactly ONE usageCount decrement update (grouped), not two.
-    const usageCountUpdates = updateSetCalls.filter(c => 'usageCount' in c);
-
-    expect(usageCountUpdates).toHaveLength(1);
+    expect(updateSetCalls.filter(c => 'usageCount' in c)).toHaveLength(1);
   });
 
   it('handles transactions with no linked coupon usage (decrementedCoupons=0)', async () => {
-    wireTransaction();
-    dbMocks.select.mockReturnValueOnce({
-      from: () => ({ where: () => ({ limit: () => Promise.resolve([originalTx]) }) }),
-    });
-    dbMocks.insert.mockReturnValue({ values: vi.fn(() => Promise.resolve()) });
-    dbMocks.update.mockReturnValue({
-      set: vi.fn(() => ({ where: vi.fn(() => ({ returning: () => Promise.resolve([{ id: 'tx-original' }]) })) })),
-    });
-    dbMocks.select.mockReturnValueOnce({
-      from: () => ({ where: () => Promise.resolve([]) }),
-    });
-
+    wire();
     const { refundTransaction } = await import('./MemberPaymentService');
-    const result = await refundTransaction('tx-original', 'org-1');
+    const result = await refundTransaction('tx-original', 'org-1', testConfig);
 
     expect(result.decrementedCoupons).toBe(0);
   });
