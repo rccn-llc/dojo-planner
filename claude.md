@@ -1333,6 +1333,7 @@ npm run check:i18n    # Validate i18n keys (source: en)
 npm run storybook     # Component docs
 npm run stripe:listen # Forward Stripe webhooks
 npm run commit        # Interactive commit helper
+npm run org:create    # Onboard a new organization end to end (see Multi-Tenancy)
 ```
 
 ## Conventions
@@ -1423,11 +1424,48 @@ Using `BRANCH` (old), `NEWPROJ` (new), `CONTROL`, `SHARED`:
 
 ### Adding an organization (the supported path)
 
-Databases are created **by hand** — `provisionTenant` does not mint them. Neon refuses `POST /api/v2/projects` on a Vercel-managed organization, and under ~50 orgs with hands-on onboarding, a few minutes in the console is not a bottleneck.
+**`npm run org:create`** (`src/scripts/onboardOrg.ts`) onboards an org end to end from a few prompts: target (`production` | `preview`), dojo name, slug, academy owner email, and a payment provider (`iqpro` | `square` | `skip`). IQPro credentials are verified with an OAuth token plus a gateway read; Square credentials with a read of `GET /v2/locations/{id}` on the environment's own API host, after a no-network check that the Application ID matches the environment (`sandbox-…` ids are sandbox-only). For Square the final summary prints the webhook subscription to create (URL + the four events the handler acts on). It then runs, in order:
 
+1. **Clerk org + slug** (`POST /v1/organizations`, created by the operator's Clerk user)
+2. **Owner access**: an existing Clerk user is added as `org:academy_owner` directly; otherwise an invitation is sent
+3. **Tenant database**: created through **Vercel** (`POST /v1/storage/stores/integration/direct`, the API behind Storage → Create Database), because Neon refuses `POST /projects` on a Vercel-managed organization. The pooled connection string is then **read from Neon** (`GET /projects/{id}/connection_uri?pooled=true`) and never printed. `--connection-string=<pooled>` skips creation and uses a database made by hand.
+4. `provisionTenant.ts` → `seed.ts --referenceDataOnly` → control-plane trial (`ensureControlTrial`, every run, never over an existing status) → payment credentials (provider column and blob written together) → `cutoverTenant.ts --activate-only` → `showTenants` + `checkTenantReadiness` + a kiosk tokenization probe (production only)
+
+Preflight also refuses a control database whose existing orgs are unknown to the target's Clerk instance, and asks before using any environment-selecting variable that came from the shell instead of `.env.onboard.<target>` — a production `CONTROL_DATABASE_URL` left exported once sent a preview run to the production control plane.
+
+Each step is detected on re-run, so after a failure the same command resumes. `--dry-run` runs every preflight check and prints the plan without writing anything.
+
+⚠️ **Configuration comes from `.env.onboard.<target>`, never `.env.local`.** One git-ignored file per target (`.env.onboard.preview`, `.env.onboard.production`), so a preview run can never read a production value. Shell variables override the file, and anything still missing is prompted for without echo:
+
+```bash
+# .env.onboard.preview   (git-ignored by the .env* rule)
+CLERK_SECRET_KEY=sk_test_...                # sk_live_... in .env.onboard.production
+CONTROL_DATABASE_URL=postgresql://...-pooler.../neondb?sslmode=require
+IQPRO_CONFIG_ENCRYPTION_KEY=...             # this environment's key (Vercel scope)
+VERCEL_TOKEN=...
+ONBOARD_OPERATOR_USERNAME=...               # your Clerk username in that instance
+IQPRO_SCOPE=...                             # sandbox for preview, live for production
+IQPRO_OAUTH_URL=...
+IQPRO_BASE_URL=https://sandbox.api.basyspro.com/iqsaas/v1
+```
+
+`.env.local` is excluded on purpose: it configures `npm run dev`, and a remote `CONTROL_DATABASE_URL` there would point the local app at a real control plane. Only the account-level `NEON_API_KEY` / `NEON_ORG_ID` are read from it. Child scripts get an explicit environment (`onboarding/runScript.ts`), so `loadEnvFiles` cannot fill a gap with a dev value.
+
+Preflight refuses, before any write:
+- a Clerk key whose prefix does not match the target
+- an encryption key that cannot decrypt the existing tenant rows
+- missing Clerk role keys
+- a masked or non-pooled connection string, or one that is the control database
+- IQPro credentials that fail OAuth or return 404 for the gateway
+
+⚠️ `seed.ts` **without** `--referenceDataOnly` overwrites an existing tenant row and flips it ACTIVE, bypassing activation's guards. `org:create` therefore always seeds reference data only.
+
+Modules live in `src/scripts/onboarding/` and never import `@/libs/Env`, so a later super-admin UI can reuse them. Encryption shares `src/libs/CryptoCore.ts` with `Crypto.ts`.
+
+**Manual fallback** (same steps by hand):
 1. Neon/Vercel console → create the database → copy its **pooled** connection string
 2. `npm run db:provision-tenant -- --orgId=<org> --connection-string=<pooled>`
-3. `DATABASE_URL=<pooled> CONTROL_DATABASE_URL=<control> npx tsx src/scripts/seed.ts --orgId=<org>`
+3. `DATABASE_URL=<pooled> CONTROL_DATABASE_URL=<control> npx tsx src/scripts/seed.ts --orgId=<org> --referenceDataOnly`
 4. `npm run db:cutover-tenant -- --orgId=<org> --target=<pooled> --activate-only`
 5. Verify with `npm run db:show-tenants` and the app's `[Tenancy] resolved { orgId, dbHost }` log line
 

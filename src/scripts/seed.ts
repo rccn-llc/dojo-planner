@@ -2649,6 +2649,12 @@ async function main() {
     process.exit(1);
   } finally {
     await pool.end();
+    // A separate control pool (CONTROL_DATABASE_URL set) would otherwise hold
+    // the process open until its idle timeout — a stall when org:create runs
+    // this as a child step.
+    if (controlPool !== pool) {
+      await controlPool.end();
+    }
   }
 }
 

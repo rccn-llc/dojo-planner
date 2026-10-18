@@ -22,31 +22,40 @@ import process from 'node:process';
  */
 export function loadEnvFiles(): void {
   for (const file of ['.env.local', '.env']) {
-    const full = path.join(process.cwd(), file);
-    if (!existsSync(full)) {
+    loadEnvFile(path.join(process.cwd(), file));
+  }
+}
+
+/**
+ * Load ONE env file into `process.env`, with the same precedence as
+ * `loadEnvFiles`: a variable already in the environment always wins.
+ * Returns false when the file does not exist.
+ */
+export function loadEnvFile(full: string): boolean {
+  if (!existsSync(full)) {
+    return false;
+  }
+  for (const rawLine of readFileSync(full, 'utf8').split('\n')) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) {
       continue;
     }
-    for (const rawLine of readFileSync(full, 'utf8').split('\n')) {
-      const line = rawLine.trim();
-      if (!line || line.startsWith('#')) {
-        continue;
-      }
-      const eqIdx = line.indexOf('=');
-      if (eqIdx === -1) {
-        continue;
-      }
-      const key = line.slice(0, eqIdx).trim();
-      // Environment wins — see the precedence note above.
-      if (process.env[key] !== undefined) {
-        continue;
-      }
-      let value = line.slice(eqIdx + 1).trim();
-      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith('\'') && value.endsWith('\''))) {
-        value = value.slice(1, -1);
-      }
-      process.env[key] = value;
+    const eqIdx = line.indexOf('=');
+    if (eqIdx === -1) {
+      continue;
     }
+    const key = line.slice(0, eqIdx).trim();
+    // Environment wins — see the precedence note above.
+    if (process.env[key] !== undefined) {
+      continue;
+    }
+    let value = line.slice(eqIdx + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith('\'') && value.endsWith('\''))) {
+      value = value.slice(1, -1);
+    }
+    process.env[key] = value;
   }
+  return true;
 }
 
 /**

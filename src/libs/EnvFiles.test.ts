@@ -1,6 +1,9 @@
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import process from 'node:process';
 import { afterEach, describe, expect, it } from 'vitest';
-import { argValue } from './EnvFiles';
+import { argValue, loadEnvFile } from './EnvFiles';
 
 const originalArgv = process.argv;
 
@@ -55,5 +58,40 @@ describe('hostOf', () => {
     const { hostOf } = await import('./EnvFiles');
 
     expect(hostOf('__shared_database__')).toBe('(unparseable connection string)');
+  });
+});
+
+describe('loadEnvFile', () => {
+  const KEYS = ['ENVFILES_TEST_A', 'ENVFILES_TEST_B', 'ENVFILES_TEST_C'];
+
+  afterEach(() => {
+    for (const key of KEYS) {
+      delete process.env[key];
+    }
+  });
+
+  function file(contents: string): string {
+    const full = path.join(mkdtempSync(path.join(tmpdir(), 'envfiles-')), '.env.test');
+    writeFileSync(full, contents);
+    return full;
+  }
+
+  it('loads values, unquoting and skipping comments and blank lines', () => {
+    const loaded = loadEnvFile(file('# comment\n\nENVFILES_TEST_A="quoted=value"\nENVFILES_TEST_B=\'single\'\n'));
+
+    expect(loaded).toBe(true);
+    expect(process.env.ENVFILES_TEST_A).toBe('quoted=value');
+    expect(process.env.ENVFILES_TEST_B).toBe('single');
+  });
+
+  it('never overrides a variable already in the environment', () => {
+    process.env.ENVFILES_TEST_C = 'from-shell';
+    loadEnvFile(file('ENVFILES_TEST_C=from-file\n'));
+
+    expect(process.env.ENVFILES_TEST_C).toBe('from-shell');
+  });
+
+  it('returns false for a missing file', () => {
+    expect(loadEnvFile(path.join(tmpdir(), 'does-not-exist.env'))).toBe(false);
   });
 });
