@@ -18,6 +18,10 @@ vi.mock('@/libs/IQPro', () => ({
     cardProcessorId: 'test-card-processor-001',
     achProcessorId: 'test-ach-processor-001',
   }),
+  computeFeeBreakdown: vi.fn().mockResolvedValue({ baseAmount: 100, taxAmount: 0, taxPct: 0, serviceFeeAmount: 3.75, serviceFeePct: 3.75, amount: 103.75 }),
+  buildServiceFeeAdjustment: vi.fn(() => ({ type: 'ServiceFee', percentage: 3.75, flatAmount: null })),
+  getCustomerPaymentMethod: vi.fn(),
+  mapTransactionStatus: (tx: Record<string, unknown>) => (['captured', 'settled', 'authorized', 'pendingsettlement'].includes(String(tx.status ?? '').toLowerCase()) ? 'approved' : 'declined'),
 }));
 
 vi.mock('@/libs/Logger', () => ({
@@ -783,6 +787,126 @@ describe('IQProPaymentProvider', () => {
       const { provider } = await load();
 
       await expect(provider.reverseTransaction({ provider: 'square' } as any, 'iq-tx-1')).rejects.toThrow();
+    });
+  });
+
+  describe('getSubscriptionPaymentMethod display fields', () => {
+    it('reports last4, BIN, brand and normalized expiry for a card — never inventing values', async () => {
+      const { provider, iqproGet } = await loadProvider();
+      iqproGet.mockResolvedValueOnce({
+        data: {
+          customer: { customerId: 'cus_1' },
+          paymentMethod: { customerPaymentMethod: { paymentMethodId: 'pm_1', card: { maskedNumber: '411111******1111', cardType: 'VISA', expirationDate: '0329' } } },
+        },
+      });
+
+      await expect(provider.getSubscriptionPaymentMethod(testConfig, 'sub_1')).resolves.toEqual({
+        customerId: 'cus_1',
+        paymentMethodId: 'pm_1',
+        paymentMethodName: 'card',
+        firstSix: '411111',
+        last4: '1111',
+        cardBrand: 'VISA',
+        expirationDate: '03/29',
+        cardBin: '411111',
+      });
+    });
+
+    it('omits display fields IQPro does not report', async () => {
+      const { provider, iqproGet } = await loadProvider();
+      iqproGet.mockResolvedValueOnce({
+        data: { paymentMethod: { customerPaymentMethod: { paymentMethodId: 'pm_1', card: { maskedCard: '', cardType: null, expirationDate: null } } } },
+      });
+
+      const result = await provider.getSubscriptionPaymentMethod(testConfig, 'sub_1');
+
+      expect(result).toEqual({ customerId: '', paymentMethodId: 'pm_1', paymentMethodName: 'card', cardBin: '400000' });
+    });
+
+    it('reports last4 and account type for ACH', async () => {
+      const { provider, iqproGet } = await loadProvider();
+      iqproGet.mockResolvedValueOnce({
+        data: { paymentMethod: { customerPaymentMethod: { paymentMethodId: 'pm_2', ach: { maskedAccount: '******6789', accountType: 'Checking' } } } },
+      });
+
+      await expect(provider.getSubscriptionPaymentMethod(testConfig, 'sub_2')).resolves.toMatchObject({
+        paymentMethodName: 'ach',
+        last4: '6789',
+        accountType: 'Checking',
+      });
+    });
+
+    it('falls back to accountNumber for ACH last4', async () => {
+      const { provider, iqproGet } = await loadProvider();
+      iqproGet.mockResolvedValueOnce({
+        data: { paymentMethod: { customerPaymentMethod: { paymentMethodId: 'pm_3', ach: { accountNumber: 'xxxx4321' } } } },
+      });
+
+      await expect(provider.getSubscriptionPaymentMethod(testConfig, 'sub_3')).resolves.toMatchObject({ last4: '4321' });
+    });
+  });
+
+  describe('chargeOneTimeFee decline reporting (retry flow)', () => {
+    const subResponse = {
+      data: { customer: { customerId: 'cus_1' }, paymentMethod: { customerPaymentMethod: { paymentMethodId: 'pm_1', card: { maskedNumber: '411111******1111' } } } },
+    };
+    const params = { providerSubscriptionId: 'sub_1', providerCustomerId: 'cus_1', amount: 100, description: 'Retry', caption: 'Retry' };
+
+    it('returns declined + the attempt id when the processor declines', async () => {
+      const { provider, iqproGet, iqproPost } = await loadProvider();
+      iqproGet.mockResolvedValueOnce(subResponse);
+      iqproPost.mockResolvedValueOnce({ data: { transactionId: 'tx_declined', status: 'Declined', processorResponseText: 'Insufficient funds' } });
+
+      await expect(provider.chargeOneTimeFee(testConfig, params)).resolves.toEqual({
+        success: false,
+        declined: true,
+        error: 'Insufficient funds',
+        transactionId: 'tx_declined',
+        paymentMethodName: 'card',
+      });
+    });
+
+    it('falls back through the reason fields and omits an empty id', async () => {
+      const { provider, iqproGet, iqproPost } = await loadProvider();
+      iqproGet.mockResolvedValueOnce(subResponse);
+      iqproPost.mockResolvedValueOnce({ data: { transaction: { status: 'Declined' } } });
+
+      await expect(provider.chargeOneTimeFee(testConfig, params)).resolves.toMatchObject({
+        declined: true,
+        error: 'Transaction declined',
+        transactionId: undefined,
+      });
+    });
+
+    it('returns success with the charged total when approved', async () => {
+      const { provider, iqproGet, iqproPost } = await loadProvider();
+      iqproGet.mockResolvedValueOnce(subResponse);
+      iqproPost.mockResolvedValueOnce({ data: { transactionId: 'tx_ok', status: 'PendingSettlement' } });
+
+      await expect(provider.chargeOneTimeFee(testConfig, params)).resolves.toMatchObject({
+        success: true,
+        transactionId: 'tx_ok',
+        amountCharged: 103.75,
+      });
+    });
+
+    it('a transport error is NOT a decline', async () => {
+      const { provider, iqproGet } = await loadProvider();
+      iqproGet.mockRejectedValueOnce(new Error('IQPro 500'));
+
+      const result = await provider.chargeOneTimeFee(testConfig, params);
+
+      expect(result.success).toBe(false);
+      expect(result.declined).toBeUndefined();
+    });
+  });
+
+  describe('closeFailedInvoice', () => {
+    it('is a no-op success (IQPro retries itself and has no invoice-close action)', async () => {
+      const { provider, iqproPost } = await loadProvider();
+
+      await expect(provider.closeFailedInvoice(testConfig, 'inv_1')).resolves.toMatchObject({ success: true });
+      expect(iqproPost).not.toHaveBeenCalled();
     });
   });
 });

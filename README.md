@@ -53,6 +53,8 @@ A comprehensive web-based management system for martial arts dojos. Dojo Planner
 - Track payment status (paid, pending, declined, refunded)
 - Multiple payment methods including saved cards, ACH, and cash
 - Financial summaries and analytics
+- Failed recurring payments: IQPro and Square webhooks record every renewal (declined and paid), the transactions list and member detail show the failure (IQPro "attempt n of 3" / overdue), and front desk can retry the charge from a modal with explicit success / decline / error results
+- Card updates the member makes through the payment provider's failed-payment email are picked up and shown on member detail (replaced cards kept as history)
 
 ### Staff & Permissions
 - Invite and manage staff members
@@ -158,6 +160,18 @@ DATABASE_URL="file:local.db" npx tsx src/scripts/seed.ts --orgId=org_xxxxx --res
 3. Copy the Organization ID (starts with `org_`)
 
 The seed script creates a complete, realistic dataset for testing every flow end-to-end: 13 classes with schedules + exceptions, 5 events covering every type (seminar / workshop / tournament / camp + one past workshop), 10 membership plans covering every billing frequency and every fee combination, 14 members in every lifecycle state (active / trial / hold / cancelled / past_due / HOH / family-member with linked relationships), signed waivers with full plan snapshots, lifecycle audit events (member.create / hold / cancel / fee charges), rich attendance over the last 8 weeks, and an active SaaS subscription on the seeded org so the dashboard doesn't gate behind subscription-expired. All dates are computed relative to seed time, so re-seeding months later still produces fresh-looking data. See `CLAUDE.md` for the full breakdown.
+
+### Testing failed payments locally
+
+The seed adds members with failed recurring payments (attempt 1/3, overdue, resolved, possible duplicate, card updated, Square, simulated decline, simulated slow retry). Retrying a seeded member never calls a payment provider outside production. To exercise the webhooks, send signed events to the dev server:
+
+```shell
+# First run creates a dev keypair in .simulator-keys/ and prints IQPRO_WEBHOOK_PUBLIC_KEY_OVERRIDE for .env.local
+npx tsx src/scripts/simulatePaymentWebhook.ts --provider=iqpro --scenario=declined --subscriptionId=seed_sub_...
+npx tsx src/scripts/simulatePaymentWebhook.ts --provider=square --scenario=invoice-failed --subscriptionId=seed_sub_... --squareKey=...
+```
+
+See "Failed recurring payments & retry" in `CLAUDE.md`.
 
 ### Stripe Integration
 

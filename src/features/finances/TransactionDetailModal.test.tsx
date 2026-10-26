@@ -27,6 +27,21 @@ vi.mock('@/hooks/useHasRole', () => ({
   useHasRole: () => mockUseHasRole(),
 }));
 
+// The retry flow itself is covered by RetryPaymentModal.test.tsx; here it is a
+// stub that reports whether it was opened and lets a test "finish" a charge.
+vi.mock('./RetryPaymentModal', () => ({
+  RetryPaymentModal: ({ isOpen, onCloseAction, transactionId, memberId }: { isOpen: boolean; onCloseAction: (c: boolean) => void; transactionId: string | null; memberId: string | null }) =>
+    isOpen
+      ? (
+          <div data-testid="retry-modal-stub">
+            {`retry:${transactionId}:${memberId}`}
+            <button type="button" onClick={() => onCloseAction(true)}>finish-retry</button>
+            <button type="button" onClick={() => onCloseAction(false)}>cancel-retry</button>
+          </div>
+        )
+      : null,
+}));
+
 const mockInvalidateTransactionsCache = vi.fn();
 vi.mock('@/hooks/useTransactionsCache', () => ({
   invalidateTransactionsCache: () => mockInvalidateTransactionsCache(),
@@ -250,7 +265,8 @@ describe('TransactionDetailModal', () => {
     });
 
     it('should display pending status badge', async () => {
-      mockGetTransaction.mockResolvedValue({ transaction: mockMembershipDetails });
+      // The modal shows the freshly-fetched detail's status, so keep them consistent.
+      mockGetTransaction.mockResolvedValue({ transaction: { ...mockMembershipDetails, status: 'pending' } });
       const mockTransaction = createMockTransaction({ status: 'pending' });
 
       await render(
@@ -265,7 +281,8 @@ describe('TransactionDetailModal', () => {
     });
 
     it('should display declined status badge', async () => {
-      mockGetTransaction.mockResolvedValue({ transaction: mockMembershipDetails });
+      // The modal shows the freshly-fetched detail's status, so keep them consistent.
+      mockGetTransaction.mockResolvedValue({ transaction: { ...mockMembershipDetails, status: 'declined' } });
       const mockTransaction = createMockTransaction({ status: 'declined' });
 
       await render(
@@ -280,7 +297,8 @@ describe('TransactionDetailModal', () => {
     });
 
     it('should display refunded status badge', async () => {
-      mockGetTransaction.mockResolvedValue({ transaction: mockMembershipDetails });
+      // The modal shows the freshly-fetched detail's status, so keep them consistent.
+      mockGetTransaction.mockResolvedValue({ transaction: { ...mockMembershipDetails, status: 'refunded' } });
       const mockTransaction = createMockTransaction({ status: 'refunded' });
 
       await render(
@@ -295,7 +313,8 @@ describe('TransactionDetailModal', () => {
     });
 
     it('should display processing status badge', async () => {
-      mockGetTransaction.mockResolvedValue({ transaction: mockMembershipDetails });
+      // The modal shows the freshly-fetched detail's status, so keep them consistent.
+      mockGetTransaction.mockResolvedValue({ transaction: { ...mockMembershipDetails, status: 'processing' } });
       const mockTransaction = createMockTransaction({ status: 'processing' });
 
       await render(
@@ -773,6 +792,114 @@ describe('TransactionDetailModal', () => {
       await vi.waitFor(() => expect(mockRefundTransaction).toHaveBeenCalledWith({ transactionId: 'txn-uuid-1' }));
 
       expect(mockInvalidateTransactionsCache).toHaveBeenCalled();
+    });
+  });
+
+  describe('failed recurring payments', () => {
+    const declinedDetails = {
+      ...mockMembershipDetails,
+      status: 'declined',
+      memberMembershipId: 'mm-1',
+      failureReason: 'Insufficient funds',
+      source: 'webhook_recurring',
+      retryOfTransactionId: null,
+      resolved: false,
+      superseded: false,
+      attemptNumber: 2,
+      membershipStatus: 'past_due',
+      membershipDeclineCount: 2,
+    };
+    const declinedRow = () => createMockTransaction({ status: 'declined' });
+
+    it('shows the decline reason and attempt, and a Retry button for front desk', async () => {
+      mockGetTransaction.mockResolvedValue({ transaction: declinedDetails });
+
+      await render(<TransactionDetailModal isOpen onCloseAction={() => {}} transaction={declinedRow()} />);
+
+      await expect.element(page.getByTestId('failure-reason')).toBeInTheDocument();
+      await expect.element(page.getByText('Insufficient funds')).toBeInTheDocument();
+      await expect.element(page.getByText('attempt_label')).toBeInTheDocument();
+      await expect.element(page.getByTestId('retry-payment-button')).toBeInTheDocument();
+    });
+
+    it('hides Retry when the user lacks the role', async () => {
+      mockUseHasRole.mockReturnValue(false);
+      mockGetTransaction.mockResolvedValue({ transaction: declinedDetails });
+
+      await render(<TransactionDetailModal isOpen onCloseAction={() => {}} transaction={declinedRow()} />);
+
+      await expect.element(page.getByTestId('failure-reason')).toBeInTheDocument();
+      expect(page.getByTestId('retry-payment-button').elements()).toHaveLength(0);
+
+      mockUseHasRole.mockReturnValue(true);
+    });
+
+    it('hides Retry and explains when the failure was since collected', async () => {
+      mockGetTransaction.mockResolvedValue({ transaction: { ...declinedDetails, resolved: true } });
+
+      await render(<TransactionDetailModal isOpen onCloseAction={() => {}} transaction={declinedRow()} />);
+
+      await expect.element(page.getByText('resolved_note')).toBeInTheDocument();
+      expect(page.getByTestId('retry-payment-button').elements()).toHaveLength(0);
+    });
+
+    it('hides Retry and points at the newer attempt when superseded', async () => {
+      mockGetTransaction.mockResolvedValue({ transaction: { ...declinedDetails, superseded: true } });
+
+      await render(<TransactionDetailModal isOpen onCloseAction={() => {}} transaction={declinedRow()} />);
+
+      await expect.element(page.getByText('superseded_note')).toBeInTheDocument();
+      expect(page.getByTestId('retry-payment-button').elements()).toHaveLength(0);
+    });
+
+    it('flags a possible duplicate charge and shows what a retry row retried', async () => {
+      mockGetTransaction.mockResolvedValue({ transaction: { ...declinedDetails, status: 'paid', failureReason: 'possible_duplicate', source: 'retry', retryOfTransactionId: 'abcdef0123456789' } });
+
+      await render(<TransactionDetailModal isOpen onCloseAction={() => {}} transaction={createMockTransaction()} />);
+
+      await expect.element(page.getByText('possible_duplicate_note')).toBeInTheDocument();
+      await expect.element(page.getByText('TXNABCDEF012345')).toBeInTheDocument();
+      expect(page.getByTestId('failure-reason').elements()).toHaveLength(0);
+    });
+
+    it('opens the retry modal with the transaction and member, and refreshes after a charge', async () => {
+      mockGetTransaction.mockResolvedValue({ transaction: declinedDetails });
+
+      await render(<TransactionDetailModal isOpen onCloseAction={() => {}} transaction={declinedRow()} />);
+      await userEvent.click(page.getByTestId('retry-payment-button'));
+
+      await expect.element(page.getByText('retry:txn-uuid-1:M001')).toBeInTheDocument();
+
+      mockGetTransaction.mockClear();
+      await userEvent.click(page.getByRole('button', { name: 'finish-retry' }));
+
+      await vi.waitFor(() => expect(mockInvalidateTransactionsCache).toHaveBeenCalled());
+
+      expect(mockGetTransaction).toHaveBeenCalledWith({ id: 'txn-uuid-1' });
+    });
+
+    it('does not refresh when the retry modal is cancelled', async () => {
+      mockGetTransaction.mockResolvedValue({ transaction: declinedDetails });
+
+      await render(<TransactionDetailModal isOpen onCloseAction={() => {}} transaction={declinedRow()} />);
+      await userEvent.click(page.getByTestId('retry-payment-button'));
+      mockGetTransaction.mockClear();
+      mockInvalidateTransactionsCache.mockClear();
+      await userEvent.click(page.getByRole('button', { name: 'cancel-retry' }));
+
+      expect(page.getByTestId('retry-modal-stub').elements()).toHaveLength(0);
+      expect(mockGetTransaction).not.toHaveBeenCalled();
+      expect(mockInvalidateTransactionsCache).not.toHaveBeenCalled();
+    });
+
+    it('uses the list row flags before details load', async () => {
+      mockGetTransaction.mockReturnValue(new Promise(() => {}));
+      const row = createMockTransaction({ status: 'declined', recurring: { memberMembershipId: 'mm-1', failureReason: 'Do not honor', source: 'webhook_recurring', resolved: false, superseded: false } });
+
+      await render(<TransactionDetailModal isOpen onCloseAction={() => {}} transaction={row} />);
+
+      await expect.element(page.getByText('Do not honor')).toBeInTheDocument();
+      await expect.element(page.getByTestId('retry-payment-button')).toBeInTheDocument();
     });
   });
 });

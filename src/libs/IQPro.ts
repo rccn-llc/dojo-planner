@@ -12,6 +12,8 @@
  */
 
 import type { IQProConfig } from '@/services/PaymentProviderConfigService';
+import { Buffer } from 'node:buffer';
+import { constants as cryptoConstants, verify as cryptoVerify } from 'node:crypto';
 import { Env } from './Env';
 import { logger } from './Logger';
 
@@ -416,7 +418,7 @@ export function getServiceFeePct(): number {
 
 // ===== Fee calculation =====
 
-function roundCents(n: number): number {
+export function roundCents(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
@@ -594,6 +596,227 @@ export async function getCustomerPaymentMethod(
   return null;
 }
 
+// ===== Webhook signature (RSA-SHA256, PKCS#1 v1.5) =====
+//
+// "iQ Pro+ Webhook API Guide" §2–4: IQPro signs the `resource` object of each
+// webhook with the GATEWAY's RSA private key. The matching public key comes
+// from `GET /api/gateway/{gatewayId}/configuration` → `data.webhookPublicKey`
+// (null until a webhook has been created for the gateway). Keys differ per
+// gateway, so per org — and sandbox and production keys differ too.
+
+type CachedKey = { pem: string | null; expiresAt: number };
+const webhookKeyCache = new Map<string, CachedKey>();
+const WEBHOOK_KEY_TTL_MS = 60 * 60 * 1000;
+
+/** Wrap a bare base64 key in PEM headers (64-char lines); pass PEM through. */
+export function toPublicKeyPem(key: string): string {
+  const trimmed = key.trim();
+  if (trimmed.includes('-----BEGIN')) {
+    return trimmed;
+  }
+  const body = trimmed.replace(/\s+/g, '');
+  const lines = body.match(/.{1,64}/g) ?? [];
+  return `-----BEGIN PUBLIC KEY-----\n${lines.join('\n')}\n-----END PUBLIC KEY-----`;
+}
+
+/**
+ * The gateway's webhook public key as PEM, or null when the gateway has no
+ * webhook configured or the key cannot be fetched. Cached per gateway for an
+ * hour; `force` bypasses the cache (used once when verification fails, in case
+ * the key rotated).
+ */
+export async function getWebhookPublicKey(config: IQProConfig, opts: { force?: boolean } = {}): Promise<string | null> {
+  const cached = webhookKeyCache.get(config.gatewayId);
+  if (!opts.force && cached && Date.now() < cached.expiresAt) {
+    return cached.pem;
+  }
+
+  try {
+    const res = await iqproGet<{ data?: { webhookPublicKey?: string | null } }>(
+      config,
+      `/api/gateway/${config.gatewayId}/configuration`,
+    );
+    const raw = res.data?.webhookPublicKey;
+    const pem = raw ? toPublicKeyPem(raw) : null;
+    webhookKeyCache.set(config.gatewayId, { pem, expiresAt: Date.now() + WEBHOOK_KEY_TTL_MS });
+    if (!pem) {
+      logger.warn('[IQPro] Gateway has no webhookPublicKey — create a webhook in Developer Hub first', {
+        gatewayId: config.gatewayId,
+      });
+    }
+    return pem;
+  } catch (error) {
+    logger.error('[IQPro] Failed to fetch webhook public key', {
+      gatewayId: config.gatewayId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+/**
+ * The webhook public key to verify against: the dev-only override when set
+ * outside production, otherwise the gateway's key.
+ */
+export async function resolveWebhookPublicKey(config: IQProConfig, opts: { force?: boolean } = {}): Promise<string | null> {
+  const override = Env.IQPRO_WEBHOOK_PUBLIC_KEY_OVERRIDE;
+  if (override) {
+    if (process.env.NODE_ENV === 'production') {
+      logger.error('[IQPro] IQPRO_WEBHOOK_PUBLIC_KEY_OVERRIDE is set in production — IGNORED');
+    } else {
+      return toPublicKeyPem(override);
+    }
+  }
+  return getWebhookPublicKey(config, opts);
+}
+
+/**
+ * The exact source text of a top-level member's value in a JSON object, or
+ * null. Used to verify the signature against the bytes IQPro actually sent:
+ * IQPro serializes with .NET, which writes decimals like `10.50` verbatim,
+ * whereas `JSON.stringify(JSON.parse(...))` would write `10.5` and every such
+ * signature would fail.
+ */
+export function extractRawJsonMember(raw: string, member: string): string | null {
+  let i = 0;
+  const n = raw.length;
+  const skipWs = () => {
+    while (i < n && /\s/.test(raw[i]!)) {
+      i++;
+    }
+  };
+  const readString = (): string | null => {
+    if (raw[i] !== '"') {
+      return null;
+    }
+    const start = i;
+    i++;
+    while (i < n && raw[i] !== '"') {
+      i += raw[i] === '\\' ? 2 : 1;
+    }
+    i++;
+    try {
+      return JSON.parse(raw.slice(start, i)) as string;
+    } catch {
+      return null;
+    }
+  };
+  const skipValue = (): boolean => {
+    const ch = raw[i];
+    if (ch === '"') {
+      return readString() !== null;
+    }
+    if (ch === '{' || ch === '[') {
+      let depth = 0;
+      while (i < n) {
+        const c = raw[i]!;
+        if (c === '"') {
+          if (readString() === null) {
+            return false;
+          }
+          continue;
+        }
+        if (c === '{' || c === '[') {
+          depth++;
+        } else if (c === '}' || c === ']') {
+          depth--;
+          if (depth === 0) {
+            i++;
+            return true;
+          }
+        }
+        i++;
+      }
+      return false;
+    }
+    while (i < n && raw[i] !== ',' && raw[i] !== '}' && !/\s/.test(raw[i]!)) {
+      i++;
+    }
+    return true;
+  };
+
+  skipWs();
+  if (raw[i] !== '{') {
+    return null;
+  }
+  i++;
+  while (i < n) {
+    skipWs();
+    if (raw[i] === '}') {
+      return null;
+    }
+    const key = readString();
+    if (key === null) {
+      return null;
+    }
+    skipWs();
+    if (raw[i] !== ':') {
+      return null;
+    }
+    i++;
+    skipWs();
+    const valueStart = i;
+    if (!skipValue()) {
+      return null;
+    }
+    if (key === member) {
+      return raw.slice(valueStart, i);
+    }
+    skipWs();
+    if (raw[i] === ',') {
+      i++;
+    }
+  }
+  return null;
+}
+
+const BASE64_RE = /^[A-Z0-9+/]+={0,2}$/i;
+
+/**
+ * Verify an IQPro webhook. Fails closed: any missing input, malformed
+ * signature, or crypto error is `false`.
+ *
+ * Checked first against the raw `resource` bytes from the request body, then
+ * against a re-serialization (what the guide's own example does). Both are
+ * checked with the same key, so trying two encodings does not weaken it.
+ */
+export function verifyIQProWebhookSignature(params: {
+  rawBody: string;
+  resource: unknown;
+  signature: string | null | undefined;
+  publicKeyPem: string | null | undefined;
+}): boolean {
+  const { rawBody, resource, signature, publicKeyPem } = params;
+  if (!signature || !publicKeyPem || resource === undefined || resource === null || !BASE64_RE.test(signature)) {
+    return false;
+  }
+
+  const signatureBytes = Buffer.from(signature, 'base64');
+  const candidates = new Set<string>();
+  const rawResource = extractRawJsonMember(rawBody, 'resource');
+  if (rawResource) {
+    candidates.add(rawResource);
+  }
+  candidates.add(JSON.stringify(resource));
+
+  for (const candidate of candidates) {
+    try {
+      const ok = cryptoVerify(
+        'sha256',
+        Buffer.from(candidate, 'utf8'),
+        { key: publicKeyPem, padding: cryptoConstants.RSA_PKCS1_PADDING },
+        signatureBytes,
+      );
+      if (ok) {
+        return true;
+      }
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
 // ===== Test helpers =====
 
 export function resetOAuthTokenCache(): void {
@@ -602,4 +825,8 @@ export function resetOAuthTokenCache(): void {
 
 export function resetGatewayProcessorsCache(): void {
   processorsCache.clear();
+}
+
+export function resetWebhookPublicKeyCache(): void {
+  webhookKeyCache.clear();
 }

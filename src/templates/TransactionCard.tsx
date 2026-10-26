@@ -1,9 +1,11 @@
 'use client';
 
 import type { TransactionStatus } from '@/features/finances/FinancesTable';
+import type { TransactionRecurringFlags } from '@/features/finances/recurringPayments';
 import { useTranslations } from 'next-intl';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { RecurringLabel } from '@/features/finances/RecurringLabel';
 
 type TransactionCardProps = {
   id: string;
@@ -14,6 +16,8 @@ type TransactionCardProps = {
   transactionId: string;
   memberName: string;
   status: TransactionStatus;
+  transactionType?: string;
+  recurring?: TransactionRecurringFlags;
   onClickAction?: () => void;
 };
 
@@ -33,6 +37,8 @@ export function TransactionCard({
   transactionId,
   memberName,
   status,
+  transactionType = '',
+  recurring,
   onClickAction,
 }: TransactionCardProps) {
   const t = useTranslations('TransactionsPage');
@@ -64,6 +70,7 @@ export function TransactionCard({
             <Badge variant={statusVariantMap[status]} className="mt-1">
               {t(`status_${status}`)}
             </Badge>
+            <RecurringLabel status={status} transactionType={transactionType} recurring={recurring} />
           </div>
         </div>
 

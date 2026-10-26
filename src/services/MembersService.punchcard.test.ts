@@ -25,6 +25,10 @@ vi.mock('@/libs/DB', () => ({
 
 vi.mock('@/libs/Logger', () => ({ logger: { error: vi.fn(), info: vi.fn(), warn: vi.fn() } }));
 
+// MembersService spreads TransactionsService's SQL-computed columns into the
+// billing-history select; they are covered against real Postgres in
+// TransactionsService.recurring.test.ts.
+vi.mock('@/services/TransactionsService', () => ({ recurringStateColumns: {} }));
 vi.mock('drizzle-orm', () => ({
   and: (...a: unknown[]) => ({ op: 'and', a }),
   eq: (col: unknown, val: unknown) => ({ op: 'eq', col, val }),

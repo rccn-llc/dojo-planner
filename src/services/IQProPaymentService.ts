@@ -36,7 +36,6 @@ import type {
 import type { IQProConfig } from '@/libs/IQPro';
 import { z } from 'zod';
 import {
-  assertTransactionApproved,
   buildServiceFeeAdjustment,
   computeFeeBreakdown,
   getCustomerPaymentMethod,
@@ -44,10 +43,12 @@ import {
   iqproGet,
   iqproPost,
   iqproPut,
+  mapTransactionStatus,
   tokenizeAch,
 } from '@/libs/IQPro';
 import { logger } from '@/libs/Logger';
 import { PAYMENT_PROVIDER } from '@/types/PaymentProvider';
+import { normalizeExpiration } from '@/utils/CardExpiration';
 
 // IQPro transaction statuses (lowercased) that decide how a charge is reversed.
 // Per the API reference, `/void` accepts only Pending / PendingSettlement and
@@ -101,7 +102,16 @@ const IQProSubscriptionResponseSchema = z.object({
       card: z.object({
         maskedNumber: z.string().optional(),
         maskedCard: z.string().optional(),
+        // Names per the webhook guide's `transactionPaymentMethod.card`;
+        // nullable because the API returns explicit nulls.
+        cardType: z.string().nullish(),
+        expirationDate: z.string().nullish(),
       }).partial().optional(),
+      ach: z.object({
+        maskedAccount: z.string().nullish(),
+        accountNumber: z.string().nullish(),
+        accountType: z.string().nullish(),
+      }).partial().nullish(),
     }).partial().optional(),
   }).partial().optional(),
 }).partial();
@@ -773,9 +783,14 @@ export class IQProPaymentProvider implements IPaymentProvider {
       );
       const txRaw = txRes.data ?? txRes;
       const txData = ((txRaw as Record<string, unknown>).transaction ?? txRaw) as Record<string, unknown>;
-      assertTransactionApproved(txData);
-
       const transactionId = (txData.transactionId ?? txData.id ?? '') as string;
+
+      if (mapTransactionStatus(txData) !== 'approved') {
+        // The processor refused the card: a decline, not an error. Keep the
+        // attempt's id so the caller can record it.
+        const reason = (txData.processorResponseText ?? txData.processorResponseMessage ?? txData.response ?? 'Transaction declined') as string;
+        return { success: false, declined: true, error: reason, transactionId: transactionId || undefined, paymentMethodName };
+      }
 
       return {
         success: true,
@@ -868,6 +883,20 @@ export class IQProPaymentProvider implements IPaymentProvider {
       logger.error('[IQPro] Subscription update failed', { subscriptionId, isAutoRenewed, error: message });
       return { success: false, error: message };
     }
+  }
+
+  /**
+   * IQPro has no documented action for closing the invoice of a failed
+   * subscription charge, and it RETRIES the charge itself (up to 3 attempts),
+   * so there is no emailed pay link to neutralise the way there is on Square.
+   * A no-op success keeps the retry flow provider-neutral; revisit if the
+   * Phase 0 sandbox run shows IQPro still auto-retries after a manual charge.
+   */
+  async closeFailedInvoice(
+    _config: PaymentProviderConfig,
+    _providerInvoiceId: string,
+  ): Promise<LifecycleActionResult & { note?: string }> {
+    return { success: true, note: 'IQPro has no invoice-close action; nothing to do.' };
   }
 
   /**
@@ -972,11 +1001,23 @@ export class IQProPaymentProvider implements IPaymentProvider {
     const cardInfo = custPM?.card;
     const maskedNumber = cardInfo?.maskedNumber ?? cardInfo?.maskedCard ?? '';
     const cardBin = maskedNumber && maskedNumber.length >= 6 ? maskedNumber.slice(0, 6) : '400000';
+    const achMasked = custPM?.ach?.maskedAccount ?? custPM?.ach?.accountNumber ?? '';
+    const masked = paymentMethodName === 'card' ? maskedNumber : achMasked;
+    // Display fields for the payment-method reconcile. Unlike `cardBin` these
+    // are never invented: an unknown value stays undefined.
+    const display = {
+      ...(paymentMethodName === 'card' && maskedNumber.length >= 6 && /^\d{6}/.test(maskedNumber) ? { firstSix: maskedNumber.slice(0, 6) } : {}),
+      ...(masked.length >= 4 ? { last4: masked.slice(-4) } : {}),
+      ...(cardInfo?.cardType ? { cardBrand: cardInfo.cardType } : {}),
+      ...(cardInfo?.expirationDate ? { expirationDate: normalizeExpiration(cardInfo.expirationDate) } : {}),
+      ...(custPM?.ach?.accountType ? { accountType: custPM.ach.accountType } : {}),
+    };
 
     return {
       customerId: sub.customer?.customerId ?? '',
       paymentMethodId,
       paymentMethodName,
+      ...display,
       cardBin,
     };
   }

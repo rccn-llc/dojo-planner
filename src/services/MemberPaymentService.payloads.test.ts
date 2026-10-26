@@ -54,6 +54,7 @@ vi.mock('@/libs/IQPro', () => ({
   iqproGet: (...a: unknown[]) => iqproGet(...a),
   iqproPost: (...a: unknown[]) => iqproPost(...a),
   iqproPut: (...a: unknown[]) => iqproPut(...a),
+  mapTransactionStatus: (tx: Record<string, unknown>) => (['captured', 'settled', 'authorized', 'pendingsettlement'].includes(String(tx.status ?? '').toLowerCase()) ? 'approved' : 'declined'),
 }));
 vi.mock('@/libs/Logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -137,7 +138,7 @@ describe('chargeOneTimeFee — IQPro Sale payload', () => {
       amount: 51.88,
     });
     buildServiceFeeAdjustment.mockReturnValue({ type: 'ServiceFee', percentage: 3.75, flatAmount: null });
-    iqproPost.mockResolvedValue({ data: { transaction: { transactionId: 'tx_1', status: 'Approved' } } });
+    iqproPost.mockResolvedValue({ data: { transaction: { transactionId: 'tx_1', status: 'PendingSettlement' } } });
   }
 
   const baseArgs = {

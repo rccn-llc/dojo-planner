@@ -23,7 +23,6 @@ const config: KnipConfig = {
     '@semantic-release/npm',
     '@swc/helpers',
     'conventional-changelog-conventionalcommits',
-    '@dojo-planner/iqpro-client',
     'vite',
   ],
   // Binaries to ignore during analysis

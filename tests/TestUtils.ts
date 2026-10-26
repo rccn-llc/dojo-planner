@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import assert from 'node:assert';
 import { Buffer } from 'node:buffer';
+import { randomUUID } from 'node:crypto';
 import { createClerkClient } from '@clerk/backend';
 import { clerk } from '@clerk/testing/playwright';
 import { faker } from '@faker-js/faker';
@@ -93,6 +94,80 @@ export const registerTenantForE2E = async (orgId: string): Promise<boolean> => {
     );
     return true;
   } catch {
+    return false;
+  } finally {
+    await pool.end().catch(() => {});
+  }
+};
+
+/** Names of the failed-payment members seeded for the shared E2E org. */
+export const E2E_FAILED_PAYMENT = {
+  pending: { firstName: 'Paula', lastName: 'PendingE2E', reason: 'Insufficient funds' },
+  overdue: { firstName: 'Oscar', lastName: 'OverdueE2E', reason: 'Do not honor' },
+  cardUpdated: { firstName: 'Carl', lastName: 'CardupdateE2E', reason: 'Card expired' },
+} as const;
+
+/**
+ * Seed failed-recurring-payment rows for the shared E2E org, the way the
+ * payment webhooks would have recorded them (`source = 'webhook_recurring'`).
+ *
+ * Same single-connection constraint as `registerTenantForE2E`: this only
+ * works from `global.setup.ts`, before the app under test holds pglite's one
+ * connection. CI runs a production build with no payment provider, so the
+ * specs exercise display + the retry modal's confirm step, not a live charge.
+ */
+export const seedFailedPaymentForE2E = async (orgId: string): Promise<boolean> => {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    return false;
+  }
+  const pool = new Pool({ connectionString, max: 1 });
+  const id = () => randomUUID();
+  const daysAgo = (d: number) => new Date(Date.now() - d * 24 * 60 * 60 * 1000);
+
+  try {
+    const planId = id();
+    await pool.query(
+      `INSERT INTO membership_plan (id, organization_id, name, slug, category, program, price, contract_length, access_level, frequency)
+       VALUES ($1, $2, 'E2E Monthly', $3, 'Adult', 'Adult', 100, 'Month-to-Month', 'Unlimited', 'Monthly')`,
+      [planId, orgId, `e2e-monthly-${planId.slice(0, 8)}`],
+    );
+
+    const scenarios = [
+      { ...E2E_FAILED_PAYMENT.pending, declines: [2], cardUpdatedDaysAgo: null as number | null },
+      { ...E2E_FAILED_PAYMENT.overdue, declines: [9, 6, 3], cardUpdatedDaysAgo: null as number | null },
+      { ...E2E_FAILED_PAYMENT.cardUpdated, declines: [3], cardUpdatedDaysAgo: 1 },
+    ];
+
+    for (const sc of scenarios) {
+      const memberId = id();
+      const membershipId = id();
+      await pool.query(
+        `INSERT INTO member (id, organization_id, first_name, last_name, email, status, member_type, provider_customer_id)
+         VALUES ($1, $2, $3, $4, $5, 'past_due', 'individual', $6)`,
+        [memberId, orgId, sc.firstName, sc.lastName, `${sc.firstName.toLowerCase()}.${memberId.slice(0, 8)}@example.com`, `seed_cus_${memberId}`],
+      );
+      await pool.query(
+        `INSERT INTO member_membership (id, member_id, membership_plan_id, status, billing_type, provider_subscription_id, decline_count, last_decline_reason)
+         VALUES ($1, $2, $3, 'past_due', 'autopay', $4, $5, $6)`,
+        [membershipId, memberId, planId, `seed_sub_${membershipId}`, sc.declines.length, sc.reason],
+      );
+      await pool.query(
+        `INSERT INTO payment_method (id, member_id, type, last4, card_brand, expiration_date, provider_payment_method_id, is_default, status, updated_source, updated_at)
+         VALUES ($1, $2, 'card', '4242', 'VISA', '03/29', $3, true, 'active', $4, $5)`,
+        [id(), memberId, `seed_pm_${memberId}`, sc.cardUpdatedDaysAgo === null ? 'app' : 'provider_sync', sc.cardUpdatedDaysAgo === null ? daysAgo(30) : daysAgo(sc.cardUpdatedDaysAgo)],
+      );
+      for (const d of sc.declines) {
+        await pool.query(
+          `INSERT INTO transaction (id, organization_id, member_id, member_membership_id, provider_transaction_id, transaction_type, amount, status, source, payment_method, description, failure_reason, created_at)
+           VALUES ($1, $2, $3, $4, $5, 'membership_payment', 103.75, 'declined', 'webhook_recurring', 'card', 'Recurring membership payment (declined)', $6, $7)`,
+          [id(), orgId, memberId, membershipId, `seed_ptx_${id()}`, sc.reason, daysAgo(d)],
+        );
+      }
+    }
+    return true;
+  } catch (error) {
+    console.warn('[E2E] Failed to seed failed-payment scenarios:', error);
     return false;
   } finally {
     await pool.end().catch(() => {});

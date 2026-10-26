@@ -69,3 +69,6 @@ build-archive.log
 
 # Database dumps (contain real data — never commit)
 *.dump
+
+# Dev-only RSA keypair for src/scripts/simulatePaymentWebhook.ts (never commit)
+.simulator-keys/

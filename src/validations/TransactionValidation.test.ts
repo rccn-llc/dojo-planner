@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ReportTypeValidation, TransactionListValidation } from './TransactionValidation';
+import { ReportTypeValidation, RetryQuoteValidation, RetryTransactionValidation, TransactionListValidation } from './TransactionValidation';
 
 describe('TransactionListValidation', () => {
   describe('valid inputs', () => {
@@ -270,5 +270,35 @@ describe('ReportTypeValidation', () => {
         expect(result.data).toEqual({ reportType: 'amount-due' });
       }
     });
+  });
+});
+
+describe('TransactionListValidation — lifecycle fee types', () => {
+  it.each(['cancellation_fee', 'hold_fee'])('accepts transactionType %s', (transactionType) => {
+    expect(TransactionListValidation.safeParse({ transactionType }).success).toBe(true);
+  });
+});
+
+describe('RetryTransactionValidation', () => {
+  it('accepts a uuid transactionId', () => {
+    expect(RetryTransactionValidation.safeParse({ transactionId: '7c9e6679-7425-40de-944b-e07fc1f90ae7' }).success).toBe(true);
+  });
+
+  it('rejects a non-uuid transactionId', () => {
+    expect(RetryTransactionValidation.safeParse({ transactionId: 'not-a-uuid' }).success).toBe(false);
+  });
+
+  it('rejects a missing transactionId', () => {
+    expect(RetryTransactionValidation.safeParse({}).success).toBe(false);
+  });
+});
+
+describe('RetryQuoteValidation', () => {
+  it('accepts a uuid transactionId', () => {
+    expect(RetryQuoteValidation.safeParse({ transactionId: '7c9e6679-7425-40de-944b-e07fc1f90ae7' }).success).toBe(true);
+  });
+
+  it('rejects a non-uuid transactionId', () => {
+    expect(RetryQuoteValidation.safeParse({ transactionId: 'abc' }).success).toBe(false);
   });
 });

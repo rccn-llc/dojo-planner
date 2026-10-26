@@ -55,6 +55,15 @@ export default function TransactionsPage() {
       memberId: tx.memberId,
       status: tx.status as Transaction['status'],
       transactionType: tx.transactionType,
+      recurring: {
+        memberMembershipId: tx.memberMembershipId,
+        failureReason: tx.failureReason,
+        source: tx.source,
+        retryOfTransactionId: tx.retryOfTransactionId,
+        resolved: tx.resolved,
+        superseded: tx.superseded,
+        attemptNumber: tx.attemptNumber,
+      },
     }));
   }, [rawTransactions, t]);
 

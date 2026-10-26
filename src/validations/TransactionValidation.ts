@@ -4,7 +4,7 @@ export const TransactionListValidation = z.object({
   limit: z.number().min(1).max(500).optional(),
   offset: z.number().min(0).optional(),
   status: z.enum(['pending', 'paid', 'declined', 'refunded', 'processing']).optional(),
-  transactionType: z.enum(['membership_payment', 'event_registration', 'signup_fee', 'refund', 'adjustment']).optional(),
+  transactionType: z.enum(['membership_payment', 'event_registration', 'signup_fee', 'refund', 'adjustment', 'cancellation_fee', 'hold_fee']).optional(),
 }).optional();
 
 export const GetTransactionValidation = z.object({
@@ -12,6 +12,14 @@ export const GetTransactionValidation = z.object({
 });
 
 export const RefundTransactionValidation = z.object({
+  transactionId: z.string().uuid(),
+});
+
+export const RetryTransactionValidation = z.object({
+  transactionId: z.string().uuid(),
+});
+
+export const RetryQuoteValidation = z.object({
   transactionId: z.string().uuid(),
 });
 

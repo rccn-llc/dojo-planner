@@ -3,7 +3,7 @@ import { expect, test as setup } from '@playwright/test';
 
 import { CONSENT_STORAGE_KEY, CONSENT_VERSION } from '@/libs/consent/constants';
 import { writeCredentials } from './e2e-credentials';
-import { cleanupOrphanedE2EUsers, createUserWithOrganization } from './TestUtils';
+import { cleanupOrphanedE2EUsers, createUserWithOrganization, seedFailedPaymentForE2E } from './TestUtils';
 
 setup.describe.configure({ mode: 'serial' });
 
@@ -20,7 +20,11 @@ setup('authenticate with Clerk', async ({ page }) => {
   // delete the shared user that other tests depend on.
   await cleanupOrphanedE2EUsers();
 
-  await createUserWithOrganization();
+  const shared = await createUserWithOrganization();
+
+  // Failed-recurring-payment rows for failedPayments.e2e.ts. Same window as the
+  // tenant row: only before the app under test holds pglite's one connection.
+  await seedFailedPaymentForE2E(shared.orgId);
 
   const sharedUsername = process.env.E2E_CLERK_USER_USERNAME!;
   const sharedPassword = process.env.E2E_CLERK_USER_PASSWORD!;

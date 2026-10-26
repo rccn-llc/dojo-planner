@@ -69,6 +69,14 @@ export const UpdateMemberPhotoValidation = z.object({
 
 export const MemberPaymentMethodsValidation = z.object({
   memberId: z.string().min(1),
+  // Member detail shows replaced cards as history; charging surfaces never ask.
+  includeReplaced: z.boolean().optional(),
+});
+
+export const SyncPaymentMethodValidation = z.object({
+  memberId: z.string().min(1),
+  // Bypass the 60s throttle (the "Refresh from provider" button).
+  force: z.boolean().optional(),
 });
 
 export const PaymentMethodMutationValidation = z.object({

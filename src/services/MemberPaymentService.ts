@@ -242,6 +242,8 @@ export async function processMemberPayment(
         .where(and(
           eq(paymentMethodSchema.memberId, params.memberId),
           sql`${paymentMethodSchema.providerPaymentMethodId} IS NOT NULL`,
+          // A card replaced at the provider must never be charged.
+          eq(paymentMethodSchema.status, 'active'),
         ))
         .orderBy(desc(paymentMethodSchema.isDefault))
         .limit(1);
@@ -1655,6 +1657,9 @@ export async function chargeOneTimeFee(args: {
     updatedAt: now,
   });
 
+  // Without this ref the charge's own webhook cannot be routed to this org.
+  await recordExternalRef(REF_TYPE.PROVIDER_TRANSACTION, charge.transactionId, orgId);
+
   return { success: true, amountCharged: charge.amountCharged ?? 0, transactionId: charge.transactionId };
 }
 
@@ -2027,6 +2032,10 @@ export async function holdMembershipLifecycle(args: {
       .set({ status: 'hold', statusChangedAt: now })
       .where(eq(memberSchema.id, ctx.member.id));
   });
+
+  // The hold-fee subscription bills on its own schedule; its charge webhooks
+  // carry its id and must be routable to this org.
+  await recordExternalRef(REF_TYPE.PROVIDER_SUBSCRIPTION, holdFeeSubscriptionId, ctx.member.organizationId);
 
   return {
     success: true,

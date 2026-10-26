@@ -20,6 +20,14 @@ const mockPaymentConfig = { provider: 'iqpro' as const, gatewayId: 'test-gateway
 vi.mock('@/services/PaymentProviderConfigService', () => ({
   resolvePaymentProviderConfig: vi.fn(async () => mockPaymentConfig),
 }));
+vi.mock('@/services/PaymentRetryService', async () => {
+  const actual = await vi.importActual<typeof import('@/services/PaymentRetryService')>('@/services/PaymentRetryService');
+  return {
+    ...actual,
+    retryFailedTransaction: vi.fn(),
+    getRetryQuote: vi.fn(),
+  };
+});
 vi.mock('@/services/MemberPaymentService', async () => {
   const actual = await vi.importActual<typeof import('@/services/MemberPaymentService')>('@/services/MemberPaymentService');
   return {
@@ -97,7 +105,7 @@ describe('Transactions Router', () => {
       ];
 
       vi.mocked(guardRole).mockResolvedValue(mockContext);
-      vi.mocked(getOrganizationTransactions).mockResolvedValue(mockTransactions);
+      vi.mocked(getOrganizationTransactions).mockResolvedValue(mockTransactions as never);
 
       const { list } = await import('./Transactions');
       const input = { limit: 10, offset: 0 };
@@ -193,7 +201,7 @@ describe('Transactions Router', () => {
       };
 
       vi.mocked(guardRole).mockResolvedValue(mockContext);
-      vi.mocked(getTransactionById).mockResolvedValue(mockTransaction);
+      vi.mocked(getTransactionById).mockResolvedValue(mockTransaction as never);
 
       const { get } = await import('./Transactions');
       const result = await callHandler(get, { id: 'txn_1' });
@@ -277,7 +285,7 @@ describe('Transactions Router', () => {
       };
 
       vi.mocked(guardRole).mockResolvedValue(mockContext);
-      vi.mocked(getTransactionById).mockResolvedValue(mockTransaction);
+      vi.mocked(getTransactionById).mockResolvedValue(mockTransaction as never);
 
       const { get } = await import('./Transactions');
       const result = await callHandler(get, { id: 'txn_2' });
@@ -383,6 +391,99 @@ describe('Transactions Router', () => {
         'transaction',
         expect.objectContaining({ status: 'failure', error: error.message }),
       );
+    });
+  });
+
+  describe('retry', () => {
+    const TX = '22222222-2222-2222-2222-222222222222';
+
+    it('requires FRONT_DESK and audits a completed retry with its outcome', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { retryFailedTransaction } = await import('@/services/PaymentRetryService');
+      const { audit } = await import('@/services/AuditService');
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(retryFailedTransaction).mockResolvedValue({ status: 'declined', retryTransactionId: 'r1', declineReason: 'Do not honor', membershipReactivated: false });
+
+      const { retry } = await import('./Transactions');
+      const result = await callHandler(retry, { transactionId: TX });
+
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
+      expect(retryFailedTransaction).toHaveBeenCalledWith(TX, 'test-org-456', mockPaymentConfig);
+      expect(result).toMatchObject({ status: 'declined', declineReason: 'Do not honor' });
+      expect(audit).toHaveBeenCalledWith(mockContext, 'transaction.retry', 'transaction', expect.objectContaining({
+        entityId: TX,
+        status: 'success',
+        changes: { outcome: { before: 'declined', after: 'declined' }, retryTransactionId: { before: null, after: 'r1' } },
+      }));
+    });
+
+    it.each([
+      ['TransactionNotFoundError', 404],
+      ['TransactionNotRetryableError', 409],
+      ['TransactionRetryInProgressError', 409],
+      ['RetryProviderUnavailableError', 503],
+      ['TransactionRetryFailedError', 422],
+    ] as const)('maps %s to %i and audits the failure', async (name, status) => {
+      const { guardRole } = await import('./AuthGuards');
+      const retrySvc = await import('@/services/PaymentRetryService');
+      const memberSvc = await import('@/services/MemberPaymentService');
+      const { audit } = await import('@/services/AuditService');
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      const errors: Record<string, Error> = {
+        TransactionNotFoundError: new memberSvc.TransactionNotFoundError(TX),
+        TransactionNotRetryableError: new retrySvc.TransactionNotRetryableError('Only declined payments can be retried.'),
+        TransactionRetryInProgressError: new retrySvc.TransactionRetryInProgressError(),
+        RetryProviderUnavailableError: new retrySvc.RetryProviderUnavailableError(),
+        TransactionRetryFailedError: new retrySvc.TransactionRetryFailedError('No saved payment method.'),
+      };
+      vi.mocked(retrySvc.retryFailedTransaction).mockRejectedValue(errors[name]);
+
+      const { retry } = await import('./Transactions');
+      const promise = callHandler(retry, { transactionId: TX });
+
+      await expect(promise).rejects.toMatchObject({ status, message: errors[name]!.message });
+      expect(audit).toHaveBeenCalledWith(mockContext, 'transaction.retry', 'transaction', expect.objectContaining({ status: 'failure' }));
+    });
+
+    it('rethrows an unknown error untouched and audits a non-Error as Unknown', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { retryFailedTransaction } = await import('@/services/PaymentRetryService');
+      const { audit } = await import('@/services/AuditService');
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(retryFailedTransaction).mockRejectedValue('boom');
+
+      const { retry } = await import('./Transactions');
+
+      await expect(callHandler(retry, { transactionId: TX })).rejects.toBe('boom');
+      expect(audit).toHaveBeenCalledWith(mockContext, 'transaction.retry', 'transaction', expect.objectContaining({ error: 'Unknown error' }));
+    });
+  });
+
+  describe('retryQuote', () => {
+    const TX = '33333333-3333-3333-3333-333333333333';
+
+    it('requires FRONT_DESK and returns the quote', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { getRetryQuote } = await import('@/services/PaymentRetryService');
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(getRetryQuote).mockResolvedValue({ transactionId: TX, autoRetriesRemaining: 2 } as never);
+
+      const { retryQuote } = await import('./Transactions');
+
+      await expect(callHandler(retryQuote, { transactionId: TX })).resolves.toMatchObject({ autoRetriesRemaining: 2 });
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
+      expect(getRetryQuote).toHaveBeenCalledWith(TX, 'test-org-456', mockPaymentConfig);
+    });
+
+    it('maps a not-retryable row to 409', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const retrySvc = await import('@/services/PaymentRetryService');
+      vi.mocked(guardRole).mockResolvedValue(mockContext);
+      vi.mocked(retrySvc.getRetryQuote).mockRejectedValue(new retrySvc.TransactionNotRetryableError('already been collected'));
+
+      const { retryQuote } = await import('./Transactions');
+
+      await expect(callHandler(retryQuote, { transactionId: TX })).rejects.toMatchObject({ status: 409 });
     });
   });
 });

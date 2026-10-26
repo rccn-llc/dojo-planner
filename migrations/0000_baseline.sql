@@ -283,6 +283,9 @@ CREATE TABLE "member_membership" (
 	"next_payment_date" timestamp,
 	"provider_subscription_id" text,
 	"provider_hold_fee_subscription_id" text,
+	"decline_count" integer DEFAULT 0 NOT NULL,
+	"last_decline_at" timestamp,
+	"last_decline_reason" text,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
@@ -400,7 +403,14 @@ CREATE TABLE "payment_method" (
 	"first_six" text,
 	"last4" text,
 	"account_type" text,
-	"is_default" boolean DEFAULT false
+	"is_default" boolean DEFAULT false,
+	"card_brand" text,
+	"expiration_date" text,
+	"status" text DEFAULT 'active' NOT NULL,
+	"updated_source" text,
+	"created_at" timestamp DEFAULT now(),
+	"updated_at" timestamp DEFAULT now(),
+	"last_synced_at" timestamp
 );
 --> statement-breakpoint
 CREATE TABLE "program" (
@@ -474,6 +484,10 @@ CREATE TABLE "transaction" (
 	"payment_method" text,
 	"description" text,
 	"processed_at" timestamp,
+	"failure_reason" text,
+	"retry_of_transaction_id" text,
+	"provider_invoice_id" text,
+	"source" text DEFAULT 'app' NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
@@ -699,4 +713,17 @@ CREATE TABLE IF NOT EXISTS "square_plan_variation" (
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "square_plan_variation_org_cadence_idx" ON "square_plan_variation" USING btree ("organization_id","cadence");
+CREATE UNIQUE INDEX IF NOT EXISTS "square_plan_variation_org_cadence_idx" ON "square_plan_variation" USING btree ("organization_id","cadence");--> statement-breakpoint
+-- ── Failed recurring payments: webhook dedup + retry linkage ────────────────
+-- Providers redeliver webhooks; each handler claims its event key here first.
+CREATE TABLE IF NOT EXISTS "payment_webhook_event" (
+	"id" text PRIMARY KEY NOT NULL,
+	"organization_id" text NOT NULL,
+	"provider" text NOT NULL,
+	"event_key" text NOT NULL,
+	"received_at" timestamp DEFAULT now() NOT NULL
+);--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "payment_webhook_event_provider_key_idx" ON "payment_webhook_event" USING btree ("provider","event_key");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "payment_webhook_event_org_idx" ON "payment_webhook_event" USING btree ("organization_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "transaction_retry_of_idx" ON "transaction" USING btree ("retry_of_transaction_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "transaction_provider_invoice_idx" ON "transaction" USING btree ("provider_invoice_id");

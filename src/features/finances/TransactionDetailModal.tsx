@@ -18,6 +18,8 @@ import { useHasRole } from '@/hooks/useHasRole';
 import { invalidateTransactionsCache } from '@/hooks/useTransactionsCache';
 import { client } from '@/libs/Orpc';
 import { ORG_ROLE } from '@/types/Auth';
+import { isRetryable, POSSIBLE_DUPLICATE } from './recurringPayments';
+import { RetryPaymentModal } from './RetryPaymentModal';
 
 type TransactionDetailModalProps = {
   isOpen: boolean;
@@ -67,11 +69,14 @@ export function TransactionDetailModal({
   const [loading, setLoading] = useState(false);
   const [refunding, setRefunding] = useState(false);
   const [refundError, setRefundError] = useState<string | null>(null);
+  const [retryOpen, setRetryOpen] = useState(false);
   const prevTransactionIdRef = useRef<string | null>(null);
 
   // Refunds are ADMIN-only (mirrors the transactions.refund guard). Only a
   // paid charge (not an already-refunded/declined one) can be refunded (#273).
   const canRefund = useHasRole(ORG_ROLE.ADMIN);
+  // Retrying a declined recurring charge is FRONT_DESK+ (transactions.retry).
+  const canRetry = useHasRole(ORG_ROLE.FRONT_DESK);
 
   const handleOpenChange = useCallback((open: boolean) => {
     if (!open) {
@@ -111,6 +116,14 @@ export function TransactionDetailModal({
     }
   }, [transaction, fetchDetails, t]);
 
+  const handleRetryClosed = useCallback(async (changed: boolean) => {
+    setRetryOpen(false);
+    if (changed && transaction) {
+      await fetchDetails(transaction.id);
+      await invalidateTransactionsCache();
+    }
+  }, [transaction, fetchDetails]);
+
   useEffect(() => {
     if (!isOpen || !transaction) {
       prevTransactionIdRef.current = null;
@@ -130,6 +143,22 @@ export function TransactionDetailModal({
   const isRefundable = canRefund
     && transaction.status === 'paid'
     && REFUNDABLE_TYPES.has(transaction.transactionType);
+
+  // Prefer the freshly-fetched detail (it reflects a retry just made in this
+  // modal) over the list row the modal was opened from.
+  const recurring = details
+    ? {
+        memberMembershipId: details.memberMembershipId,
+        failureReason: details.failureReason,
+        source: details.source,
+        retryOfTransactionId: details.retryOfTransactionId,
+        resolved: details.resolved,
+        superseded: details.superseded,
+        attemptNumber: details.attemptNumber,
+      }
+    : transaction.recurring;
+  const currentStatus = (details?.status ?? transaction.status) as TransactionStatus;
+  const showRetry = canRetry && isRetryable({ status: currentStatus, transactionType: transaction.transactionType, recurring });
 
   const typeKey = TRANSACTION_TYPE_LABELS[transaction.transactionType] ?? transaction.transactionType;
   const hasMembershipDetails = details?.membershipPlanName
@@ -154,8 +183,8 @@ export function TransactionDetailModal({
               </div>
               <div className="text-right">
                 <p className="text-lg font-bold text-foreground">{transaction.amount}</p>
-                <Badge variant={statusVariantMap[transaction.status]}>
-                  {t(`status_${transaction.status}`)}
+                <Badge variant={statusVariantMap[currentStatus]}>
+                  {t(`status_${currentStatus}`)}
                 </Badge>
               </div>
             </div>
@@ -178,6 +207,35 @@ export function TransactionDetailModal({
               </div>
             </div>
           </div>
+
+          {/* Failed recurring payment */}
+          {currentStatus === 'declined' && recurring?.failureReason && recurring.failureReason !== POSSIBLE_DUPLICATE && (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm" data-testid="failure-reason">
+              <span className="text-muted-foreground">{t('failure_reason_label')}</span>
+              <p className="font-medium text-destructive">{recurring.failureReason}</p>
+              {recurring.attemptNumber && (
+                <p className="text-muted-foreground">{t('attempt_label', { attempt: recurring.attemptNumber })}</p>
+              )}
+            </div>
+          )}
+          {currentStatus === 'declined' && recurring?.resolved && (
+            <p className="text-sm text-muted-foreground">{t('resolved_note')}</p>
+          )}
+          {currentStatus === 'declined' && !recurring?.resolved && recurring?.superseded && (
+            <p className="text-sm text-muted-foreground">{t('superseded_note')}</p>
+          )}
+          {recurring?.failureReason === POSSIBLE_DUPLICATE && (
+            <p className="rounded-lg border border-yellow-600 bg-yellow-50 p-3 text-sm text-yellow-900 dark:bg-yellow-900/20 dark:text-yellow-200">
+              {t('possible_duplicate_note')}
+            </p>
+          )}
+          {recurring?.retryOfTransactionId && (
+            <p className="text-sm text-muted-foreground">
+              {t('retry_of_label')}
+              {' '}
+              <span className="font-mono">{`TXN${recurring.retryOfTransactionId.slice(0, 12).toUpperCase()}`}</span>
+            </p>
+          )}
 
           {/* Loading State */}
           {loading && (
@@ -241,6 +299,11 @@ export function TransactionDetailModal({
         )}
 
         <DialogFooter>
+          {showRetry && (
+            <Button onClick={() => setRetryOpen(true)} data-testid="retry-payment-button">
+              {t('retry_button')}
+            </Button>
+          )}
           {isRefundable && (
             <Button variant="destructive" disabled={refunding} onClick={handleRefund}>
               {refunding ? t('refunding_button') : t('refund_button')}
@@ -250,6 +313,15 @@ export function TransactionDetailModal({
             {t('close_button')}
           </Button>
         </DialogFooter>
+
+        {/* Nested inside the parent's content so Radix stacks focus and
+            outside-click dismissal correctly. */}
+        <RetryPaymentModal
+          isOpen={retryOpen}
+          transactionId={retryOpen ? transaction.id : null}
+          memberId={transaction.memberId}
+          onCloseAction={changed => void handleRetryClosed(changed)}
+        />
       </DialogContent>
     </Dialog>
   );

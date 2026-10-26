@@ -220,4 +220,18 @@ describe('TransactionCard', () => {
       expect(page.getByText('TXN999999')).toBeInTheDocument();
     });
   });
+
+  describe('recurring label', () => {
+    it('shows the recurring attempt label for a webhook-recorded decline', async () => {
+      await render(<TransactionCard {...defaultProps} status="declined" transactionType="membership_payment" recurring={{ source: 'webhook_recurring', attemptNumber: 1, memberMembershipId: 'mm' }} />);
+
+      await expect.element(page.getByTestId('recurring-label')).toHaveTextContent('source_recurring_attempt');
+    });
+
+    it('shows nothing for an ordinary row', async () => {
+      await render(<TransactionCard {...defaultProps} />);
+
+      expect(page.getByTestId('recurring-label').elements()).toHaveLength(0);
+    });
+  });
 });

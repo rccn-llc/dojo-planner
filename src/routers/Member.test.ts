@@ -53,6 +53,14 @@ vi.mock('@/services/MembersService', () => ({
   getAllMembershipPlans: vi.fn(),
   getMemberTransactions: vi.fn(),
 }));
+const resolvePaymentProviderConfigMock = vi.fn();
+vi.mock('@/services/PaymentProviderConfigService', () => ({
+  resolvePaymentProviderConfig: (...a: unknown[]) => resolvePaymentProviderConfigMock(...a),
+}));
+const syncMemberPaymentMethodMock = vi.fn();
+vi.mock('@/services/PaymentMethodSyncService', () => ({
+  syncMemberPaymentMethod: (...a: unknown[]) => syncMemberPaymentMethodMock(...a),
+}));
 vi.mock('@/services/EmailService', () => ({
   sendMemberConfirmationEmail: vi.fn(),
 }));
@@ -329,7 +337,7 @@ describe('Member Router', () => {
       const { listPaymentMethods } = await import('./Member');
       const result = await callHandler(listPaymentMethods, { memberId: 'member-123' });
 
-      expect(getMemberPaymentMethods).toHaveBeenCalledWith('member-123', 'test-org-456');
+      expect(getMemberPaymentMethods).toHaveBeenCalledWith('member-123', 'test-org-456', { includeReplaced: undefined });
       expect(audit).toHaveBeenCalledWith(
         mockFrontDeskContext,
         AUDIT_ACTION.PAYMENT_METHOD_VIEW,
@@ -337,6 +345,74 @@ describe('Member Router', () => {
         { entityId: 'member-123', status: 'success' },
       );
       expect(result).toEqual({ paymentMethods: [{ id: 'pm-1' }] });
+    });
+
+    it('passes includeReplaced through for the member-detail history view', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { getMemberPaymentMethods } = await import('@/services/MembersService');
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
+      vi.mocked(getMemberPaymentMethods).mockResolvedValue([] as never);
+
+      const { listPaymentMethods } = await import('./Member');
+      await callHandler(listPaymentMethods, { memberId: 'member-123', includeReplaced: true });
+
+      expect(getMemberPaymentMethods).toHaveBeenCalledWith('member-123', 'test-org-456', { includeReplaced: true });
+    });
+  });
+
+  describe('syncPaymentMethod', () => {
+    beforeEach(() => {
+      resolvePaymentProviderConfigMock.mockResolvedValue({ provider: 'iqpro' });
+    });
+
+    it('requires FRONT_DESK, passes the staff actor, and audits a completed sync', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { audit } = await import('@/services/AuditService');
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
+      syncMemberPaymentMethodMock.mockResolvedValue({ changed: true, paymentMethod: { last4: '4242' } });
+
+      const { syncPaymentMethod } = await import('./Member');
+      const result = await callHandler(syncPaymentMethod, { memberId: 'member-123', force: true });
+
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
+      expect(syncMemberPaymentMethodMock).toHaveBeenCalledWith('member-123', 'test-org-456', { provider: 'iqpro' }, { force: true, actor: mockFrontDeskContext });
+      expect(result).toEqual({ changed: true, paymentMethod: { last4: '4242' } });
+      expect(audit).toHaveBeenCalledWith(mockFrontDeskContext, AUDIT_ACTION.PAYMENT_METHOD_SYNC, AUDIT_ENTITY_TYPE.MEMBER, { entityId: 'member-123', status: 'success' });
+    });
+
+    it('audits a failed provider read as a failure but still returns the result', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { audit } = await import('@/services/AuditService');
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
+      syncMemberPaymentMethodMock.mockResolvedValue({ changed: false, error: 'Could not read' });
+
+      const { syncPaymentMethod } = await import('./Member');
+
+      await expect(callHandler(syncPaymentMethod, { memberId: 'member-123' })).resolves.toMatchObject({ error: 'Could not read' });
+      expect(audit).toHaveBeenCalledWith(mockFrontDeskContext, AUDIT_ACTION.PAYMENT_METHOD_SYNC, AUDIT_ENTITY_TYPE.MEMBER, { entityId: 'member-123', status: 'failure', error: 'Could not read' });
+    });
+
+    it('does not audit a throttled/skipped sync (no provider read happened)', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { audit } = await import('@/services/AuditService');
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
+      syncMemberPaymentMethodMock.mockResolvedValue({ changed: false, skipped: 'throttled' });
+
+      const { syncPaymentMethod } = await import('./Member');
+      await callHandler(syncPaymentMethod, { memberId: 'member-123' });
+
+      expect(audit).not.toHaveBeenCalled();
+    });
+
+    it('maps a member from another org to 404', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { MemberNotFoundError } = await import('@/services/MembersService');
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
+      syncMemberPaymentMethodMock.mockRejectedValue(new MemberNotFoundError());
+
+      const { syncPaymentMethod } = await import('./Member');
+
+      await expect(callHandler(syncPaymentMethod, { memberId: 'nope' })).rejects.toMatchObject({ status: 404 });
     });
   });
 
