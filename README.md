@@ -134,6 +134,7 @@ Access the app at http://localhost:3000
 npm run db:generate   # Generate migration from schema changes
 npm run db:migrate    # Apply pending migrations
 npm run db:studio     # Open Drizzle Studio to explore the database
+npm run org:create    # Onboard a new organization end to end (Clerk org, database, seed, activate)
 ```
 
 ### Database Seeding
