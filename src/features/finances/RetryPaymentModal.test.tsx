@@ -35,6 +35,8 @@ const baseQuote = {
   card: { type: 'card', cardBrand: 'VISA', last4: '4242', expirationDate: '03/29', updatedAt: null, updatedSource: null, updatedAfterFailure: false },
   declineCount: 1,
   autoRetriesRemaining: 0,
+  paysInvoice: false,
+  doubleChargeRisk: false,
   overdue: false,
   blockedReason: null,
 };
@@ -134,7 +136,7 @@ describe('RetryPaymentModal', () => {
 
   describe('IQPro auto-retry warning', () => {
     it('requires the acknowledgement checkbox before charging', async () => {
-      mockQuote.mockResolvedValue({ ...baseQuote, provider: 'iqpro', autoRetriesRemaining: 2 });
+      mockQuote.mockResolvedValue({ ...baseQuote, provider: 'iqpro', autoRetriesRemaining: 2, doubleChargeRisk: true });
       await renderModal().view;
 
       await expect.element(page.getByText(/auto_retry_warning\|2/)).toBeInTheDocument();
@@ -142,6 +144,16 @@ describe('RetryPaymentModal', () => {
 
       await userEvent.click(page.getByRole('checkbox'));
 
+      await expect.element(chargeButton()).toBeEnabled();
+    });
+
+    it('shows NO warning when the retry pays the IQPro invoice, even with automatic retries left', async () => {
+      mockQuote.mockResolvedValue({ ...baseQuote, provider: 'iqpro', autoRetriesRemaining: 2, paysInvoice: true, doubleChargeRisk: false });
+      await renderModal().view;
+
+      await expect.element(page.getByTestId('pays-invoice-note')).toHaveTextContent('pays_invoice_note');
+      expect(page.getByText(/auto_retry_warning/).elements()).toHaveLength(0);
+      expect(page.getByRole('checkbox').elements()).toHaveLength(0);
       await expect.element(chargeButton()).toBeEnabled();
     });
 

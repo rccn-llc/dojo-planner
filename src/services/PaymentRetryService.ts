@@ -3,10 +3,8 @@
  *
  * ── What a retry is ─────────────────────────────────────────────────────────
  *
- * A standalone charge of the card saved on the membership's subscription, for
- * the amount the failed attempt tried to collect. It is NOT "pay the
- * provider's invoice": Square documents that its API cannot pay an invoice,
- * and IQPro offers no such action either. Every retry is recorded as its own
+ * A charge of the card saved on the membership's subscription, for the amount
+ * the failed attempt tried to collect. Every retry is recorded as its own
  * transaction row (`source = 'retry'`, `retry_of_transaction_id` → the failed
  * row), approved or declined.
  *
@@ -16,11 +14,14 @@
  *   not retry. After a successful retry the invoice is CANCELLED so that link
  *   cannot also be paid (`closeFailedInvoice`).
  * - **IQPro** retries a declined subscription charge itself, up to 3 times per
- *   cycle. A manual retry while automatic attempts remain risks IQPro's own
- *   retry ALSO succeeding. The UI warns and requires confirmation; the
- *   recorder flags a probable double charge (`possible_duplicate`). If the
- *   sandbox shows IQPro does not stand down after a manual charge, set
- *   `IQPRO_MANUAL_RETRY_POLICY` to `'overdue_only'`.
+ *   cycle. When the failed charge carries its invoice id, the retry PAYS THAT
+ *   INVOICE (`InsertTransaction.invoiceId`, per the iQ Pro+ API reference),
+ *   which settles it — IQPro stops retrying and billing continues as scheduled
+ *   (confirmed by Basys). Without an invoice id it is a standalone charge, and
+ *   IQPro's own retry could ALSO succeed: only then does the UI warn and
+ *   require confirmation, and only then does `IQPRO_MANUAL_RETRY_POLICY =
+ *   'overdue_only'` apply. The recorder's `possible_duplicate` flag stays as a
+ *   backstop either way.
  *
  * ── Concurrency ─────────────────────────────────────────────────────────────
  *
@@ -281,6 +282,15 @@ export function retryBaseAmount(row: { amount: number; source: string }, service
   return roundCents(row.amount / (1 + serviceFeePct / 100));
 }
 
+/**
+ * Whether the retry will pay the provider's invoice for the failed charge.
+ * Only IQPro can (Square's API cannot pay invoices), and only when the failed
+ * charge's webhook carried an invoice id.
+ */
+export function paysInvoice(provider: string | null, providerInvoiceId: string | null): boolean {
+  return provider === PAYMENT_PROVIDER.IQPRO && Boolean(providerInvoiceId);
+}
+
 /** IQPro automatic attempts left in the current cycle; 0 for Square. */
 export function autoRetriesRemaining(provider: string, declineCount: number): number {
   return provider === PAYMENT_PROVIDER.IQPRO ? Math.max(0, IQPRO_MAX_ATTEMPTS - declineCount) : 0;
@@ -313,6 +323,13 @@ export type RetryQuote = {
   } | null;
   declineCount: number;
   autoRetriesRemaining: number;
+  /** The retry pays the provider's invoice (IQPro), ending its automatic retries. */
+  paysInvoice: boolean;
+  /**
+   * IQPro will still retry on its own AND this retry cannot settle the invoice,
+   * so both could succeed. The modal warns and requires confirmation.
+   */
+  doubleChargeRisk: boolean;
   overdue: boolean;
   /** Set when policy forbids retrying now; the UI disables the charge. */
   blockedReason: string | null;
@@ -380,6 +397,8 @@ export async function getRetryQuote(
 
   const providerName = config?.provider ?? null;
   const remaining = providerName ? autoRetriesRemaining(providerName, ctx.membership.declineCount) : 0;
+  const invoicePaid = paysInvoice(providerName, ctx.original.providerInvoiceId);
+  const doubleChargeRisk = remaining > 0 && !invoicePaid;
   const overdue = providerName === PAYMENT_PROVIDER.IQPRO && ctx.membership.declineCount >= IQPRO_MAX_ATTEMPTS;
 
   return {
@@ -406,16 +425,18 @@ export async function getRetryQuote(
       : null,
     declineCount: ctx.membership.declineCount,
     autoRetriesRemaining: remaining,
+    paysInvoice: invoicePaid,
+    doubleChargeRisk,
     overdue,
-    blockedReason: retryBlockedReason(providerName, remaining),
+    blockedReason: retryBlockedReason(providerName, doubleChargeRisk),
   };
 }
 
-function retryBlockedReason(provider: string | null, remaining: number): string | null {
+function retryBlockedReason(provider: string | null, doubleChargeRisk: boolean): string | null {
   if (!provider) {
     return 'No payment provider is configured for this organization.';
   }
-  if (provider === PAYMENT_PROVIDER.IQPRO && IQPRO_MANUAL_RETRY_POLICY === 'overdue_only' && remaining > 0) {
+  if (provider === PAYMENT_PROVIDER.IQPRO && IQPRO_MANUAL_RETRY_POLICY === 'overdue_only' && doubleChargeRisk) {
     return 'IQPro is still retrying this charge automatically. A manual retry is available once it is overdue.';
   }
   return null;
@@ -464,6 +485,9 @@ async function chargeSubscriptionCard(
     amount: baseAmount,
     description: `Retry of ${ctx.membership.planName} ${label}`,
     caption: 'Payment retry',
+    ...(paysInvoice(config.provider, ctx.original.providerInvoiceId) && ctx.original.providerInvoiceId
+      ? { invoiceId: ctx.original.providerInvoiceId }
+      : {}),
   });
 
   if (charge.success) {
@@ -557,7 +581,11 @@ export async function retryFailedTransaction(
   const ctx = await db.transaction(async (tx) => {
     const loaded = await loadRetryContext(tx, transactionId, organizationId, { lock: true });
 
-    const blocked = retryBlockedReason(config.provider, autoRetriesRemaining(config.provider, loaded.membership.declineCount));
+    const blocked = retryBlockedReason(
+      config.provider,
+      autoRetriesRemaining(config.provider, loaded.membership.declineCount) > 0
+      && !paysInvoice(config.provider, loaded.original.providerInvoiceId),
+    );
     if (blocked) {
       throw new TransactionNotRetryableError(blocked);
     }

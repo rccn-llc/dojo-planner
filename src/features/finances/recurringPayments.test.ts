@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isFailedUnresolved, isRetryable, recurringLabel } from './recurringPayments';
+import { isFailedUnresolved, isReadyToRetry, isRetryable, latestRetryableFailure, recurringLabel } from './recurringPayments';
 
 const declined = (recurring = {}) => ({ status: 'declined', transactionType: 'membership_payment', recurring: { memberMembershipId: 'mm-1', ...recurring } });
 
@@ -47,5 +47,27 @@ describe('recurringLabel', () => {
   it('returns null for ordinary rows', () => {
     expect(recurringLabel({ status: 'paid', transactionType: 'membership_payment', recurring: { source: 'app' } })).toBeNull();
     expect(recurringLabel({ status: 'paid', transactionType: 'membership_payment' })).toBeNull();
+  });
+});
+
+describe('isReadyToRetry', () => {
+  it('needs a retryable failure AND a card updated since', () => {
+    expect(isReadyToRetry(declined({ cardUpdatedAfterFailure: true }))).toBe(true);
+    expect(isReadyToRetry(declined({ cardUpdatedAfterFailure: false }))).toBe(false);
+    expect(isReadyToRetry(declined({ cardUpdatedAfterFailure: true, resolved: true }))).toBe(false);
+    expect(isReadyToRetry(declined({ cardUpdatedAfterFailure: true, superseded: true }))).toBe(false);
+  });
+});
+
+describe('latestRetryableFailure', () => {
+  it('returns the newest retryable row', () => {
+    const rows = [
+      { ...declined(), id: 'a', createdAt: '2026-10-01' },
+      { ...declined(), id: 'b', createdAt: new Date('2026-10-03') },
+      { ...declined({ resolved: true }), id: 'c', createdAt: '2026-10-05' },
+    ];
+
+    expect(latestRetryableFailure(rows)?.id).toBe('b');
+    expect(latestRetryableFailure([])).toBeNull();
   });
 });

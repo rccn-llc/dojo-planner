@@ -924,7 +924,8 @@
     "resolved": "Resolved",
     "possible_duplicate": "Possible duplicate",
     "retry_payment": "Retry payment",
-    "failed_payments_filter": "Failed payments"
+    "failed_payments_filter": "Failed payments",
+    "card_updated_ready": "Card updated — ready to retry"
   },
   "TransactionDetailModal": {
     "title": "Transaction Details",
@@ -2465,6 +2466,7 @@
     "error_generic": "Something went wrong. Please try again.",
     "try_again_button": "Try again",
     "done_button": "Done",
-    "close_button": "Close"
+    "close_button": "Close",
+    "pays_invoice_note": "This payment will be applied to the open IQPro invoice, so IQPro stops retrying it automatically."
   }
 }

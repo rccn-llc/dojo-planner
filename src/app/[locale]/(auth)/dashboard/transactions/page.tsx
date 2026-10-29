@@ -63,6 +63,7 @@ export default function TransactionsPage() {
         resolved: tx.resolved,
         superseded: tx.superseded,
         attemptNumber: tx.attemptNumber,
+        cardUpdatedAfterFailure: tx.cardUpdatedAfterFailure,
       },
     }));
   }, [rawTransactions, t]);

@@ -140,7 +140,7 @@ export function RetryPaymentModal({ isOpen, transactionId, memberId, onCloseActi
   }, [phase, transactionId, t]);
 
   const quote = 'quote' in phase ? phase.quote : null;
-  const needsAck = phase.kind === 'confirm' && phase.quote.autoRetriesRemaining > 0;
+  const needsAck = phase.kind === 'confirm' && phase.quote.doubleChargeRisk;
   const blocked = phase.kind === 'confirm' && Boolean(phase.quote.blockedReason);
   const chargeDisabled = phase.kind !== 'confirm' || blocked || (needsAck && !acknowledged);
   const total = quote?.fees?.amount ?? quote?.baseAmount ?? 0;
@@ -223,8 +223,9 @@ export function RetryPaymentModal({ isOpen, transactionId, memberId, onCloseActi
             )}
 
             {quote.overdue && <Alert variant="info">{t('overdue_note')}</Alert>}
+            {quote.paysInvoice && <p className="text-xs text-muted-foreground" data-testid="pays-invoice-note">{t('pays_invoice_note')}</p>}
 
-            {quote.autoRetriesRemaining > 0 && (
+            {quote.doubleChargeRisk && (
               <div className="space-y-2 rounded-lg border border-yellow-600 bg-yellow-50 p-3 text-sm text-yellow-900 dark:bg-yellow-900/20 dark:text-yellow-200">
                 <p className="flex gap-2">
                   <AlertTriangle className="mt-0.5 size-4 shrink-0" />

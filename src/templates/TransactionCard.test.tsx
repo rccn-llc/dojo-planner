@@ -228,6 +228,20 @@ describe('TransactionCard', () => {
       await expect.element(page.getByTestId('recurring-label')).toHaveTextContent('source_recurring_attempt');
     });
 
+    it('adds "Card updated — ready to retry" when the card changed after the failure', async () => {
+      await render(<TransactionCard {...defaultProps} status="declined" transactionType="membership_payment" recurring={{ source: 'webhook_recurring', attemptNumber: 3, memberMembershipId: 'mm', cardUpdatedAfterFailure: true }} />);
+
+      await expect.element(page.getByTestId('card-updated-label')).toHaveTextContent('card_updated_ready');
+      await expect.element(page.getByTestId('recurring-label')).toBeInTheDocument();
+    });
+
+    it('shows only the ready label for an app-recorded decline (no recurring label)', async () => {
+      await render(<TransactionCard {...defaultProps} status="declined" transactionType="membership_payment" recurring={{ source: 'app', memberMembershipId: 'mm', cardUpdatedAfterFailure: true }} />);
+
+      await expect.element(page.getByTestId('card-updated-label')).toBeInTheDocument();
+      expect(page.getByTestId('recurring-label').elements()).toHaveLength(0);
+    });
+
     it('shows nothing for an ordinary row', async () => {
       await render(<TransactionCard {...defaultProps} />);
 

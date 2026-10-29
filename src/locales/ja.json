@@ -924,7 +924,8 @@
     "resolved": "解決済み",
     "possible_duplicate": "二重請求の可能性",
     "retry_payment": "支払いを再試行",
-    "failed_payments_filter": "失敗した支払い"
+    "failed_payments_filter": "失敗した支払い",
+    "card_updated_ready": "カード更新済み — 再試行できます"
   },
   "TransactionDetailModal": {
     "title": "取引の詳細",
@@ -2465,6 +2466,7 @@
     "error_generic": "問題が発生しました。もう一度お試しください。",
     "try_again_button": "再試行",
     "done_button": "完了",
-    "close_button": "閉じる"
+    "close_button": "閉じる",
+    "pays_invoice_note": "この支払いは未払いの IQPro 請求書に充当されるため、IQPro の自動再試行は停止します。"
   }
 }

@@ -3,7 +3,7 @@
 import type { TransactionRecurringFlags } from './recurringPayments';
 import { useTranslations } from 'next-intl';
 import { Badge } from '@/components/ui/badge';
-import { recurringLabel } from './recurringPayments';
+import { isReadyToRetry, recurringLabel } from './recurringPayments';
 
 /**
  * Secondary badge beside a transaction's status: "Recurring · attempt 2/3",
@@ -16,17 +16,27 @@ export function RecurringLabel({ status, transactionType, recurring }: {
 }) {
   const t = useTranslations('TransactionsPage');
   const label = recurringLabel({ status, transactionType, recurring });
-  if (!label) {
+  const ready = isReadyToRetry({ status, transactionType, recurring });
+  if (!label && !ready) {
     return null;
   }
 
-  const text = label.key === 'source_recurring_attempt'
+  const text = label?.key === 'source_recurring_attempt'
     ? t('source_recurring_attempt', { attempt: label.attempt })
-    : t(label.key);
+    : label ? t(label.key) : null;
 
   return (
-    <Badge variant={label.variant} className="ml-1" data-testid="recurring-label">
-      {text}
-    </Badge>
+    <>
+      {label && (
+        <Badge variant={label.variant} className="ml-1" data-testid="recurring-label">
+          {text}
+        </Badge>
+      )}
+      {ready && (
+        <Badge variant="success" className="ml-1" data-testid="card-updated-label">
+          {t('card_updated_ready')}
+        </Badge>
+      )}
+    </>
   );
 }

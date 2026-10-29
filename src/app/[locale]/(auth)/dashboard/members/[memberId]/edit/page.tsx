@@ -834,6 +834,7 @@ export default function EditMemberPage() {
           resolved: tx.resolved,
           superseded: tx.superseded,
           attemptNumber: tx.attemptNumber,
+          cardUpdatedAfterFailure: tx.cardUpdatedAfterFailure,
         },
       }));
       setBillingHistory(items);

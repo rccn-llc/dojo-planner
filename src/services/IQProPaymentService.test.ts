@@ -584,13 +584,61 @@ describe('IQProPaymentProvider', () => {
       expect(p.subscriptionStatusId).toBe(1);
       expect(p.recurrence.billingPeriodId).toBe(4); // monthly
       expect(p.recurrence.schedule).toEqual({ minutes: [0], hours: [0], daysOfMonth: [15] }); // no monthsOfYear
-      expect(p.lineItems[0].unitOfMeasureId).toBe(3); // MONTH
+      expect(p.lineItems[0].unitOfMeasureId).toBe(120); // IQPro 'Months' (3 was 'Alcoholic strength by volume')
       expect(p.paymentMethod.cardProcessorId).toBe('test-card-processor-001');
       expect(p.paymentMethod.achProcessorId).toBe('test-ach-processor-001');
       expect(p.addresses).toHaveLength(2);
       expect(p.addresses[0].isBilling).toBe(true);
       expect(p.addresses[1].isRemittance).toBe(true);
       expect(p.paymentAdjustments).toEqual([{ type: 'ServiceFee', percentage: 3.75, flatAmount: null }]);
+    });
+
+    it('uses IQPro\'s native Six Months period (7) for semi-annual, with both months and the Half year unit', async () => {
+      const { provider, iqproPost } = await loadProvider();
+      iqproPost.mockResolvedValueOnce({ data: { subscriptionId: 'sub_semi' } });
+
+      await provider.createSubscription(testConfig, {
+        customerId: 'cust_1',
+        paymentMethodId: 'pm_1',
+        amount: 594,
+        frequency: 'semi-annual' as any,
+        startDate: new Date('2026-04-15T12:00:00Z'),
+        description: 'Semi-annual',
+        firstName: 'A',
+        lastName: 'B',
+        email: 'a@b.test',
+      } as any);
+
+      const p = iqproPost.mock.calls[0]![2] as any;
+
+      expect(p.recurrence.billingPeriodId).toBe(7);
+      // IQPro REQUIRES monthsOfYear for period 7 (sandbox: 400 without it).
+      expect(p.recurrence.schedule).toEqual({ minutes: [0], hours: [0], daysOfMonth: [15], monthsOfYear: [4, 10] });
+      expect(p.lineItems[0].unitOfMeasureId).toBe(69); // IQPro 'Half year (six months)'
+    });
+
+    it('uses daysOfWeek and the Weeks unit for weekly subscriptions', async () => {
+      const { provider, iqproPost } = await loadProvider();
+      iqproPost.mockResolvedValueOnce({ data: { subscriptionId: 'sub_week' } });
+
+      await provider.createSubscription(testConfig, {
+        customerId: 'cust_1',
+        paymentMethodId: 'pm_1',
+        amount: 25,
+        frequency: 'weekly' as any,
+        startDate: new Date('2026-04-15T12:00:00Z'),
+        description: 'Weekly',
+        firstName: 'A',
+        lastName: 'B',
+        email: 'a@b.test',
+      } as any);
+
+      const p = iqproPost.mock.calls[0]![2] as any;
+
+      expect(p.recurrence.billingPeriodId).toBe(2);
+      expect(p.recurrence.schedule).not.toHaveProperty('daysOfMonth');
+      expect(p.recurrence.schedule.daysOfWeek).toHaveLength(1);
+      expect(p.lineItems[0].unitOfMeasureId).toBe(191); // IQPro 'Weeks'
     });
 
     it('sets billingPeriodId 6 + monthsOfYear for annual subscriptions', async () => {
@@ -615,7 +663,7 @@ describe('IQProPaymentProvider', () => {
 
       expect(p.recurrence.billingPeriodId).toBe(6);
       expect(p.recurrence.schedule).toEqual({ minutes: [0], hours: [0], daysOfMonth: [15], monthsOfYear: [4] });
-      expect(p.lineItems[0].unitOfMeasureId).toBe(4); // YEAR
+      expect(p.lineItems[0].unitOfMeasureId).toBe(193); // IQPro 'Years' (4 was 'Ampere')
     });
   });
 
@@ -888,6 +936,29 @@ describe('IQProPaymentProvider', () => {
         transactionId: 'tx_ok',
         amountCharged: 103.75,
       });
+    });
+
+    it('applies the charge to the invoice when one is given (ends IQPro\'s automatic retries)', async () => {
+      const { provider, iqproGet, iqproPost } = await loadProvider();
+      iqproGet.mockResolvedValueOnce(subResponse);
+      iqproPost.mockResolvedValueOnce({ data: { transactionId: 'tx_inv', status: 'PendingSettlement' } });
+
+      await provider.chargeOneTimeFee(testConfig, { ...params, invoiceId: 'inv-123' });
+
+      const body = iqproPost.mock.calls[0]![2] as Record<string, unknown>;
+
+      expect(body.invoiceId).toBe('inv-123');
+      expect(body.type).toBe('Sale');
+    });
+
+    it('sends no invoiceId for an ordinary fee charge', async () => {
+      const { provider, iqproGet, iqproPost } = await loadProvider();
+      iqproGet.mockResolvedValueOnce(subResponse);
+      iqproPost.mockResolvedValueOnce({ data: { transactionId: 'tx_fee', status: 'PendingSettlement' } });
+
+      await provider.chargeOneTimeFee(testConfig, params);
+
+      expect(iqproPost.mock.calls[0]![2]).not.toHaveProperty('invoiceId');
     });
 
     it('a transport error is NOT a decline', async () => {

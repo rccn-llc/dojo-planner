@@ -927,7 +927,8 @@
     "resolved": "Réglé",
     "possible_duplicate": "Doublon possible",
     "retry_payment": "Relancer le paiement",
-    "failed_payments_filter": "Paiements échoués"
+    "failed_payments_filter": "Paiements échoués",
+    "card_updated_ready": "Carte mise à jour — prêt à relancer"
   },
   "ReportsPage": {
     "title": "Rapports",
@@ -2470,6 +2471,7 @@
     "error_generic": "Une erreur s'est produite. Veuillez réessayer.",
     "try_again_button": "Réessayer",
     "done_button": "Terminé",
-    "close_button": "Fermer"
+    "close_button": "Fermer",
+    "pays_invoice_note": "Ce paiement sera appliqué à la facture IQPro ouverte ; IQPro cessera donc de la relancer automatiquement."
   }
 }

@@ -501,9 +501,13 @@ describe('processMemberPayment', () => {
     const membershipSet = dbState.setCalls.find(s => s.providerSubscriptionId === 'sub_42');
     const next = membershipSet?.nextPaymentDate as Date;
     const first = membershipSet?.firstPaymentDate as Date;
-    const diffMs = next.getTime() - first.getTime();
+    // Seven CALENDAR days, not 7×24h of milliseconds: across a daylight-saving
+    // change the local "same time next week" is 7 days ± 1 hour, so a fixed ms
+    // difference failed every run in the week before a DST transition.
+    const expected = new Date(first);
+    expected.setDate(expected.getDate() + 7);
 
-    expect(diffMs).toBe(7 * 24 * 60 * 60 * 1000);
+    expect(next.getTime()).toBe(expected.getTime());
   });
 
   it('autopay (semi-annual): nextPaymentDate is exactly six months later', async () => {

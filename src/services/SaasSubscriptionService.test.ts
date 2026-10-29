@@ -380,7 +380,7 @@ describe('SaasSubscriptionService', () => {
             expect.objectContaining({
               unitPrice: 49,
               discount: 0,
-              unitOfMeasureId: 3,
+              unitOfMeasureId: 120, // IQPro 'Months'
             }),
           ]),
         }),
@@ -474,7 +474,7 @@ describe('SaasSubscriptionService', () => {
 
       expect(subPayload.recurrence.billingPeriodId).toBe(6);
       expect(subPayload.recurrence.schedule.monthsOfYear).toBeDefined();
-      expect(subPayload.lineItems[0].unitOfMeasureId).toBe(4);
+      expect(subPayload.lineItems[0].unitOfMeasureId).toBe(193); // IQPro 'Years'
       expect(subPayload.lineItems[0].unitPrice).toBe(348); // annual total for basic
     });
 
@@ -580,7 +580,7 @@ describe('SaasSubscriptionService', () => {
               name: 'Growth Plan',
               unitPrice: 125,
               discount: 0,
-              unitOfMeasureId: 3,
+              unitOfMeasureId: 120, // IQPro 'Months'
             }),
           ]),
         }),
@@ -647,7 +647,7 @@ describe('SaasSubscriptionService', () => {
       const callArgs = iqproPut.mock.calls[0]![2] as Record<string, any>;
 
       expect(callArgs.lineItems[0].unitPrice).toBe(1188); // annual total for growth
-      expect(callArgs.lineItems[0].unitOfMeasureId).toBe(4);
+      expect(callArgs.lineItems[0].unitOfMeasureId).toBe(193); // IQPro 'Years'
     });
 
     it('returns error when IQPro update fails', async () => {

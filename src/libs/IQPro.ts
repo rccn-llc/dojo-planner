@@ -41,6 +41,31 @@ type CachedToken = { token: string; expiresAt: number };
 const oauthTokenCache = new Map<string, CachedToken>();
 const TOKEN_CACHE_MAX = 100;
 
+/**
+ * Turn an IQPro (Azure AD B2C) token failure into an actionable message.
+ *
+ * ⚠️ IQPro client secrets EXPIRE 365 days after creation, production included.
+ * An expired secret still matches what IQPro has on file, so B2C does not say
+ * "wrong secret" (AADB2C90081) — it fails during token issuance with
+ * AADB2C90085 "The service has encountered an internal error", which reads
+ * like an IQPro outage. Every IQPro call for that org (or the platform) then
+ * fails until the secret is rotated: Location Settings for an org,
+ * `backfillPlatformIQProConfig.ts` for the platform, or the `IQPRO_*` env.
+ */
+export function describeOAuthFailure(status: number, body: string): string {
+  const code = /AADB2C\d+/.exec(body)?.[0];
+  switch (code) {
+    case 'AADB2C90085':
+      return `IQPro OAuth token request failed (${status}, ${code}): the client secret has most likely EXPIRED (IQPro secrets expire 365 days after creation). Rotate it — Location Settings for an org, backfillPlatformIQProConfig.ts for the platform.`;
+    case 'AADB2C90081':
+      return `IQPro OAuth token request failed (${status}, ${code}): the client secret does not match this client id.`;
+    case 'AADB2C90018':
+      return `IQPro OAuth token request failed (${status}, ${code}): the client id is unknown to IQPro (wrong environment or deleted client).`;
+    default:
+      return `OAuth token request failed: ${status}${code ? ` (${code})` : ''}`;
+  }
+}
+
 async function getOAuthToken(config: IQProConfig): Promise<string> {
   const key = config.clientId;
   const cached = oauthTokenCache.get(key);
@@ -60,7 +85,11 @@ async function getOAuthToken(config: IQProConfig): Promise<string> {
   });
 
   if (!res.ok) {
-    throw new Error(`OAuth token request failed: ${res.status}`);
+    const body = await res.text().catch(() => '');
+    const message = describeOAuthFailure(res.status, body);
+    // clientId only — never the secret.
+    logger.error('[IQPro] OAuth token request failed', { status: res.status, clientId: config.clientId, message });
+    throw new Error(message);
   }
 
   const data = await res.json();

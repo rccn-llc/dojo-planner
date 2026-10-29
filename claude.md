@@ -386,12 +386,13 @@ When a member's subscription charge fails at IQPro or Square, the payment webhoo
 8. The first invoice of a subscription the app already charged at signup (Square) is skipped.
 
 **Retry (`transactions.retry` → `PaymentRetryService.retryFailedTransaction`, FRONT_DESK+):**
-- A standalone charge of the card on the membership's subscription (`provider.chargeOneTimeFee`), NOT "pay the provider's invoice" — ⚠️ Square documents that its API cannot pay invoices. The new row is `source = 'retry'`, `retry_of_transaction_id` → the failed row, approved OR declined.
+- A charge of the card on the membership's subscription (`provider.chargeOneTimeFee`). The new row is `source = 'retry'`, `retry_of_transaction_id` → the failed row, approved OR declined.
+- **IQPro: the retry PAYS THE INVOICE** when the failed charge's webhook carried `invoiceId` (stored as `provider_invoice_id`): the Sale is sent with `InsertTransaction.invoiceId` (iQ Pro+ API reference: "Specifies an invoice to apply a transaction against … update it's status accordingly"). Basys confirms this settles the invoice — IQPro stops its automatic retries and billing continues as scheduled — so there is no double-charge risk. Without an invoice id it falls back to a standalone charge. ⚠️ Square's API cannot pay invoices (see below).
 - Guards (typed errors → 404 / 409 / 422 / 503): declined, `membership_payment`/`hold_fee`, linked to a membership with a subscription, **not resolved** (a later paid row for the membership — manual retry, auto-retry, or the member paying the emailed link — settles every failed attempt in that cycle), and the **latest** failure (older attempts are "superseded").
 - **Concurrency:** the failed row is locked `FOR UPDATE` while a `pending` placeholder retry row is inserted; a concurrent retry sees the pending child and gets 409. A charge that could not be attempted (not a decline) deletes the placeholder and throws `TransactionRetryFailedError` (422).
 - **A decline is a result, not an error**: `{ status: 'declined', declineReason }`, recorded and audited as a completed `TRANSACTION_RETRY`. `ChargeFeeResult.declined` distinguishes a processor decline from "could not attempt" in both providers.
 - **Square:** after an approved retry, `closeFailedInvoice` CANCELs the unpaid invoice (it emailed the member a pay link). A failure there is returned as a `warning` (money was collected), never a rollback. ⚠️ Not yet sandbox-verified. IQPro: no-op.
-- ⚠️ **IQPro double-charge risk:** a manual retry while IQPro still has automatic attempts left may be followed by IQPro's own retry also succeeding. The modal warns ("IQPro will retry automatically N more times") and requires a checkbox. `IQPRO_MANUAL_RETRY_POLICY` (`'anytime'` | `'overdue_only'`) in `PaymentRetryService.ts` tightens this to overdue-only if the sandbox shows IQPro does not stand down.
+- ⚠️ **IQPro double-charge risk — only for a standalone charge** (no invoice id): IQPro's own retry could also succeed. The quote reports `doubleChargeRisk` (= automatic retries left AND not paying the invoice); only then does the modal warn ("IQPro will retry automatically N more times") and require a checkbox, and only then does `IQPRO_MANUAL_RETRY_POLICY = 'overdue_only'` block the retry. An invoice-paying retry shows "applied to the open IQPro invoice" instead. ⚠️ Not yet sandbox-verified that real IQPro decline webhooks carry `invoiceId`.
 - On approval: membership/member reactivated, decline count reset, receipt email sent, `PROVIDER_TRANSACTION` ref recorded.
 - **Local simulation (non-production only):** a `seed_*` subscription is never sent to a provider — `seed_decline_*` declines, `seed_slow_*` approves after 3s, other `seed_*` approve. Refused when `NODE_ENV=production`.
 
@@ -406,9 +407,11 @@ When a member's subscription charge fails at IQPro or Square, the payment webhoo
 | "Refresh from payment provider" button (`force`) | both |
 | Daily cron `/api/cron/sync-past-due-payment-methods` | both |
 
-**UI:** `RetryPaymentModal` (`src/features/finances/`) — loading (card refresh + `transactions.retryQuote`) → confirm (breakdown, card, "updated by member" badge, IQPro auto-retry warning + required checkbox) → processing (cannot be dismissed) → approved / declined (Try again) / error (no Try again on 409). Opened from `TransactionDetailModal`, the member past-due banner (`PastDueBanner`), and member billing-history rows. `RecurringLabel` shows "Recurring · attempt n/3" / "Retry" / "Resolved" / "Possible duplicate"; `TransactionsService.recurringStateColumns` computes `resolved` / `superseded` / `attemptNumber` in SQL (attempts are counted only for rows with a provider transaction id — IQPro attempts; Square invoice failures have none and Square does not auto-retry). The transactions filter has a "Failed payments" option. Member billing history has a Status column, Refund only on paid rows.
+**UI:** `RetryPaymentModal` (`src/features/finances/`) — loading (card refresh + `transactions.retryQuote`) → confirm (breakdown, card, "updated by member" badge, IQPro auto-retry warning + required checkbox) → processing (cannot be dismissed) → approved / declined (Try again) / error (no Try again on 409). Opened from `TransactionDetailModal`, the member past-due banner (`PastDueBanner`), and member billing-history rows. `RecurringLabel` shows "Recurring · attempt n/3" / "Retry" / "Resolved" / "Possible duplicate", plus **"Card updated — ready to retry"** (`isReadyToRetry`: a retryable failure whose member's active card was updated at the provider after it — `cardUpdatedAfterFailure`, computed in SQL from `payment_method.updated_source = 'provider_sync'`). Because IQPro sends **no** webhook for a card update (no Invoice webhook either — confirmed by Basys), this signal comes only from the card-sync reads, which is why the daily job exists; `TransactionsService.recurringStateColumns` computes `resolved` / `superseded` / `attemptNumber` in SQL (attempts are counted only for rows with a provider transaction id — IQPro attempts; Square invoice failures have none and Square does not auto-retry). The transactions filter has a "Failed payments" option. Member billing history has a Status column, Refund only on paid rows.
 
 **Routing refs:** every webhook resolves its org from `tenant_external_ref`. Previously unrecorded ids are now recorded: `chargeOneTimeFee` charges, recurring hold-fee subscriptions, and everything the **kiosk** creates (`recordExternalRefs` in the kiosk's `tenantDirectory.ts`). `src/scripts/backfillExternalRefs.ts` (dry run by default, `--confirm`) records refs for existing rows across active tenants; seed ids are skipped.
+
+**IQPro sandbox (real failed renewals):** `src/scripts/iqproSandboxDailySubscription.ts` (refuses non-sandbox URLs) puts a member who already has a real IQPro customer + saved card (added via Add Member with approving card `4264281555555550`) on a **$1.00 DAILY** subscription (billingPeriodId 1, unit 36 Days), adds the local membership and routing refs, and prints the test steps: switch the card to decline card `4124939999999990` via IQPro's update-card email → three decline webhooks → overdue → update back → "Card updated — ready to retry" → retry pays the invoice. `--cancel=<id>` cleans up. Needs a public tunnel + a Developer Hub Transaction webhook, and `IQPRO_WEBHOOK_PUBLIC_KEY_OVERRIDE` unset. Basys: amounts can matter for decline triggers (use $1), there is no delayed decline, and subscriptions cannot be charged on demand. ⚠️ The schedule's time zone is assumed UTC.
 
 **Testing locally:** the seed adds failed-payment members (Paula Pending = attempt 1/3, Oscar Overdue, Rita Resolved, Dana Duplicate, Carl Cardupdate, Sam Square, Diego Decline, Sloane Slow). `src/scripts/simulatePaymentWebhook.ts` sends signed webhooks to localhost (IQPro via a dev keypair in gitignored `.simulator-keys/` + `IQPRO_WEBHOOK_PUBLIC_KEY_OVERRIDE`, Square via HMAC). ⚠️ Square's sandbox cannot simulate a failed recurring payment (Square staff); its `invoice.scheduled_charge_failed` path is fixture-tested only.
 
@@ -446,14 +449,14 @@ UI consumers must handle `null` everywhere it's displayed. The membership detail
 
 The IQPro subscription mapping (`src/services/IQProPaymentService.ts` `createSubscription`) handles four cadences:
 
-| Frequency | IQPro `billingPeriodId` | Schedule |
-|-----------|-------------------------|----------|
-| `Weekly` | 2 | `daysOfWeek: [startDayOfWeek]` (no `daysOfMonth`) |
-| `Monthly` | 4 | `daysOfMonth: [startDayOfMonth]` |
-| `Semi-Annual` | 6 (yearly) | `daysOfMonth: [startDayOfMonth]`, `monthsOfYear: [startMonth, startMonth+6 wrapped mod 12]` — fires twice a year |
-| `Annual` | 6 | `daysOfMonth: [startDayOfMonth]`, `monthsOfYear: [startMonth]` |
+| Frequency | IQPro `billingPeriodId` | Line-item `unitOfMeasureId` | Schedule |
+|-----------|-------------------------|-----------------------------|----------|
+| `Weekly` | 2 (Weekly) | 191 (Weeks) | `daysOfWeek: [startDayOfWeek]` (no `daysOfMonth`) |
+| `Monthly` | 4 (Monthly) | 120 (Months) | `daysOfMonth: [startDayOfMonth]` |
+| `Semi-Annual` | 7 (Six Months) | 69 (Half year) | `daysOfMonth: [startDayOfMonth]`, `monthsOfYear: [startMonth, startMonth+6 wrapped mod 12]` |
+| `Annual` | 6 (Yearly) | 193 (Years) | `daysOfMonth: [startDayOfMonth]`, `monthsOfYear: [startMonth]` |
 
-Semi-annual is not a native IQPro `billingPeriodId`; we emulate it by using the yearly billing period with two `monthsOfYear` entries 6 months apart. This is the safest approach against the sandbox — verify behavior in the IQPro sandbox console when first deploying semi-annual plans.
+The ids live in `src/libs/IQProConstants.ts` (`IQPRO_BILLING_PERIOD`, `IQPRO_UNIT`) — never inline a number. They are a separate module from `libs/IQPro.ts` because many tests mock that module wholesale, which would erase the constants. Semi-annual uses IQPro's native **Six Months** period (7). ⚠️ Sandbox: period 7 **without** `monthsOfYear` is rejected with a 400, so both months are still sent; whether a single entry would also bill every six months is untested. Every mapping above was accepted by the sandbox and read back with the expected period and unit names.
 
 `normalizeFrequency(value)` in `MemberPaymentService.ts` is the canonical helper for converting any plan-frequency string (or `null`) into the IQPro `SubscriptionFrequency` enum. Anything that doesn't map to a recurring cadence (null, empty, `'None'`, `'one-time'`, unrecognized) returns `null` → the caller routes through `handleOneTimePayment` instead of `handleAutopay`.
 
@@ -561,6 +564,8 @@ The webhook handler at `src/app/[locale]/webhook/iqpro/route.ts` verifies with t
 3. For the platform's own SaaS-billing account: run `src/scripts/backfillPlatformIQProConfig.ts` (there is no admin UI for this).
 4. Once every org and the platform have their values in the DB, the `IQPRO_CLIENT_ID` / `IQPRO_CLIENT_SECRET` / `IQPRO_GATEWAY_ID` env vars can be removed (keep `IQPRO_SCOPE` / `IQPRO_OAUTH_URL` / `IQPRO_BASE_URL` — they're platform-wide).
 
+⚠️ **IQPro client secrets EXPIRE 365 days after creation — production included** (Basys). An expired secret still matches, so Azure B2C does NOT answer "wrong secret" (AADB2C90081); it fails token issuance with **AADB2C90085 "The service has encountered an internal error"**, which looks like an IQPro outage. Every IQPro call for that org (or, for the platform secret, every SaaS-billing call) then fails until it is rotated. `describeOAuthFailure` in `libs/IQPro.ts` names this in the thrown error and log ("client secret has most likely EXPIRED"). Rotate via Location Settings (org), `backfillPlatformIQProConfig.ts` (platform), the `IQPRO_*` env fallback, and the kiosk's copy. Basys recommends rotating before expiry.
+
 **OAuth token cache:** keyed by `clientId` (since `oauthUrl` and `scope` are global). Two orgs with different `clientId`s get two separate cached tokens — there's no cross-tenant leakage. Cap 100 entries; lazy eviction on access; oldest-by-expiry dropped on overflow.
 
 **Key Files:**
@@ -636,14 +641,15 @@ After every approved transaction (one-time or autopay-initial-charge), `sendPaym
 The IQPro subscription API has strict requirements validated against the sandbox:
 
 - `prefix` (required, max 10 chars) — set to `"MBR"` for membership subscriptions
-- `billingPeriodId` — 4 (Monthly) or 6 (Yearly)
+- `billingPeriodId` — see the frequency table above. IQPro's full list (`GET /api/constants/billingperiod`): 1 Daily, 2 Weekly, 3 Biweekly, 4 Monthly, 5 Quarterly, 6 Yearly, 7 Six Months
+- `unitOfMeasureId` comes from IQPro's `/api/constants/units`: **36 Days, 191 Weeks, 120 Months, 69 Half year, 193 Years, 138 Piece**. ⚠️ The app used to send 1 / 3 / 4 / 6, which IQPro reads as Acre / Alcoholic strength / Ampere / Are (confirmed on real sandbox line items). Fixed in both repos via `IQPRO_UNIT`. One-time Sales (memberships, fees, store, retries) use **Piece**; subscription line items use the cadence's time unit
+- The API reference is public: `https://api.basyspro.com/iqsaas/v1/scalar/` (spec at `/iqsaas/v1/openapi/v1.json`); `/api/constants/*` need a token
 - Schedule for monthly: `{ minutes: [0], hours: [0], daysOfMonth: [day] }` — must NOT include `monthsOfYear`
 - Schedule for annual: `{ minutes: [0], hours: [0], daysOfMonth: [day], monthsOfYear: [month] }`
 - Two separate addresses required: one billing (must include `country`, `state`, `email`), one remittance (cannot be same as billing)
 - `cardProcessorId` / `achProcessorId` required on payment method — fetched via `getGatewayProcessors()` from gateway config
 - `trialLengthInDays` (required, min 0) and `invoiceLengthInDays` (required, min 1)
 - Line items: `unitPrice` in dollars (not cents), `discount` field is required (use `0`)
-- `unitOfMeasureId`: 3 = Month, 4 = Year
 
 **IQPro webhooks (`/webhook/iqpro`)** — per the attached "iQ Pro+ Webhook API Guide" and "Subscription Decline Webhooks":
 - Payload `{ resourceType, subType, resource, traceId, actionDateTime, hashAlg, signatureAlg, signature }`. The signature is in the BODY and covers ONLY `resource`: **RSA-SHA256, PKCS#1 v1.5**, the gateway's public key. ⚠️ This replaced an HMAC/`x-iqpro-signature` scheme backed by a package that was never installed — every delivery used to fail before reaching a handler. `IQPRO_WEBHOOK_SECRET` is gone.
@@ -1480,7 +1486,7 @@ Using `BRANCH` (old), `NEWPROJ` (new), `CONTROL`, `SHARED`:
 
 ### Adding an organization (the supported path)
 
-**`npm run org:create`** (`src/scripts/onboardOrg.ts`) onboards an org end to end from a few prompts: target (`production` | `preview`), dojo name, slug, academy owner email, and a payment provider (`iqpro` | `square` | `skip`). IQPro credentials are verified with an OAuth token plus a gateway read; Square credentials with a read of `GET /v2/locations/{id}` on the environment's own API host, after a no-network check that the Application ID matches the environment (`sandbox-…` ids are sandbox-only). For Square the final summary prints the webhook subscription to create (URL + the four events the handler acts on). It then runs, in order:
+**`npm run org:create`** (`src/scripts/onboardOrg.ts`) onboards an org end to end from a few prompts: target (`production` | `preview`), dojo name, slug, academy owner email, and a payment provider (`iqpro` | `square` | `skip`). IQPro credentials are verified with an OAuth token plus a gateway read; Square credentials with a read of `GET /v2/locations/{id}` on the environment's own API host, after a no-network check that the Application ID matches the environment (`sandbox-…` ids are sandbox-only). The final summary prints the webhook subscription to create by hand (`src/scripts/onboarding/webhookReminders.ts`): for Square the URL + `SQUARE_WEBHOOK_EVENTS` (every event the handler acts on, incl. the four `card.*` events — a drift-guard test compares it to the route's `case` list); for IQPro the Developer Hub **Transaction** webhook, without which the gateway has no public key and every delivery is refused. It then runs, in order:
 
 1. **Clerk org + slug** (`POST /v1/organizations`, created by the operator's Clerk user)
 2. **Owner access**: an existing Clerk user is added as `org:academy_owner` directly; otherwise an invitation is sent

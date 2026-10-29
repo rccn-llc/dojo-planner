@@ -294,3 +294,50 @@ describe('resolveWebhookPublicKey', () => {
     await expect(mod.resolveWebhookPublicKey(testConfig)).resolves.toContain('BEGIN PUBLIC KEY');
   });
 });
+
+describe('describeOAuthFailure / token request failures', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.resetModules();
+  });
+
+  it.each([
+    ['AADB2C90085', /most likely EXPIRED/],
+    ['AADB2C90081', /does not match this client id/],
+    ['AADB2C90018', /client id is unknown/],
+  ])('explains %s', async (code, expected) => {
+    const { describeOAuthFailure } = await load();
+
+    expect(describeOAuthFailure(400, `{"error":"invalid_grant","error_description":"${code}: something\\r\\nCorrelation ID: x"}`)).toMatch(expected);
+  });
+
+  it('falls back to the status (with any unrecognised code) otherwise', async () => {
+    const { describeOAuthFailure } = await load();
+
+    expect(describeOAuthFailure(500, 'gateway timeout')).toBe('OAuth token request failed: 500');
+    expect(describeOAuthFailure(400, 'AADB2C99999: new')).toBe('OAuth token request failed: 400 (AADB2C99999)');
+  });
+
+  it('throws the actionable message from a real token request and logs the client id, never the secret', async () => {
+    const mod = await load();
+    mockFetch.mockResolvedValueOnce(new Response('{"error":"invalid_grant","error_description":"AADB2C90085: The service has encountered an internal error."}', { status: 400 }));
+
+    await expect(mod.getWebhookPublicKey(testConfig)).resolves.toBeNull();
+
+    const logged = JSON.stringify(mockLogger.error.mock.calls);
+
+    expect(logged).toContain('most likely EXPIRED');
+    expect(logged).toContain('test-client-id');
+    expect(logged).not.toContain('test-client-secret');
+  });
+
+  it('copes with an unreadable error body', async () => {
+    const mod = await load();
+    const broken = new Response(null, { status: 503 });
+    Object.defineProperty(broken, 'text', { value: () => Promise.reject(new Error('stream closed')) });
+    mockFetch.mockResolvedValueOnce(broken);
+
+    await expect(mod.getWebhookPublicKey(testConfig)).resolves.toBeNull();
+    expect(JSON.stringify(mockLogger.error.mock.calls)).toContain('OAuth token request failed: 503');
+  });
+});

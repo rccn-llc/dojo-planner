@@ -13,6 +13,8 @@ export type TransactionRecurringFlags = {
   resolved?: boolean;
   superseded?: boolean;
   attemptNumber?: number | null;
+  /** The member's active card was updated at the provider after this failure. */
+  cardUpdatedAfterFailure?: boolean;
 };
 
 /** `failure_reason` marker for a suspected double charge. */
@@ -72,4 +74,9 @@ export function latestRetryableFailure<T extends RowLike & { createdAt: Date | s
   return rows
     .filter(isRetryable)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null;
+}
+
+/** A failure worth retrying NOW: still retryable, and the card changed since it failed. */
+export function isReadyToRetry(tx: RowLike): boolean {
+  return isRetryable(tx) && Boolean(tx.recurring?.cardUpdatedAfterFailure);
 }

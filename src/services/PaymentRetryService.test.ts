@@ -13,6 +13,7 @@ import { TransactionNotFoundError } from './MemberPaymentService';
 import {
   autoRetriesRemaining,
   getRetryQuote,
+  paysInvoice,
   retryBaseAmount,
   retryFailedTransaction,
   RetryProviderUnavailableError,
@@ -137,6 +138,13 @@ describe('pure helpers', () => {
     expect(retryBaseAmount({ amount: 100, source: 'retry' }, 3.75)).toBe(100);
   });
 
+  it('pays the invoice only for IQPro, and only with an invoice id', () => {
+    expect(paysInvoice('iqpro', 'inv-1')).toBe(true);
+    expect(paysInvoice('iqpro', null)).toBe(false);
+    expect(paysInvoice('square', 'inv-1')).toBe(false);
+    expect(paysInvoice(null, 'inv-1')).toBe(false);
+  });
+
   it('counts IQPro automatic attempts left; Square never auto-retries', () => {
     expect(autoRetriesRemaining('iqpro', 1)).toBe(2);
     expect(autoRetriesRemaining('iqpro', 3)).toBe(0);
@@ -203,6 +211,34 @@ describe('retryFailedTransaction', () => {
       await retryFailedTransaction(f.declinedId, ORG, IQPRO);
 
       expect(sendReceipt).toHaveBeenCalledWith(expect.objectContaining({ serviceFeeAmount: 4, serviceFeePct: 4 }));
+    });
+
+    it('IQPro: pays the failed charge\'s invoice (ends IQPro\'s own retries)', async () => {
+      const f = await makeFailure({ providerInvoiceId: 'iq-inv-1' });
+      provider.chargeOneTimeFee.mockResolvedValue({ success: true, amountCharged: 103.75, transactionId: 'ptx_inv' });
+
+      await retryFailedTransaction(f.declinedId, ORG, IQPRO);
+
+      expect(provider.chargeOneTimeFee).toHaveBeenCalledWith(IQPRO, expect.objectContaining({ invoiceId: 'iq-inv-1' }));
+    });
+
+    it('IQPro without an invoice id: a standalone charge (no invoiceId sent)', async () => {
+      const f = await makeFailure();
+      provider.chargeOneTimeFee.mockResolvedValue({ success: true, amountCharged: 103.75, transactionId: 'ptx_noinv' });
+
+      await retryFailedTransaction(f.declinedId, ORG, IQPRO);
+
+      expect(provider.chargeOneTimeFee.mock.calls[0]![1]).not.toHaveProperty('invoiceId');
+    });
+
+    it('Square: never sends the invoice id to the charge (its API cannot pay invoices)', async () => {
+      const f = await makeFailure({ providerInvoiceId: 'sq-inv-1' });
+      provider.chargeOneTimeFee.mockResolvedValue({ success: true, amountCharged: 103.75, transactionId: 'pay_x' });
+
+      await retryFailedTransaction(f.declinedId, ORG, SQUARE);
+
+      expect(provider.chargeOneTimeFee.mock.calls[0]![1]).not.toHaveProperty('invoiceId');
+      expect(provider.closeFailedInvoice).toHaveBeenCalledWith(SQUARE, 'sq-inv-1');
     });
 
     it('cancels the provider invoice after a successful Square retry', async () => {
@@ -487,10 +523,22 @@ describe('getRetryQuote', () => {
       card: { type: 'card', last4: '4242', cardBrand: 'VISA', expirationDate: '03/29', updatedAfterFailure: false },
       declineCount: 1,
       autoRetriesRemaining: 2,
+      paysInvoice: false,
+      // IQPro still retrying + no invoice to pay → both charges could succeed.
+      doubleChargeRisk: true,
       overdue: false,
       blockedReason: null,
     });
     expect(provider.computeFees).toHaveBeenCalledWith(IQPRO, expect.objectContaining({ baseAmount: 100, isTaxable: false, paymentMethodType: 'card' }));
+  });
+
+  it('IQPro with an invoice id: pays the invoice, so no double-charge risk even with retries left', async () => {
+    const f = await makeFailure({ declineCount: 1, providerInvoiceId: 'iq-inv-2' });
+    provider.computeFees.mockResolvedValue({ baseAmount: 100, taxAmount: 0, taxPct: 0, serviceFeeAmount: 3.75, serviceFeePct: 3.75, amount: 103.75 });
+
+    const quote = await getRetryQuote(f.declinedId, ORG, IQPRO);
+
+    expect(quote).toMatchObject({ autoRetriesRemaining: 2, paysInvoice: true, doubleChargeRisk: false });
   });
 
   it('flags a card the member updated at the provider after the failure', async () => {

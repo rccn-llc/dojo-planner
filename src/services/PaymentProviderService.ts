@@ -315,6 +315,14 @@ export type ChargeOneTimeFeeParams = {
   amount: number;
   description: string;
   caption: string;
+  /**
+   * The provider invoice this charge pays (IQPro `InsertTransaction.invoiceId`).
+   * Paying a failed subscription charge's invoice settles it, so IQPro stops
+   * its own automatic retries and billing continues as scheduled — no double
+   * charge. Square ignores it: its API cannot pay an invoice, so the retry
+   * cancels the invoice afterwards instead (`closeFailedInvoice`).
+   */
+  invoiceId?: string;
 };
 
 /** A saved payment method resolved from an existing subscription. */

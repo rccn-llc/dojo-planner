@@ -46,6 +46,7 @@ import {
   mapTransactionStatus,
   tokenizeAch,
 } from '@/libs/IQPro';
+import { IQPRO_BILLING_PERIOD, IQPRO_UNIT } from '@/libs/IQProConstants';
 import { logger } from '@/libs/Logger';
 import { PAYMENT_PROVIDER } from '@/types/PaymentProvider';
 import { normalizeExpiration } from '@/utils/CardExpiration';
@@ -427,7 +428,7 @@ export class IQProPaymentProvider implements IPaymentProvider {
         unitPrice: li.unitPrice,
         discount: li.discount,
         freightAmount: 0,
-        unitOfMeasureId: 1,
+        unitOfMeasureId: IQPRO_UNIT.PIECE,
         localTaxPercent: isTaxable ? fb.taxPct : 0,
         nationalTaxPercent: 0,
       }));
@@ -512,13 +513,15 @@ export class IQProPaymentProvider implements IPaymentProvider {
       const startMonth = params.startDate.getMonth() + 1; // 1-12
 
       // Billing period mapping (IQPro recurrence schema):
-      // - Weekly (billingPeriodId: 2): schedule must include daysOfWeek.
-      // - Monthly (billingPeriodId: 4): schedule needs daysOfMonth only.
-      // - Semi-annual: IQPro has no native 6-month cadence. We use
-      //   billingPeriodId: 6 (yearly) with two monthsOfYear entries (startMonth
-      //   and startMonth+6 wrapped mod 12) so the sub fires twice a year.
-      // - Annual (billingPeriodId: 6): schedule needs daysOfMonth +
-      //   monthsOfYear with the single start month.
+      // - Weekly (WEEKLY): schedule must include daysOfWeek.
+      // - Monthly (MONTHLY): schedule needs daysOfMonth only.
+      // - Semi-annual (SIX_MONTHS, IQPro's native period 7): IQPro REQUIRES
+      //   monthsOfYear + daysOfMonth for it (sandbox-verified). It does not say
+      //   whether a single month would fire every 6 months or once a year, so
+      //   both months are listed (startMonth and startMonth+6) — fires twice a
+      //   year either way, exactly as the earlier yearly emulation did.
+      // - Annual (YEARLY): schedule needs daysOfMonth + monthsOfYear with the
+      //   single start month.
       let billingPeriodId: number;
       const schedule: Record<string, number[]> = {
         minutes: [0],
@@ -527,24 +530,24 @@ export class IQProPaymentProvider implements IPaymentProvider {
       };
       switch (params.frequency) {
         case 'weekly':
-          billingPeriodId = 2;
+          billingPeriodId = IQPRO_BILLING_PERIOD.WEEKLY;
           schedule.daysOfWeek = [params.startDate.getDay()];
           // Weekly schedules don't need daysOfMonth — replace it.
           delete (schedule as Record<string, unknown>).daysOfMonth;
           break;
         case 'semi-annual': {
-          billingPeriodId = 6;
+          billingPeriodId = IQPRO_BILLING_PERIOD.SIX_MONTHS;
           const secondMonth = ((startMonth - 1 + 6) % 12) + 1;
           schedule.monthsOfYear = [startMonth, secondMonth].sort((a, b) => a - b);
           break;
         }
         case 'annual':
-          billingPeriodId = 6;
+          billingPeriodId = IQPRO_BILLING_PERIOD.YEARLY;
           schedule.monthsOfYear = [startMonth];
           break;
         case 'monthly':
         default:
-          billingPeriodId = 4;
+          billingPeriodId = IQPRO_BILLING_PERIOD.MONTHLY;
           break;
       }
 
@@ -580,16 +583,15 @@ export class IQProPaymentProvider implements IPaymentProvider {
         country,
       };
 
-      // IQPro unitOfMeasureId: 1=Item, 3=Month, 4=Year, 6=Week (per gateway docs).
-      // Semi-annual bills in months, so use Month (3) and let unitPrice be the
-      // 6-month total.
+      // The line item's unit is the billing period (unitPrice is the price
+      // for one period). IDs from IQPro's /api/constants/units — see IQPRO_UNIT.
       const unitOfMeasureId = (() => {
         switch (params.frequency) {
-          case 'weekly': return 6;
-          case 'annual': return 4;
-          case 'semi-annual':
+          case 'weekly': return IQPRO_UNIT.WEEKS;
+          case 'annual': return IQPRO_UNIT.YEARS;
+          case 'semi-annual': return IQPRO_UNIT.HALF_YEAR;
           case 'monthly':
-          default: return 3;
+          default: return IQPRO_UNIT.MONTHS;
         }
       })();
 
@@ -746,6 +748,9 @@ export class IQProPaymentProvider implements IPaymentProvider {
 
       const feeTxPayload = {
         type: 'Sale',
+        // Applies the payment to the invoice (a failed subscription charge's),
+        // which updates its balance/status and ends IQPro's automatic retries.
+        ...(params.invoiceId ? { invoiceId: params.invoiceId } : {}),
         remit: {
           baseAmount: serverFees.baseAmount,
           taxAmount: serverFees.taxAmount,
@@ -768,7 +773,7 @@ export class IQProPaymentProvider implements IPaymentProvider {
             unitPrice: baseAmount,
             discount: 0,
             freightAmount: 0,
-            unitOfMeasureId: 1,
+            unitOfMeasureId: IQPRO_UNIT.PIECE,
             localTaxPercent: 0,
             nationalTaxPercent: 0,
           },

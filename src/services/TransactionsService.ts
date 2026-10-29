@@ -39,6 +39,13 @@ export type RecurringState = {
    * and Square does not auto-retry, so "attempt n of 3" would be false there.
    */
   attemptNumber: number | null;
+  /**
+   * A declined row whose member's ACTIVE card was updated at the provider
+   * after the failure (the reconcile recorded `updated_source = 'provider_sync'`)
+   * — a retry may now succeed. IQPro sends no webhook for a card update, so
+   * this comes from the card-sync reads (daily job, page loads, retry modal).
+   */
+  cardUpdatedAfterFailure: boolean;
 };
 
 const RETRYABLE_TYPES_SQL = sql.raw(`('membership_payment','hold_fee')`);
@@ -64,6 +71,13 @@ export const recurringStateColumns = {
       AND t2.status = 'declined'
       AND t2.transaction_type IN ${RETRYABLE_TYPES_SQL}
       AND t2.created_at > ${transactionSchema.createdAt}
+  ))`.mapWith(Boolean),
+  cardUpdatedAfterFailure: sql<boolean>`(${transactionSchema.status} = 'declined' AND ${transactionSchema.memberId} IS NOT NULL AND EXISTS (
+    SELECT 1 FROM "payment_method" pm
+    WHERE pm.member_id = ${transactionSchema.memberId}
+      AND pm.status = 'active'
+      AND pm.updated_source = 'provider_sync'
+      AND pm.updated_at > ${transactionSchema.createdAt}
   ))`.mapWith(Boolean),
   attemptNumber: sql<number | null>`CASE WHEN ${transactionSchema.status} = 'declined' AND ${transactionSchema.source} = 'webhook_recurring' AND ${transactionSchema.providerTransactionId} IS NOT NULL THEN (
     SELECT count(*)::int FROM "transaction" t2

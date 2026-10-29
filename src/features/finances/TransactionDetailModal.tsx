@@ -155,6 +155,7 @@ export function TransactionDetailModal({
         resolved: details.resolved,
         superseded: details.superseded,
         attemptNumber: details.attemptNumber,
+        cardUpdatedAfterFailure: details.cardUpdatedAfterFailure,
       }
     : transaction.recurring;
   const currentStatus = (details?.status ?? transaction.status) as TransactionStatus;

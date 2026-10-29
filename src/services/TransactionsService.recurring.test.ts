@@ -87,6 +87,39 @@ describe('recurring failed-payment state columns', () => {
     expect(row.attemptNumber).toBeNull();
   });
 
+  it('flags a decline whose member\'s active card was updated at the provider AFTER the failure', async () => {
+    const m = await membership();
+    const before = await tx(m, 'declined', 'webhook_recurring', 0);
+    const { paymentMethodSchema } = await import('@/models/Schema');
+    await db.insert(paymentMethodSchema).values([
+      { id: randomUUID(), memberId: m.memberId, type: 'card', last4: '1111', status: 'replaced', updatedSource: 'app', updatedAt: at(-5) },
+      { id: randomUUID(), memberId: m.memberId, type: 'card', last4: '4242', status: 'active', updatedSource: 'provider_sync', updatedAt: at(5) },
+    ]);
+    const after = await tx(m, 'declined', 'webhook_recurring', 10);
+    const paid = await tx(m, 'paid', 'webhook_recurring', 11);
+
+    const byId = new Map((await getOrganizationTransactions(ORG)).map(r => [r.id, r]));
+
+    expect(byId.get(before)!.cardUpdatedAfterFailure).toBe(true);
+    // Updated BEFORE this failure — the new card is the one that declined.
+    expect(byId.get(after)!.cardUpdatedAfterFailure).toBe(false);
+    expect(byId.get(paid)!.cardUpdatedAfterFailure).toBe(false);
+  });
+
+  it('does not count a card the staff updated in the app, or a replaced card', async () => {
+    const m = await membership();
+    const d = await tx(m, 'declined', 'webhook_recurring', 0);
+    const { paymentMethodSchema } = await import('@/models/Schema');
+    await db.insert(paymentMethodSchema).values([
+      { id: randomUUID(), memberId: m.memberId, type: 'card', last4: '1', status: 'active', updatedSource: 'app', updatedAt: at(5) },
+      { id: randomUUID(), memberId: m.memberId, type: 'card', last4: '2', status: 'replaced', updatedSource: 'provider_sync', updatedAt: at(6) },
+    ]);
+
+    const row = (await getOrganizationTransactions(ORG)).find(r => r.id === d)!;
+
+    expect(row.cardUpdatedAfterFailure).toBe(false);
+  });
+
   it('never marks a guest row (no membership) resolved or superseded', async () => {
     const id = randomUUID();
     await db.insert(transactionSchema).values({ id, organizationId: ORG, transactionType: 'product_purchase', amount: 5, status: 'declined' });
