@@ -1111,6 +1111,14 @@ describe('IQProPaymentProvider', () => {
       });
     });
 
+    it('skips a subscription IQPro already cancelled (it refuses any update, and bills nothing)', async () => {
+      const { provider, iqproGet, iqproPut } = await loadWithPut();
+      iqproGet.mockResolvedValueOnce({ data: { ...storedSub, status: { subscriptionStatusId: 7, name: 'Cancelled' } } });
+
+      await expect(provider.setSubscriptionPaymentMethod(testConfig, 'sub_cancelled', 'pm_new')).resolves.toEqual({ success: true });
+      expect(iqproPut).not.toHaveBeenCalled();
+    });
+
     it('returns a failure when IQPro refuses the switch', async () => {
       const { provider, iqproGet, iqproPut } = await loadWithPut();
       iqproGet.mockResolvedValueOnce({ data: storedSub });

@@ -362,6 +362,20 @@ describe('retryFailedTransaction', () => {
   });
 
   describe('could not attempt', () => {
+    it('refuses a failure with no recorded amount rather than "collecting" $0', async () => {
+      const f = await makeFailure();
+      await db.update(transactionSchema).set({ amount: 0 }).where(eq(transactionSchema.id, f.declinedId));
+      const { TransactionNotRetryableError } = await import('./PaymentRetryService');
+
+      await expect(retryFailedTransaction(f.declinedId, ORG, IQPRO)).rejects.toBeInstanceOf(TransactionNotRetryableError);
+      expect(provider.chargeOneTimeFee).not.toHaveBeenCalled();
+
+      // The placeholder is removed, so a later (fixed-amount) retry is not blocked.
+      const rows = await db.select().from(transactionSchema).where(eq(transactionSchema.retryOfTransactionId, f.declinedId));
+
+      expect(rows).toHaveLength(0);
+    });
+
     it('removes the placeholder and throws when the charge errors (not a decline)', async () => {
       const f = await makeFailure();
       provider.chargeOneTimeFee.mockResolvedValue({ success: false, error: 'No saved payment method on the existing subscription.' });
@@ -530,6 +544,16 @@ describe('getRetryQuote', () => {
       blockedReason: null,
     });
     expect(provider.computeFees).toHaveBeenCalledWith(IQPRO, expect.objectContaining({ baseAmount: 100, isTaxable: false, paymentMethodType: 'card' }));
+  });
+
+  it('names the saved card so IQPro can price it by its BIN', async () => {
+    const f = await makeFailure({ declineCount: 1 });
+    await db.insert(paymentMethodSchema).values({ id: randomUUID(), memberId: f.memberId, type: 'card', last4: '5555', providerPaymentMethodId: 'pm_amex', isDefault: true });
+    provider.computeFees.mockResolvedValue({ baseAmount: 100, taxAmount: 0, taxPct: 0, serviceFeeAmount: 3.75, serviceFeePct: 3.75, amount: 103.75 });
+
+    await getRetryQuote(f.declinedId, ORG, IQPRO);
+
+    expect(provider.computeFees).toHaveBeenCalledWith(IQPRO, expect.objectContaining({ customerId: `cus_${f.memberId}`, paymentMethodId: 'pm_amex' }));
   });
 
   it('IQPro with an invoice id: pays the invoice, so no double-charge risk even with retries left', async () => {

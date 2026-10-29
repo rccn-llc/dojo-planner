@@ -297,6 +297,27 @@ describe('IQPro webhook', () => {
       expect(recordRecurringCharge).toHaveBeenCalledWith(expect.objectContaining({ amount: 0, occurredAt: undefined }));
     });
 
+    it('reads the amount from `remit` too — the live sandbox payload\'s key, not the guide\'s', async () => {
+      const { transactionRemit: _drop, ...withoutGuideKey } = subscriptionDecline;
+      await (await load())(post(signed({ ...withoutGuideKey, remit: { baseAmount: 1, amount: 1.04 } })));
+
+      expect(recordRecurringCharge).toHaveBeenCalledWith(expect.objectContaining({ amount: 1.04 }));
+      expect(loggerWarn).not.toHaveBeenCalledWith(expect.stringContaining('no amount'), expect.anything());
+    });
+
+    it('falls back to the base amount, and warns loudly when there is no amount at all', async () => {
+      const { transactionRemit: _drop, ...withoutGuideKey } = subscriptionDecline;
+      await (await load())(post(signed({ ...withoutGuideKey, remit: { baseAmount: 1 } })));
+
+      expect(recordRecurringCharge).toHaveBeenCalledWith(expect.objectContaining({ amount: 1 }));
+
+      recordRecurringCharge.mockClear();
+      await (await load())(post(signed({ ...withoutGuideKey, transactionId: 'tx-no-amount' })));
+
+      expect(recordRecurringCharge).toHaveBeenCalledWith(expect.objectContaining({ amount: 0 }));
+      expect(loggerWarn).toHaveBeenCalledWith('[IQPro Webhook] Subscription charge carries no amount', expect.objectContaining({ transactionId: 'tx-no-amount' }));
+    });
+
     it('ignores VOIDED / REFUNDED statuses', async () => {
       await (await load())(post(signed({ ...subscriptionDecline, status: 'VOIDED' })));
 
@@ -454,18 +475,26 @@ describe('IQPro webhook', () => {
       await runAfterResponse.mock.calls[0]![1]();
 
       expect(runWithTenant).toHaveBeenCalledWith(expect.objectContaining({ orgId: 'org_a', db: tenantDb }), expect.any(Function));
-      expect(syncMemberQuietly).toHaveBeenCalledWith('mem_1', 'org_a', IQPRO_CONFIG);
+      // A decline dates any card change it finds before the failure.
+      expect(syncMemberQuietly).toHaveBeenCalledWith('mem_1', 'org_a', IQPRO_CONFIG, { changedBefore: expect.any(Date) });
       // A decline opens a card-update request first, so the sync can watch for
       // the card the member adds through IQPro's post-decline email.
       expect(openUpdateRequestAfterDecline).toHaveBeenCalledWith('mem_1', 'org_a', IQPRO_CONFIG);
       expect(openUpdateRequestAfterDecline.mock.invocationCallOrder[0]!).toBeLessThan(syncMemberQuietly.mock.invocationCallOrder[0]!);
     });
 
+    it('uses IQPro\'s own charge time as the failure time when the event carries one', async () => {
+      await (await load())(post(signed({ ...subscriptionDecline, createdDateTime: '2026-10-29T21:37:52Z' })));
+      await runAfterResponse.mock.calls[0]![1]();
+
+      expect(syncMemberQuietly).toHaveBeenCalledWith('mem_1', 'org_a', IQPRO_CONFIG, { changedBefore: new Date('2026-10-29T21:37:52Z') });
+    });
+
     it('a paid charge syncs without opening a card-update request', async () => {
       await (await load())(post(signed({ ...subscriptionDecline, status: 'PENDINGSETTLEMENT' })));
       await runAfterResponse.mock.calls[0]![1]();
 
-      expect(syncMemberQuietly).toHaveBeenCalledWith('mem_1', 'org_a', IQPRO_CONFIG);
+      expect(syncMemberQuietly).toHaveBeenCalledWith('mem_1', 'org_a', IQPRO_CONFIG, {});
       expect(openUpdateRequestAfterDecline).not.toHaveBeenCalled();
     });
 

@@ -102,6 +102,45 @@ describe('syncMemberPaymentMethod', () => {
     expect(rows.find(r => r.providerPaymentMethodId === 'pm_added')).toMatchObject({ status: 'active', updatedSource: 'provider_sync' });
   });
 
+  it('dates a change found right after a decline BEFORE the failure — it is the card that declined', async () => {
+    const m = await makeMember();
+    const failedAt = new Date(Date.now() - 5_000);
+    provider.getSubscriptionPaymentMethod.mockResolvedValue({ customerId: 'c', paymentMethodId: 'pm_declining', paymentMethodName: 'card', last4: '9990', expirationDate: '03/31' });
+
+    const result = await syncMemberPaymentMethod(m.memberId, ORG, IQPRO, { force: true, changedBefore: failedAt });
+
+    expect(result.changed).toBe(true);
+    expect(result.paymentMethod!.updatedAt!.getTime()).toBe(failedAt.getTime() - 1);
+
+    const rows = await cards(m.memberId);
+
+    expect(rows.find(r => r.providerPaymentMethodId === 'pm_declining')!.updatedAt!.getTime()).toBe(failedAt.getTime() - 1);
+    // Still synced now.
+    expect(rows.find(r => r.providerPaymentMethodId === 'pm_declining')!.lastSyncedAt!.getTime()).toBeGreaterThan(failedAt.getTime());
+  });
+
+  it('ignores a failure time in the future and dates the change now', async () => {
+    const m = await makeMember();
+    const before = Date.now();
+    provider.getSubscriptionPaymentMethod.mockResolvedValue({ customerId: 'c', paymentMethodId: 'pm_old', paymentMethodName: 'card', last4: '1111', expirationDate: '09/30' });
+
+    const result = await syncMemberPaymentMethod(m.memberId, ORG, IQPRO, { force: true, changedBefore: new Date(Date.now() + 60_000) });
+
+    expect(result.paymentMethod!.updatedAt!.getTime()).toBeGreaterThanOrEqual(before);
+  });
+
+  it('syncMemberQuietly passes changedBefore through', async () => {
+    const m = await makeMember();
+    const failedAt = new Date(Date.now() - 5_000);
+    provider.getSubscriptionPaymentMethod.mockResolvedValue({ customerId: 'c', paymentMethodId: 'pm_declining', paymentMethodName: 'card', last4: '9990', expirationDate: '03/31' });
+
+    await syncMemberQuietly(m.memberId, ORG, IQPRO, { changedBefore: failedAt });
+
+    const rows = await cards(m.memberId);
+
+    expect(rows.find(r => r.providerPaymentMethodId === 'pm_declining')!.updatedAt!.getTime()).toBe(failedAt.getTime() - 1);
+  });
+
   it('still reads the subscription card when applying a pending update throws', async () => {
     const m = await makeMember();
     await db.insert(paymentMethodUpdateRequestSchema).values({ id: randomUUID(), organizationId: ORG, memberId: m.memberId, provider: 'iqpro', providerCustomerId: m.customerId, reason: 'decline' });

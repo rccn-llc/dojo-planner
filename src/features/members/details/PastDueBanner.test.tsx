@@ -94,9 +94,9 @@ describe('PastDueBanner', () => {
     await expect.element(page.getByTestId('slot')).toBeInTheDocument();
   });
 
-  it('hides the card-update action once the member updated their card', async () => {
+  it('keeps the card-update action after a card update, so staff can still resend the link', async () => {
     await render(<PastDueBanner rows={[row()]} activeCard={{ updatedSource: 'provider_sync', updatedAt: new Date('2026-10-02T09:00:00Z') }} canRetry onRetryAction={vi.fn()} cardUpdateAction={<span data-testid="slot">action</span>} />);
 
-    expect(page.getByTestId('slot').elements()).toHaveLength(0);
+    await expect.element(page.getByTestId('slot')).toBeInTheDocument();
   });
 });

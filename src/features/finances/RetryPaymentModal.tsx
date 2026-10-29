@@ -164,10 +164,10 @@ export function RetryPaymentModal({ isOpen, transactionId, memberId, onCloseActi
 
         {phase.kind === 'loading' && (
           <div className="space-y-3" data-testid="retry-loading">
-            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Spinner size="sm" />
               {t('loading')}
-            </p>
+            </div>
             <Skeleton className="h-16 w-full" />
             <Skeleton className="h-10 w-full" />
           </div>
@@ -249,7 +249,7 @@ export function RetryPaymentModal({ isOpen, transactionId, memberId, onCloseActi
 
         {phase.kind === 'approved' && (
           <div className="space-y-3" role="status" data-testid="retry-approved">
-            <div className="flex gap-3 rounded-lg border border-green-600 bg-green-50 p-4 text-green-900 dark:bg-green-900/20 dark:text-green-200">
+            <div className="flex gap-3 rounded-lg border border-green-600 bg-green-50 p-4 text-green-900 dark:bg-green-900/20 dark:text-green-100">
               <CheckCircle2 className="size-5 shrink-0" />
               <div className="space-y-1 text-sm">
                 <p className="font-semibold">{t('approved_title', { amount: money(phase.result.amountCharged ?? total) })}</p>

@@ -123,7 +123,18 @@ export async function syncMemberPaymentMethod(
   memberId: string,
   organizationId: string,
   config: PaymentProviderConfig | null,
-  opts: { force?: boolean; actor?: AuditContext } = {},
+  opts: {
+    force?: boolean;
+    actor?: AuditContext;
+    /**
+     * A change found now already happened before this moment. The sync that
+     * follows a decline can only find the card that was CHARGED, so a
+     * difference it discovers predates the failure — dating it "now" would
+     * claim the member updated their card after the failure ("ready to
+     * retry") when it is the card that just declined. Sandbox, 2026-10.
+     */
+    changedBefore?: Date;
+  } = {},
 ): Promise<SyncPaymentMethodResult> {
   const [member] = await db
     .select({ id: memberSchema.id })
@@ -190,6 +201,10 @@ export async function syncMemberPaymentMethod(
   }
 
   const now = new Date();
+  // When the card changed (see opts.changedBefore); last_synced_at stays `now`.
+  const changedAt = opts.changedBefore && opts.changedBefore.getTime() <= now.getTime()
+    ? new Date(opts.changedBefore.getTime() - 1)
+    : now;
   const remoteFields = {
     type: localType(remote),
     providerPaymentMethodId: remote.paymentMethodId,
@@ -240,7 +255,7 @@ export async function syncMemberPaymentMethod(
         cardBrand: remoteFields.cardBrand ?? local.cardBrand,
         firstSix: remoteFields.firstSix ?? local.firstSix,
         updatedSource: 'provider_sync',
-        updatedAt: now,
+        updatedAt: changedAt,
         lastSyncedAt: now,
       })
       .where(eq(paymentMethodSchema.id, local.id));
@@ -252,7 +267,7 @@ export async function syncMemberPaymentMethod(
       cardBrand: remoteFields.cardBrand ?? local.cardBrand,
       expirationDate: remoteFields.expirationDate ?? local.expirationDate,
       updatedSource: 'provider_sync',
-      updatedAt: now,
+      updatedAt: changedAt,
     });
     await recordChange({ memberId, organizationId, config, actor: opts.actor, previous: local, next: updated });
     return { changed: true, paymentMethod: updated, previousLast4: local.last4 };
@@ -264,7 +279,7 @@ export async function syncMemberPaymentMethod(
     if (local) {
       await tx
         .update(paymentMethodSchema)
-        .set({ status: 'replaced', isDefault: false, updatedAt: now })
+        .set({ status: 'replaced', isDefault: false, updatedAt: changedAt })
         .where(eq(paymentMethodSchema.id, local.id));
     }
     await tx.insert(paymentMethodSchema).values({
@@ -275,12 +290,12 @@ export async function syncMemberPaymentMethod(
       status: 'active',
       updatedSource: 'provider_sync',
       createdAt: now,
-      updatedAt: now,
+      updatedAt: changedAt,
       lastSyncedAt: now,
     });
   });
 
-  const next = toSynced({ id: newId, type: remoteFields.type, last4: remoteFields.last4, cardBrand: remoteFields.cardBrand, expirationDate: remoteFields.expirationDate, updatedSource: 'provider_sync', updatedAt: now });
+  const next = toSynced({ id: newId, type: remoteFields.type, last4: remoteFields.last4, cardBrand: remoteFields.cardBrand, expirationDate: remoteFields.expirationDate, updatedSource: 'provider_sync', updatedAt: changedAt });
   await recordChange({ memberId, organizationId, config, actor: opts.actor, previous: local ?? null, next });
   return { changed: true, paymentMethod: next, previousLast4: local?.last4 ?? null };
 }
@@ -358,9 +373,10 @@ export async function syncMemberQuietly(
   memberId: string,
   organizationId: string,
   config: PaymentProviderConfig,
+  opts: { changedBefore?: Date } = {},
 ): Promise<void> {
   try {
-    await syncMemberPaymentMethod(memberId, organizationId, config, { force: true });
+    await syncMemberPaymentMethod(memberId, organizationId, config, { force: true, ...opts });
   } catch (error) {
     logger.warn('[PaymentMethodSync] Background sync failed', {
       memberId,

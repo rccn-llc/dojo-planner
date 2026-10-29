@@ -77,7 +77,7 @@ export function PastDueBanner({ rows, activeCard, canRetry, onRetryAction, cardU
           {cardUpdatedAfter && activeCard?.updatedAt && (
             <p className="font-medium">{t('past_due_banner_card_updated', { date: new Date(activeCard.updatedAt).toLocaleDateString() })}</p>
           )}
-          {!cardUpdatedAfter && cardUpdateAction}
+          {cardUpdateAction}
         </div>
       </div>
       {canRetry && (

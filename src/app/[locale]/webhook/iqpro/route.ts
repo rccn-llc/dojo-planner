@@ -91,8 +91,11 @@ function str(value: unknown): string | undefined {
 /** The fields this handler reads from `resource`. Card data is never read. */
 function readResource(resource: Record<string, unknown>) {
   const customer = resource.customer as Record<string, unknown> | undefined;
-  const remit = resource.transactionRemit as Record<string, unknown> | undefined;
-  const amount = Number(remit?.amount ?? 0);
+  // The webhook guide names it `transactionRemit`; the live sandbox payload
+  // (and IQPro's own transaction GET) use `remit`. Accept both — a missing
+  // amount recorded a $0 decline that a retry would then "collect" as $0.
+  const remit = (resource.transactionRemit ?? resource.remit) as Record<string, unknown> | undefined;
+  const amount = Number(remit?.amount ?? remit?.baseAmount ?? 0);
   return {
     transactionId: str(resource.transactionId),
     subscriptionId: str(resource.subscriptionId),
@@ -233,6 +236,14 @@ async function handleVerifiedEvent(
   }
 
   const occurredAt = fields.createdAt ? new Date(fields.createdAt) : undefined;
+  const receivedAt = new Date();
+
+  if (!(fields.amount > 0)) {
+    logger.warn('[IQPro Webhook] Subscription charge carries no amount', {
+      transactionId: fields.transactionId,
+      subscriptionId: fields.subscriptionId,
+    });
+  }
 
   const result = await recordRecurringCharge({
     provider: PAYMENT_PROVIDER.IQPRO,
@@ -264,7 +275,11 @@ async function handleVerifiedEvent(
         if (declined) {
           await openUpdateRequestAfterDecline(memberId, orgId, config);
         }
-        await syncMemberQuietly(memberId, orgId, config);
+        // After a decline the subscription's card IS the card that declined, so
+        // a change found now predates the failure — not "updated, ready to retry".
+        await syncMemberQuietly(memberId, orgId, config, declined
+          ? { changedBefore: occurredAt && !Number.isNaN(occurredAt.getTime()) ? occurredAt : receivedAt }
+          : {});
       },
     ));
   }

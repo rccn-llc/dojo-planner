@@ -997,6 +997,12 @@ export class IQProPaymentProvider implements IPaymentProvider {
     try {
       const subRes = await iqproGet<{ data?: Record<string, unknown> }>(iqpro, subPath);
       const sub = (subRes.data ?? subRes) as Record<string, unknown>;
+      // IQPro refuses any update to a cancelled subscription, and it bills
+      // nothing — nothing to switch (sandbox: one cancelled at IQPro but not
+      // locally kept a card-update request open forever).
+      if ((sub.status as { subscriptionStatusId?: number } | undefined)?.subscriptionStatusId === IQPRO_SUBSCRIPTION_STATUS.CANCELLED) {
+        return { success: true };
+      }
       const current = (sub.paymentMethod ?? {}) as Record<string, unknown>;
 
       // The new method may be a bank account where the old was a card (or the
