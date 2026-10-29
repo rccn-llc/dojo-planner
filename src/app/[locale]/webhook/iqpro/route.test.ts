@@ -66,6 +66,8 @@ const runAfterResponse = vi.fn();
 vi.mock('@/libs/AfterResponse', () => ({ runAfterResponse: (l: string, w: () => Promise<void>) => runAfterResponse(l, w) }));
 const syncMemberQuietly = vi.fn();
 vi.mock('@/services/PaymentMethodSyncService', () => ({ syncMemberQuietly: (...a: unknown[]) => syncMemberQuietly(...a) }));
+const openUpdateRequestAfterDecline = vi.fn();
+vi.mock('@/services/PaymentMethodUpdateRequestService', () => ({ openUpdateRequestAfterDecline: (...a: unknown[]) => openUpdateRequestAfterDecline(...a) }));
 vi.mock('@/libs/Logger', () => ({
   logger: {
     info: (...a: unknown[]) => loggerInfo(...a),
@@ -453,6 +455,18 @@ describe('IQPro webhook', () => {
 
       expect(runWithTenant).toHaveBeenCalledWith(expect.objectContaining({ orgId: 'org_a', db: tenantDb }), expect.any(Function));
       expect(syncMemberQuietly).toHaveBeenCalledWith('mem_1', 'org_a', IQPRO_CONFIG);
+      // A decline opens a card-update request first, so the sync can watch for
+      // the card the member adds through IQPro's post-decline email.
+      expect(openUpdateRequestAfterDecline).toHaveBeenCalledWith('mem_1', 'org_a', IQPRO_CONFIG);
+      expect(openUpdateRequestAfterDecline.mock.invocationCallOrder[0]!).toBeLessThan(syncMemberQuietly.mock.invocationCallOrder[0]!);
+    });
+
+    it('a paid charge syncs without opening a card-update request', async () => {
+      await (await load())(post(signed({ ...subscriptionDecline, status: 'PENDINGSETTLEMENT' })));
+      await runAfterResponse.mock.calls[0]![1]();
+
+      expect(syncMemberQuietly).toHaveBeenCalledWith('mem_1', 'org_a', IQPRO_CONFIG);
+      expect(openUpdateRequestAfterDecline).not.toHaveBeenCalled();
     });
 
     it('does not sync for a duplicate or unmatched event', async () => {

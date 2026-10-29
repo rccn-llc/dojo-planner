@@ -25,6 +25,7 @@ import { isRetryable } from '@/features/finances/recurringPayments';
 import { RetryPaymentModal } from '@/features/finances/RetryPaymentModal';
 import { transformCouponsToUi } from '@/features/marketing';
 import { ConvertMemberModal } from '@/features/members/conversion/ConvertMemberModal';
+import { CardUpdateLinkAction } from '@/features/members/details/CardUpdateLinkAction';
 import { ChangeMembershipModal } from '@/features/members/details/ChangeMembershipModal';
 import { EditContactInfoModal } from '@/features/members/details/EditContactInfoModal';
 import { EditMemberPhotoModal } from '@/features/members/details/EditMemberPhotoModal';
@@ -1211,6 +1212,7 @@ export default function EditMemberPage() {
         activeCard={activePaymentMethods[0] ?? null}
         canRetry={canRetryPayment}
         onRetryAction={row => setRetryTarget({ transactionId: row.id, memberId: row.memberId })}
+        cardUpdateAction={canRetryPayment ? <CardUpdateLinkAction memberId={memberId} /> : undefined}
       />
 
       {/* Member Header */}

@@ -79,6 +79,11 @@ export const SyncPaymentMethodValidation = z.object({
   force: z.boolean().optional(),
 });
 
+/** Email the member IQPro's add-a-card link, or read the open request. */
+export const PaymentMethodUpdateRequestValidation = z.object({
+  memberId: z.string().min(1),
+});
+
 export const PaymentMethodMutationValidation = z.object({
   memberId: z.string().min(1),
   paymentMethodId: z.string().min(1),

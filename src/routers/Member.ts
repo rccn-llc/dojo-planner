@@ -7,13 +7,21 @@ import { sendMemberConfirmationEmail } from '@/services/EmailService';
 import { cancelMembershipLifecycle, getLifecycleContext, HoldLimitReachedError, holdMembershipLifecycle, reactivateMembershipLifecycle } from '@/services/MemberPaymentService';
 import { addMemberMembership, changeMemberMembership, createMember, deleteMemberPaymentMethod, getAllMembershipPlans, getFamilyMembers, getHeadOfHouseholdMembers, getHOHForFamilyMember, getMemberById, getMemberPaymentMethods, getMembershipPlans, getMemberTransactions, getPunchcardUsage, linkFamilyMember, MemberNotFoundError, MemberOnHoldError, removeFully, setPrimaryPaymentMethod as setPrimaryPaymentMethodService, unlinkFamilyMember, updateMember, updateMemberContactInfo, updateMemberPhoto, updateMemberStatus } from '@/services/MembersService';
 import { syncMemberPaymentMethod } from '@/services/PaymentMethodSyncService';
+import {
+  getPaymentMethodUpdateStatus,
+  MemberEmailMissingError,
+  NoProviderCustomerError,
+  openPaymentMethodUpdateRequest,
+  PaymentMethodUpdateLinkError,
+  PaymentMethodUpdateNotSupportedError,
+} from '@/services/PaymentMethodUpdateRequestService';
 import { resolvePaymentProviderConfig } from '@/services/PaymentProviderConfigService';
 import { generatePdfFilename } from '@/services/WaiverPdfService';
 import { generateWaiverPdfBuffer } from '@/services/WaiverPdfService.server';
 import { AUDIT_ACTION, AUDIT_ENTITY_TYPE } from '@/types/Audit';
 import { ORG_ROLE } from '@/types/Auth';
 import { rankMembersByQuery } from '@/utils/MemberSearch';
-import { AddMembershipValidation, CancelMembershipValidation, ChangeMembershipValidation, DeleteMemberValidation, EditMemberValidation, GetHOHForMemberValidation, GetHOHPaymentMethodsValidation, GetMemberByIdValidation, HoldMembershipValidation, LinkFamilyMemberValidation, ListFamilyMembersValidation, MemberPaymentMethodsValidation, MemberTransactionsValidation, MemberValidation, PaymentMethodMutationValidation, ReactivateMembershipValidation, RemoveFullyMemberValidation, SearchHOHValidation, SendConfirmationEmailValidation, SyncPaymentMethodValidation, UnlinkFamilyMemberValidation, UpdateMemberContactInfoValidation, UpdateMemberPhotoValidation, UpdateMemberTypeValidation } from '@/validations/MemberValidation';
+import { AddMembershipValidation, CancelMembershipValidation, ChangeMembershipValidation, DeleteMemberValidation, EditMemberValidation, GetHOHForMemberValidation, GetHOHPaymentMethodsValidation, GetMemberByIdValidation, HoldMembershipValidation, LinkFamilyMemberValidation, ListFamilyMembersValidation, MemberPaymentMethodsValidation, MemberTransactionsValidation, MemberValidation, PaymentMethodMutationValidation, PaymentMethodUpdateRequestValidation, ReactivateMembershipValidation, RemoveFullyMemberValidation, SearchHOHValidation, SendConfirmationEmailValidation, SyncPaymentMethodValidation, UnlinkFamilyMemberValidation, UpdateMemberContactInfoValidation, UpdateMemberPhotoValidation, UpdateMemberTypeValidation } from '@/validations/MemberValidation';
 import { guardAuth, guardRole } from './AuthGuards';
 
 /**
@@ -701,6 +709,51 @@ export const syncPaymentMethod = os
       return result;
     } catch (error) {
       throw toOrpcError(error, 'Failed to refresh the card on file.');
+    }
+  });
+
+/**
+ * Email the member IQPro's add-a-card link and open a card-update request, so
+ * the card they add is detected and put on their subscription.
+ */
+export const sendPaymentMethodUpdateLink = os
+  .input(PaymentMethodUpdateRequestValidation)
+  .handler(async ({ input }) => {
+    const context = await guardRole(ORG_ROLE.FRONT_DESK);
+
+    try {
+      const config = await resolvePaymentProviderConfig(context.orgId);
+      return await openPaymentMethodUpdateRequest(input.memberId, context.orgId, config, {
+        reason: 'staff',
+        sendLink: true,
+        actor: context,
+      });
+    } catch (error) {
+      if (error instanceof PaymentMethodUpdateNotSupportedError || error instanceof NoProviderCustomerError || error instanceof MemberEmailMissingError) {
+        throw new ORPCError('Conflict', { status: 409, message: error.message });
+      }
+      if (error instanceof PaymentMethodUpdateLinkError) {
+        await audit(context, AUDIT_ACTION.PAYMENT_METHOD_UPDATE_REQUEST, AUDIT_ENTITY_TYPE.MEMBER, {
+          entityId: input.memberId,
+          status: 'failure',
+          error: error.message,
+        });
+        throw new ORPCError('Unprocessable', { status: 422, message: error.message });
+      }
+      throw toOrpcError(error, 'Failed to send the card-update link.');
+    }
+  });
+
+/** Whether a card-update link can be sent, and the open request (or null). */
+export const paymentMethodUpdateRequest = os
+  .input(PaymentMethodUpdateRequestValidation)
+  .handler(async ({ input }) => {
+    const context = await guardRole(ORG_ROLE.FRONT_DESK);
+    try {
+      const config = await resolvePaymentProviderConfig(context.orgId);
+      return await getPaymentMethodUpdateStatus(input.memberId, context.orgId, config);
+    } catch (error) {
+      throw toOrpcError(error, 'Failed to load the card-update request.');
     }
   });
 

@@ -87,4 +87,16 @@ describe('PastDueBanner', () => {
     await expect.element(page.getByTestId('past-due-banner')).toBeInTheDocument();
     expect(page.getByTestId('past-due-retry-button').elements()).toHaveLength(0);
   });
+
+  it('shows the card-update action while the card has not been updated since the failure', async () => {
+    await render(<PastDueBanner rows={[row()]} canRetry onRetryAction={vi.fn()} cardUpdateAction={<span data-testid="slot">action</span>} />);
+
+    await expect.element(page.getByTestId('slot')).toBeInTheDocument();
+  });
+
+  it('hides the card-update action once the member updated their card', async () => {
+    await render(<PastDueBanner rows={[row()]} activeCard={{ updatedSource: 'provider_sync', updatedAt: new Date('2026-10-02T09:00:00Z') }} canRetry onRetryAction={vi.fn()} cardUpdateAction={<span data-testid="slot">action</span>} />);
+
+    expect(page.getByTestId('slot').elements()).toHaveLength(0);
+  });
 });

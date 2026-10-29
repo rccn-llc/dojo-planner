@@ -973,6 +973,174 @@ describe('IQProPaymentProvider', () => {
     });
   });
 
+  describe('card-update requests', () => {
+    async function loadWithPut() {
+      const loaded = await loadProvider();
+      const { iqproPut } = await import('@/libs/IQPro');
+      return { ...loaded, iqproPut: vi.mocked(iqproPut) };
+    }
+
+    const storedSub = {
+      name: 'Adult BJJ',
+      prefix: 'MBR',
+      recurrence: {
+        termStartDate: '2026-10-29T05:07:00Z',
+        billingStartDate: '2026-10-29T05:07:00Z',
+        isAutoRenewed: true,
+        allowProration: false,
+        trialLengthInDays: 0,
+        invoiceLengthInDays: 1,
+        billingPeriod: { billingPeriodId: 4, name: 'Monthly' },
+        schedule: { minutes: [0], hours: [0], daysOfMonth: [29] },
+      },
+      paymentMethod: { subscriptionPaymentMethodId: 'spm_1', cardProcessorId: 'proc_card_on_sub', isAutoCharged: true },
+    };
+
+    it('lists the customer\'s saved cards and bank accounts', async () => {
+      const { provider, iqproGet } = await loadProvider();
+      iqproGet.mockResolvedValueOnce({
+        data: {
+          paymentMethods: [
+            { paymentMethodId: 'pm_card', card: { maskedCard: '426428******5555' }, isDefault: true },
+            { paymentMethodId: 'pm_ach', ach: { maskedAccount: '****6789' } },
+            { customerPaymentMethodId: 'pm_bare' },
+            { card: { maskedCard: '411111******1111' } },
+          ],
+        },
+      });
+
+      await expect(provider.listCustomerPaymentMethods(testConfig, 'cus_1')).resolves.toEqual([
+        { paymentMethodId: 'pm_card', type: 'card', last4: '5555', isDefault: true },
+        { paymentMethodId: 'pm_ach', type: 'ach', last4: '6789' },
+        { paymentMethodId: 'pm_bare', type: 'ach' },
+      ]);
+      expect(iqproGet).toHaveBeenCalledWith(transportConfig, '/api/gateway/test-gateway-001/customer/cus_1');
+    });
+
+    it('returns an empty list for a customer with no methods, and null when IQPro cannot be read', async () => {
+      const { provider, iqproGet } = await loadProvider();
+      iqproGet.mockResolvedValueOnce({ data: {} });
+
+      await expect(provider.listCustomerPaymentMethods(testConfig, 'cus_1')).resolves.toEqual([]);
+
+      iqproGet.mockRejectedValueOnce(new Error('IQPro 503'));
+
+      await expect(provider.listCustomerPaymentMethods(testConfig, 'cus_1')).resolves.toBeNull();
+
+      iqproGet.mockRejectedValueOnce('not an error');
+
+      await expect(provider.listCustomerPaymentMethods(testConfig, 'cus_1')).resolves.toBeNull();
+    });
+
+    it('sends IQPro\'s add-payment-method link by email', async () => {
+      const { provider, iqproPost } = await loadProvider();
+      iqproPost.mockResolvedValueOnce({ statusCode: 'Created' });
+
+      await expect(provider.sendPaymentMethodUpdateLink(testConfig, { providerCustomerId: 'cus_1', email: 'm@example.com' })).resolves.toEqual({ success: true });
+      expect(iqproPost).toHaveBeenCalledWith(transportConfig, '/api/gateway/test-gateway-001/customer/cus_1/payment/token', {
+        notificationContactMethod: 'Email',
+        mainRecipient: 'm@example.com',
+      });
+    });
+
+    it('returns a failure when IQPro refuses the link', async () => {
+      const { provider, iqproPost } = await loadProvider();
+      iqproPost.mockRejectedValueOnce(new Error('400 bad email'));
+
+      await expect(provider.sendPaymentMethodUpdateLink(testConfig, { providerCustomerId: 'cus_1', email: 'x' })).resolves.toEqual({ success: false, error: '400 bad email' });
+
+      iqproPost.mockRejectedValueOnce('boom');
+
+      await expect(provider.sendPaymentMethodUpdateLink(testConfig, { providerCustomerId: 'cus_1', email: 'x' })).resolves.toEqual({ success: false, error: 'Unknown error' });
+    });
+
+    it('switches the subscription\'s card with the sandbox-verified shape: stored recurrence echoed verbatim', async () => {
+      const { provider, iqproGet, iqproPut, getGatewayProcessors } = await loadWithPut();
+      iqproGet.mockResolvedValueOnce({ data: storedSub });
+      iqproPut.mockResolvedValueOnce({ data: {} });
+
+      await expect(provider.setSubscriptionPaymentMethod(testConfig, 'sub_1', 'pm_new')).resolves.toEqual({ success: true });
+      expect(iqproPut).toHaveBeenCalledWith(transportConfig, '/api/gateway/test-gateway-001/subscription/sub_1', {
+        name: 'Adult BJJ',
+        prefix: 'MBR',
+        recurrence: {
+          termStartDate: '2026-10-29T05:07:00Z',
+          billingStartDate: '2026-10-29T05:07:00Z',
+          isAutoRenewed: true,
+          allowProration: false,
+          trialLengthInDays: 0,
+          invoiceLengthInDays: 1,
+          billingPeriodId: 4,
+          schedule: { minutes: [0], hours: [0], daysOfMonth: [29] },
+        },
+        paymentMethod: {
+          subscriptionPaymentMethodId: 'spm_1',
+          customerPaymentMethodId: 'pm_new',
+          // The subscription's own processor wins; the gateway's fills the gap.
+          cardProcessorId: 'proc_card_on_sub',
+          achProcessorId: 'test-ach-processor-001',
+          isAutoCharged: true,
+        },
+      });
+      expect(getGatewayProcessors).toHaveBeenCalledTimes(1);
+    });
+
+    it('needs no gateway lookup when the subscription already has both processors', async () => {
+      const { provider, iqproGet, iqproPut, getGatewayProcessors } = await loadWithPut();
+      iqproGet.mockResolvedValueOnce({ data: { ...storedSub, paymentMethod: { subscriptionPaymentMethodId: 'spm_1', cardProcessorId: 'c', achProcessorId: 'a', isAutoCharged: false } } });
+      iqproPut.mockResolvedValueOnce({ data: {} });
+
+      await provider.setSubscriptionPaymentMethod(testConfig, 'sub_1', 'pm_new');
+
+      expect(getGatewayProcessors).not.toHaveBeenCalled();
+      expect(iqproPut.mock.calls[0]![2]).toMatchObject({ paymentMethod: { cardProcessorId: 'c', achProcessorId: 'a', isAutoCharged: false } });
+    });
+
+    it('defaults to auto-charged and null processors when nothing is known', async () => {
+      const { provider, iqproGet, iqproPut, getGatewayProcessors } = await loadWithPut();
+      iqproGet.mockResolvedValueOnce({ name: 'N', prefix: 'P' });
+      getGatewayProcessors.mockResolvedValueOnce({ cardProcessorId: null, achProcessorId: null });
+      iqproPut.mockResolvedValueOnce({ data: {} });
+
+      await provider.setSubscriptionPaymentMethod(testConfig, 'sub_1', 'pm_new');
+
+      expect(iqproPut.mock.calls[0]![2]).toEqual({
+        name: 'N',
+        prefix: 'P',
+        paymentMethod: { subscriptionPaymentMethodId: null, customerPaymentMethodId: 'pm_new', cardProcessorId: null, achProcessorId: null, isAutoCharged: true },
+      });
+    });
+
+    it('returns a failure when IQPro refuses the switch', async () => {
+      const { provider, iqproGet, iqproPut } = await loadWithPut();
+      iqproGet.mockResolvedValueOnce({ data: storedSub });
+      iqproPut.mockRejectedValueOnce(new Error('IQPro 500'));
+
+      await expect(provider.setSubscriptionPaymentMethod(testConfig, 'sub_1', 'pm_new')).resolves.toEqual({ success: false, error: 'IQPro 500' });
+
+      iqproGet.mockRejectedValueOnce('boom');
+
+      await expect(provider.setSubscriptionPaymentMethod(testConfig, 'sub_1', 'pm_new')).resolves.toEqual({ success: false, error: 'Unknown error' });
+    });
+
+    it('hold/reactivate still sends name + prefix + the stored recurrence, overriding only isAutoRenewed', async () => {
+      const { provider, iqproGet, iqproPut } = await loadWithPut();
+      iqproGet.mockResolvedValueOnce({ data: storedSub });
+      iqproPut.mockResolvedValueOnce({ data: {} });
+
+      await expect(provider.setSubscriptionAutoRenewal(testConfig, 'sub_1', false)).resolves.toEqual({ success: true });
+
+      const body = iqproPut.mock.calls[0]![2] as Record<string, any>;
+
+      expect(body).toEqual({
+        name: 'Adult BJJ',
+        prefix: 'MBR',
+        recurrence: expect.objectContaining({ termStartDate: '2026-10-29T05:07:00Z', billingStartDate: '2026-10-29T05:07:00Z', isAutoRenewed: false, billingPeriodId: 4 }),
+      });
+      expect(body).not.toHaveProperty('paymentMethod');
+    });
+  });
+
   describe('closeFailedInvoice', () => {
     it('is a no-op success (IQPro retries itself and has no invoice-close action)', async () => {
       const { provider, iqproPost } = await loadProvider();

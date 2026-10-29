@@ -38,6 +38,7 @@ import { MEMBER_STATUS } from '@/types/MemberStatus';
 import { PAYMENT_PROVIDER } from '@/types/PaymentProvider';
 import { audit } from './AuditService';
 import { MemberNotFoundError } from './MembersService';
+import { applyPendingCardUpdate, membersWithOpenUpdateRequests } from './PaymentMethodUpdateRequestService';
 import { getPaymentProvider } from './PaymentProviderService';
 
 /** A repeat sync within this window reuses the last result instead of calling the provider. */
@@ -155,6 +156,19 @@ export async function syncMemberPaymentMethod(
 
   if (subscriptionId.startsWith('seed_') && process.env.NODE_ENV !== 'production') {
     return { changed: false, skipped: 'simulated', ...(local ? { paymentMethod: toSynced(local) } : {}) };
+  }
+
+  // A card the member ADDED at IQPro is not on the subscription until we put
+  // it there; do that first so the read below sees it.
+  if (config.provider === PAYMENT_PROVIDER.IQPRO) {
+    try {
+      await applyPendingCardUpdate(memberId, organizationId, config);
+    } catch (error) {
+      logger.warn('[PaymentMethodSync] Applying a pending card update failed', {
+        memberId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   let remote: SubscriptionPaymentMethod | null = null;
@@ -359,9 +373,10 @@ export async function syncMemberQuietly(
 export const CRON_SYNC_LIMIT_PER_ORG = 200;
 
 /**
- * Reconcile every member of one org who has a past-due membership. Runs from
- * the daily cron to catch card updates that no webhook or page view surfaced.
- * Must run inside the org's tenant scope. Respects the per-member throttle.
+ * Reconcile every member of one org who has a past-due membership or an open
+ * card-update request. Runs from the daily cron to catch card updates that no
+ * webhook or page view surfaced. Must run inside the org's tenant scope.
+ * Respects the per-member throttle.
  */
 export async function syncPastDuePaymentMethods(
   organizationId: string,
@@ -377,10 +392,12 @@ export async function syncPastDuePaymentMethods(
       isNotNull(memberMembershipSchema.providerSubscriptionId),
     ))
     .limit(CRON_SYNC_LIMIT_PER_ORG);
+  const pending = await membersWithOpenUpdateRequests(organizationId, CRON_SYNC_LIMIT_PER_ORG);
+  const memberIds = [...new Set([...rows.map(r => r.memberId), ...pending])].slice(0, CRON_SYNC_LIMIT_PER_ORG);
 
   let changed = 0;
   let failed = 0;
-  for (const { memberId } of rows) {
+  for (const memberId of memberIds) {
     try {
       const result = await syncMemberPaymentMethod(memberId, organizationId, config);
       if (result.changed) {
@@ -397,5 +414,5 @@ export async function syncPastDuePaymentMethods(
       });
     }
   }
-  return { checked: rows.length, changed, failed };
+  return { checked: memberIds.length, changed, failed };
 }

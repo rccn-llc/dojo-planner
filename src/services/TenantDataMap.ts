@@ -88,6 +88,8 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   // Both member_id and related_member_id point at member; all members exist by now.
   { table: 'family_member', scope: 'via', parentColumn: 'member_id', parentSelect: 'SELECT id FROM member WHERE organization_id = $1' },
   { table: 'coupon_usage', scope: 'via', parentColumn: 'member_id', parentSelect: 'SELECT id FROM member WHERE organization_id = $1' },
+  // Card-update requests reference member, and carry organization_id directly.
+  { table: 'payment_method_update_request', scope: 'direct' },
   { table: 'class_schedule_instance', scope: 'via', parentColumn: 'class_id', parentSelect: 'SELECT id FROM class WHERE organization_id = $1' },
   { table: 'class_tag', scope: 'via', parentColumn: 'class_id', parentSelect: 'SELECT id FROM class WHERE organization_id = $1' },
   { table: 'event_session', scope: 'via', parentColumn: 'event_id', parentSelect: 'SELECT id FROM event WHERE organization_id = $1' },

@@ -716,6 +716,17 @@ describe('squarePaymentService', () => {
     });
   });
 
+  describe('card-update requests (IQPro-only)', () => {
+    it('refuses rather than calling Square: it reports card changes by webhook', async () => {
+      const provider = await loadProvider();
+
+      await expect(provider.listCustomerPaymentMethods(squareConfig as never, 'cus_1')).resolves.toBeNull();
+      await expect(provider.sendPaymentMethodUpdateLink(squareConfig as never, { providerCustomerId: 'cus_1', email: 'm@example.com' })).resolves.toMatchObject({ success: false });
+      await expect(provider.setSubscriptionPaymentMethod(squareConfig as never, 'sub_1', 'card_1')).resolves.toMatchObject({ success: false });
+      expect(squarePost).not.toHaveBeenCalled();
+    });
+  });
+
   describe('closeFailedInvoice', () => {
     it('reads the invoice version, then cancels with it', async () => {
       squareGet.mockResolvedValueOnce({ invoice: { version: 4, status: 'UNPAID' } });

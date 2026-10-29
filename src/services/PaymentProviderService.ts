@@ -348,6 +348,14 @@ export type SubscriptionPaymentMethod = {
 
 export type LifecycleActionResult = { success: boolean; error?: string };
 
+/** A saved payment method on the provider's CUSTOMER record (not a subscription). */
+export type CustomerPaymentMethodSummary = {
+  paymentMethodId: string;
+  type: 'card' | 'ach';
+  last4?: string;
+  isDefault?: boolean;
+};
+
 /**
  * Outcome of reversing a charge for its FULL amount.
  *
@@ -443,6 +451,35 @@ export type IPaymentProvider = {
     config: PaymentProviderConfig,
     providerInvoiceId: string,
   ) => Promise<LifecycleActionResult & { note?: string }>;
+
+  /**
+   * Every saved payment method on the provider customer, or null when it can't
+   * be read. The card-update requests compare this against the ids recorded
+   * when the request opened: a new id is a card the member added.
+   */
+  listCustomerPaymentMethods: (
+    config: PaymentProviderConfig,
+    providerCustomerId: string,
+  ) => Promise<CustomerPaymentMethodSummary[] | null>;
+
+  /**
+   * Email the member the provider's own "add a payment method" link (IQPro:
+   * `POST …/customer/{id}/payment/token`). Returns failures, never throws.
+   */
+  sendPaymentMethodUpdateLink: (
+    config: PaymentProviderConfig,
+    params: { providerCustomerId: string; email: string },
+  ) => Promise<LifecycleActionResult>;
+
+  /**
+   * Put a saved customer payment method on a live subscription, so its
+   * renewals (and the provider's own retries) charge it. Returns failures.
+   */
+  setSubscriptionPaymentMethod: (
+    config: PaymentProviderConfig,
+    subscriptionId: string,
+    paymentMethodId: string,
+  ) => Promise<LifecycleActionResult>;
 };
 
 // ===== Factory =====

@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import type { TransactionRecurringFlags } from '@/features/finances/recurringPayments';
 import { AlertTriangle } from 'lucide-react';
 import { useTranslations } from 'next-intl';
@@ -24,6 +25,8 @@ type PastDueBannerProps = {
   activeCard?: { updatedSource: string | null; updatedAt: Date | null } | null;
   canRetry: boolean;
   onRetryAction: (row: PastDueBannerRow) => void;
+  /** Extra action under the details — the "Send card-update link" control. */
+  cardUpdateAction?: ReactNode;
 };
 
 const money = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n);
@@ -34,7 +37,7 @@ const money = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency',
  * will retry"); the third becomes an "Overdue" variant. Tells staff when the
  * member updated their card after the failure, so they know a retry may work.
  */
-export function PastDueBanner({ rows, activeCard, canRetry, onRetryAction }: PastDueBannerProps) {
+export function PastDueBanner({ rows, activeCard, canRetry, onRetryAction, cardUpdateAction }: PastDueBannerProps) {
   const t = useTranslations('MemberDetailPage');
   const failure = latestRetryableFailure(rows);
   if (!failure) {
@@ -74,6 +77,7 @@ export function PastDueBanner({ rows, activeCard, canRetry, onRetryAction }: Pas
           {cardUpdatedAfter && activeCard?.updatedAt && (
             <p className="font-medium">{t('past_due_banner_card_updated', { date: new Date(activeCard.updatedAt).toLocaleDateString() })}</p>
           )}
+          {!cardUpdatedAfter && cardUpdateAction}
         </div>
       </div>
       {canRetry && (

@@ -35,6 +35,7 @@ import type {
   CreatePaymentMethodParams,
   CreatePaymentMethodResult,
   CreateSubscriptionParams,
+  CustomerPaymentMethodSummary,
   FeeQuote,
   IPaymentProvider,
   LifecycleActionResult,
@@ -873,6 +874,30 @@ export class SquarePaymentProvider implements IPaymentProvider {
         error: error instanceof Error ? error.message : 'Square invoice cancel failed.',
       };
     }
+  }
+
+  // Card-update requests are IQPro-only: Square sends card.* webhooks, and its
+  // retry charges whatever card is on file. Typed refusals, never throws.
+  async listCustomerPaymentMethods(
+    _config: PaymentProviderConfig,
+    _providerCustomerId: string,
+  ): Promise<CustomerPaymentMethodSummary[] | null> {
+    return null;
+  }
+
+  async sendPaymentMethodUpdateLink(
+    _config: PaymentProviderConfig,
+    _params: { providerCustomerId: string; email: string },
+  ): Promise<LifecycleActionResult> {
+    return { success: false, error: 'Card-update links are not used with Square: it reports card changes itself.' };
+  }
+
+  async setSubscriptionPaymentMethod(
+    _config: PaymentProviderConfig,
+    _subscriptionId: string,
+    _paymentMethodId: string,
+  ): Promise<LifecycleActionResult> {
+    return { success: false, error: 'Not used with Square: its subscriptions charge the card on file.' };
   }
 
   /**

@@ -11,6 +11,7 @@ import { getClientIP, isRateLimitingEnabled, webhookRateLimiter } from '@/libs/R
 import { runWithTenant } from '@/libs/TenantContext';
 import { organizationSchema, transactionSchema } from '@/models/Schema';
 import { syncMemberQuietly } from '@/services/PaymentMethodSyncService';
+import { openUpdateRequestAfterDecline } from '@/services/PaymentMethodUpdateRequestService';
 import { resolvePaymentProviderConfig, resolvePlatformIQProConfig } from '@/services/PaymentProviderConfigService';
 import { recordRecurringCharge } from '@/services/RecurringChargeWebhookService';
 import { getDbForOrg } from '@/services/TenantDirectoryService';
@@ -257,7 +258,14 @@ async function handleVerifiedEvent(
     const memberId = result.memberId;
     runAfterResponse('IQPro payment-method sync', () => runWithTenant(
       { orgId, db: tenantDb, source: 'webhook' },
-      () => syncMemberQuietly(memberId, orgId, config),
+      async () => {
+        // A decline: watch for the card the member adds through IQPro's
+        // post-decline email (it lands on the customer, not the subscription).
+        if (declined) {
+          await openUpdateRequestAfterDecline(memberId, orgId, config);
+        }
+        await syncMemberQuietly(memberId, orgId, config);
+      },
     ));
   }
 }

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '@/libs/DB';
-import { memberMembershipSchema, memberSchema, membershipPlanSchema, noteSchema, paymentMethodSchema } from '@/models/Schema';
+import { memberMembershipSchema, memberSchema, membershipPlanSchema, noteSchema, paymentMethodSchema, paymentMethodUpdateRequestSchema } from '@/models/Schema';
 import { AUDIT_ACTION } from '@/types/Audit';
 import { MemberNotFoundError } from './MembersService';
 import {
@@ -15,7 +15,7 @@ import {
 
 vi.mock('@/libs/DB');
 
-const provider = { getSubscriptionPaymentMethod: vi.fn() };
+const provider = { getSubscriptionPaymentMethod: vi.fn(), listCustomerPaymentMethods: vi.fn(), setSubscriptionPaymentMethod: vi.fn() };
 vi.mock('./PaymentProviderService', () => ({ getPaymentProvider: vi.fn(async () => provider) }));
 
 const auditMock = vi.fn();
@@ -73,6 +73,46 @@ describe('syncMemberPaymentMethod', () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
+  });
+
+  it('first puts a card the member ADDED at IQPro on the subscription, then records it locally', async () => {
+    const m = await makeMember();
+    await db.insert(paymentMethodUpdateRequestSchema).values({
+      id: randomUUID(),
+      organizationId: ORG,
+      memberId: m.memberId,
+      provider: 'iqpro',
+      providerCustomerId: m.customerId,
+      reason: 'decline',
+      baselinePaymentMethodIds: JSON.stringify(['pm_old']),
+    });
+    provider.listCustomerPaymentMethods.mockResolvedValue([{ paymentMethodId: 'pm_old', type: 'card' }, { paymentMethodId: 'pm_added', type: 'card' }]);
+    provider.setSubscriptionPaymentMethod.mockResolvedValue({ success: true });
+    // What IQPro reports once the subscription points at the added card.
+    provider.getSubscriptionPaymentMethod.mockResolvedValue({ customerId: 'c', paymentMethodId: 'pm_added', paymentMethodName: 'card', last4: '4242', expirationDate: '03/31' });
+
+    const result = await syncMemberPaymentMethod(m.memberId, ORG, IQPRO);
+
+    expect(provider.setSubscriptionPaymentMethod).toHaveBeenCalledWith(IQPRO, `sub_${m.memberId}`, 'pm_added');
+    expect(result).toMatchObject({ changed: true, previousLast4: '1111', paymentMethod: { last4: '4242' } });
+
+    const rows = await cards(m.memberId);
+
+    expect(rows.find(r => r.providerPaymentMethodId === 'pm_old')!.status).toBe('replaced');
+    expect(rows.find(r => r.providerPaymentMethodId === 'pm_added')).toMatchObject({ status: 'active', updatedSource: 'provider_sync' });
+  });
+
+  it('still reads the subscription card when applying a pending update throws', async () => {
+    const m = await makeMember();
+    await db.insert(paymentMethodUpdateRequestSchema).values({ id: randomUUID(), organizationId: ORG, memberId: m.memberId, provider: 'iqpro', providerCustomerId: m.customerId, reason: 'decline' });
+    provider.listCustomerPaymentMethods.mockRejectedValue(new Error('IQPro down'));
+    provider.getSubscriptionPaymentMethod.mockResolvedValue({ customerId: 'c', paymentMethodId: 'pm_old', paymentMethodName: 'card', last4: '1111', expirationDate: '01/27' });
+
+    await expect(syncMemberPaymentMethod(m.memberId, ORG, IQPRO)).resolves.toMatchObject({ changed: false });
+
+    provider.listCustomerPaymentMethods.mockRejectedValue('boom');
+
+    await expect(syncMemberPaymentMethod(m.memberId, ORG, IQPRO, { force: true })).resolves.toMatchObject({ changed: false });
   });
 
   it('replaces the card when the provider reports a different payment method — old kept as history', async () => {
@@ -348,6 +388,18 @@ describe('syncPastDuePaymentMethods', () => {
 
     expect(summary).toEqual({ checked: 2, changed: 1, failed: 1 });
     expect(provider.getSubscriptionPaymentMethod).toHaveBeenCalledTimes(2);
+  });
+
+  it('also polls members with an open card-update request who are not past due', async () => {
+    const m = await makeMember({ membershipStatus: 'active' });
+    await db.insert(paymentMethodUpdateRequestSchema).values({ id: randomUUID(), organizationId: ORG, memberId: m.memberId, provider: 'iqpro', providerCustomerId: m.customerId, reason: 'staff' });
+    provider.listCustomerPaymentMethods.mockResolvedValue([]);
+    provider.getSubscriptionPaymentMethod.mockResolvedValue({ customerId: 'c', paymentMethodId: 'pm_old', paymentMethodName: 'card', last4: '1111', expirationDate: '01/27' });
+
+    const result = await syncPastDuePaymentMethods(ORG, IQPRO);
+
+    expect(provider.getSubscriptionPaymentMethod).toHaveBeenCalledWith(IQPRO, `sub_${m.memberId}`);
+    expect(result.checked).toBeGreaterThanOrEqual(1);
   });
 
   it('counts a thrown member sync as a failure and continues', async () => {
