@@ -46,7 +46,7 @@ import {
   mapTransactionStatus,
   tokenizeAch,
 } from '@/libs/IQPro';
-import { IQPRO_BILLING_PERIOD, IQPRO_UNIT } from '@/libs/IQProConstants';
+import { IQPRO_BILLING_PERIOD, IQPRO_SUBSCRIPTION_STATUS, IQPRO_UNIT } from '@/libs/IQProConstants';
 import { logger } from '@/libs/Logger';
 import { PAYMENT_PROVIDER } from '@/types/PaymentProvider';
 import { normalizeExpiration } from '@/utils/CardExpiration';
@@ -597,7 +597,7 @@ export class IQProPaymentProvider implements IPaymentProvider {
 
       const subscriptionPayload: Record<string, unknown> = {
         customerId: params.customerId,
-        subscriptionStatusId: 1, // Active
+        subscriptionStatusId: IQPRO_SUBSCRIPTION_STATUS.SCHEDULED, // 1 is DRAFT, which never bills
         name: params.description,
         prefix: params.prefix ?? 'MBR', // Membership subscription prefix (max 10 chars). 'HOLD' for hold-fee subs.
         recurrence: {

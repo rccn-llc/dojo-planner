@@ -581,7 +581,8 @@ describe('IQProPaymentProvider', () => {
       const p = payload as Record<string, any>;
 
       expect(p.prefix).toBe('MBR');
-      expect(p.subscriptionStatusId).toBe(1);
+      // 1 is DRAFT (never bills); IQPro expects SCHEDULED at creation.
+      expect(p.subscriptionStatusId).toBe(2);
       expect(p.recurrence.billingPeriodId).toBe(4); // monthly
       expect(p.recurrence.schedule).toEqual({ minutes: [0], hours: [0], daysOfMonth: [15] }); // no monthsOfYear
       expect(p.lineItems[0].unitOfMeasureId).toBe(120); // IQPro 'Months' (3 was 'Alcoholic strength by volume')

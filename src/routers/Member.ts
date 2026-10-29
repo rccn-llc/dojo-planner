@@ -106,10 +106,14 @@ export const create = os
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      // A drizzle query error's message is only the SQL + params; Postgres's
+      // reason (missing column, constraint violation) is on `cause`.
+      const cause = error instanceof Error ? error.cause as { message?: string; code?: string; constraint?: string; column?: string } | undefined : undefined;
       logger.error(`Failed to create member: ${errorMessage}`, {
         error,
         errorString: String(error),
         errorKeys: error instanceof Error ? Object.keys(error) : [],
+        cause: cause ? { message: cause.message, code: cause.code, constraint: cause.constraint, column: cause.column } : undefined,
       });
 
       // Audit the failure

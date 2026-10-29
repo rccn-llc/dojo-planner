@@ -9,7 +9,7 @@
  * ── Prerequisites ───────────────────────────────────────────────────────────
  *
  *  1. A member created through the app's normal Add Member flow with an
- *     APPROVING sandbox card (e.g. Visa 4264281555555550), so they have an
+ *     APPROVING sandbox card (e.g. Visa 4264281555555555), so they have an
  *     IQPro customer and a saved card. No card number ever passes through this
  *     script — it reuses the vaulted payment method.
  *  2. The dev server reachable from the internet (e.g. `cloudflared tunnel
@@ -34,7 +34,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { Pool } from 'pg';
 import { loadEnvFile } from '../libs/EnvFiles';
-import { IQPRO_BILLING_PERIOD, IQPRO_UNIT } from '../libs/IQProConstants';
+import { IQPRO_BILLING_PERIOD, IQPRO_SUBSCRIPTION_STATUS, IQPRO_UNIT } from '../libs/IQProConstants';
 
 /** IQPro `/api/constants/billingperiod`: 1 = Daily. */
 export const IQPRO_BILLING_PERIOD_DAILY = IQPRO_BILLING_PERIOD.DAILY;
@@ -79,14 +79,19 @@ export function buildDailySubscriptionPayload(p: {
   firstName: string;
   lastName: string;
   email: string;
+  /** Two-letter US state. IQPro rejects a placeholder ("Invalid state for specified country"). */
+  state: string;
   hour: number;
   minute: number;
+  /** The gateway's IANA time zone (`GET /api/gateway/{id}` → `timezone`). */
+  timeZone?: string;
   now?: Date;
 }): Record<string, unknown> {
-  const start = (p.now ?? new Date()).toISOString();
+  const start = gatewayStartTime(p.now ?? new Date(), p.timeZone ?? 'UTC');
   return {
     customerId: p.customerId,
-    subscriptionStatusId: 1,
+    // ACTIVE, not the app's SCHEDULED: see gatewayStartTime.
+    subscriptionStatusId: IQPRO_SUBSCRIPTION_STATUS.ACTIVE,
     name: 'Sandbox daily test',
     prefix: 'SBXDAILY',
     recurrence: {
@@ -105,7 +110,7 @@ export function buildDailySubscriptionPayload(p: {
       ...(p.cardProcessorId ? { cardProcessorId: p.cardProcessorId } : {}),
     },
     addresses: [
-      { isBilling: true, isShipping: false, isRemittance: false, firstName: p.firstName, lastName: p.lastName, email: p.email, state: 'N/A', country: 'US' },
+      { isBilling: true, isShipping: false, isRemittance: false, firstName: p.firstName, lastName: p.lastName, email: p.email, state: p.state, country: 'US' },
       { isBilling: false, isShipping: false, isRemittance: true, firstName: p.firstName, lastName: p.lastName, email: p.email, country: 'US' },
     ],
     lineItems: [{
@@ -119,14 +124,46 @@ export function buildDailySubscriptionPayload(p: {
   };
 }
 
+/** Wall-clock parts of `date` in `timeZone`. */
+function wallClock(date: Date, timeZone: string): { y: string; mo: string; d: string; h: number; mi: number } {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date).map(x => [x.type, x.value]));
+  return { y: parts.year!, mo: parts.month!, d: parts.day!, h: Number(parts.hour), mi: Number(parts.minute) };
+}
+
 /**
- * Default run time: ~10 minutes from now, expressed in UTC. ⚠️ ASSUMED that
- * IQPro evaluates schedules in UTC — not documented; if the first charge lands
- * hours off, pass --hour/--minute in the gateway's time zone instead.
+ * Default run time: ~10 minutes from now, in the GATEWAY's time zone.
+ * Sandbox: a schedule of 04:20 on a `US/Central` gateway is 04:20 Central, not
+ * 04:20 UTC.
  */
-export function defaultRunTime(now = new Date()): { hour: number; minute: number } {
-  const t = new Date(now.getTime() + 10 * 60 * 1000);
-  return { hour: t.getUTCHours(), minute: t.getUTCMinutes() };
+export function defaultRunTime(now = new Date(), timeZone = 'UTC'): { hour: number; minute: number } {
+  const t = wallClock(new Date(now.getTime() + 10 * 60 * 1000), timeZone);
+  return { hour: t.h, minute: t.mi };
+}
+
+/**
+ * Two minutes from now on the gateway's wall clock, written with a `Z`.
+ *
+ * ⚠️ Sandbox findings (US/Central gateway, CDT = UTC−5):
+ *  - IQPro STORES a start date as if its clock time were gateway-local: we sent
+ *    04:10Z and it stored 09:10Z. So the effective start is the clock time read
+ *    as Central — here, two minutes from now.
+ *  - It VALIDATES the status against the start as real UTC: a future start must
+ *    be SCHEDULED, a past one ACTIVE. This string is ~5h in the past as UTC, so
+ *    it needs ACTIVE ("Status provided is Scheduled but status expected is
+ *    Active"). The app sends real `now`, which validates as SCHEDULED.
+ *  - Start date and schedule can be edited only while DRAFT.
+ */
+export function gatewayStartTime(now: Date, timeZone: string): string {
+  const t = wallClock(new Date(now.getTime() + 2 * 60 * 1000), timeZone);
+  return `${t.y}-${t.mo}-${t.d}T${String(t.h).padStart(2, '0')}:${String(t.mi).padStart(2, '0')}:00.000Z`;
 }
 
 export function parseArgs(argv: string[]): Record<string, string> {
@@ -192,7 +229,9 @@ async function main(): Promise<void> {
 
   try {
     const { rows: [member] } = await pool.query(
-      `SELECT m.first_name, m.last_name, m.email, m.provider_customer_id, pm.provider_payment_method_id
+      `SELECT m.first_name, m.last_name, m.email, m.provider_customer_id, pm.provider_payment_method_id,
+              (SELECT a.state FROM address a WHERE a.member_id = m.id
+                ORDER BY (a.type = 'billing') DESC, a.is_default DESC LIMIT 1) AS state
          FROM member m JOIN payment_method pm ON pm.member_id = m.id AND pm.status = 'active'
         WHERE m.id = $1 AND m.organization_id = $2 AND pm.provider_payment_method_id IS NOT NULL
         ORDER BY pm.is_default DESC LIMIT 1`,
@@ -211,10 +250,13 @@ async function main(): Promise<void> {
     }
 
     const gateway = await call('GET', `/api/gateway/${env.IQPRO_GATEWAY_ID}`);
-    const processors = ((gateway.data ?? gateway) as { processors?: Array<{ processorId: string; isDefaultCard?: boolean }> }).processors ?? [];
+    const gatewayData = (gateway.data ?? gateway) as { processors?: Array<{ processorId: string; isDefaultCard?: boolean }>; timezone?: string };
+    const processors = gatewayData.processors ?? [];
     const cardProcessorId = (processors.find(x => x.isDefaultCard) ?? processors[0])?.processorId ?? null;
+    // Schedules run in the gateway's own time zone (sandbox: US/Central).
+    const timeZone = gatewayData.timezone ?? 'UTC';
 
-    const { hour, minute } = args.hour ? { hour: Number(args.hour), minute: Number(args.minute ?? 0) } : defaultRunTime();
+    const { hour, minute } = args.hour ? { hour: Number(args.hour), minute: Number(args.minute ?? 0) } : defaultRunTime(new Date(), timeZone);
     const payload = buildDailySubscriptionPayload({
       customerId: member.provider_customer_id,
       paymentMethodId: member.provider_payment_method_id,
@@ -223,8 +265,10 @@ async function main(): Promise<void> {
       firstName: member.first_name,
       lastName: member.last_name,
       email: member.email,
+      state: /^[A-Z]{2}$/i.test(member.state ?? '') ? member.state.toUpperCase() : 'CA',
       hour,
       minute,
+      timeZone,
     });
     const created = await call('POST', `/api/gateway/${env.IQPRO_GATEWAY_ID}/subscription`, payload);
     const sub = (created.data ?? created) as { subscriptionId?: string; id?: string };
@@ -240,8 +284,12 @@ async function main(): Promise<void> {
       [membershipId, memberId, plan.id, subscriptionId],
     );
 
-    // Routing refs live in the control plane (locally: the same database).
-    const control = new Pool({ connectionString: process.env.CONTROL_DATABASE_URL ?? databaseUrl, max: 1 });
+    // Routing refs live in the control plane. Locally that is the SAME
+    // database, and pglite-server accepts one connection, so reuse `pool`
+    // rather than open a second one it would refuse — after the subscription
+    // already exists, which would leave its webhooks unroutable.
+    const controlUrl = process.env.CONTROL_DATABASE_URL ?? databaseUrl;
+    const control = controlUrl === databaseUrl ? pool : new Pool({ connectionString: controlUrl, max: 1 });
     try {
       for (const [refType, refId] of [['provider_subscription', subscriptionId], ['provider_customer', member.provider_customer_id]]) {
         await control.query(
@@ -250,21 +298,23 @@ async function main(): Promise<void> {
         );
       }
     } finally {
-      await control.end().catch(() => {});
+      if (control !== pool) {
+        await control.end().catch(() => {});
+      }
     }
 
     console.info(`
 Created sandbox DAILY subscription ${subscriptionId}
   member:     ${member.first_name} ${member.last_name} (${memberId})
   membership: ${membershipId} on "${plan.name}"
-  charges:    $${payload.lineItems && (payload.lineItems as Array<{ unitPrice: number }>)[0]!.unitPrice} daily at ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} UTC
+  charges:    $${payload.lineItems && (payload.lineItems as Array<{ unitPrice: number }>)[0]!.unitPrice} daily at ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} ${timeZone} (gateway time)
 
 Next:
   1. Watch the dev server log for "[IQPro Webhook] Received" at that time — a PAID renewal row should appear.
   2. Make it decline: open IQPro's "update your card" email (or the subscription in the iQ Pro+ portal) and
      switch the card to the sandbox decline card 4124939999999990 ("Not sufficient funds").
      The next runs should produce declined rows: attempt 1/3, 2/3, 3/3 → overdue.
-  3. Update the card back to 4264281555555550, open the member (or wait for the daily job): the
+  3. Update the card back to 4264281555555555, open the member (or wait for the daily job): the
      "Card updated — ready to retry" label should appear. Retry from the modal; it should pay the invoice,
      and IQPro must NOT charge again for that cycle.
   4. Clean up: npx tsx src/scripts/iqproSandboxDailySubscription.ts --cancel=${subscriptionId}
