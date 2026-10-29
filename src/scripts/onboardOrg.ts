@@ -48,7 +48,6 @@ import {
 import { createPrompter } from './onboarding/prompt';
 import { buildChildEnv, runScript } from './onboarding/runScript';
 import { countOrgRows, ensureControlTrial, hasPaymentConfig, planSteps, readAllTenantRows, readConfiguredProvider, readTenantRow, writePaymentConfig } from './onboarding/steps';
-import { APP_URL, iqproWebhookReminder, squareWebhookReminder } from './onboarding/webhookReminders';
 
 const prompt = createPrompter();
 const REQUIRED_ROLES = [ORG_ROLE.ACADEMY_OWNER, ORG_ROLE.ADMIN];
@@ -65,6 +64,7 @@ const NEON_STORE_METADATA = {
   region: process.env.ONBOARD_NEON_REGION || 'iad1',
   auth: false,
 };
+const APP_URL = 'https://app.dojoplanner.com';
 
 /** Read ONE account-level key from `.env.local` — never environment-specific config. */
 function accountLevelValue(name: string): string | undefined {
@@ -85,6 +85,20 @@ function vercelTeamIdFromProject(): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Square only sends status changes (paid invoices, failed charges, cancelled
+ * subscriptions, captured payments) if a webhook subscription exists — and its
+ * URL is an HMAC input, so it must match exactly.
+ */
+function squareWebhookReminder(target: 'production' | 'preview'): string {
+  const url = target === 'production' ? `${APP_URL}/webhook/square` : '<Preview URL>/webhook/square';
+  return `
+   ⚠️  Square webhooks — Square Developer Dashboard → Webhooks → Add subscription:
+       URL:     ${url}   (exactly; it is part of the signature)
+       Events:  invoice.payment_made, invoice.scheduled_charge_failed, subscription.updated, payment.updated
+       Its signature key must be the Webhook Signature Key entered above.`;
 }
 
 async function secret(name: string, label: string): Promise<string> {
@@ -406,7 +420,7 @@ async function main(): Promise<void> {
    Kiosk:      ${target === 'production' ? `${KIOSK_URL}/?org=${slug}` : `<Preview kiosk URL>/?org=${slug}`}
    Owner:      ${owner.kind === 'member' ? 'added' : 'invited — they get access when they accept'}
    Billing:    ${trial.written ? '30-day trial started; the owner subscribes from the dashboard' : `existing subscription status: ${trial.status}`}
-   Payments:   ${paymentProvider === 'square' ? 'Square configured' : paymentProvider ? 'IQPro configured' : 'not configured — set on Location Settings'}; kiosk probe ${kioskStatus}${paymentProvider === 'square' ? squareWebhookReminder(target) : paymentProvider ? iqproWebhookReminder(target) : ''}
+   Payments:   ${paymentProvider === 'square' ? 'Square configured' : paymentProvider ? 'IQPro configured' : 'not configured — set on Location Settings'}; kiosk probe ${kioskStatus}${paymentProvider === 'square' ? squareWebhookReminder(target) : ''}
    Internal org that should never be billed? Add ${orgId} to EXEMPT_ORG_IDS in src/utils/SuperAdmins.ts.`);
   } finally {
     await control.end();
