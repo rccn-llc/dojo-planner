@@ -20,7 +20,7 @@ export type TenantScope = {
   /** The resolved database handle for that organization. */
   db: TenantDb;
   /** Where the scope was established. Diagnostics only. */
-  source: 'rpc' | 'rsc' | 'webhook' | 'script' | 'test';
+  source: 'rpc' | 'rsc' | 'webhook' | 'script' | 'cron' | 'test';
 };
 
 const storage = new AsyncLocalStorage<TenantScope>();

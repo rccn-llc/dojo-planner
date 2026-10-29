@@ -1,5 +1,6 @@
 'use client';
 
+import type { TransactionRecurringFlags } from '@/features/finances/recurringPayments';
 import type { AttendanceRecord, PunchcardInfo } from '@/features/members/details/MemberDetailAttendance';
 import type { MemberNote } from '@/features/members/details/MemberDetailNotes';
 import type { ConversionType } from '@/hooks/useConvertMemberWizard';
@@ -7,7 +8,7 @@ import type { Member } from '@/hooks/useMembersCache';
 import type { MemberPaymentMethodData } from '@/services/MembersService';
 import type { SignedWaiverWithTemplateName } from '@/services/WaiversService';
 import { useOrganization } from '@clerk/nextjs';
-import { Archive, ArchiveRestore, ArrowRightLeft, Download, MoreVertical, Pencil, Plus, Trash2, Unlink } from 'lucide-react';
+import { Archive, ArchiveRestore, ArrowRightLeft, Download, MoreVertical, Pencil, Plus, RefreshCw, Trash2, Unlink } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
@@ -19,6 +20,9 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { RecurringLabel } from '@/features/finances/RecurringLabel';
+import { isRetryable } from '@/features/finances/recurringPayments';
+import { RetryPaymentModal } from '@/features/finances/RetryPaymentModal';
 import { transformCouponsToUi } from '@/features/marketing';
 import { ConvertMemberModal } from '@/features/members/conversion/ConvertMemberModal';
 import { ChangeMembershipModal } from '@/features/members/details/ChangeMembershipModal';
@@ -27,6 +31,7 @@ import { EditMemberPhotoModal } from '@/features/members/details/EditMemberPhoto
 import { EditPaymentMethodModal } from '@/features/members/details/EditPaymentMethodModal';
 import { MemberDetailAttendance } from '@/features/members/details/MemberDetailAttendance';
 import { MemberDetailNotes } from '@/features/members/details/MemberDetailNotes';
+import { PastDueBanner } from '@/features/members/details/PastDueBanner';
 import { ArchiveMemberModal } from '@/features/members/lifecycle/ArchiveMemberModal';
 import { CancelMembershipModal } from '@/features/members/lifecycle/CancelMembershipModal';
 import { HoldMembershipModal } from '@/features/members/lifecycle/HoldMembershipModal';
@@ -103,11 +108,24 @@ type BillingHistoryItem = {
   id: string;
   date: string;
   member: string;
+  memberId: string | null;
+  createdAt: Date;
   amount: number;
   purpose: string;
   method: string;
+  status: string;
+  transactionType: string;
+  recurring?: TransactionRecurringFlags;
   groupType?: 'family' | 'individual';
   children?: BillingHistoryItem[];
+};
+
+const BILLING_STATUS_VARIANT: Record<string, 'default' | 'outline' | 'destructive' | 'warning'> = {
+  paid: 'default',
+  pending: 'outline',
+  declined: 'destructive',
+  refunded: 'warning',
+  processing: 'outline',
 };
 
 type MemberData = {
@@ -490,6 +508,11 @@ export default function EditMemberPage() {
   // HOH data for family members (who is this family member's HOH?)
   const [currentHOH, setCurrentHOH] = useState<{ id: string; name: string } | null>(null);
 
+  // Only ACTIVE cards can be charged; replaced ones are history (a card the
+  // member replaced at the payment provider).
+  const activePaymentMethods = useMemo(() => paymentMethods.filter(pm => pm.status !== 'replaced'), [paymentMethods]);
+  const replacedPaymentMethods = useMemo(() => paymentMethods.filter(pm => pm.status === 'replaced'), [paymentMethods]);
+
   // Get the current member from cache for membership info
   const currentMember: Member | undefined = members?.find(m => m.id === memberId);
   const currentMembership = currentMember?.currentMembership;
@@ -504,16 +527,16 @@ export default function EditMemberPage() {
       return null;
     }
     const memberName = `${currentMember.firstName || ''} ${currentMember.lastName || ''}`.trim();
-    const primaryPayment = paymentMethods[0];
+    const primaryPayment = activePaymentMethods[0];
     return {
       id: currentMember.id,
       name: memberName,
       email: currentMember.email || '',
-      hasPaymentMethod: paymentMethods.length > 0,
+      hasPaymentMethod: activePaymentMethods.length > 0,
       paymentMethodLast4: primaryPayment?.last4 ?? undefined,
       paymentMethodType: primaryPayment?.type === 'card' ? 'card' as const : primaryPayment?.type === 'bank_transfer' ? 'ach' as const : undefined,
     };
-  }, [currentMember, paymentMethods]);
+  }, [currentMember, activePaymentMethods]);
 
   const handleOpenMembershipModal = (mode: 'add' | 'change') => {
     setMembershipModalMode(mode);
@@ -732,7 +755,8 @@ export default function EditMemberPage() {
     }
     setIsLoadingPayment(true);
     try {
-      const result = await client.member.listPaymentMethods({ memberId });
+      // Include replaced cards: they are shown as history under "Previous cards".
+      const result = await client.member.listPaymentMethods({ memberId, includeReplaced: true });
       setPaymentMethods(result.paymentMethods);
     } catch (err) {
       console.warn('[Edit Member] Failed to fetch payment methods:', err);
@@ -795,9 +819,23 @@ export default function EditMemberPage() {
           day: 'numeric',
         }),
         member: `${tx.memberFirstName || ''} ${tx.memberLastName || ''}`.trim(),
+        memberId: tx.memberId,
+        createdAt: new Date(tx.createdAt),
         amount: tx.amount,
         purpose: formatTransactionType(tx.transactionType),
         method: tx.paymentMethod || 'N/A',
+        status: tx.status,
+        transactionType: tx.transactionType,
+        recurring: {
+          memberMembershipId: tx.memberMembershipId,
+          failureReason: tx.failureReason,
+          source: tx.source,
+          retryOfTransactionId: tx.retryOfTransactionId,
+          resolved: tx.resolved,
+          superseded: tx.superseded,
+          attemptNumber: tx.attemptNumber,
+          cardUpdatedAfterFailure: tx.cardUpdatedAfterFailure,
+        },
       }));
       setBillingHistory(items);
     } catch (err) {
@@ -837,6 +875,73 @@ export default function EditMemberPage() {
       setRefundingId(null);
     }
   }, [reloadBillingHistory]);
+
+  // Explicit keys (not a template literal) so the i18n checker can see them.
+  const billingStatusLabel = (status: string): string => {
+    switch (status) {
+      case 'paid':
+        return t('billing_status_paid');
+      case 'pending':
+        return t('billing_status_pending');
+      case 'declined':
+        return t('billing_status_declined');
+      case 'refunded':
+        return t('billing_status_refunded');
+      case 'processing':
+        return t('billing_status_processing');
+      default:
+        return status;
+    }
+  };
+
+  // Retrying a declined recurring payment is FRONT_DESK+ (transactions.retry).
+  const canRetryPayment = useHasRole(ORG_ROLE.FRONT_DESK);
+  const [retryTarget, setRetryTarget] = useState<{ transactionId: string; memberId: string | null } | null>(null);
+
+  const handleRetryClosed = useCallback(async (changed: boolean) => {
+    setRetryTarget(null);
+    if (changed) {
+      // A retry may have reactivated the membership and/or recorded a new row.
+      await Promise.all([reloadBillingHistory(), reloadPaymentMethods()]);
+      invalidateMembersCache();
+    }
+  }, [reloadBillingHistory, reloadPaymentMethods]);
+
+  // Refresh the card on file from the payment provider — e.g. after the member
+  // updated it through the provider's failed-payment email (no webhook).
+  const [isRefreshingCard, setIsRefreshingCard] = useState(false);
+  const [cardRefreshMessage, setCardRefreshMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const handleRefreshCard = useCallback(async () => {
+    setIsRefreshingCard(true);
+    setCardRefreshMessage(null);
+    try {
+      const result = await client.member.syncPaymentMethod({ memberId, force: true });
+      if (result.error) {
+        setCardRefreshMessage({ kind: 'error', text: t('refresh_card_failed', { error: result.error }) });
+      } else if (result.changed) {
+        setCardRefreshMessage({ kind: 'ok', text: t('refresh_card_changed', { last4: result.paymentMethod?.last4 ?? '????' }) });
+        await reloadPaymentMethods();
+      } else {
+        setCardRefreshMessage({ kind: 'ok', text: t('refresh_card_unchanged') });
+      }
+    } catch (err) {
+      setCardRefreshMessage({ kind: 'error', text: t('refresh_card_failed', { error: err instanceof Error ? err.message : '' }) });
+    } finally {
+      setIsRefreshingCard(false);
+    }
+  }, [memberId, reloadPaymentMethods, t]);
+
+  // A past-due member may have just updated their card at the provider: check
+  // quietly on page load (throttled server-side) so the card shown is current.
+  const isPastDue = currentMember?.status === 'past_due';
+  useEffect(() => {
+    if (!isPastDue || !memberId) {
+      return;
+    }
+    void client.member.syncPaymentMethod({ memberId })
+      .then(result => (result.changed ? reloadPaymentMethods() : undefined))
+      .catch(() => {});
+  }, [isPastDue, memberId, reloadPaymentMethods]);
 
   // Fetch family members if this member is a head of household
   const isHOH = currentMember?.memberType === 'head-of-household';
@@ -1090,6 +1195,23 @@ export default function EditMemberPage() {
           {state.error}
         </div>
       )}
+
+      {/* Failed recurring payment */}
+      <PastDueBanner
+        rows={billingHistory.map(item => ({
+          id: item.id,
+          memberId: item.memberId,
+          memberName: item.memberId === memberId ? '' : item.member,
+          amount: item.amount,
+          createdAt: item.createdAt,
+          status: item.status,
+          transactionType: item.transactionType,
+          recurring: item.recurring,
+        }))}
+        activeCard={activePaymentMethods[0] ?? null}
+        canRetry={canRetryPayment}
+        onRetryAction={row => setRetryTarget({ transactionId: row.id, memberId: row.memberId })}
+      />
 
       {/* Member Header */}
       <div className="flex items-center gap-4">
@@ -1533,23 +1655,45 @@ export default function EditMemberPage() {
                 <div className="mb-6 flex items-center justify-between">
                   <h2 className="text-lg font-semibold text-foreground">{t('payment_method_title')}</h2>
                   {!isLoadingPayment && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setIsEditPaymentMethodOpen(true)}
-                      aria-label={t('add_payment_method_aria')}
-                    >
-                      <Plus className="mr-1 size-4" />
-                      {' '}
-                      Add
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      {canRetryPayment && currentMembership && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={isRefreshingCard}
+                          onClick={handleRefreshCard}
+                          data-testid="refresh-card-button"
+                        >
+                          <RefreshCw className={`mr-1 size-4 ${isRefreshingCard ? 'animate-spin' : ''}`} />
+                          {isRefreshingCard ? t('refreshing_from_provider') : t('refresh_from_provider')}
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsEditPaymentMethodOpen(true)}
+                        aria-label={t('add_payment_method_aria')}
+                      >
+                        <Plus className="mr-1 size-4" />
+                        {' '}
+                        Add
+                      </Button>
+                    </div>
                   )}
                 </div>
+                {cardRefreshMessage && (
+                  <p
+                    className={`mb-3 text-sm ${cardRefreshMessage.kind === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}
+                    data-testid="card-refresh-message"
+                  >
+                    {cardRefreshMessage.text}
+                  </p>
+                )}
                 {isLoadingPayment
                   ? (
                       <p className="text-sm text-muted-foreground">{t('loading_payment_methods')}</p>
                     )
-                  : paymentMethods.length === 0
+                  : activePaymentMethods.length === 0
                     ? (
                         <p className="text-sm text-muted-foreground">{t('no_payment_method')}</p>
                       )
@@ -1559,7 +1703,7 @@ export default function EditMemberPage() {
                             <p className="mb-3 text-sm text-destructive">{pmError}</p>
                           )}
                           <div className="space-y-3">
-                            {paymentMethods.map(pm => (
+                            {activePaymentMethods.map(pm => (
                               <div key={pm.id} className="flex items-center gap-4 rounded-lg border border-border p-3">
                                 <div className="rounded-lg bg-blue-600 p-3">
                                   <span className="text-2xl">{getPaymentTypeIcon(pm.type)}</span>
@@ -1576,6 +1720,18 @@ export default function EditMemberPage() {
                                   </p>
                                   {pm.isDefault && (
                                     <p className="mt-1 text-xs text-muted-foreground">{t('default_payment_method')}</p>
+                                  )}
+                                  {(pm.cardBrand || pm.expirationDate) && (
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                      {[pm.cardBrand, pm.expirationDate ? t('payment_method_expires', { date: pm.expirationDate }) : null].filter(Boolean).join(' · ')}
+                                    </p>
+                                  )}
+                                  {pm.updatedAt && pm.updatedSource && (
+                                    <p className="mt-1 text-xs text-muted-foreground" data-testid="payment-method-updated">
+                                      {pm.updatedSource === 'provider_sync'
+                                        ? t('payment_method_updated_provider', { date: new Date(pm.updatedAt).toLocaleDateString() })
+                                        : t('payment_method_updated_app', { date: new Date(pm.updatedAt).toLocaleDateString() })}
+                                    </p>
                                   )}
                                 </div>
                                 <div className="flex shrink-0 items-center gap-2">
@@ -1606,6 +1762,16 @@ export default function EditMemberPage() {
                               </div>
                             ))}
                           </div>
+                          {replacedPaymentMethods.length > 0 && (
+                            <details className="mt-3 text-sm" data-testid="previous-cards">
+                              <summary className="cursor-pointer text-muted-foreground">{t('previous_cards')}</summary>
+                              <ul className="mt-2 space-y-1 pl-4 text-muted-foreground">
+                                {replacedPaymentMethods.map(pm => (
+                                  <li key={pm.id}>{t('previous_card_replaced', { last4: pm.last4 ?? '????' })}</li>
+                                ))}
+                              </ul>
+                            </details>
+                          )}
                           {/* Applied Coupon Info */}
                           {appliedCoupon && (
                             <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950/30">
@@ -1710,6 +1876,7 @@ export default function EditMemberPage() {
                             <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">{t('member_column')}</th>
                             <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">{t('table_date')}</th>
                             <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">{t('table_amount')}</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">{t('billing_status_column')}</th>
                             <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">{t('table_purpose')}</th>
                             <th className="hidden px-4 py-3 text-left text-sm font-semibold text-foreground sm:table-cell">{t('table_method')}</th>
                             <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">{t('actions_button')}</th>
@@ -1725,10 +1892,27 @@ export default function EditMemberPage() {
                               <td className="p-4 text-sm font-semibold text-primary">
                                 {formatCurrency(item.amount)}
                               </td>
+                              <td className="p-4 text-sm" data-testid={`billing-status-${item.id}`}>
+                                <Badge variant={BILLING_STATUS_VARIANT[item.status] ?? 'outline'}>
+                                  {billingStatusLabel(item.status)}
+                                </Badge>
+                                <RecurringLabel status={item.status} transactionType={item.transactionType} recurring={item.recurring} />
+                              </td>
                               <td className="p-4 text-sm text-muted-foreground">{item.purpose}</td>
                               <td className="hidden p-4 text-sm text-muted-foreground sm:table-cell">{item.method}</td>
                               <td className="p-4">
-                                {canRefund && (
+                                {canRetryPayment && isRetryable(item) && (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => setRetryTarget({ transactionId: item.id, memberId: item.memberId })}
+                                    className="w-fit"
+                                    data-testid={`billing-retry-${item.id}`}
+                                  >
+                                    {t('retry_payment_button')}
+                                  </Button>
+                                )}
+                                {/* Only a paid charge can be refunded; the server also refuses others. */}
+                                {canRefund && item.status === 'paid' && (
                                   <Button
                                     size="sm"
                                     disabled={refundingId === item.id}
@@ -1866,7 +2050,7 @@ export default function EditMemberPage() {
           memberDateOfBirth={currentMember.dateOfBirth ? new Date(currentMember.dateOfBirth) : undefined}
           conversionType={conversionType}
           hasMembership={hasActiveMembership}
-          hasPaymentMethod={paymentMethods.length > 0}
+          hasPaymentMethod={activePaymentMethods.length > 0}
           currentHOHId={currentHOH?.id}
           currentHOHName={currentHOH?.name}
           availableCoupons={availableCoupons}
@@ -1909,6 +2093,12 @@ export default function EditMemberPage() {
           onSuccess={handleArchiveSuccess}
         />
       )}
+      <RetryPaymentModal
+        isOpen={retryTarget !== null}
+        transactionId={retryTarget?.transactionId ?? null}
+        memberId={retryTarget?.memberId ?? null}
+        onCloseAction={changed => void handleRetryClosed(changed)}
+      />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { and, count, desc, eq, gte, inArray, max, or } from 'drizzle-orm';
 import { db } from '@/libs/DB';
 import { logger } from '@/libs/Logger';
 import { addressSchema, attendanceSchema, couponUsageSchema, eventRegistrationSchema, familyMemberSchema, memberMembershipSchema, memberSchema, membershipPlanSchema, noteSchema, paymentMethodSchema, signedWaiverSchema, transactionSchema } from '@/models/Schema';
+import { recurringStateColumns } from '@/services/TransactionsService';
 
 export type MembershipPlanData = {
   id: string;
@@ -881,6 +882,13 @@ export type MemberPaymentMethodData = {
   last4: string | null;
   accountType: string | null;
   isDefault: boolean | null;
+  cardBrand: string | null;
+  expirationDate: string | null;
+  /** 'active' | 'replaced' — replaced cards are history only. */
+  status: string;
+  /** 'app' | 'provider_sync' | null (legacy rows). */
+  updatedSource: string | null;
+  updatedAt: Date | null;
 };
 
 /**
@@ -893,6 +901,7 @@ export type MemberPaymentMethodData = {
 export async function getMemberPaymentMethods(
   memberId: string,
   organizationId: string,
+  options: { includeReplaced?: boolean } = {},
 ): Promise<MemberPaymentMethodData[]> {
   return db
     .select({
@@ -902,14 +911,22 @@ export async function getMemberPaymentMethods(
       last4: paymentMethodSchema.last4,
       accountType: paymentMethodSchema.accountType,
       isDefault: paymentMethodSchema.isDefault,
+      cardBrand: paymentMethodSchema.cardBrand,
+      expirationDate: paymentMethodSchema.expirationDate,
+      status: paymentMethodSchema.status,
+      updatedSource: paymentMethodSchema.updatedSource,
+      updatedAt: paymentMethodSchema.updatedAt,
     })
     .from(paymentMethodSchema)
     .innerJoin(memberSchema, eq(paymentMethodSchema.memberId, memberSchema.id))
     .where(and(
       eq(paymentMethodSchema.memberId, memberId),
       eq(memberSchema.organizationId, organizationId),
+      // Replaced cards are history: every charging surface (HOH billing, event
+      // enrollment) must only ever see active ones.
+      ...(options.includeReplaced ? [] : [eq(paymentMethodSchema.status, 'active')]),
     ))
-    .orderBy(desc(paymentMethodSchema.isDefault));
+    .orderBy(desc(paymentMethodSchema.isDefault), desc(paymentMethodSchema.updatedAt));
 }
 
 /**
@@ -959,7 +976,7 @@ export async function deleteMemberPaymentMethod(
       const remaining = await tx
         .select({ id: paymentMethodSchema.id })
         .from(paymentMethodSchema)
-        .where(eq(paymentMethodSchema.memberId, memberId))
+        .where(and(eq(paymentMethodSchema.memberId, memberId), eq(paymentMethodSchema.status, 'active')))
         .limit(1);
       const next = remaining[0];
       if (next) {
@@ -1039,6 +1056,7 @@ export async function getMemberTransactions(
       description: transactionSchema.description,
       processedAt: transactionSchema.processedAt,
       createdAt: transactionSchema.createdAt,
+      ...recurringStateColumns,
     })
     .from(transactionSchema)
     .innerJoin(memberSchema, eq(transactionSchema.memberId, memberSchema.id))

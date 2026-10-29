@@ -19,10 +19,15 @@ export type FinancesFilters = {
   status: string;
 };
 
+/** Status-filter value for declined charges nobody has collected yet. */
+export const FAILED_UNRESOLVED_FILTER = 'failed_unresolved';
+
 type FinancesFilterBarProps = {
   onFiltersChangeAction: (filters: FinancesFilters) => void;
   availableOrigins: string[];
   availableStatuses: TransactionStatus[];
+  /** Offer the "Failed payments" quick filter (there are unresolved declines). */
+  hasFailedPayments?: boolean;
 };
 
 const STATUS_OPTIONS: Array<{ value: string; labelKey: TransactionStatus }> = [
@@ -37,6 +42,7 @@ export function FinancesFilterBar({
   onFiltersChangeAction,
   availableOrigins,
   availableStatuses,
+  hasFailedPayments = false,
 }: FinancesFilterBarProps) {
   const t = useTranslations('TransactionsPage');
   const [filters, setFilters] = useState<FinancesFilters>({
@@ -79,6 +85,7 @@ export function FinancesFilterBar({
         value: option.value,
         label: t(`status_${option.labelKey}`),
       })),
+    ...(hasFailedPayments ? [{ value: FAILED_UNRESOLVED_FILTER, label: t('failed_payments_filter') }] : []),
   ];
 
   return (

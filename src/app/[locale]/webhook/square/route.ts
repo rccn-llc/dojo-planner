@@ -1,14 +1,18 @@
+import type { PaymentProviderConfig } from '@/services/PaymentProviderConfigService';
 import { and, eq, ne } from 'drizzle-orm';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
+import { runAfterResponse } from '@/libs/AfterResponse';
 import { db } from '@/libs/DB';
 import { Env } from '@/libs/Env';
 import { logger } from '@/libs/Logger';
 import { getClientIP, isRateLimitingEnabled, webhookRateLimiter } from '@/libs/RateLimit';
-import { verifySquareWebhookSignature } from '@/libs/Square';
+import { fromMinorUnits, verifySquareWebhookSignature } from '@/libs/Square';
 import { runWithTenant } from '@/libs/TenantContext';
 import { memberMembershipSchema, memberSchema, transactionSchema } from '@/models/Schema';
+import { syncByProviderCustomer, syncMemberQuietly } from '@/services/PaymentMethodSyncService';
 import { resolvePaymentProviderConfig } from '@/services/PaymentProviderConfigService';
+import { recordRecurringCharge } from '@/services/RecurringChargeWebhookService';
 import { getDbForOrg } from '@/services/TenantDirectoryService';
 import { REF_TYPE, resolveOrgByExternalRef } from '@/services/TenantExternalRefService';
 import { MEMBER_STATUS } from '@/types/MemberStatus';
@@ -94,6 +98,15 @@ function extractRoutingRef(payload: SquareWebhookPayload): { refType: typeof REF
       : null;
   }
 
+  // Card-on-file changes (Cards API webhooks) carry the customer, not a
+  // subscription. The customer ref is recorded when the app creates it.
+  if (type.startsWith('card.')) {
+    const card = object.card as { customer_id?: string } | undefined;
+    return card?.customer_id
+      ? { refType: REF_TYPE.PROVIDER_CUSTOMER, refId: card.customer_id }
+      : null;
+  }
+
   if (type.startsWith('payment.')) {
     const payment = object.payment as { id?: string } | undefined;
     return payment?.id
@@ -104,75 +117,97 @@ function extractRoutingRef(payload: SquareWebhookPayload): { refType: typeof REF
   return null;
 }
 
-/** The subscription id an invoice event belongs to. */
-function invoiceSubscriptionId(payload: SquareWebhookPayload): string | null {
-  const invoice = payload.data?.object?.invoice as { subscription_id?: string } | undefined;
-  return invoice?.subscription_id ?? null;
+type SquareMoney = { amount?: number; currency?: string };
+type SquareInvoice = {
+  id?: string;
+  subscription_id?: string;
+  status?: string;
+  payment_requests?: Array<{
+    computed_amount_money?: SquareMoney;
+    total_completed_amount_money?: SquareMoney;
+  }>;
+  next_payment_amount_money?: SquareMoney;
+  updated_at?: string;
+};
+
+function invoiceOf(payload: SquareWebhookPayload): SquareInvoice | undefined {
+  return payload.data?.object?.invoice as SquareInvoice | undefined;
 }
 
 /**
- * A recurring charge succeeded.
- *
- * Mirrors the IQPro handler: the membership goes active, and the member is
- * lifted out of past_due — but ONLY out of past_due, so this can never
- * resurrect someone who was cancelled or is on hold.
+ * The dollar amount of a subscription invoice. A failed charge reports what was
+ * due (`computed_amount_money`); a payment reports what was collected
+ * (`total_completed_amount_money`). Minor units cross to dollars ONLY through
+ * `fromMinorUnits`.
  */
-async function handleInvoicePaid(orgId: string, subscriptionId: string): Promise<void> {
-  const membership = await db.query.memberMembershipSchema.findFirst({
-    where: eq(memberMembershipSchema.providerSubscriptionId, subscriptionId),
-    columns: { memberId: true },
+function invoiceAmount(invoice: SquareInvoice, outcome: 'paid' | 'declined'): number {
+  const request = invoice.payment_requests?.[0];
+  const money = outcome === 'paid'
+    ? (request?.total_completed_amount_money ?? request?.computed_amount_money)
+    : (request?.computed_amount_money ?? invoice.next_payment_amount_money);
+  return fromMinorUnits(money?.amount ?? 0);
+}
+
+/**
+ * A subscription invoice was paid or its scheduled charge failed. Recorded as
+ * a transaction row with the shared status side effects.
+ *
+ * Square does not auto-retry a failed scheduled charge; it emails the customer
+ * the invoice with a pay link instead. That is why a retry from the app must
+ * cancel the invoice afterwards (see retryFailedTransaction).
+ */
+async function handleInvoiceEvent(orgId: string, payload: SquareWebhookPayload, outcome: 'paid' | 'declined', ctx: SyncContext): Promise<void> {
+  const invoice = invoiceOf(payload);
+  if (!invoice?.subscription_id) {
+    return;
+  }
+
+  const occurredAt = invoice.updated_at ? new Date(invoice.updated_at) : undefined;
+
+  const result = await recordRecurringCharge({
+    provider: PAYMENT_PROVIDER.SQUARE,
+    eventKey: payload.event_id ?? `${invoice.id}:${payload.type}`,
+    organizationId: orgId,
+    providerSubscriptionId: invoice.subscription_id,
+    // Invoice events carry no payment id.
+    providerTransactionId: null,
+    providerInvoiceId: invoice.id ?? null,
+    amount: invoiceAmount(invoice, outcome),
+    outcome,
+    // Square documents that the decline reason is not in the webhook payload.
+    failureReason: outcome === 'declined' ? 'Scheduled charge failed' : null,
+    occurredAt: occurredAt && !Number.isNaN(occurredAt.getTime()) ? occurredAt : undefined,
   });
 
-  await db
-    .update(memberMembershipSchema)
-    .set({ status: 'active', updatedAt: new Date() })
-    // The org predicate is required: a provider id is unique per MERCHANT,
-    // not globally, so without it one merchant's id could match another
-    // org's row.
-    // No org predicate here: `member_membership` carries no organization_id —
-    // it is org-scoped by the tenant DATABASE this runs against, which
-    // `runWithTenant` selected from the resolved org.
-    .where(eq(memberMembershipSchema.providerSubscriptionId, subscriptionId));
-
-  if (membership?.memberId) {
-    await db
-      .update(memberSchema)
-      .set({ status: MEMBER_STATUS.ACTIVE, statusChangedAt: new Date(), updatedAt: new Date() })
-      .where(and(
-        eq(memberSchema.id, membership.memberId),
-        eq(memberSchema.organizationId, orgId),
-        eq(memberSchema.status, MEMBER_STATUS.PAST_DUE),
-      ));
+  if (result.status === 'recorded') {
+    const memberId = result.memberId;
+    scheduleSync(ctx, 'Square payment-method sync', config => syncMemberQuietly(memberId, ctx.orgId, config));
   }
 }
 
-/** A scheduled charge failed. */
-async function handleInvoiceFailed(orgId: string, subscriptionId: string): Promise<void> {
-  const membership = await db.query.memberMembershipSchema.findFirst({
-    where: eq(memberMembershipSchema.providerSubscriptionId, subscriptionId),
-    columns: { memberId: true },
-  });
+type SyncContext = {
+  orgId: string;
+  config: PaymentProviderConfig;
+  tenantDb: Awaited<ReturnType<typeof getDbForOrg>>;
+};
 
-  await db
-    .update(memberMembershipSchema)
-    .set({ status: MEMBER_STATUS.PAST_DUE, updatedAt: new Date() })
-    // No org predicate here: `member_membership` carries no organization_id —
-    // it is org-scoped by the tenant DATABASE this runs against, which
-    // `runWithTenant` selected from the resolved org.
-    .where(eq(memberMembershipSchema.providerSubscriptionId, subscriptionId));
+/**
+ * Reconcile the saved card after the response is sent. The tenant scope is
+ * re-entered: by the time `after()` runs, the request's scope has ended.
+ */
+function scheduleSync(ctx: SyncContext, label: string, work: (config: PaymentProviderConfig) => Promise<void>): void {
+  runAfterResponse(label, () => runWithTenant(
+    { orgId: ctx.orgId, db: ctx.tenantDb, source: 'webhook' },
+    () => work(ctx.config),
+  ));
+}
 
-  if (membership?.memberId) {
-    // Do not drag a cancelled or held member back into past_due — their
-    // membership is not being collected on.
-    await db
-      .update(memberSchema)
-      .set({ status: MEMBER_STATUS.PAST_DUE, statusChangedAt: new Date(), updatedAt: new Date() })
-      .where(and(
-        eq(memberSchema.id, membership.memberId),
-        eq(memberSchema.organizationId, orgId),
-        ne(memberSchema.status, MEMBER_STATUS.CANCELLED),
-        ne(memberSchema.status, MEMBER_STATUS.HOLD),
-      ));
+/** A card on file was created, updated (incl. by the card network), or disabled. */
+function handleCardEvent(payload: SquareWebhookPayload, ctx: SyncContext): void {
+  const card = payload.data?.object?.card as { customer_id?: string } | undefined;
+  const customerId = card?.customer_id;
+  if (customerId) {
+    scheduleSync(ctx, 'Square card sync', config => syncByProviderCustomer(customerId, ctx.orgId, config));
   }
 }
 
@@ -183,7 +218,7 @@ async function handleInvoiceFailed(orgId: string, subscriptionId: string): Promi
  * DEACTIVATED are acted on — treating any update as a cancellation would
  * cancel memberships that merely paused.
  */
-async function handleSubscriptionUpdated(orgId: string, payload: SquareWebhookPayload): Promise<void> {
+async function handleSubscriptionUpdated(orgId: string, payload: SquareWebhookPayload, ctx: SyncContext): Promise<void> {
   const subscription = payload.data?.object?.subscription as { id?: string; status?: string } | undefined;
   const subscriptionId = subscription?.id;
   const status = subscription?.status;
@@ -192,7 +227,12 @@ async function handleSubscriptionUpdated(orgId: string, payload: SquareWebhookPa
     return;
   }
   if (status !== 'CANCELED' && status !== 'DEACTIVATED') {
-    logger.info('[Square Webhook] subscription.updated ignored', { subscriptionId, status });
+    // Not a cancellation — but it may be a card change on the subscription.
+    const customerId = (payload.data?.object?.subscription as { customer_id?: string } | undefined)?.customer_id;
+    if (customerId) {
+      scheduleSync(ctx, 'Square subscription card sync', config => syncByProviderCustomer(customerId, ctx.orgId, config));
+    }
+    logger.info('[Square Webhook] subscription.updated: not terminal', { subscriptionId, status });
     return;
   }
 
@@ -265,27 +305,25 @@ async function handlePaymentUpdated(orgId: string, payload: SquareWebhookPayload
     ));
 }
 
-async function handleWebhookEvent(orgId: string, payload: SquareWebhookPayload): Promise<void> {
+async function handleWebhookEvent(orgId: string, payload: SquareWebhookPayload, ctx: SyncContext): Promise<void> {
   const type = payload.type ?? '';
   logger.info('[Square Webhook] Processing event', { type, id: payload.event_id, orgId });
 
   switch (type) {
-    case 'invoice.payment_made': {
-      const subscriptionId = invoiceSubscriptionId(payload);
-      if (subscriptionId) {
-        await handleInvoicePaid(orgId, subscriptionId);
-      }
+    case 'invoice.payment_made':
+      await handleInvoiceEvent(orgId, payload, 'paid', ctx);
       break;
-    }
-    case 'invoice.scheduled_charge_failed': {
-      const subscriptionId = invoiceSubscriptionId(payload);
-      if (subscriptionId) {
-        await handleInvoiceFailed(orgId, subscriptionId);
-      }
+    case 'invoice.scheduled_charge_failed':
+      await handleInvoiceEvent(orgId, payload, 'declined', ctx);
       break;
-    }
     case 'subscription.updated':
-      await handleSubscriptionUpdated(orgId, payload);
+      await handleSubscriptionUpdated(orgId, payload, ctx);
+      break;
+    case 'card.created':
+    case 'card.updated':
+    case 'card.automatically_updated':
+    case 'card.disabled':
+      handleCardEvent(payload, ctx);
       break;
     case 'payment.updated':
       await handlePaymentUpdated(orgId, payload);
@@ -450,7 +488,7 @@ export const POST = async (request: Request) => {
   try {
     await runWithTenant(
       { orgId, db: tenantDb, source: 'webhook' },
-      () => handleWebhookEvent(orgId, payload),
+      () => handleWebhookEvent(orgId, payload, { orgId, config, tenantDb }),
     );
   } catch (error) {
     logger.error('[Square Webhook] Processing error', {

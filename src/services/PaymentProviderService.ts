@@ -300,6 +300,13 @@ export type ChargeFeeResult = {
   /** Card vs bank, resolved from the saved payment method. */
   paymentMethodName?: 'card' | 'ach';
   feeBreakdown?: FeeQuote;
+  /**
+   * True only when the PROCESSOR declined the card. Distinguishes "the card was
+   * refused" (a normal outcome the retry UI shows as a decline, with
+   * `transactionId` set to the declined attempt when the provider created one)
+   * from "we could not attempt a charge" (missing card, network, config).
+   */
+  declined?: boolean;
 };
 
 export type ChargeOneTimeFeeParams = {
@@ -308,6 +315,14 @@ export type ChargeOneTimeFeeParams = {
   amount: number;
   description: string;
   caption: string;
+  /**
+   * The provider invoice this charge pays (IQPro `InsertTransaction.invoiceId`).
+   * Paying a failed subscription charge's invoice settles it, so IQPro stops
+   * its own automatic retries and billing continues as scheduled — no double
+   * charge. Square ignores it: its API cannot pay an invoice, so the retry
+   * cancels the invoice afterwards instead (`closeFailedInvoice`).
+   */
+  invoiceId?: string;
 };
 
 /** A saved payment method resolved from an existing subscription. */
@@ -315,6 +330,14 @@ export type SubscriptionPaymentMethod = {
   customerId: string;
   paymentMethodId: string;
   paymentMethodName: 'card' | 'ach';
+  /** Display details for the card/account, when the provider reports them. */
+  firstSix?: string;
+  last4?: string;
+  cardBrand?: string;
+  /** 'MM/YY'. */
+  expirationDate?: string;
+  /** ACH 'Checking' | 'Savings'. */
+  accountType?: string;
 };
 
 export type LifecycleActionResult = { success: boolean; error?: string };
@@ -402,6 +425,18 @@ export type IPaymentProvider = {
     config: PaymentProviderConfig,
     providerTransactionId: string,
   ) => Promise<ReverseTransactionResult>;
+
+  /**
+   * Close the provider-side invoice of a failed recurring charge after the app
+   * collected the money another way (a manual retry). Without it a provider
+   * that emailed the member a pay link (Square) leaves that link live, and the
+   * member can pay twice. Returns failures rather than throwing: the money is
+   * already collected, so the caller surfaces a warning, never a rollback.
+   */
+  closeFailedInvoice: (
+    config: PaymentProviderConfig,
+    providerInvoiceId: string,
+  ) => Promise<LifecycleActionResult & { note?: string }>;
 };
 
 // ===== Factory =====

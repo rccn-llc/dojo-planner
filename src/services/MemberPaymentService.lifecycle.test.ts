@@ -37,6 +37,7 @@ vi.mock('@/libs/IQPro', () => ({
   iqproGet: vi.fn(),
   iqproPost: vi.fn(),
   iqproPut: vi.fn(),
+  mapTransactionStatus: (tx: Record<string, unknown>) => (['captured', 'settled', 'authorized', 'pendingsettlement'].includes(String(tx.status ?? '').toLowerCase()) ? 'approved' : 'declined'),
 }));
 vi.mock('@/libs/Logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -66,6 +67,11 @@ vi.mock('./OrganizationService', () => ({
 }));
 vi.mock('./PaymentProviderService', () => ({
   getPaymentProvider: vi.fn(),
+}));
+const recordExternalRefMock = vi.fn();
+vi.mock('./TenantExternalRefService', () => ({
+  REF_TYPE: { PROVIDER_SUBSCRIPTION: 'provider_subscription', PROVIDER_TRANSACTION: 'provider_transaction' },
+  recordExternalRef: (...a: unknown[]) => recordExternalRefMock(...a),
 }));
 
 beforeEach(() => {
@@ -206,5 +212,29 @@ describe('cancelMembershipLifecycle — records cancellation fee in billing hist
       .find((row: any) => row?.transactionType === 'cancellation_fee');
 
     expect(feeInsert).toBeUndefined();
+  });
+});
+
+describe('holdMembershipLifecycle — recurring hold-fee subscription is routable (#webhooks)', () => {
+  it('records a provider-subscription ref for the new hold-fee subscription', async () => {
+    const { getPaymentProvider } = await import('./PaymentProviderService');
+    vi.mocked(getPaymentProvider).mockResolvedValue({
+      getSubscriptionPaymentMethod: vi.fn().mockResolvedValue({ customerId: 'cus_1', paymentMethodId: 'pm_1', paymentMethodName: 'card' }),
+      createSubscription: vi.fn().mockResolvedValue({ success: true, subscriptionId: 'hold_sub_1' }),
+      setSubscriptionAutoRenewal: vi.fn().mockResolvedValue({ success: true }),
+    } as any);
+    const { holdMembershipLifecycle } = await import('./MemberPaymentService');
+
+    const result = await holdMembershipLifecycle({
+      config: { provider: 'iqpro' } as any,
+      ctx: {
+        member: { id: 'mem-1', organizationId: 'org-1', firstName: 'J', lastName: 'D', email: 'j@example.com', phone: null, providerCustomerId: 'cus_1' },
+        membership: { id: 'mm-1', memberId: 'mem-1', membershipPlanId: 'plan-1', status: 'active', providerSubscriptionId: 'sub_1', providerHoldFeeSubscriptionId: null },
+        plan: { id: 'plan-1', name: 'Monthly', cancellationFee: 0, holdFeeAmount: 10, holdFeeFrequency: 'Monthly', holdLimitPerYear: null },
+      } as any,
+    });
+
+    expect(result.holdFeeSubscriptionId).toBe('hold_sub_1');
+    expect(recordExternalRefMock).toHaveBeenCalledWith('provider_subscription', 'hold_sub_1', 'org-1');
   });
 });

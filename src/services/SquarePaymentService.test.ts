@@ -608,6 +608,142 @@ describe('squarePaymentService', () => {
     });
   });
 
+  describe('decline vs error reporting (retry flow)', () => {
+    const feeParams = {
+      providerSubscriptionId: 'sub_1',
+      providerCustomerId: 'cust_1',
+      amount: 50,
+      description: 'Retry',
+      caption: 'Retry',
+    };
+
+    it('flags a FAILED payment as declined and keeps its id', async () => {
+      squareGet.mockResolvedValueOnce({ subscription: { customer_id: 'cust_1', card_id: 'ccof:card_1' } });
+      squarePost
+        .mockResolvedValueOnce({ order: { total_money: { amount: 5000 } } })
+        .mockResolvedValueOnce({ payment: { id: 'pay_declined', status: 'FAILED' } });
+
+      const result = await (await loadProvider()).chargeOneTimeFee(squareConfig as never, feeParams);
+
+      expect(result).toMatchObject({ success: false, declined: true, transactionId: 'pay_declined' });
+    });
+
+    it('flags a PAYMENT_METHOD_ERROR (CARD_DECLINED) as a decline', async () => {
+      const { SquareApiError } = await import('@/libs/Square');
+      squareGet.mockResolvedValueOnce({ subscription: { customer_id: 'cust_1', card_id: 'ccof:card_1' } });
+      squarePost
+        .mockResolvedValueOnce({ order: { total_money: { amount: 5000 } } })
+        .mockRejectedValueOnce(new SquareApiError('/v2/payments', 402, JSON.stringify({ errors: [{ category: 'PAYMENT_METHOD_ERROR', code: 'CARD_DECLINED', detail: 'Card declined.' }] })));
+
+      const result = await (await loadProvider()).chargeOneTimeFee(squareConfig as never, feeParams);
+
+      expect(result).toMatchObject({ success: false, declined: true, error: 'CARD_DECLINED' });
+    });
+
+    it('does NOT flag a server error as a decline', async () => {
+      const { SquareApiError } = await import('@/libs/Square');
+      squareGet.mockResolvedValueOnce({ subscription: { customer_id: 'cust_1', card_id: 'ccof:card_1' } });
+      squarePost
+        .mockResolvedValueOnce({ order: { total_money: { amount: 5000 } } })
+        .mockRejectedValueOnce(new SquareApiError('/v2/payments', 500, JSON.stringify({ errors: [{ category: 'API_ERROR', code: 'INTERNAL_SERVER_ERROR' }] })));
+
+      const result = await (await loadProvider()).chargeOneTimeFee(squareConfig as never, feeParams);
+
+      expect(result.success).toBe(false);
+      expect(result.declined).toBeUndefined();
+    });
+  });
+
+  describe('getSubscriptionPaymentMethod card details', () => {
+    it('adds last4, brand, BIN and MM/YY expiry from GET /v2/cards', async () => {
+      squareGet
+        .mockResolvedValueOnce({ subscription: { customer_id: 'cust_1', card_id: 'ccof:card_1' } })
+        .mockResolvedValueOnce({ card: { last_4: '4242', card_brand: 'VISA', exp_month: 3, exp_year: 2029, bin: '424242' } });
+
+      const result = await (await loadProvider()).getSubscriptionPaymentMethod(squareConfig as never, 'sub_1');
+
+      expect(result).toEqual({
+        customerId: 'cust_1',
+        paymentMethodId: 'ccof:card_1',
+        paymentMethodName: 'card',
+        last4: '4242',
+        cardBrand: 'VISA',
+        firstSix: '424242',
+        expirationDate: '03/29',
+      });
+      expect(squareGet.mock.calls[1]?.[1]).toBe('/v2/cards/ccof:card_1');
+    });
+
+    it('omits fields the card does not report', async () => {
+      squareGet
+        .mockResolvedValueOnce({ subscription: { customer_id: 'cust_1', card_id: 'ccof:card_1' } })
+        .mockResolvedValueOnce({ card: {} });
+
+      await expect((await loadProvider()).getSubscriptionPaymentMethod(squareConfig as never, 'sub_1'))
+        .resolves
+        .toEqual({ customerId: 'cust_1', paymentMethodId: 'ccof:card_1', paymentMethodName: 'card' });
+    });
+
+    it('still returns the card id when the details lookup fails', async () => {
+      squareGet
+        .mockResolvedValueOnce({ subscription: { customer_id: 'cust_1', card_id: 'ccof:card_1' } })
+        .mockRejectedValueOnce('boom');
+
+      await expect((await loadProvider()).getSubscriptionPaymentMethod(squareConfig as never, 'sub_1'))
+        .resolves
+        .toMatchObject({ paymentMethodId: 'ccof:card_1' });
+    });
+  });
+
+  describe('closeFailedInvoice', () => {
+    it('reads the invoice version, then cancels with it', async () => {
+      squareGet.mockResolvedValueOnce({ invoice: { version: 4, status: 'UNPAID' } });
+      squarePost.mockResolvedValueOnce({ invoice: { status: 'CANCELED' } });
+
+      const result = await (await loadProvider()).closeFailedInvoice(squareConfig as never, 'inv_1');
+
+      expect(result).toEqual({ success: true });
+      expect(squareGet.mock.calls[0]?.[1]).toBe('/v2/invoices/inv_1');
+      expect(squarePost.mock.calls[0]?.[1]).toBe('/v2/invoices/inv_1/cancel');
+      expect(squarePost.mock.calls[0]?.[2]).toEqual({ version: 4 });
+    });
+
+    it('sends version 0 when the invoice reports none', async () => {
+      squareGet.mockResolvedValueOnce({});
+      squarePost.mockResolvedValueOnce({});
+
+      await (await loadProvider()).closeFailedInvoice(squareConfig as never, 'inv_1');
+
+      expect(squarePost.mock.calls[0]?.[2]).toEqual({ version: 0 });
+    });
+
+    it.each(['PAID', 'CANCELED', 'REFUNDED'])('does nothing for an invoice already %s', async (status) => {
+      squareGet.mockResolvedValueOnce({ invoice: { version: 2, status } });
+
+      const result = await (await loadProvider()).closeFailedInvoice(squareConfig as never, 'inv_1');
+
+      expect(result).toMatchObject({ success: true, note: expect.stringContaining(status) });
+      expect(squarePost).not.toHaveBeenCalled();
+    });
+
+    it('RETURNS a failure rather than throwing', async () => {
+      squareGet.mockResolvedValueOnce({ invoice: { version: 1, status: 'UNPAID' } });
+      squarePost.mockRejectedValueOnce(new Error('Square /cancel failed (400)'));
+
+      await expect((await loadProvider()).closeFailedInvoice(squareConfig as never, 'inv_1'))
+        .resolves
+        .toMatchObject({ success: false, error: expect.stringContaining('400') });
+    });
+
+    it('uses a generic message for a non-Error throw', async () => {
+      squareGet.mockRejectedValueOnce('boom');
+
+      await expect((await loadProvider()).closeFailedInvoice(squareConfig as never, 'inv_1'))
+        .resolves
+        .toEqual({ success: false, error: 'Square invoice cancel failed.' });
+    });
+  });
+
   describe('reverseTransaction', () => {
     it('cancels an APPROVED (uncaptured) payment — a void, no money moves', async () => {
       const provider = await loadProvider();

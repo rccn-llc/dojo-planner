@@ -1,6 +1,7 @@
 'use client';
 
 import type { FinancesFilters } from './FinancesFilterBar';
+import type { TransactionRecurringFlags } from './recurringPayments';
 import { useTranslations } from 'next-intl';
 import { useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
@@ -8,7 +9,9 @@ import { Pagination } from '@/components/ui/pagination/Pagination';
 import { Spinner } from '@/components/ui/spinner';
 import { SortableHeader } from '@/components/ui/table';
 import { TransactionCard } from '@/templates/TransactionCard';
-import { FinancesFilterBar } from './FinancesFilterBar';
+import { FAILED_UNRESOLVED_FILTER, FinancesFilterBar } from './FinancesFilterBar';
+import { RecurringLabel } from './RecurringLabel';
+import { isFailedUnresolved } from './recurringPayments';
 import { TransactionDetailModal } from './TransactionDetailModal';
 
 export type TransactionStatus = 'paid' | 'pending' | 'declined' | 'refunded' | 'processing';
@@ -25,6 +28,8 @@ export type Transaction = {
   memberId: string | null;
   status: TransactionStatus;
   transactionType: string;
+  /** Failed-recurring-payment state (absent for rows built without it). */
+  recurring?: TransactionRecurringFlags;
 };
 
 type FinancesTableProps = {
@@ -83,7 +88,8 @@ export function FinancesTable({
     transactions
       .filter((transaction) => {
         // Apply status filter to determine which origins are available
-        const matchesStatus = filters.status === 'all' || transaction.status === filters.status;
+        const matchesStatus = filters.status === 'all'
+          || (filters.status === FAILED_UNRESOLVED_FILTER ? isFailedUnresolved(transaction) : transaction.status === filters.status);
         // Apply search filter too
         const searchLower = filters.search.toLowerCase();
         const matchesSearch = filters.search === ''
@@ -142,7 +148,8 @@ export function FinancesTable({
         || transaction.status.toLowerCase().includes(searchLower);
 
       const matchesOrigin = filters.origin === 'all' || transaction.purpose === filters.origin;
-      const matchesStatus = filters.status === 'all' || transaction.status === filters.status;
+      const matchesStatus = filters.status === 'all'
+        || (filters.status === FAILED_UNRESOLVED_FILTER ? isFailedUnresolved(transaction) : transaction.status === filters.status);
 
       return matchesSearch && matchesOrigin && matchesStatus;
     });
@@ -224,6 +231,7 @@ export function FinancesTable({
               onFiltersChangeAction={handleFiltersChange}
               availableOrigins={availableOrigins}
               availableStatuses={availableStatuses}
+              hasFailedPayments={transactions.some(isFailedUnresolved)}
             />
           </div>
           {headerActions}
@@ -342,6 +350,7 @@ export function FinancesTable({
                               <Badge variant={statusVariantMap[transaction.status]}>
                                 {t(`status_${transaction.status}`)}
                               </Badge>
+                              <RecurringLabel status={transaction.status} transactionType={transaction.transactionType} recurring={transaction.recurring} />
                             </td>
                             <td className="px-6 py-4 text-sm text-foreground">{transaction.memberName}</td>
                             <td className="px-6 py-4 text-sm text-foreground">{transaction.amount}</td>
@@ -383,6 +392,8 @@ export function FinancesTable({
                       transactionId={transaction.transactionId}
                       memberName={transaction.memberName}
                       status={transaction.status}
+                      transactionType={transaction.transactionType}
+                      recurring={transaction.recurring}
                       onClickAction={() => handleRowClick(transaction)}
                     />
                   ))

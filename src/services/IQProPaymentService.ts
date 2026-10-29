@@ -36,7 +36,6 @@ import type {
 import type { IQProConfig } from '@/libs/IQPro';
 import { z } from 'zod';
 import {
-  assertTransactionApproved,
   buildServiceFeeAdjustment,
   computeFeeBreakdown,
   getCustomerPaymentMethod,
@@ -44,10 +43,13 @@ import {
   iqproGet,
   iqproPost,
   iqproPut,
+  mapTransactionStatus,
   tokenizeAch,
 } from '@/libs/IQPro';
+import { IQPRO_BILLING_PERIOD, IQPRO_UNIT } from '@/libs/IQProConstants';
 import { logger } from '@/libs/Logger';
 import { PAYMENT_PROVIDER } from '@/types/PaymentProvider';
+import { normalizeExpiration } from '@/utils/CardExpiration';
 
 // IQPro transaction statuses (lowercased) that decide how a charge is reversed.
 // Per the API reference, `/void` accepts only Pending / PendingSettlement and
@@ -101,7 +103,16 @@ const IQProSubscriptionResponseSchema = z.object({
       card: z.object({
         maskedNumber: z.string().optional(),
         maskedCard: z.string().optional(),
+        // Names per the webhook guide's `transactionPaymentMethod.card`;
+        // nullable because the API returns explicit nulls.
+        cardType: z.string().nullish(),
+        expirationDate: z.string().nullish(),
       }).partial().optional(),
+      ach: z.object({
+        maskedAccount: z.string().nullish(),
+        accountNumber: z.string().nullish(),
+        accountType: z.string().nullish(),
+      }).partial().nullish(),
     }).partial().optional(),
   }).partial().optional(),
 }).partial();
@@ -417,7 +428,7 @@ export class IQProPaymentProvider implements IPaymentProvider {
         unitPrice: li.unitPrice,
         discount: li.discount,
         freightAmount: 0,
-        unitOfMeasureId: 1,
+        unitOfMeasureId: IQPRO_UNIT.PIECE,
         localTaxPercent: isTaxable ? fb.taxPct : 0,
         nationalTaxPercent: 0,
       }));
@@ -502,13 +513,15 @@ export class IQProPaymentProvider implements IPaymentProvider {
       const startMonth = params.startDate.getMonth() + 1; // 1-12
 
       // Billing period mapping (IQPro recurrence schema):
-      // - Weekly (billingPeriodId: 2): schedule must include daysOfWeek.
-      // - Monthly (billingPeriodId: 4): schedule needs daysOfMonth only.
-      // - Semi-annual: IQPro has no native 6-month cadence. We use
-      //   billingPeriodId: 6 (yearly) with two monthsOfYear entries (startMonth
-      //   and startMonth+6 wrapped mod 12) so the sub fires twice a year.
-      // - Annual (billingPeriodId: 6): schedule needs daysOfMonth +
-      //   monthsOfYear with the single start month.
+      // - Weekly (WEEKLY): schedule must include daysOfWeek.
+      // - Monthly (MONTHLY): schedule needs daysOfMonth only.
+      // - Semi-annual (SIX_MONTHS, IQPro's native period 7): IQPro REQUIRES
+      //   monthsOfYear + daysOfMonth for it (sandbox-verified). It does not say
+      //   whether a single month would fire every 6 months or once a year, so
+      //   both months are listed (startMonth and startMonth+6) — fires twice a
+      //   year either way, exactly as the earlier yearly emulation did.
+      // - Annual (YEARLY): schedule needs daysOfMonth + monthsOfYear with the
+      //   single start month.
       let billingPeriodId: number;
       const schedule: Record<string, number[]> = {
         minutes: [0],
@@ -517,24 +530,24 @@ export class IQProPaymentProvider implements IPaymentProvider {
       };
       switch (params.frequency) {
         case 'weekly':
-          billingPeriodId = 2;
+          billingPeriodId = IQPRO_BILLING_PERIOD.WEEKLY;
           schedule.daysOfWeek = [params.startDate.getDay()];
           // Weekly schedules don't need daysOfMonth — replace it.
           delete (schedule as Record<string, unknown>).daysOfMonth;
           break;
         case 'semi-annual': {
-          billingPeriodId = 6;
+          billingPeriodId = IQPRO_BILLING_PERIOD.SIX_MONTHS;
           const secondMonth = ((startMonth - 1 + 6) % 12) + 1;
           schedule.monthsOfYear = [startMonth, secondMonth].sort((a, b) => a - b);
           break;
         }
         case 'annual':
-          billingPeriodId = 6;
+          billingPeriodId = IQPRO_BILLING_PERIOD.YEARLY;
           schedule.monthsOfYear = [startMonth];
           break;
         case 'monthly':
         default:
-          billingPeriodId = 4;
+          billingPeriodId = IQPRO_BILLING_PERIOD.MONTHLY;
           break;
       }
 
@@ -570,16 +583,15 @@ export class IQProPaymentProvider implements IPaymentProvider {
         country,
       };
 
-      // IQPro unitOfMeasureId: 1=Item, 3=Month, 4=Year, 6=Week (per gateway docs).
-      // Semi-annual bills in months, so use Month (3) and let unitPrice be the
-      // 6-month total.
+      // The line item's unit is the billing period (unitPrice is the price
+      // for one period). IDs from IQPro's /api/constants/units — see IQPRO_UNIT.
       const unitOfMeasureId = (() => {
         switch (params.frequency) {
-          case 'weekly': return 6;
-          case 'annual': return 4;
-          case 'semi-annual':
+          case 'weekly': return IQPRO_UNIT.WEEKS;
+          case 'annual': return IQPRO_UNIT.YEARS;
+          case 'semi-annual': return IQPRO_UNIT.HALF_YEAR;
           case 'monthly':
-          default: return 3;
+          default: return IQPRO_UNIT.MONTHS;
         }
       })();
 
@@ -736,6 +748,9 @@ export class IQProPaymentProvider implements IPaymentProvider {
 
       const feeTxPayload = {
         type: 'Sale',
+        // Applies the payment to the invoice (a failed subscription charge's),
+        // which updates its balance/status and ends IQPro's automatic retries.
+        ...(params.invoiceId ? { invoiceId: params.invoiceId } : {}),
         remit: {
           baseAmount: serverFees.baseAmount,
           taxAmount: serverFees.taxAmount,
@@ -758,7 +773,7 @@ export class IQProPaymentProvider implements IPaymentProvider {
             unitPrice: baseAmount,
             discount: 0,
             freightAmount: 0,
-            unitOfMeasureId: 1,
+            unitOfMeasureId: IQPRO_UNIT.PIECE,
             localTaxPercent: 0,
             nationalTaxPercent: 0,
           },
@@ -773,9 +788,14 @@ export class IQProPaymentProvider implements IPaymentProvider {
       );
       const txRaw = txRes.data ?? txRes;
       const txData = ((txRaw as Record<string, unknown>).transaction ?? txRaw) as Record<string, unknown>;
-      assertTransactionApproved(txData);
-
       const transactionId = (txData.transactionId ?? txData.id ?? '') as string;
+
+      if (mapTransactionStatus(txData) !== 'approved') {
+        // The processor refused the card: a decline, not an error. Keep the
+        // attempt's id so the caller can record it.
+        const reason = (txData.processorResponseText ?? txData.processorResponseMessage ?? txData.response ?? 'Transaction declined') as string;
+        return { success: false, declined: true, error: reason, transactionId: transactionId || undefined, paymentMethodName };
+      }
 
       return {
         success: true,
@@ -868,6 +888,20 @@ export class IQProPaymentProvider implements IPaymentProvider {
       logger.error('[IQPro] Subscription update failed', { subscriptionId, isAutoRenewed, error: message });
       return { success: false, error: message };
     }
+  }
+
+  /**
+   * IQPro has no documented action for closing the invoice of a failed
+   * subscription charge, and it RETRIES the charge itself (up to 3 attempts),
+   * so there is no emailed pay link to neutralise the way there is on Square.
+   * A no-op success keeps the retry flow provider-neutral; revisit if the
+   * Phase 0 sandbox run shows IQPro still auto-retries after a manual charge.
+   */
+  async closeFailedInvoice(
+    _config: PaymentProviderConfig,
+    _providerInvoiceId: string,
+  ): Promise<LifecycleActionResult & { note?: string }> {
+    return { success: true, note: 'IQPro has no invoice-close action; nothing to do.' };
   }
 
   /**
@@ -972,11 +1006,23 @@ export class IQProPaymentProvider implements IPaymentProvider {
     const cardInfo = custPM?.card;
     const maskedNumber = cardInfo?.maskedNumber ?? cardInfo?.maskedCard ?? '';
     const cardBin = maskedNumber && maskedNumber.length >= 6 ? maskedNumber.slice(0, 6) : '400000';
+    const achMasked = custPM?.ach?.maskedAccount ?? custPM?.ach?.accountNumber ?? '';
+    const masked = paymentMethodName === 'card' ? maskedNumber : achMasked;
+    // Display fields for the payment-method reconcile. Unlike `cardBin` these
+    // are never invented: an unknown value stays undefined.
+    const display = {
+      ...(paymentMethodName === 'card' && maskedNumber.length >= 6 && /^\d{6}/.test(maskedNumber) ? { firstSix: maskedNumber.slice(0, 6) } : {}),
+      ...(masked.length >= 4 ? { last4: masked.slice(-4) } : {}),
+      ...(cardInfo?.cardType ? { cardBrand: cardInfo.cardType } : {}),
+      ...(cardInfo?.expirationDate ? { expirationDate: normalizeExpiration(cardInfo.expirationDate) } : {}),
+      ...(custPM?.ach?.accountType ? { accountType: custPM.ach.accountType } : {}),
+    };
 
     return {
       customerId: sub.customer?.customerId ?? '',
       paymentMethodId,
       paymentMethodName,
+      ...display,
       cardBin,
     };
   }

@@ -53,6 +53,7 @@ import { logger } from '@/libs/Logger';
 import { fromMinorUnits, SquareApiError, squareGet, squarePost, toMinorUnits } from '@/libs/Square';
 import { squarePlanVariationSchema } from '@/models/Schema';
 import { PAYMENT_PROVIDER } from '@/types/PaymentProvider';
+import { formatExpiration } from '@/utils/CardExpiration';
 
 /**
  * Narrow the union at the boundary, mirroring `requireIQPro`.
@@ -629,6 +630,9 @@ export class SquarePaymentProvider implements IPaymentProvider {
       if (mapPaymentStatus(res.payment?.status) !== 'approved') {
         return {
           success: false,
+          declined: true,
+          transactionId: res.payment?.id,
+          paymentMethodName: 'card',
           error: `Square declined the fee charge (${res.payment?.status ?? 'unknown'}).`,
         };
       }
@@ -644,6 +648,11 @@ export class SquarePaymentProvider implements IPaymentProvider {
       logger.error('[Square] one-time fee charge failed', {
         error: error instanceof Error ? error.message : String(error),
       });
+      // Square refuses a card with a PAYMENT_METHOD_ERROR (e.g. CARD_DECLINED)
+      // rather than a FAILED payment: that is a decline, not a system error.
+      if (error instanceof SquareApiError && error.category === 'PAYMENT_METHOD_ERROR') {
+        return { success: false, declined: true, paymentMethodName: 'card', error: error.code ?? error.message };
+      }
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Square fee charge failed.',
@@ -727,6 +736,34 @@ export class SquarePaymentProvider implements IPaymentProvider {
   }
 
   /**
+   * Display details of a card on file. Best-effort: a failure returns no
+   * details rather than failing the lookup that needed only the card id.
+   */
+  private async cardDetails(
+    square: SquareProviderConfig,
+    cardId: string,
+  ): Promise<Pick<SubscriptionPaymentMethod, 'last4' | 'cardBrand' | 'expirationDate' | 'firstSix'>> {
+    try {
+      const { card } = await squareGet<{
+        card?: { last_4?: string; card_brand?: string; exp_month?: number; exp_year?: number; bin?: string };
+      }>(square, `/v2/cards/${cardId}`);
+      const expirationDate = formatExpiration(card?.exp_month, card?.exp_year);
+      return {
+        ...(card?.last_4 ? { last4: card.last_4 } : {}),
+        ...(card?.card_brand ? { cardBrand: card.card_brand } : {}),
+        ...(card?.bin ? { firstSix: card.bin } : {}),
+        ...(expirationDate ? { expirationDate } : {}),
+      };
+    } catch (error) {
+      logger.warn('[Square] card details lookup failed', {
+        cardId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {};
+    }
+  }
+
+  /**
    * Resolve the card saved on a subscription, so a hold fee can be charged
    * against it without re-collecting card data.
    *
@@ -750,7 +787,7 @@ export class SquarePaymentProvider implements IPaymentProvider {
         return null;
       }
 
-      return { customerId, paymentMethodId, paymentMethodName: 'card' };
+      return { customerId, paymentMethodId, paymentMethodName: 'card', ...(await this.cardDetails(square, paymentMethodId)) };
     } catch (error) {
       // Null rather than a throw: the callers treat "cannot read it" and
       // "there isn't one" identically, and both must degrade.
@@ -759,6 +796,49 @@ export class SquarePaymentProvider implements IPaymentProvider {
         error: error instanceof Error ? error.message : String(error),
       });
       return null;
+    }
+  }
+
+  /**
+   * Cancel the unpaid invoice of a failed subscription charge after the app
+   * collected the money with a standalone card-on-file payment.
+   *
+   * Square cannot pay a subscription invoice through its API ("Square APIs
+   * cannot be used to pay for invoices"), and after a failed scheduled charge
+   * it emails the member the invoice with a pay link. Leaving that invoice open
+   * would let the member pay a second time. CancelInvoice requires the
+   * invoice's current `version`, so it is read first.
+   *
+   * ⚠️ Unit-tested only; not yet sandbox-verified.
+   */
+  async closeFailedInvoice(
+    config: PaymentProviderConfig,
+    providerInvoiceId: string,
+  ): Promise<LifecycleActionResult & { note?: string }> {
+    const square = requireSquare(config);
+
+    try {
+      const { invoice } = await squareGet<{ invoice?: { version?: number; status?: string } }>(
+        square,
+        `/v2/invoices/${providerInvoiceId}`,
+      );
+      const status = invoice?.status;
+
+      if (status === 'PAID' || status === 'CANCELED' || status === 'REFUNDED') {
+        return { success: true, note: `Invoice already ${status}; nothing to cancel.` };
+      }
+
+      await squarePost(square, `/v2/invoices/${providerInvoiceId}/cancel`, { version: invoice?.version ?? 0 });
+      return { success: true };
+    } catch (error) {
+      logger.error('[Square] failed-invoice cancel failed', {
+        providerInvoiceId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Square invoice cancel failed.',
+      };
     }
   }
 

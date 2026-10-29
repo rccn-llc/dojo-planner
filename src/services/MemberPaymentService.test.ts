@@ -62,6 +62,7 @@ vi.mock('@/libs/IQPro', () => ({
   iqproPut: vi.fn(),
   assertTransactionApproved: vi.fn(),
   buildServiceFeeAdjustment: vi.fn(() => ({ type: 'ServiceFee', percentage: 3.75, flatAmount: null })),
+  mapTransactionStatus: (tx: Record<string, unknown>) => (['captured', 'settled', 'authorized', 'pendingsettlement'].includes(String(tx.status ?? '').toLowerCase()) ? 'approved' : 'declined'),
 }));
 
 const testConfig = {
@@ -148,6 +149,12 @@ vi.mock('./PaymentProviderService', async () => {
     ...actual,
     getPaymentProvider: vi.fn().mockResolvedValue(mockProvider),
   };
+});
+
+const mockRecordExternalRef = vi.fn();
+vi.mock('./TenantExternalRefService', async () => {
+  const actual = await vi.importActual<typeof import('./TenantExternalRefService')>('./TenantExternalRefService');
+  return { ...actual, recordExternalRef: (...a: unknown[]) => mockRecordExternalRef(...a) };
 });
 
 const mockSendReceipt = vi.fn().mockResolvedValue(true);
@@ -494,9 +501,13 @@ describe('processMemberPayment', () => {
     const membershipSet = dbState.setCalls.find(s => s.providerSubscriptionId === 'sub_42');
     const next = membershipSet?.nextPaymentDate as Date;
     const first = membershipSet?.firstPaymentDate as Date;
-    const diffMs = next.getTime() - first.getTime();
+    // Seven CALENDAR days, not 7×24h of milliseconds: across a daylight-saving
+    // change the local "same time next week" is 7 days ± 1 hour, so a fixed ms
+    // difference failed every run in the week before a DST transition.
+    const expected = new Date(first);
+    expected.setDate(expected.getDate() + 7);
 
-    expect(diffMs).toBe(7 * 24 * 60 * 60 * 1000);
+    expect(next.getTime()).toBe(expected.getTime());
   });
 
   it('autopay (semi-annual): nextPaymentDate is exactly six months later', async () => {
@@ -1417,5 +1428,34 @@ describe('chargeOneTimeFee (resilience — #237)', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('No saved payment method');
+  });
+
+  it('records the fee row AND a provider-transaction ref so the charge\'s webhook can be routed', async () => {
+    mockProvider.chargeOneTimeFee.mockResolvedValueOnce({
+      success: true,
+      transactionId: 'fee_tx_1',
+      amountCharged: 25.94,
+      paymentMethodName: 'card',
+    });
+    const values = vi.fn().mockResolvedValue(undefined);
+    dbMocks.insert.mockReturnValue({ values });
+
+    const { chargeOneTimeFee } = await import('./MemberPaymentService');
+    const result = await chargeOneTimeFee({
+      config: testConfig,
+      providerSubscriptionId: 'sub_real_1',
+      providerCustomerId: 'cus_9',
+      orgId: 'org-1',
+      memberId: 'member-1',
+      memberMembershipId: 'mm-1',
+      amount: 25,
+      transactionType: 'hold_fee',
+      description: 'Hold fee',
+      caption: 'Hold fee',
+    });
+
+    expect(result).toEqual({ success: true, amountCharged: 25.94, transactionId: 'fee_tx_1' });
+    expect(values).toHaveBeenCalledWith(expect.objectContaining({ transactionType: 'hold_fee', providerTransactionId: 'fee_tx_1', status: 'paid' }));
+    expect(mockRecordExternalRef).toHaveBeenCalledWith('provider_transaction', 'fee_tx_1', 'org-1');
   });
 });

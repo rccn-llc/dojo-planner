@@ -22,6 +22,7 @@ import { eq } from 'drizzle-orm';
 // read control, saw null, and locked out a customer who had just paid.
 import { controlOrganizationDb } from '@/libs/ControlPlaneReads';
 import { getGatewayProcessors, iqproPost, iqproPut } from '@/libs/IQPro';
+import { IQPRO_BILLING_PERIOD, IQPRO_UNIT } from '@/libs/IQProConstants';
 import { logger } from '@/libs/Logger';
 import { organizationSchema } from '@/models/Schema';
 import { recordExternalRef, REF_TYPE } from '@/services/TenantExternalRefService';
@@ -256,7 +257,7 @@ export async function subscribe(
     const amount = getPlanTotalPrice(params.planId, params.billingCycle);
     const now = new Date();
     const dayOfMonth = now.getDate();
-    const billingPeriodId = params.billingCycle === 'annual' ? 6 : 4;
+    const billingPeriodId = params.billingCycle === 'annual' ? IQPRO_BILLING_PERIOD.YEARLY : IQPRO_BILLING_PERIOD.MONTHLY;
 
     const schedule: Record<string, number[]> = {
       minutes: [0],
@@ -312,7 +313,7 @@ export async function subscribe(
         quantity: 1,
         unitPrice: amount,
         discount: 0,
-        unitOfMeasureId: params.billingCycle === 'annual' ? 4 : 3,
+        unitOfMeasureId: params.billingCycle === 'annual' ? IQPRO_UNIT.YEARS : IQPRO_UNIT.MONTHS,
       }],
     };
 
@@ -358,7 +359,7 @@ export async function subscribe(
         unitPrice: amount,
         discount: 0,
         freightAmount: 0,
-        unitOfMeasureId: 1,
+        unitOfMeasureId: IQPRO_UNIT.PIECE,
         localTaxPercent: 0,
         nationalTaxPercent: 0,
       }],
@@ -460,7 +461,7 @@ export async function changePlan(
           quantity: 1,
           unitPrice: amount,
           discount: 0,
-          unitOfMeasureId: newBillingCycle === 'annual' ? 4 : 3,
+          unitOfMeasureId: newBillingCycle === 'annual' ? IQPRO_UNIT.YEARS : IQPRO_UNIT.MONTHS,
         }],
       },
     );

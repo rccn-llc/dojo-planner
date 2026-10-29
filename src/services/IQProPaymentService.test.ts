@@ -18,6 +18,10 @@ vi.mock('@/libs/IQPro', () => ({
     cardProcessorId: 'test-card-processor-001',
     achProcessorId: 'test-ach-processor-001',
   }),
+  computeFeeBreakdown: vi.fn().mockResolvedValue({ baseAmount: 100, taxAmount: 0, taxPct: 0, serviceFeeAmount: 3.75, serviceFeePct: 3.75, amount: 103.75 }),
+  buildServiceFeeAdjustment: vi.fn(() => ({ type: 'ServiceFee', percentage: 3.75, flatAmount: null })),
+  getCustomerPaymentMethod: vi.fn(),
+  mapTransactionStatus: (tx: Record<string, unknown>) => (['captured', 'settled', 'authorized', 'pendingsettlement'].includes(String(tx.status ?? '').toLowerCase()) ? 'approved' : 'declined'),
 }));
 
 vi.mock('@/libs/Logger', () => ({
@@ -580,13 +584,61 @@ describe('IQProPaymentProvider', () => {
       expect(p.subscriptionStatusId).toBe(1);
       expect(p.recurrence.billingPeriodId).toBe(4); // monthly
       expect(p.recurrence.schedule).toEqual({ minutes: [0], hours: [0], daysOfMonth: [15] }); // no monthsOfYear
-      expect(p.lineItems[0].unitOfMeasureId).toBe(3); // MONTH
+      expect(p.lineItems[0].unitOfMeasureId).toBe(120); // IQPro 'Months' (3 was 'Alcoholic strength by volume')
       expect(p.paymentMethod.cardProcessorId).toBe('test-card-processor-001');
       expect(p.paymentMethod.achProcessorId).toBe('test-ach-processor-001');
       expect(p.addresses).toHaveLength(2);
       expect(p.addresses[0].isBilling).toBe(true);
       expect(p.addresses[1].isRemittance).toBe(true);
       expect(p.paymentAdjustments).toEqual([{ type: 'ServiceFee', percentage: 3.75, flatAmount: null }]);
+    });
+
+    it('uses IQPro\'s native Six Months period (7) for semi-annual, with both months and the Half year unit', async () => {
+      const { provider, iqproPost } = await loadProvider();
+      iqproPost.mockResolvedValueOnce({ data: { subscriptionId: 'sub_semi' } });
+
+      await provider.createSubscription(testConfig, {
+        customerId: 'cust_1',
+        paymentMethodId: 'pm_1',
+        amount: 594,
+        frequency: 'semi-annual' as any,
+        startDate: new Date('2026-04-15T12:00:00Z'),
+        description: 'Semi-annual',
+        firstName: 'A',
+        lastName: 'B',
+        email: 'a@b.test',
+      } as any);
+
+      const p = iqproPost.mock.calls[0]![2] as any;
+
+      expect(p.recurrence.billingPeriodId).toBe(7);
+      // IQPro REQUIRES monthsOfYear for period 7 (sandbox: 400 without it).
+      expect(p.recurrence.schedule).toEqual({ minutes: [0], hours: [0], daysOfMonth: [15], monthsOfYear: [4, 10] });
+      expect(p.lineItems[0].unitOfMeasureId).toBe(69); // IQPro 'Half year (six months)'
+    });
+
+    it('uses daysOfWeek and the Weeks unit for weekly subscriptions', async () => {
+      const { provider, iqproPost } = await loadProvider();
+      iqproPost.mockResolvedValueOnce({ data: { subscriptionId: 'sub_week' } });
+
+      await provider.createSubscription(testConfig, {
+        customerId: 'cust_1',
+        paymentMethodId: 'pm_1',
+        amount: 25,
+        frequency: 'weekly' as any,
+        startDate: new Date('2026-04-15T12:00:00Z'),
+        description: 'Weekly',
+        firstName: 'A',
+        lastName: 'B',
+        email: 'a@b.test',
+      } as any);
+
+      const p = iqproPost.mock.calls[0]![2] as any;
+
+      expect(p.recurrence.billingPeriodId).toBe(2);
+      expect(p.recurrence.schedule).not.toHaveProperty('daysOfMonth');
+      expect(p.recurrence.schedule.daysOfWeek).toHaveLength(1);
+      expect(p.lineItems[0].unitOfMeasureId).toBe(191); // IQPro 'Weeks'
     });
 
     it('sets billingPeriodId 6 + monthsOfYear for annual subscriptions', async () => {
@@ -611,7 +663,7 @@ describe('IQProPaymentProvider', () => {
 
       expect(p.recurrence.billingPeriodId).toBe(6);
       expect(p.recurrence.schedule).toEqual({ minutes: [0], hours: [0], daysOfMonth: [15], monthsOfYear: [4] });
-      expect(p.lineItems[0].unitOfMeasureId).toBe(4); // YEAR
+      expect(p.lineItems[0].unitOfMeasureId).toBe(193); // IQPro 'Years' (4 was 'Ampere')
     });
   });
 
@@ -783,6 +835,149 @@ describe('IQProPaymentProvider', () => {
       const { provider } = await load();
 
       await expect(provider.reverseTransaction({ provider: 'square' } as any, 'iq-tx-1')).rejects.toThrow();
+    });
+  });
+
+  describe('getSubscriptionPaymentMethod display fields', () => {
+    it('reports last4, BIN, brand and normalized expiry for a card — never inventing values', async () => {
+      const { provider, iqproGet } = await loadProvider();
+      iqproGet.mockResolvedValueOnce({
+        data: {
+          customer: { customerId: 'cus_1' },
+          paymentMethod: { customerPaymentMethod: { paymentMethodId: 'pm_1', card: { maskedNumber: '411111******1111', cardType: 'VISA', expirationDate: '0329' } } },
+        },
+      });
+
+      await expect(provider.getSubscriptionPaymentMethod(testConfig, 'sub_1')).resolves.toEqual({
+        customerId: 'cus_1',
+        paymentMethodId: 'pm_1',
+        paymentMethodName: 'card',
+        firstSix: '411111',
+        last4: '1111',
+        cardBrand: 'VISA',
+        expirationDate: '03/29',
+        cardBin: '411111',
+      });
+    });
+
+    it('omits display fields IQPro does not report', async () => {
+      const { provider, iqproGet } = await loadProvider();
+      iqproGet.mockResolvedValueOnce({
+        data: { paymentMethod: { customerPaymentMethod: { paymentMethodId: 'pm_1', card: { maskedCard: '', cardType: null, expirationDate: null } } } },
+      });
+
+      const result = await provider.getSubscriptionPaymentMethod(testConfig, 'sub_1');
+
+      expect(result).toEqual({ customerId: '', paymentMethodId: 'pm_1', paymentMethodName: 'card', cardBin: '400000' });
+    });
+
+    it('reports last4 and account type for ACH', async () => {
+      const { provider, iqproGet } = await loadProvider();
+      iqproGet.mockResolvedValueOnce({
+        data: { paymentMethod: { customerPaymentMethod: { paymentMethodId: 'pm_2', ach: { maskedAccount: '******6789', accountType: 'Checking' } } } },
+      });
+
+      await expect(provider.getSubscriptionPaymentMethod(testConfig, 'sub_2')).resolves.toMatchObject({
+        paymentMethodName: 'ach',
+        last4: '6789',
+        accountType: 'Checking',
+      });
+    });
+
+    it('falls back to accountNumber for ACH last4', async () => {
+      const { provider, iqproGet } = await loadProvider();
+      iqproGet.mockResolvedValueOnce({
+        data: { paymentMethod: { customerPaymentMethod: { paymentMethodId: 'pm_3', ach: { accountNumber: 'xxxx4321' } } } },
+      });
+
+      await expect(provider.getSubscriptionPaymentMethod(testConfig, 'sub_3')).resolves.toMatchObject({ last4: '4321' });
+    });
+  });
+
+  describe('chargeOneTimeFee decline reporting (retry flow)', () => {
+    const subResponse = {
+      data: { customer: { customerId: 'cus_1' }, paymentMethod: { customerPaymentMethod: { paymentMethodId: 'pm_1', card: { maskedNumber: '411111******1111' } } } },
+    };
+    const params = { providerSubscriptionId: 'sub_1', providerCustomerId: 'cus_1', amount: 100, description: 'Retry', caption: 'Retry' };
+
+    it('returns declined + the attempt id when the processor declines', async () => {
+      const { provider, iqproGet, iqproPost } = await loadProvider();
+      iqproGet.mockResolvedValueOnce(subResponse);
+      iqproPost.mockResolvedValueOnce({ data: { transactionId: 'tx_declined', status: 'Declined', processorResponseText: 'Insufficient funds' } });
+
+      await expect(provider.chargeOneTimeFee(testConfig, params)).resolves.toEqual({
+        success: false,
+        declined: true,
+        error: 'Insufficient funds',
+        transactionId: 'tx_declined',
+        paymentMethodName: 'card',
+      });
+    });
+
+    it('falls back through the reason fields and omits an empty id', async () => {
+      const { provider, iqproGet, iqproPost } = await loadProvider();
+      iqproGet.mockResolvedValueOnce(subResponse);
+      iqproPost.mockResolvedValueOnce({ data: { transaction: { status: 'Declined' } } });
+
+      await expect(provider.chargeOneTimeFee(testConfig, params)).resolves.toMatchObject({
+        declined: true,
+        error: 'Transaction declined',
+        transactionId: undefined,
+      });
+    });
+
+    it('returns success with the charged total when approved', async () => {
+      const { provider, iqproGet, iqproPost } = await loadProvider();
+      iqproGet.mockResolvedValueOnce(subResponse);
+      iqproPost.mockResolvedValueOnce({ data: { transactionId: 'tx_ok', status: 'PendingSettlement' } });
+
+      await expect(provider.chargeOneTimeFee(testConfig, params)).resolves.toMatchObject({
+        success: true,
+        transactionId: 'tx_ok',
+        amountCharged: 103.75,
+      });
+    });
+
+    it('applies the charge to the invoice when one is given (ends IQPro\'s automatic retries)', async () => {
+      const { provider, iqproGet, iqproPost } = await loadProvider();
+      iqproGet.mockResolvedValueOnce(subResponse);
+      iqproPost.mockResolvedValueOnce({ data: { transactionId: 'tx_inv', status: 'PendingSettlement' } });
+
+      await provider.chargeOneTimeFee(testConfig, { ...params, invoiceId: 'inv-123' });
+
+      const body = iqproPost.mock.calls[0]![2] as Record<string, unknown>;
+
+      expect(body.invoiceId).toBe('inv-123');
+      expect(body.type).toBe('Sale');
+    });
+
+    it('sends no invoiceId for an ordinary fee charge', async () => {
+      const { provider, iqproGet, iqproPost } = await loadProvider();
+      iqproGet.mockResolvedValueOnce(subResponse);
+      iqproPost.mockResolvedValueOnce({ data: { transactionId: 'tx_fee', status: 'PendingSettlement' } });
+
+      await provider.chargeOneTimeFee(testConfig, params);
+
+      expect(iqproPost.mock.calls[0]![2]).not.toHaveProperty('invoiceId');
+    });
+
+    it('a transport error is NOT a decline', async () => {
+      const { provider, iqproGet } = await loadProvider();
+      iqproGet.mockRejectedValueOnce(new Error('IQPro 500'));
+
+      const result = await provider.chargeOneTimeFee(testConfig, params);
+
+      expect(result.success).toBe(false);
+      expect(result.declined).toBeUndefined();
+    });
+  });
+
+  describe('closeFailedInvoice', () => {
+    it('is a no-op success (IQPro retries itself and has no invoice-close action)', async () => {
+      const { provider, iqproPost } = await loadProvider();
+
+      await expect(provider.closeFailedInvoice(testConfig, 'inv_1')).resolves.toMatchObject({ success: true });
+      expect(iqproPost).not.toHaveBeenCalled();
     });
   });
 });

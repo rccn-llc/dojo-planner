@@ -85,7 +85,7 @@ vi.mock('@/models/Schema', () => ({
   },
 }));
 
-vi.mock('@/services/TransactionsService', () => ({}));
+vi.mock('@/services/TransactionsService', () => ({ recurringStateColumns: {} }));
 
 const TEST_ORG = 'org-123';
 

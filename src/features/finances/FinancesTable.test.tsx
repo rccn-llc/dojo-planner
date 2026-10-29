@@ -606,4 +606,52 @@ describe('FinancesTable', () => {
       expect(page.getByRole('option', { name: 'status_declined' }).elements()).toHaveLength(0);
     });
   });
+
+  describe('failed recurring payments', () => {
+    const failed = (id: string, recurring: Transaction['recurring']) => createMockTransaction({ id, transactionId: `TXN-${id}`, status: 'declined', memberName: `Member ${id}`, recurring });
+
+    it('labels recurring attempts, retries, resolved failures and possible duplicates', async () => {
+      await render(
+        <FinancesTable transactions={[
+          failed('a', { memberMembershipId: 'mm', source: 'webhook_recurring', attemptNumber: 2 }),
+          failed('b', { memberMembershipId: 'mm', source: 'webhook_recurring', resolved: true }),
+          createMockTransaction({ id: 'c', transactionId: 'TXN-c', recurring: { source: 'retry' } }),
+          createMockTransaction({ id: 'd', transactionId: 'TXN-d', recurring: { source: 'webhook_recurring', failureReason: 'possible_duplicate' } }),
+          createMockTransaction({ id: 'e', transactionId: 'TXN-e' }),
+        ]}
+        />,
+      );
+
+      await expect.element(page.getByText('source_recurring_attempt').first()).toBeInTheDocument();
+      await expect.element(page.getByText('resolved').first()).toBeInTheDocument();
+      await expect.element(page.getByText('source_retry').first()).toBeInTheDocument();
+      await expect.element(page.getByText('possible_duplicate').first()).toBeInTheDocument();
+    });
+
+    it('offers a "Failed payments" filter showing only unresolved declines', async () => {
+      await render(
+        <FinancesTable transactions={[
+          failed('open', { memberMembershipId: 'mm', source: 'webhook_recurring' }),
+          failed('done', { memberMembershipId: 'mm', source: 'webhook_recurring', resolved: true }),
+          createMockTransaction({ id: 'ok', transactionId: 'TXN-ok', memberName: 'Member ok' }),
+        ]}
+        />,
+      );
+
+      await page.getByTestId('finances-status-filter').click();
+      await page.getByRole('option', { name: 'failed_payments_filter' }).click();
+
+      await expect.element(page.getByText('Member open').first()).toBeInTheDocument();
+      expect(page.getByText('Member done').elements()).toHaveLength(0);
+      expect(page.getByText('Member ok').elements()).toHaveLength(0);
+    });
+
+    it('omits the filter when nothing has failed', async () => {
+      await render(<FinancesTable transactions={[createMockTransaction()]} />);
+
+      await page.getByTestId('finances-status-filter').click();
+
+      expect(page.getByRole('option', { name: 'failed_payments_filter' }).elements()).toHaveLength(0);
+    });
+  });
 });

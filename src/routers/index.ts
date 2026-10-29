@@ -22,7 +22,7 @@ import { create as createCoupon, getTotalSavings as getCouponTotalSavings, listA
 import { earningsChart, financialStats, memberAverageChart, membershipStats } from './Dashboard';
 import { cancelRegistration as cancelEventRegistration, create as createEvent, registrations as listEventRegistrations, list as listEvents, register as registerForEvent, remove as removeEvent, update as updateEvent } from './Events';
 import { list as listInstructors, updatePhoto as updateInstructorPhoto } from './Instructors';
-import { addMembership, cancelMembership, changeMembership, create as createMember, deletePaymentMethod, getHOHForMember, getHOHPaymentMethods, getById as getMemberById, holdMembership, linkFamily, listAllMembershipPlans, listFamily, listMembershipPlans, listMemberTransactions, listPaymentMethods, reactivateMembership, removeFullyMember, remove as removeMember, restore as restoreMember, searchHOH, sendConfirmationEmail, setPrimaryPaymentMethod, unlinkFamily, updateLastAccessed, update as updateMember, updateContactInfo as updateMemberContactInfo, updatePhoto as updateMemberPhoto, updateMemberType } from './Member';
+import { addMembership, cancelMembership, changeMembership, create as createMember, deletePaymentMethod, getHOHForMember, getHOHPaymentMethods, getById as getMemberById, holdMembership, linkFamily, listAllMembershipPlans, listFamily, listMembershipPlans, listMemberTransactions, listPaymentMethods, reactivateMembership, removeFullyMember, remove as removeMember, restore as restoreMember, searchHOH, sendConfirmationEmail, setPrimaryPaymentMethod, syncPaymentMethod, unlinkFamily, updateLastAccessed, update as updateMember, updateContactInfo as updateMemberContactInfo, updatePhoto as updateMemberPhoto, updateMemberType } from './Member';
 import { list as listMembers } from './Members';
 import { create as createMembershipPlan, remove as removeMembershipPlan, update as updateMembershipPlan } from './MembershipPlans';
 import { create as createNoteHandler, list as listNotes, remove as removeNoteHandler, update as updateNoteHandler } from './Notes';
@@ -34,7 +34,7 @@ import { chartData as reportChartData, currentValues as reportCurrentValues, ins
 import { create as createRole, remove as removeRole, update as updateRole } from './Roles';
 import { cancelSaasSubscription, changeSaasPlan, getCurrentPlan, getSaasBillingHistory, getSaasTokenizationConfig, subscribeToPlan } from './SaasSubscription';
 import { create as createTagHandler, listAll as listAllTags, listClassTags, listMembershipTags, remove as removeTagHandler, update as updateTagHandler } from './Tags';
-import { get as getTransaction, list as listTransactions, refund as refundTransaction } from './Transactions';
+import { get as getTransaction, list as listTransactions, refund as refundTransaction, retry as retryTransaction, retryQuote as retryTransactionQuote } from './Transactions';
 import {
   addWaiverToMembership,
   createMergeFieldHandler,
@@ -74,6 +74,7 @@ export const router = {
     listMembershipPlans,
     listAllMembershipPlans,
     listPaymentMethods,
+    syncPaymentMethod,
     deletePaymentMethod,
     setPrimaryPaymentMethod,
     listMemberTransactions,
@@ -132,6 +133,8 @@ export const router = {
     list: listTransactions,
     get: getTransaction,
     refund: refundTransaction,
+    retry: retryTransaction,
+    retryQuote: retryTransactionQuote,
   },
   payment: {
     process: processPayment,

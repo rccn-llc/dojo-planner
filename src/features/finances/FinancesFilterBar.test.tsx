@@ -394,4 +394,28 @@ describe('FinancesFilterBar', () => {
       expect(page.getByRole('option', { name: 'status_paid' })).toBeInTheDocument();
     });
   });
+
+  describe('Failed payments quick filter', () => {
+    it('appears only when there are failed payments, and selects the failed_unresolved status', async () => {
+      const onChange = vi.fn();
+      await render(
+        <FinancesFilterBar onFiltersChangeAction={onChange} availableOrigins={[]} availableStatuses={ALL_STATUSES} hasFailedPayments />,
+      );
+
+      await page.getByTestId('finances-status-filter').click();
+      await page.getByRole('option', { name: 'failed_payments_filter' }).click();
+
+      expect(onChange).toHaveBeenLastCalledWith({ search: '', origin: 'all', status: 'failed_unresolved' });
+    });
+
+    it('is hidden by default', async () => {
+      await render(
+        <FinancesFilterBar onFiltersChangeAction={vi.fn()} availableOrigins={[]} availableStatuses={ALL_STATUSES} />,
+      );
+
+      await page.getByTestId('finances-status-filter').click();
+
+      expect(page.getByRole('option', { name: 'failed_payments_filter' }).elements()).toHaveLength(0);
+    });
+  });
 });

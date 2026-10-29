@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { db } from '@/libs/DB';
 import { eventRegistrationSchema, eventSchema, memberMembershipSchema, memberSchema, membershipPlanSchema, transactionSchema } from '@/models/Schema';
 
@@ -15,6 +15,84 @@ export type TransactionData = {
   description: string | null;
   processedAt: Date | null;
   createdAt: Date;
+} & RecurringState;
+
+/**
+ * Failed-payment state of a row, computed in SQL so the list and the member
+ * billing history agree and need no per-row round-trips.
+ */
+export type RecurringState = {
+  memberMembershipId: string | null;
+  failureReason: string | null;
+  /** 'app' | 'webhook_recurring' | 'retry'. */
+  source: string;
+  retryOfTransactionId: string | null;
+  /** A declined row that something later collected (retry, auto-retry, member paid). */
+  resolved: boolean;
+  /** A declined row with a NEWER unresolved decline for the same membership — retry that one. */
+  superseded: boolean;
+  /**
+   * 1-based attempt within the billing cycle for an IQPro-style automatic
+   * retry sequence; null otherwise. Only rows with a provider transaction id
+   * count: every IQPro attempt is a TRANSACTION webhook with its own id,
+   * whereas a Square failure is recorded from an INVOICE event with none —
+   * and Square does not auto-retry, so "attempt n of 3" would be false there.
+   */
+  attemptNumber: number | null;
+  /**
+   * A declined row whose member's ACTIVE card was updated at the provider
+   * after the failure (the reconcile recorded `updated_source = 'provider_sync'`)
+   * — a retry may now succeed. IQPro sends no webhook for a card update, so
+   * this comes from the card-sync reads (daily job, page loads, retry modal).
+   */
+  cardUpdatedAfterFailure: boolean;
+};
+
+const RETRYABLE_TYPES_SQL = sql.raw(`('membership_payment','hold_fee')`);
+
+/**
+ * Columns for `RecurringState`. Correlated subqueries reference the outer
+ * `transaction` row; `t2`/`t3` are the inner aliases.
+ */
+export const recurringStateColumns = {
+  memberMembershipId: transactionSchema.memberMembershipId,
+  failureReason: transactionSchema.failureReason,
+  source: transactionSchema.source,
+  retryOfTransactionId: transactionSchema.retryOfTransactionId,
+  resolved: sql<boolean>`(${transactionSchema.status} = 'declined' AND ${transactionSchema.memberMembershipId} IS NOT NULL AND EXISTS (
+    SELECT 1 FROM "transaction" t2
+    WHERE t2.member_membership_id = ${transactionSchema.memberMembershipId}
+      AND t2.status = 'paid'
+      AND t2.created_at > ${transactionSchema.createdAt}
+  ))`.mapWith(Boolean),
+  superseded: sql<boolean>`(${transactionSchema.status} = 'declined' AND ${transactionSchema.memberMembershipId} IS NOT NULL AND EXISTS (
+    SELECT 1 FROM "transaction" t2
+    WHERE t2.member_membership_id = ${transactionSchema.memberMembershipId}
+      AND t2.status = 'declined'
+      AND t2.transaction_type IN ${RETRYABLE_TYPES_SQL}
+      AND t2.created_at > ${transactionSchema.createdAt}
+  ))`.mapWith(Boolean),
+  cardUpdatedAfterFailure: sql<boolean>`(${transactionSchema.status} = 'declined' AND ${transactionSchema.memberId} IS NOT NULL AND EXISTS (
+    SELECT 1 FROM "payment_method" pm
+    WHERE pm.member_id = ${transactionSchema.memberId}
+      AND pm.status = 'active'
+      AND pm.updated_source = 'provider_sync'
+      AND pm.updated_at > ${transactionSchema.createdAt}
+  ))`.mapWith(Boolean),
+  attemptNumber: sql<number | null>`CASE WHEN ${transactionSchema.status} = 'declined' AND ${transactionSchema.source} = 'webhook_recurring' AND ${transactionSchema.providerTransactionId} IS NOT NULL THEN (
+    SELECT count(*)::int FROM "transaction" t2
+    WHERE t2.member_membership_id = ${transactionSchema.memberMembershipId}
+      AND t2.status = 'declined'
+      AND t2.source = 'webhook_recurring'
+      AND t2.provider_transaction_id IS NOT NULL
+      AND t2.created_at <= ${transactionSchema.createdAt}
+      AND t2.created_at > COALESCE((
+        SELECT max(t3.created_at) FROM "transaction" t3
+        WHERE t3.member_membership_id = ${transactionSchema.memberMembershipId}
+          AND t3.status = 'paid'
+          AND t3.created_at < ${transactionSchema.createdAt}
+      ), 'epoch'::timestamp)
+  ) END`.mapWith(v => (v === null || v === undefined ? null : Number(v))),
 };
 
 // Default page size for the org-wide transactions list when the caller doesn't
@@ -56,6 +134,7 @@ export async function getOrganizationTransactions(
       description: transactionSchema.description,
       processedAt: transactionSchema.processedAt,
       createdAt: transactionSchema.createdAt,
+      ...recurringStateColumns,
     })
     .from(transactionSchema)
     // leftJoin (not inner): a guest/non-member transaction has a null member_id
@@ -91,10 +170,12 @@ export type TransactionDetailData = {
   membershipBillingType: string | null;
   membershipStartDate: Date | null;
   membershipNextPaymentDate: Date | null;
+  membershipStatus: string | null;
+  membershipDeclineCount: number | null;
   // Event details (nullable)
   eventName: string | null;
   eventType: string | null;
-};
+} & RecurringState;
 
 export async function getTransactionById(
   transactionId: string,
@@ -122,8 +203,11 @@ export async function getTransactionById(
       membershipBillingType: memberMembershipSchema.billingType,
       membershipStartDate: memberMembershipSchema.startDate,
       membershipNextPaymentDate: memberMembershipSchema.nextPaymentDate,
+      membershipStatus: memberMembershipSchema.status,
+      membershipDeclineCount: memberMembershipSchema.declineCount,
       eventName: eventSchema.name,
       eventType: eventSchema.eventType,
+      ...recurringStateColumns,
     })
     .from(transactionSchema)
     // leftJoin (not inner): a guest/non-member transaction has a null member_id

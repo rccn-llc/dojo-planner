@@ -47,7 +47,7 @@ export type TenantTable = {
 };
 
 /**
- * All 34 copyable tables, in INSERT order.
+ * All 35 copyable tables, in INSERT order.
  *
  * NOTE: `instructor_profile` is org-scoped but is NOT cleared by `seed.ts`'s
  * teardown. Copying only what the seed clears would silently drop it, so it is
@@ -68,6 +68,9 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   // ensurePlanVariation would recreate them — but it would orphan the
   // already-created Square catalog objects, so it is copied.
   { table: 'square_plan_variation', scope: 'direct' },
+  // Processed payment-webhook keys. Copied so a redelivery after a cutover is
+  // still recognised as a duplicate rather than recorded twice.
+  { table: 'payment_webhook_event', scope: 'direct' },
 
   // ── L2: reference L1 ──
   { table: 'member', scope: 'direct' },

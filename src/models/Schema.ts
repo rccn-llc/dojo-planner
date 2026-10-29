@@ -261,6 +261,13 @@ export const memberMembershipSchema = pgTable(
     nextPaymentDate: timestamp('next_payment_date', { mode: 'date' }), // When the next payment is due (for autopay)
     providerSubscriptionId: text('provider_subscription_id'), // Recurring subscription ID at the org's payment provider
     providerHoldFeeSubscriptionId: text('provider_hold_fee_subscription_id'), // Subscription billing the recurring hold fee while on hold
+    // Recurring-charge declines in the current billing cycle, counted from the
+    // provider's webhooks. IQPro retries a declined subscription charge up to
+    // 3 times, then marks it overdue — so >= 3 is "overdue". Reset to 0 by any
+    // successful charge. Square does not auto-retry, so it never passes 1 there.
+    declineCount: integer('decline_count').notNull().default(0),
+    lastDeclineAt: timestamp('last_decline_at', { mode: 'date' }),
+    lastDeclineReason: text('last_decline_reason'),
     createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { mode: 'date' })
       .defaultNow()
@@ -447,6 +454,17 @@ export const paymentMethodSchema = pgTable('payment_method', {
   last4: text('last4'),
   accountType: text('account_type'), // ACH bank account type: 'Checking' | 'Savings'. Null for cards.
   isDefault: boolean('is_default').default(false),
+  cardBrand: text('card_brand'), // e.g. 'VISA'. Null for ACH or when the provider did not report it.
+  expirationDate: text('expiration_date'), // 'MM/YY'. Lets the UI show a card changed when last4 did not.
+  // 'active' | 'replaced'. A card replaced AT THE PROVIDER (e.g. the member
+  // updated it through the provider's failed-payment email) is kept as
+  // 'replaced' rather than deleted, so history shows what it replaced. Every
+  // "the saved card" lookup must filter on 'active'.
+  status: text('status').notNull().default('active'),
+  updatedSource: text('updated_source'), // 'app' | 'provider_sync'
+  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow(),
+  updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().$onUpdate(() => new Date()),
+  lastSyncedAt: timestamp('last_synced_at', { mode: 'date' }), // Last reconcile against the provider
 }, table => [
   // Payment methods are looked up by member_id on member detail / billing.
   index('payment_method_member_idx').on(table.memberId),
@@ -969,6 +987,13 @@ export const transactionSchema = pgTable(
     paymentMethod: text('payment_method'), // 'card', 'cash', 'check', 'bank_transfer'
     description: text('description'),
     processedAt: timestamp('processed_at', { mode: 'date' }),
+    failureReason: text('failure_reason'), // Decline reason from the provider; 'possible_duplicate' flags a suspected double charge
+    // The declined row this row retries. Deliberately NOT a DB foreign key: a
+    // self-reference would make the tenant copy/purge order depend on row order
+    // within one table. Ownership is verified in code (same org, same member).
+    retryOfTransactionId: text('retry_of_transaction_id'),
+    providerInvoiceId: text('provider_invoice_id'), // Square invoice id / IQPro invoiceId of a recurring charge
+    source: text('source').notNull().default('app'), // 'app' | 'webhook_recurring' | 'retry'
     createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { mode: 'date' })
       .defaultNow()
@@ -986,5 +1011,26 @@ export const transactionSchema = pgTable(
     // FKs joined from the membership / event-registration detail views.
     index('transaction_member_membership_idx').on(table.memberMembershipId),
     index('transaction_event_registration_idx').on(table.eventRegistrationId),
+    index('transaction_retry_of_idx').on(table.retryOfTransactionId),
+    index('transaction_provider_invoice_idx').on(table.providerInvoiceId),
+  ],
+);
+
+// Payment-provider webhook deliveries already processed. Providers redeliver
+// (IQPro and Square both document at-least-once delivery), so every handler
+// claims its event key here first and stops if the insert conflicts.
+// event_key: IQPro `transactionId:STATUS`, Square `event_id`.
+export const paymentWebhookEventSchema = pgTable(
+  'payment_webhook_event',
+  {
+    id: text('id').primaryKey(), // UUID v4
+    organizationId: text('organization_id').notNull(),
+    provider: text('provider').notNull(), // 'iqpro' | 'square'
+    eventKey: text('event_key').notNull(),
+    receivedAt: timestamp('received_at', { mode: 'date' }).defaultNow().notNull(),
+  },
+  table => [
+    uniqueIndex('payment_webhook_event_provider_key_idx').on(table.provider, table.eventKey),
+    index('payment_webhook_event_org_idx').on(table.organizationId),
   ],
 );

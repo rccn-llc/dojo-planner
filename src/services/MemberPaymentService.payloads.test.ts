@@ -11,7 +11,7 @@
  * platform's IQPro merchant. These payloads are byte-for-byte ports of the
  * kiosk's, and their inline comments mark bugs someone already paid for
  * (the '400000' BIN fallback, `addTaxToTotal: true` alongside a zero tax,
- * `unitOfMeasureId: 1`, the exact `recurrence` echo shape on PUT).
+ * `unitOfMeasureId: 138` (IQPro 'Piece'; 1 was 'Acre'), the exact `recurrence` echo shape on PUT).
  *
  * These tests assert the ENTIRE request body, not a subset. That is
  * deliberate: a characterization test that only checks the fields you
@@ -54,6 +54,7 @@ vi.mock('@/libs/IQPro', () => ({
   iqproGet: (...a: unknown[]) => iqproGet(...a),
   iqproPost: (...a: unknown[]) => iqproPost(...a),
   iqproPut: (...a: unknown[]) => iqproPut(...a),
+  mapTransactionStatus: (tx: Record<string, unknown>) => (['captured', 'settled', 'authorized', 'pendingsettlement'].includes(String(tx.status ?? '').toLowerCase()) ? 'approved' : 'declined'),
 }));
 vi.mock('@/libs/Logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -137,7 +138,7 @@ describe('chargeOneTimeFee — IQPro Sale payload', () => {
       amount: 51.88,
     });
     buildServiceFeeAdjustment.mockReturnValue({ type: 'ServiceFee', percentage: 3.75, flatAmount: null });
-    iqproPost.mockResolvedValue({ data: { transaction: { transactionId: 'tx_1', status: 'Approved' } } });
+    iqproPost.mockResolvedValue({ data: { transaction: { transactionId: 'tx_1', status: 'PendingSettlement' } } });
   }
 
   const baseArgs = {
@@ -190,7 +191,7 @@ describe('chargeOneTimeFee — IQPro Sale payload', () => {
             unitPrice: 50,
             discount: 0,
             freightAmount: 0,
-            unitOfMeasureId: 1,
+            unitOfMeasureId: 138,
             localTaxPercent: 0,
             nationalTaxPercent: 0,
           },

@@ -59,7 +59,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 
 import { Pool } from 'pg';
 import { encryptConnectionString } from '../libs/TenantCrypto';
-import { TENANT_STATUS, tenantSchema } from '../models/ControlSchema';
+import { TENANT_STATUS, tenantExternalRefSchema, tenantSchema } from '../models/ControlSchema';
 import {
   addressSchema,
   attendanceSchema,
@@ -89,6 +89,7 @@ import {
   noteSchema,
   organizationSchema,
   paymentMethodSchema,
+  paymentWebhookEventSchema,
   programSchema,
   signedWaiverSchema,
   tagSchema,
@@ -1103,6 +1104,7 @@ async function clearSeededData(organizationId: string) {
 
   // Clear transaction and payment data (references member)
   await db.delete(transactionSchema).where(eq(transactionSchema.organizationId, organizationId));
+  await db.delete(paymentWebhookEventSchema).where(eq(paymentWebhookEventSchema.organizationId, organizationId));
   await db.delete(paymentMethodSchema).where(sql`${paymentMethodSchema.memberId} IN (SELECT id FROM member WHERE organization_id = ${organizationId})`);
 
   // Clear audit_event rows for this org (references member / membership IDs that
@@ -2405,7 +2407,143 @@ async function seedOrganization(organizationId: string) {
     }
   }
 
+  const failedPaymentScenarioCount = await seedFailedPaymentScenarios(organizationId, membershipPlanIdMap['month-to-month-gold'] ?? null);
+  console.info(`  💥 Seeded ${failedPaymentScenarioCount} failed-recurring-payment scenarios`);
+
   console.info(`  ✅ Seeded ${programsData.length} programs, ${allTags.length} tags, ${classesData.length} classes, ${eventsData.length} events, ${couponsData.length} coupons, ${membershipPlansData.length} membership plans, ${membersData.length} members, ${familyLinkCount} family-member links, ${catalogCategoriesData.length} catalog categories, ${catalogItemsData.length} catalog items, ${waiverTemplatesData.length} waiver templates, ${signedWaiverCount} signed waivers, ${mergeFieldsData.length} merge fields, ${paymentMethodCount} payment methods, ${transactionCount} transactions, ${auditEventCount} audit events, ${attendanceCount} attendance records`);
+}
+
+/**
+ * Failed-recurring-payment scenarios for local testing of the webhook → UI →
+ * retry loop without a live gateway (see CLAUDE.md "Failed payments & retry").
+ *
+ * Every id is synthetic (`seed_*`), so outside production the retry and
+ * card-sync services SIMULATE the provider instead of calling it:
+ *   - `seed_sub_*`     → retry approves
+ *   - `seed_decline_*` → retry declines ("Insufficient funds (simulated)")
+ *   - `seed_slow_*`    → retry approves after a 3s delay (processing state)
+ *
+ * `tenant_external_ref` rows are written for each subscription so
+ * `simulatePaymentWebhook` can route signed webhooks to this org.
+ */
+async function seedFailedPaymentScenarios(organizationId: string, planId: string | null): Promise<number> {
+  if (!planId) {
+    return 0;
+  }
+  const now = Date.now();
+  const daysAgo = (d: number) => new Date(now - d * 24 * 60 * 60 * 1000);
+
+  type Scenario = {
+    firstName: string;
+    lastName: string;
+    subPrefix: 'seed_sub_' | 'seed_decline_' | 'seed_slow_';
+    memberStatus: 'past_due' | 'active';
+    membershipStatus: 'past_due' | 'active';
+    declineCount: number;
+    rows: Array<{ daysAgo: number; status: 'declined' | 'paid'; source: 'webhook_recurring' | 'retry'; reason?: string; invoice?: boolean; noProviderTx?: boolean; retryOfPrev?: boolean }>;
+    cardUpdatedDaysAgo?: number;
+  };
+
+  const scenarios: Scenario[] = [
+    // IQPro attempt 1 of 3 — IQPro will retry; the modal warns about double charges.
+    { firstName: 'Paula', lastName: 'Pending', subPrefix: 'seed_sub_', memberStatus: 'past_due', membershipStatus: 'past_due', declineCount: 1, rows: [{ daysAgo: 2, status: 'declined', source: 'webhook_recurring', reason: 'Insufficient funds' }] },
+    // Overdue: IQPro gave up after 3 declines.
+    { firstName: 'Oscar', lastName: 'Overdue', subPrefix: 'seed_sub_', memberStatus: 'past_due', membershipStatus: 'past_due', declineCount: 3, rows: [
+      { daysAgo: 9, status: 'declined', source: 'webhook_recurring', reason: 'Do not honor' },
+      { daysAgo: 6, status: 'declined', source: 'webhook_recurring', reason: 'Do not honor' },
+      { daysAgo: 3, status: 'declined', source: 'webhook_recurring', reason: 'Do not honor' },
+    ] },
+    // Resolved by a manual retry.
+    { firstName: 'Rita', lastName: 'Resolved', subPrefix: 'seed_sub_', memberStatus: 'active', membershipStatus: 'active', declineCount: 0, rows: [
+      { daysAgo: 8, status: 'declined', source: 'webhook_recurring', reason: 'Expired card' },
+      { daysAgo: 7, status: 'paid', source: 'retry', retryOfPrev: true },
+    ] },
+    // Possible double charge: IQPro's own retry succeeded after a manual one.
+    { firstName: 'Dana', lastName: 'Duplicate', subPrefix: 'seed_sub_', memberStatus: 'active', membershipStatus: 'active', declineCount: 0, rows: [
+      { daysAgo: 5, status: 'declined', source: 'webhook_recurring', reason: 'Insufficient funds' },
+      { daysAgo: 4, status: 'paid', source: 'retry', retryOfPrev: true },
+      { daysAgo: 2, status: 'paid', source: 'webhook_recurring', reason: 'possible_duplicate' },
+    ] },
+    // Member updated their card at the provider after the failure.
+    { firstName: 'Carl', lastName: 'Cardupdate', subPrefix: 'seed_sub_', memberStatus: 'past_due', membershipStatus: 'past_due', declineCount: 1, cardUpdatedDaysAgo: 1, rows: [{ daysAgo: 2, status: 'declined', source: 'webhook_recurring', reason: 'Card expired' }] },
+    // Square: failure recorded from an invoice event (no payment id, no attempt count).
+    { firstName: 'Sam', lastName: 'Square', subPrefix: 'seed_sub_', memberStatus: 'past_due', membershipStatus: 'past_due', declineCount: 1, rows: [{ daysAgo: 1, status: 'declined', source: 'webhook_recurring', reason: 'Scheduled charge failed', invoice: true, noProviderTx: true }] },
+    // Retry is simulated as DECLINED.
+    { firstName: 'Diego', lastName: 'Decline', subPrefix: 'seed_decline_', memberStatus: 'past_due', membershipStatus: 'past_due', declineCount: 1, rows: [{ daysAgo: 1, status: 'declined', source: 'webhook_recurring', reason: 'Insufficient funds' }] },
+    // Retry is simulated SLOWLY (3s) — the modal must not be dismissable meanwhile.
+    { firstName: 'Sloane', lastName: 'Slow', subPrefix: 'seed_slow_', memberStatus: 'past_due', membershipStatus: 'past_due', declineCount: 1, rows: [{ daysAgo: 1, status: 'declined', source: 'webhook_recurring', reason: 'Insufficient funds' }] },
+  ];
+
+  for (const sc of scenarios) {
+    const memberId = randomUUID();
+    const membershipId = randomUUID();
+    const subscriptionId = `${sc.subPrefix}${randomUUID()}`;
+    const customerId = `seed_cus_${randomUUID()}`;
+
+    await db.insert(memberSchema).values({
+      id: memberId,
+      organizationId,
+      firstName: sc.firstName,
+      lastName: sc.lastName,
+      email: `${sc.firstName.toLowerCase()}.${sc.lastName.toLowerCase()}@example.com`,
+      status: sc.memberStatus,
+      memberType: 'individual',
+      providerCustomerId: customerId,
+    }).onConflictDoNothing();
+
+    await db.insert(memberMembershipSchema).values({
+      id: membershipId,
+      memberId,
+      membershipPlanId: planId,
+      status: sc.membershipStatus,
+      billingType: 'autopay',
+      startDate: daysAgo(120),
+      providerSubscriptionId: subscriptionId,
+      declineCount: sc.declineCount,
+      ...(sc.declineCount > 0 ? { lastDeclineAt: daysAgo(sc.rows.at(-1)!.daysAgo), lastDeclineReason: sc.rows.at(-1)!.reason ?? null } : {}),
+    }).onConflictDoNothing();
+
+    if (sc.cardUpdatedDaysAgo !== undefined) {
+      await db.insert(paymentMethodSchema).values([
+        { id: randomUUID(), memberId, type: 'card', firstSix: '411111', last4: '1111', cardBrand: 'VISA', expirationDate: '09/25', providerPaymentMethodId: `seed_pm_${randomUUID()}`, isDefault: false, status: 'replaced', updatedSource: 'app' },
+        { id: randomUUID(), memberId, type: 'card', firstSix: '424242', last4: '4242', cardBrand: 'VISA', expirationDate: '03/29', providerPaymentMethodId: `seed_pm_${randomUUID()}`, isDefault: true, status: 'active', updatedSource: 'provider_sync', updatedAt: daysAgo(sc.cardUpdatedDaysAgo) },
+      ]).onConflictDoNothing();
+    } else {
+      await db.insert(paymentMethodSchema).values({ id: randomUUID(), memberId, type: 'card', firstSix: '424242', last4: '0005', cardBrand: 'VISA', expirationDate: '12/28', providerPaymentMethodId: `seed_pm_${randomUUID()}`, isDefault: true }).onConflictDoNothing();
+    }
+
+    let previousId: string | null = null;
+    for (const r of sc.rows) {
+      const id = randomUUID();
+      await db.insert(transactionSchema).values({
+        id,
+        organizationId,
+        memberId,
+        memberMembershipId: membershipId,
+        transactionType: 'membership_payment',
+        // Webhook rows hold the provider's charged TOTAL (base 100 + 3.75% fee).
+        amount: 103.75,
+        status: r.status,
+        source: r.source,
+        paymentMethod: 'card',
+        description: r.source === 'retry' ? 'Retry of Month-to-Month Gold payment' : 'Recurring membership payment',
+        failureReason: r.reason ?? null,
+        providerTransactionId: r.noProviderTx ? null : `seed_ptx_${randomUUID()}`,
+        providerInvoiceId: r.invoice ? `seed_inv_${randomUUID()}` : null,
+        retryOfTransactionId: r.retryOfPrev ? previousId : null,
+        processedAt: r.status === 'paid' ? daysAgo(r.daysAgo) : null,
+        createdAt: daysAgo(r.daysAgo),
+      }).onConflictDoNothing();
+      previousId = id;
+    }
+
+    await controlDb.insert(tenantExternalRefSchema).values([
+      { refType: 'provider_subscription', refId: subscriptionId, orgId: organizationId },
+      { refType: 'provider_customer', refId: customerId, orgId: organizationId },
+    ]).onConflictDoNothing();
+  }
+
+  return scenarios.length;
 }
 
 /**

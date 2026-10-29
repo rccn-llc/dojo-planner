@@ -6,13 +6,14 @@ import { audit } from '@/services/AuditService';
 import { sendMemberConfirmationEmail } from '@/services/EmailService';
 import { cancelMembershipLifecycle, getLifecycleContext, HoldLimitReachedError, holdMembershipLifecycle, reactivateMembershipLifecycle } from '@/services/MemberPaymentService';
 import { addMemberMembership, changeMemberMembership, createMember, deleteMemberPaymentMethod, getAllMembershipPlans, getFamilyMembers, getHeadOfHouseholdMembers, getHOHForFamilyMember, getMemberById, getMemberPaymentMethods, getMembershipPlans, getMemberTransactions, getPunchcardUsage, linkFamilyMember, MemberNotFoundError, MemberOnHoldError, removeFully, setPrimaryPaymentMethod as setPrimaryPaymentMethodService, unlinkFamilyMember, updateMember, updateMemberContactInfo, updateMemberPhoto, updateMemberStatus } from '@/services/MembersService';
+import { syncMemberPaymentMethod } from '@/services/PaymentMethodSyncService';
 import { resolvePaymentProviderConfig } from '@/services/PaymentProviderConfigService';
 import { generatePdfFilename } from '@/services/WaiverPdfService';
 import { generateWaiverPdfBuffer } from '@/services/WaiverPdfService.server';
 import { AUDIT_ACTION, AUDIT_ENTITY_TYPE } from '@/types/Audit';
 import { ORG_ROLE } from '@/types/Auth';
 import { rankMembersByQuery } from '@/utils/MemberSearch';
-import { AddMembershipValidation, CancelMembershipValidation, ChangeMembershipValidation, DeleteMemberValidation, EditMemberValidation, GetHOHForMemberValidation, GetHOHPaymentMethodsValidation, GetMemberByIdValidation, HoldMembershipValidation, LinkFamilyMemberValidation, ListFamilyMembersValidation, MemberPaymentMethodsValidation, MemberTransactionsValidation, MemberValidation, PaymentMethodMutationValidation, ReactivateMembershipValidation, RemoveFullyMemberValidation, SearchHOHValidation, SendConfirmationEmailValidation, UnlinkFamilyMemberValidation, UpdateMemberContactInfoValidation, UpdateMemberPhotoValidation, UpdateMemberTypeValidation } from '@/validations/MemberValidation';
+import { AddMembershipValidation, CancelMembershipValidation, ChangeMembershipValidation, DeleteMemberValidation, EditMemberValidation, GetHOHForMemberValidation, GetHOHPaymentMethodsValidation, GetMemberByIdValidation, HoldMembershipValidation, LinkFamilyMemberValidation, ListFamilyMembersValidation, MemberPaymentMethodsValidation, MemberTransactionsValidation, MemberValidation, PaymentMethodMutationValidation, ReactivateMembershipValidation, RemoveFullyMemberValidation, SearchHOHValidation, SendConfirmationEmailValidation, SyncPaymentMethodValidation, UnlinkFamilyMemberValidation, UpdateMemberContactInfoValidation, UpdateMemberPhotoValidation, UpdateMemberTypeValidation } from '@/validations/MemberValidation';
 import { guardAuth, guardRole } from './AuthGuards';
 
 /**
@@ -663,13 +664,40 @@ export const listPaymentMethods = os
   .input(MemberPaymentMethodsValidation)
   .handler(async ({ input }) => {
     const context = await guardRole(ORG_ROLE.FRONT_DESK);
-    const paymentMethods = await getMemberPaymentMethods(input.memberId, context.orgId);
+    const paymentMethods = await getMemberPaymentMethods(input.memberId, context.orgId, { includeReplaced: input.includeReplaced });
     // SOC2 CC7.2: log read access to saved payment methods (sensitive financial data).
     await audit(context, AUDIT_ACTION.PAYMENT_METHOD_VIEW, AUDIT_ENTITY_TYPE.MEMBER, {
       entityId: input.memberId,
       status: 'success',
     });
     return { paymentMethods };
+  });
+
+/**
+ * Reconcile the member's saved card with the card on their subscription at
+ * the payment provider — e.g. after the member updated it through IQPro's
+ * failed-payment email, which sends us no webhook. Throttled to one provider
+ * read per minute unless `force` is set.
+ */
+export const syncPaymentMethod = os
+  .input(SyncPaymentMethodValidation)
+  .handler(async ({ input }) => {
+    const context = await guardRole(ORG_ROLE.FRONT_DESK);
+
+    try {
+      const config = await resolvePaymentProviderConfig(context.orgId);
+      const result = await syncMemberPaymentMethod(input.memberId, context.orgId, config, { force: input.force, actor: context });
+      if (!result.skipped) {
+        await audit(context, AUDIT_ACTION.PAYMENT_METHOD_SYNC, AUDIT_ENTITY_TYPE.MEMBER, {
+          entityId: input.memberId,
+          status: result.error ? 'failure' : 'success',
+          ...(result.error ? { error: result.error } : {}),
+        });
+      }
+      return result;
+    } catch (error) {
+      throw toOrpcError(error, 'Failed to refresh the card on file.');
+    }
   });
 
 export const deletePaymentMethod = os

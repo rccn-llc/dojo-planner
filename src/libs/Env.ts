@@ -44,7 +44,15 @@ export const Env = createEnv({
     IQPRO_OAUTH_URL: z.string().url().optional(),
     IQPRO_BASE_URL: z.string().url().optional(),
     IQPRO_GATEWAY_ID: z.string().min(1).optional(),
-    IQPRO_WEBHOOK_SECRET: z.string().min(1).optional(),
+    // NON-PRODUCTION ONLY. A PEM public key the IQPro webhook verifies against
+    // INSTEAD of the one fetched from the gateway, so `simulatePaymentWebhook`
+    // can sign events locally. Ignored (and logged) when NODE_ENV=production —
+    // honouring it there would let anyone with the matching private key forge
+    // payment events.
+    IQPRO_WEBHOOK_PUBLIC_KEY_OVERRIDE: z.string().min(1).optional(),
+    // Bearer secret Vercel Cron sends to /api/cron/* routes. Unset → the cron
+    // routes refuse every request (fail closed).
+    CRON_SECRET: z.string().min(16).optional(),
     // AES-256-GCM key (32 raw bytes, hex-encoded → 64 chars) used to encrypt
     // per-org and platform IQPro client_secret values stored in the DB.
     // Required at decrypt time when any encrypted column has a value; optional
@@ -108,7 +116,8 @@ export const Env = createEnv({
     IQPRO_OAUTH_URL: process.env.IQPRO_OAUTH_URL,
     IQPRO_BASE_URL: process.env.IQPRO_BASE_URL,
     IQPRO_GATEWAY_ID: process.env.IQPRO_GATEWAY_ID,
-    IQPRO_WEBHOOK_SECRET: process.env.IQPRO_WEBHOOK_SECRET,
+    IQPRO_WEBHOOK_PUBLIC_KEY_OVERRIDE: process.env.IQPRO_WEBHOOK_PUBLIC_KEY_OVERRIDE,
+    CRON_SECRET: process.env.CRON_SECRET,
     IQPRO_CONFIG_ENCRYPTION_KEY: process.env.IQPRO_CONFIG_ENCRYPTION_KEY,
     SERVICE_FEE_PCT: process.env.SERVICE_FEE_PCT,
     SQUARE_ACCESS_TOKEN: process.env.SQUARE_ACCESS_TOKEN,

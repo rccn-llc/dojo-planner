@@ -17,6 +17,9 @@ export const AUDIT_ACTION = {
   MEMBERSHIP_CANCEL: 'memberMembership.cancel',
   MEMBERSHIP_HOLD: 'memberMembership.hold',
   MEMBERSHIP_REACTIVATE: 'memberMembership.reactivate',
+  // A recurring charge declined for the 3rd time in a cycle; IQPro has stopped
+  // retrying. Webhook-originated (system actor).
+  MEMBERSHIP_OVERDUE: 'memberMembership.overdue',
   CANCELLATION_FEE_CHARGE: 'cancellationFee.charge',
   HOLD_FEE_CHARGE: 'holdFee.charge',
 
@@ -68,6 +71,11 @@ export const AUDIT_ACTION = {
   // Transaction operations
   TRANSACTION_CREATE: 'transaction.create',
   TRANSACTION_REFUND: 'transaction.refund',
+  // Staff re-charged a declined recurring payment from the UI.
+  TRANSACTION_RETRY: 'transaction.retry',
+  // A recurring charge succeeded for a cycle a manual retry had already
+  // collected — a probable double charge (system actor).
+  TRANSACTION_POSSIBLE_DUPLICATE: 'transaction.possibleDuplicate',
   TRANSACTION_UPDATE: 'transaction.update',
   // Read-access logging for sensitive financial data (SOC2 CC7.2)
   TRANSACTION_VIEW: 'transaction.view',
@@ -79,6 +87,11 @@ export const AUDIT_ACTION = {
   PAYMENT_METHOD_SET_PRIMARY: 'paymentMethod.setPrimary',
   // Read-access logging for saved payment methods (SOC2 CC7.2)
   PAYMENT_METHOD_VIEW: 'paymentMethod.view',
+  // Reconciled the local saved card against the provider's subscription card.
+  PAYMENT_METHOD_SYNC: 'paymentMethod.sync',
+  // The reconcile found the card changed AT THE PROVIDER (e.g. the member
+  // updated it via the provider's failed-payment email).
+  PAYMENT_METHOD_PROVIDER_UPDATE: 'paymentMethod.providerUpdate',
 
   // Tag operations
   TAG_CREATE: 'tag.create',
@@ -223,6 +236,12 @@ export type AuditFieldChange = {
  * Context about the authenticated user performing the action.
  * Extracted from Clerk auth and passed through guards.
  */
+/**
+ * The actor recorded for audits that originate from a provider webhook or a
+ * scheduled job — no Clerk user performed them. Pair with the resolved orgId.
+ */
+export const SYSTEM_ACTOR_USER_ID = 'system:payment-webhook';
+
 export type AuditContext = {
   /** Clerk user ID performing the action */
   userId: string;

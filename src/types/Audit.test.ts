@@ -41,8 +41,11 @@ describe('Audit Types', () => {
       // + 3 note (create + update + delete) + 3 staff (invite + update + remove)
       // + 3 role (create + update + delete) + 1 organization location update
       // + 1 iqpro config (per-org) + 1 payment provider change
-      // + 1 instructor photo update = 100
-      expect(actionCount).toBe(100);
+      // + 1 instructor photo update
+      // + 5 failed recurring payments (membership overdue + transaction retry
+      //   + transaction possible duplicate + payment method sync
+      //   + payment method provider update) = 105
+      expect(actionCount).toBe(105);
     });
   });
 

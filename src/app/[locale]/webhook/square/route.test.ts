@@ -40,6 +40,18 @@ vi.mock('@/services/TenantDirectoryService', () => ({
 vi.mock('@/services/PaymentProviderConfigService', () => ({
   resolvePaymentProviderConfig: (orgId: string) => resolvePaymentProviderConfig(orgId),
 }));
+const recordRecurringCharge = vi.fn().mockResolvedValue({ status: 'duplicate' });
+const runAfterResponse = vi.fn();
+vi.mock('@/libs/AfterResponse', () => ({ runAfterResponse: (l: string, w: () => Promise<void>) => runAfterResponse(l, w) }));
+const syncMemberQuietly = vi.fn();
+const syncByProviderCustomer = vi.fn();
+vi.mock('@/services/PaymentMethodSyncService', () => ({
+  syncMemberQuietly: (...a: unknown[]) => syncMemberQuietly(...a),
+  syncByProviderCustomer: (...a: unknown[]) => syncByProviderCustomer(...a),
+}));
+vi.mock('@/services/RecurringChargeWebhookService', () => ({
+  recordRecurringCharge: (e: unknown) => recordRecurringCharge(e),
+}));
 vi.mock('@/services/TenantExternalRefService', () => ({
   REF_TYPE: {
     PROVIDER_SUBSCRIPTION: 'provider_subscription',
@@ -141,7 +153,13 @@ describe('square webhook', () => {
     expect(res.status).toBe(200);
     expect(resolveOrgByExternalRef).toHaveBeenCalledWith('provider_subscription', 'sub_1');
     expect(getDbForOrg).toHaveBeenCalledWith('org_resolved');
-    expect(tenantUpdateWhere).toHaveBeenCalled();
+    expect(recordRecurringCharge).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'square',
+      organizationId: 'org_resolved',
+      providerSubscriptionId: 'sub_1',
+      outcome: 'paid',
+      eventKey: 'ev_1',
+    }));
   });
 
   it('REFUSES an invalid signature with 401 and writes nothing', async () => {
@@ -152,6 +170,7 @@ describe('square webhook', () => {
 
     expect(res.status).toBe(401);
     expect(tenantUpdateWhere).not.toHaveBeenCalled();
+    expect(recordRecurringCharge).not.toHaveBeenCalled();
     expect(loggerError).toHaveBeenCalledWith(
       expect.stringContaining('Invalid signature'),
       expect.anything(),
@@ -288,7 +307,7 @@ describe('notification URL derivation', () => {
     const res = await post(body, url);
 
     expect(res.status).toBe(200);
-    expect(tenantUpdateWhere).toHaveBeenCalled();
+    expect(recordRecurringCharge).toHaveBeenCalled();
   });
 
   it('still accepts the un-prefixed URL a pre-existing deployment signs against', async () => {
@@ -300,7 +319,7 @@ describe('notification URL derivation', () => {
     const res = await post(body, 'https://example.test/en/webhook/square');
 
     expect(res.status).toBe(200);
-    expect(tenantUpdateWhere).toHaveBeenCalled();
+    expect(recordRecurringCharge).toHaveBeenCalled();
   });
 
   it('a wrong key is STILL refused on a locale-prefixed URL', async () => {
@@ -324,5 +343,179 @@ describe('notification URL derivation', () => {
 
     expect(res.status).toBe(401);
     expect(tenantUpdateWhere).not.toHaveBeenCalled();
+  });
+});
+
+describe('square recurring invoice events', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resolveOrgByExternalRef.mockResolvedValue('org_resolved');
+    getDbForOrg.mockResolvedValue(tenantDb);
+    resolvePaymentProviderConfig.mockResolvedValue({ provider: 'square', webhookSignatureKey: SIGNATURE_KEY });
+  });
+
+  function invoiceEvent(type: string, invoice: Record<string, unknown>, eventId: string | null = 'ev_x') {
+    return JSON.stringify({ type, ...(eventId ? { event_id: eventId } : {}), data: { object: { invoice } } });
+  }
+
+  it('records invoice.scheduled_charge_failed as a declined charge, amount from computed_amount_money', async () => {
+    const body = invoiceEvent('invoice.scheduled_charge_failed', {
+      id: 'inv_1',
+      subscription_id: 'sub_9',
+      status: 'UNPAID',
+      updated_at: '2026-10-02T10:00:00Z',
+      payment_requests: [{ computed_amount_money: { amount: 10375, currency: 'USD' }, total_completed_amount_money: { amount: 0 } }],
+    });
+    signatureHeader = sign(body);
+
+    expect((await post(body)).status).toBe(200);
+    expect(recordRecurringCharge).toHaveBeenCalledWith({
+      provider: 'square',
+      eventKey: 'ev_x',
+      organizationId: 'org_resolved',
+      providerSubscriptionId: 'sub_9',
+      providerTransactionId: null,
+      providerInvoiceId: 'inv_1',
+      amount: 103.75,
+      outcome: 'declined',
+      failureReason: 'Scheduled charge failed',
+      occurredAt: new Date('2026-10-02T10:00:00Z'),
+    });
+  });
+
+  it('falls back to next_payment_amount_money for a failed charge with no payment request', async () => {
+    const body = invoiceEvent('invoice.scheduled_charge_failed', { id: 'inv_2', subscription_id: 'sub_9', next_payment_amount_money: { amount: 5000 } });
+    signatureHeader = sign(body);
+
+    await post(body);
+
+    expect(recordRecurringCharge).toHaveBeenCalledWith(expect.objectContaining({ amount: 50, occurredAt: undefined }));
+  });
+
+  it('records invoice.payment_made with the collected amount', async () => {
+    const body = invoiceEvent('invoice.payment_made', {
+      id: 'inv_3',
+      subscription_id: 'sub_9',
+      payment_requests: [{ computed_amount_money: { amount: 10375 }, total_completed_amount_money: { amount: 10375 } }],
+    });
+    signatureHeader = sign(body);
+
+    await post(body);
+
+    expect(recordRecurringCharge).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'paid', amount: 103.75, failureReason: null }));
+  });
+
+  it('uses computed_amount_money for a paid invoice that omits the completed amount, and 0 when nothing is present', async () => {
+    const withComputed = invoiceEvent('invoice.payment_made', { id: 'inv_4', subscription_id: 'sub_9', payment_requests: [{ computed_amount_money: { amount: 2000 } }] });
+    signatureHeader = sign(withComputed);
+    await post(withComputed);
+
+    expect(recordRecurringCharge).toHaveBeenLastCalledWith(expect.objectContaining({ amount: 20 }));
+
+    const empty = invoiceEvent('invoice.payment_made', { id: 'inv_5', subscription_id: 'sub_9' });
+    signatureHeader = sign(empty);
+    await post(empty);
+
+    expect(recordRecurringCharge).toHaveBeenLastCalledWith(expect.objectContaining({ amount: 0 }));
+  });
+
+  it('derives an event key from the invoice when event_id is absent, and ignores an invalid date', async () => {
+    const body = invoiceEvent('invoice.payment_made', { id: 'inv_6', subscription_id: 'sub_9', updated_at: 'garbage' }, null);
+    signatureHeader = sign(body);
+
+    await post(body);
+
+    expect(recordRecurringCharge).toHaveBeenCalledWith(expect.objectContaining({ eventKey: 'inv_6:invoice.payment_made', occurredAt: undefined, providerInvoiceId: 'inv_6' }));
+  });
+
+  it('defaults a missing invoice id to null', async () => {
+    const body = invoiceEvent('invoice.payment_made', { subscription_id: 'sub_9' });
+    signatureHeader = sign(body);
+
+    await post(body);
+
+    expect(recordRecurringCharge).toHaveBeenCalledWith(expect.objectContaining({ providerInvoiceId: null }));
+  });
+
+  it('500s (so Square redelivers) when recording throws', async () => {
+    recordRecurringCharge.mockRejectedValueOnce(new Error('db down'));
+    const body = invoiceEvent('invoice.scheduled_charge_failed', { id: 'inv_7', subscription_id: 'sub_9' });
+    signatureHeader = sign(body);
+
+    expect((await post(body)).status).toBe(500);
+  });
+});
+
+describe('square payment-method sync triggers', () => {
+  const CONFIG = { provider: 'square', webhookSignatureKey: SIGNATURE_KEY };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resolveOrgByExternalRef.mockResolvedValue('org_resolved');
+    getDbForOrg.mockResolvedValue(tenantDb);
+    resolvePaymentProviderConfig.mockResolvedValue(CONFIG);
+  });
+
+  async function runScheduled() {
+    runWithTenant.mockClear();
+    await runAfterResponse.mock.calls[0]![1]();
+  }
+
+  it.each(['card.created', 'card.updated', 'card.automatically_updated', 'card.disabled'])('routes %s by customer and syncs that customer after the response', async (type) => {
+    const body = JSON.stringify({ type, event_id: 'ev_card', data: { object: { card: { id: 'ccof:1', customer_id: 'cus_9' } } } });
+    signatureHeader = sign(body);
+
+    expect((await post(body)).status).toBe(200);
+    expect(resolveOrgByExternalRef).toHaveBeenCalledWith('provider_customer', 'cus_9');
+
+    await runScheduled();
+
+    expect(runWithTenant).toHaveBeenCalledWith(expect.objectContaining({ orgId: 'org_resolved' }), expect.any(Function));
+    expect(syncByProviderCustomer).toHaveBeenCalledWith('cus_9', 'org_resolved', CONFIG);
+  });
+
+  it('ignores a card event with no customer', async () => {
+    const body = JSON.stringify({ type: 'card.updated', event_id: 'ev_x', data: { object: { card: { id: 'ccof:1' } } } });
+    signatureHeader = sign(body);
+
+    expect((await post(body)).status).toBe(200);
+    expect(resolveOrgByExternalRef).not.toHaveBeenCalled();
+    expect(runAfterResponse).not.toHaveBeenCalled();
+  });
+
+  it('syncs the customer on a non-terminal subscription.updated (possible card change)', async () => {
+    const body = JSON.stringify({ type: 'subscription.updated', event_id: 'ev_s', data: { object: { subscription: { id: 'sub_1', status: 'ACTIVE', customer_id: 'cus_2' } } } });
+    signatureHeader = sign(body);
+
+    await post(body);
+    await runScheduled();
+
+    expect(syncByProviderCustomer).toHaveBeenCalledWith('cus_2', 'org_resolved', CONFIG);
+  });
+
+  it('does not schedule a sync for a non-terminal subscription.updated without a customer', async () => {
+    const body = JSON.stringify({ type: 'subscription.updated', event_id: 'ev_s2', data: { object: { subscription: { id: 'sub_1', status: 'PAUSED' } } } });
+    signatureHeader = sign(body);
+
+    await post(body);
+
+    expect(runAfterResponse).not.toHaveBeenCalled();
+  });
+
+  it('syncs the member after a recorded invoice event, not after a duplicate', async () => {
+    recordRecurringCharge.mockResolvedValueOnce({ status: 'recorded', memberId: 'mem_7' });
+    const body = JSON.stringify({ type: 'invoice.scheduled_charge_failed', event_id: 'ev_i', data: { object: { invoice: { id: 'inv', subscription_id: 'sub_1' } } } });
+    signatureHeader = sign(body);
+
+    await post(body);
+    await runScheduled();
+
+    expect(syncMemberQuietly).toHaveBeenCalledWith('mem_7', 'org_resolved', CONFIG);
+
+    runAfterResponse.mockClear();
+    recordRecurringCharge.mockResolvedValueOnce({ status: 'duplicate' });
+    await post(body);
+
+    expect(runAfterResponse).not.toHaveBeenCalled();
   });
 });
