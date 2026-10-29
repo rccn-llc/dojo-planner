@@ -1,5 +1,5 @@
 import { generateKeyPairSync } from 'node:crypto';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -57,6 +57,20 @@ describe('IQPro simulation', () => {
       expect(second.created).toBe(false);
       expect(second.publicKeyPem).toBe(first.publicKeyPem);
       expect(first.privateKeyPem).toContain('BEGIN PRIVATE KEY');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('never overwrites half a keypair, and never writes through a planted symlink', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'sim-keys-'));
+    const target = path.join(dir, 'elsewhere.txt');
+    try {
+      writeFileSync(target, 'untouched');
+      symlinkSync(target, path.join(dir, 'iqpro-webhook-private.pem'));
+
+      expect(() => loadOrCreateDevKeypair(dir)).toThrow('Incomplete dev keypair');
+      expect(readFileSync(target, 'utf8')).toBe('untouched');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -29,7 +29,7 @@
  */
 import { Buffer } from 'node:buffer';
 import { constants, createHmac, generateKeyPairSync, randomUUID, sign } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 
@@ -119,19 +119,57 @@ export function signSquareWebhook(body: string, signatureKey: string, notificati
 
 const KEY_DIR = '.simulator-keys';
 
-/** Load (or create on first run) the dev IQPro keypair. */
+function isErrno(error: unknown, code: string): boolean {
+  return (error as NodeJS.ErrnoException | null)?.code === code;
+}
+
+/** The stored keypair, or null when either file is missing. */
+function readDevKeypair(priv: string, pub: string): { privateKeyPem: string; publicKeyPem: string } | null {
+  try {
+    return { privateKeyPem: readFileSync(priv, 'utf8'), publicKeyPem: readFileSync(pub, 'utf8') };
+  } catch (error) {
+    if (isErrno(error, 'ENOENT')) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Load (or create on first run) the dev IQPro keypair.
+ *
+ * No exists-then-write check: it reads the files directly, and creates them
+ * with `wx` (O_CREAT | O_EXCL), which refuses any path that already exists —
+ * including a symlink planted there — so the private key can never be written
+ * through to some other file.
+ */
 export function loadOrCreateDevKeypair(dir = KEY_DIR): { privateKeyPem: string; publicKeyPem: string; created: boolean } {
   const priv = path.join(dir, 'iqpro-webhook-private.pem');
   const pub = path.join(dir, 'iqpro-webhook-public.pem');
-  if (existsSync(priv) && existsSync(pub)) {
-    return { privateKeyPem: readFileSync(priv, 'utf8'), publicKeyPem: readFileSync(pub, 'utf8'), created: false };
+  const existing = readDevKeypair(priv, pub);
+  if (existing) {
+    return { ...existing, created: false };
   }
+
   const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
   const privateKeyPem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
   const publicKeyPem = publicKey.export({ type: 'spki', format: 'pem' }).toString();
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(priv, privateKeyPem, { mode: 0o600 });
-  writeFileSync(pub, publicKeyPem);
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  try {
+    writeFileSync(priv, privateKeyPem, { mode: 0o600, flag: 'wx' });
+    writeFileSync(pub, publicKeyPem, { flag: 'wx' });
+  } catch (error) {
+    if (!isErrno(error, 'EEXIST')) {
+      throw error;
+    }
+    // Another run created the pair first — use it. Half a pair (one file
+    // left by an interrupted run) is never overwritten; the operator decides.
+    const raced = readDevKeypair(priv, pub);
+    if (!raced) {
+      throw new Error(`Incomplete dev keypair in ${dir}: delete the directory and re-run.`);
+    }
+    return { ...raced, created: false };
+  }
   return { privateKeyPem, publicKeyPem, created: true };
 }
 
