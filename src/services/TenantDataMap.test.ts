@@ -32,6 +32,24 @@ describe('tenantDataMap', () => {
     expect(unaccounted).toEqual([]);
   });
 
+  it('matches the table counts documented on TENANT_TABLES', () => {
+    // Completeness reviews read the comment; keep it true. Adding a table
+    // means updating "All N copyable tables (X direct, Y via)" there.
+    const source = readFileSync(path.join(process.cwd(), 'src/services/TenantDataMap.ts'), 'utf8');
+    const documented = /All (\d+) copyable tables, in INSERT order \((\d+) `direct`, (\d+) `via`\)/.exec(source);
+    const directDoc = /`direct` — the table carries `organization_id` itself \((\d+) tables\)/.exec(source);
+
+    expect(documented).not.toBeNull();
+
+    const direct = TENANT_TABLES.filter(t => t.scope === 'direct').length;
+    const via = TENANT_TABLES.filter(t => t.scope === 'via').length;
+
+    expect(Number(documented![1])).toBe(TENANT_TABLES.length);
+    expect(Number(documented![2])).toBe(direct);
+    expect(Number(documented![3])).toBe(via);
+    expect(Number(directDoc![1])).toBe(direct);
+  });
+
   it('never copies a control-plane table into a tenant database', () => {
     // `tenant` and `tenant_external_ref` exist empty and inert in every tenant
     // database, and `platform_config` holds the PLATFORM's own merchant

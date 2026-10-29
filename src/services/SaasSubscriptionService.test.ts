@@ -788,8 +788,8 @@ describe('SaasSubscriptionService', () => {
       expect(db.update).not.toHaveBeenCalled();
     });
 
-    it('returns error when IQPro cancel fails', async () => {
-      const { service, iqproPost } = await setupModule();
+    it('returns error when IQPro cancel fails, leaving the local status unchanged', async () => {
+      const { service, db, iqproPost } = await setupModule();
 
       mockFindFirst().mockResolvedValue({ saasProviderSubscriptionId: 'iqpro-sub-001' });
       iqproPost.mockRejectedValue(new Error('Cancel API error'));
@@ -797,6 +797,21 @@ describe('SaasSubscriptionService', () => {
       const result = await service.cancelSubscription(testConfig, 'test-org-123', false);
 
       expect(result).toEqual({ success: false, error: 'Cancel API error' });
+      expect(db.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses without the platform IQPro config, rather than marking a live subscription cancelled', async () => {
+      // IQPro would keep charging while the org lost access.
+      const { service, db, iqproPost } = await setupModule();
+
+      mockFindFirst().mockResolvedValue({ saasProviderSubscriptionId: 'iqpro-sub-001' });
+
+      const result = await service.cancelSubscription(null, 'test-org-123', false);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/not configured/i);
+      expect(iqproPost).not.toHaveBeenCalled();
+      expect(db.update).not.toHaveBeenCalled();
     });
   });
 

@@ -2,7 +2,7 @@
 
 import type { StaffMemberData } from '@/hooks/useInviteStaffForm';
 import { useTranslations } from 'next-intl';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { inviteStaffMember, updateStaffMember } from '@/actions/staff';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useInviteStaffForm } from '@/hooks/useInviteStaffForm';
@@ -26,6 +26,30 @@ export const InviteStaffModal = ({
   // State rather than a ref: refs must not be read or written during render.
   const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  // The delayed close after a successful save. Cleared whenever the modal
+  // closes, on unmount, and before scheduling another: a stale timer would
+  // otherwise close the modal the user has just reopened.
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearCloseTimer = useCallback(() => {
+    if (closeTimerRef.current !== null) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      clearCloseTimer();
+    }
+  }, [isOpen, clearCloseTimer]);
+
+  useEffect(() => clearCloseTimer, [clearCloseTimer]);
+
+  const handleClose = () => {
+    clearCloseTimer();
+    onCloseAction();
+  };
 
   // Determine if we're in edit mode
   const isEditMode = !!staffMember?.id;
@@ -120,7 +144,9 @@ export const InviteStaffModal = ({
       }
 
       // Close modal after a short delay to show success message
-      setTimeout(() => {
+      clearCloseTimer();
+      closeTimerRef.current = setTimeout(() => {
+        closeTimerRef.current = null;
         onCloseAction();
       }, 1500);
     } catch (error) {
@@ -132,7 +158,7 @@ export const InviteStaffModal = ({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={open => !open && onCloseAction()}>
+    <Dialog open={isOpen} onOpenChange={open => !open && handleClose()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>
@@ -154,7 +180,7 @@ export const InviteStaffModal = ({
                   data={form.data}
                   onUpdate={form.updateData}
                   onSave={handleSave}
-                  onCancel={onCloseAction}
+                  onCancel={handleClose}
                   isLoading={form.isLoading}
                   error={form.error}
                   roles={form.roles}

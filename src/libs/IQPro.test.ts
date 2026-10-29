@@ -271,7 +271,22 @@ describe('iqproPost', () => {
     expect(JSON.stringify(mockLogger.info.mock.calls)).not.toContain('000123456789');
   });
 
-  it('logs the full error body on failure and throws with status', async () => {
+  it('logs a JSON error body (redacted) on failure and throws with status', async () => {
+    const mod = await import('./IQPro');
+    mod.resetOAuthTokenCache();
+
+    mockOAuthOk();
+    mockFetch.mockResolvedValueOnce(new Response(
+      JSON.stringify({ statusCode: 'BadRequest', statusDetails: ['Validation failed: missing field'] }),
+      { status: 400 },
+    ));
+
+    await expect(
+      mod.iqproPost(testConfig, '/api/gateway/test-gateway-id/customer', { x: 1 }),
+    ).rejects.toThrow('Validation failed: missing field');
+  });
+
+  it('never logs or embeds a non-JSON error body, only its kind and length', async () => {
     const mod = await import('./IQPro');
     mod.resetOAuthTokenCache();
 
@@ -283,12 +298,12 @@ describe('iqproPost', () => {
 
     await expect(
       mod.iqproPost(testConfig, '/api/gateway/test-gateway-id/customer', { x: 1 }),
-    ).rejects.toThrow('IQPro API /api/gateway/test-gateway-id/customer failed: 400 Validation failed: missing field');
+    ).rejects.toThrow('IQPro API /api/gateway/test-gateway-id/customer failed: 400 [non-JSON text body redacted, 32 chars]');
 
     expect(mockLogger.error).toHaveBeenCalledWith('[IQPro] POST failed', {
       path: '/api/gateway/test-gateway-id/customer',
       status: 400,
-      response: 'Validation failed: missing field',
+      response: '[non-JSON text body redacted, 32 chars]',
     });
   });
 });

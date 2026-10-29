@@ -56,9 +56,29 @@ describe('redactBodyForLog', () => {
     expect(JSON.parse(out)).toEqual({ data: { achId: REDACTED, status: 'ok' } });
   });
 
-  it('keeps short non-JSON text, truncates long text, and labels an empty body', () => {
-    expect(redactBodyForLog('Bad Request')).toBe('Bad Request');
-    expect(redactBodyForLog('x'.repeat(600))).toBe(`${'x'.repeat(500)}… [truncated]`);
+  it('never logs a non-JSON body — only its kind and length', () => {
+    // Gateway error pages can echo submitted fields; they cannot be redacted
+    // by field, so none of their text is kept.
+    const html = '<html><body>Error for jane@example.com card 4111111111111111</body></html>';
+    const text = 'Declined: cardholder Jane Doe, 4111111111111111';
+
+    expect(redactBodyForLog(html)).toBe(`[non-JSON HTML/XML body redacted, ${html.length} chars]`);
+    expect(redactBodyForLog('<!DOCTYPE html><p>x</p>')).toContain('HTML/XML');
+    expect(redactBodyForLog(text)).toBe(`[non-JSON text body redacted, ${text.length} chars]`);
+    expect(redactBodyForLog(html)).not.toContain('4111');
+    expect(redactBodyForLog(text)).not.toContain('Jane');
+  });
+
+  it('treats a bare JSON string as free text, but keeps harmless JSON primitives', () => {
+    const quoted = 'card 4111111111111111 declined';
+
+    expect(redactBodyForLog(JSON.stringify(quoted))).toBe(`[non-JSON text body redacted, ${quoted.length} chars]`);
+    expect(redactBodyForLog('42')).toBe('42');
+    expect(redactBodyForLog('true')).toBe('true');
+    expect(redactBodyForLog('null')).toBe('null');
+  });
+
+  it('labels an empty body', () => {
     expect(redactBodyForLog('')).toBe('(empty body)');
     expect(redactBodyForLog(null)).toBe('(empty body)');
   });

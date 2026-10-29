@@ -130,6 +130,62 @@ describe('openPaymentMethodUpdateRequest', () => {
     expect(provider.listCustomerPaymentMethods).toHaveBeenCalledTimes(1);
   });
 
+  it('two concurrent opens leave ONE pending request, and the loser reuses it', async () => {
+    // A decline webhook and a staff click at the same moment: both find no
+    // open request. The unique index lets only one insert; the other reuses it.
+    const m = await makeMember();
+    provider.listCustomerPaymentMethods
+      .mockResolvedValueOnce([{ paymentMethodId: 'pm_a', type: 'card' }])
+      .mockResolvedValueOnce([{ paymentMethodId: 'pm_b', type: 'card' }]);
+
+    const [first, second] = await Promise.all([
+      openPaymentMethodUpdateRequest(m.memberId, ORG, IQPRO, { reason: 'decline', sendLink: false }),
+      openPaymentMethodUpdateRequest(m.memberId, ORG, IQPRO, { reason: 'staff', sendLink: false }),
+    ]);
+
+    // Both raced past the lookup: the race was real, not serialised away.
+    expect(provider.listCustomerPaymentMethods).toHaveBeenCalledTimes(2);
+
+    const rows = await requests(m.memberId);
+
+    expect(rows.filter(r => r.status === 'pending')).toHaveLength(1);
+    expect(first.requestId).toBe(second.requestId);
+    expect([first.created, second.created].sort()).toEqual([false, true]);
+  });
+
+  it('the database refuses a second pending request for the same member', async () => {
+    const m = await makeMember();
+    const row = { organizationId: ORG, memberId: m.memberId, provider: 'iqpro', providerCustomerId: m.customerId, reason: 'staff' };
+    await db.insert(paymentMethodUpdateRequestSchema).values({ id: randomUUID(), ...row });
+
+    await expect(db.insert(paymentMethodUpdateRequestSchema).values({ id: randomUUID(), ...row })).rejects.toThrow();
+
+    // Closed requests are history and do not count.
+    await db.insert(paymentMethodUpdateRequestSchema).values({ id: randomUUID(), ...row, status: 'completed' });
+    await db.insert(paymentMethodUpdateRequestSchema).values({ id: randomUUID(), ...row, status: 'expired' });
+
+    expect(await requests(m.memberId)).toHaveLength(3);
+  });
+
+  it('expires a stale pending request so it does not block a new one', async () => {
+    const m = await makeMember();
+    provider.listCustomerPaymentMethods.mockResolvedValue([]);
+    const old = await openPaymentMethodUpdateRequest(m.memberId, ORG, IQPRO, { reason: 'decline', sendLink: false });
+    await db.update(paymentMethodUpdateRequestSchema)
+      .set({ createdAt: new Date(Date.now() - UPDATE_REQUEST_TTL_MS - 60_000) })
+      .where(eq(paymentMethodUpdateRequestSchema.id, old.requestId));
+
+    const fresh = await openPaymentMethodUpdateRequest(m.memberId, ORG, IQPRO, { reason: 'staff', sendLink: false });
+
+    expect(fresh).toMatchObject({ created: true });
+    expect(fresh.requestId).not.toBe(old.requestId);
+
+    const rows = await requests(m.memberId);
+
+    expect(rows.find(r => r.id === old.requestId)!.status).toBe('expired');
+    expect(rows.find(r => r.id === fresh.requestId)!.status).toBe('pending');
+  });
+
   it('refuses Square, a member without an IQPro customer, and a link with no email', async () => {
     const square = await makeMember();
     const noCustomer = await makeMember({ customerId: null });

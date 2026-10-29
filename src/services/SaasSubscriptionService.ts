@@ -549,20 +549,26 @@ export async function cancelSubscription(
       return { success: false, error: NO_PAID_SUBSCRIPTION_ERROR };
     }
 
-    // Cancel the IQPro subscription (best-effort when config is present).
-    if (config) {
-      const gatewayId = config.gatewayId;
-      await iqproPost(
-        config,
-        `/api/gateway/${gatewayId}/subscription/${org.saasProviderSubscriptionId}/cancel`,
-        {
-          cancel: {
-            now: !endOfPeriod,
-            endOfBillingPeriod: endOfPeriod,
-          },
-        },
-      );
+    // A real subscription can only be cancelled AT IQPro. Without the platform
+    // config, flipping the local status alone would cut the org's access while
+    // IQPro keeps charging them. Refuse and leave the status unchanged.
+    if (!config) {
+      logger.error('[SaaS] Cancel refused: platform IQPro config is unavailable', { orgId });
+      return { success: false, error: 'Payment processing is not configured, so the subscription could not be cancelled. Please try again later.' };
     }
+
+    // Throws on any non-2xx, so the local status below is only written after
+    // IQPro has accepted the cancellation.
+    await iqproPost(
+      config,
+      `/api/gateway/${config.gatewayId}/subscription/${org.saasProviderSubscriptionId}/cancel`,
+      {
+        cancel: {
+          now: !endOfPeriod,
+          endOfBillingPeriod: endOfPeriod,
+        },
+      },
+    );
 
     await controlOrganizationDb()
       .update(organizationSchema)
