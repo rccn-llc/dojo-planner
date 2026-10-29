@@ -19,6 +19,7 @@ import { invalidateTransactionsCache } from '@/hooks/useTransactionsCache';
 import { client } from '@/libs/Orpc';
 import { ORG_ROLE } from '@/types/Auth';
 import { isRetryable, POSSIBLE_DUPLICATE } from './recurringPayments';
+import { RefundConfirmDialog } from './RefundConfirmDialog';
 import { RetryPaymentModal } from './RetryPaymentModal';
 
 type TransactionDetailModalProps = {
@@ -69,6 +70,7 @@ export function TransactionDetailModal({
   const [loading, setLoading] = useState(false);
   const [refunding, setRefunding] = useState(false);
   const [refundError, setRefundError] = useState<string | null>(null);
+  const [refundConfirmOpen, setRefundConfirmOpen] = useState(false);
   const [retryOpen, setRetryOpen] = useState(false);
   const prevTransactionIdRef = useRef<string | null>(null);
 
@@ -105,6 +107,7 @@ export function TransactionDetailModal({
     setRefundError(null);
     try {
       await client.transactions.refund({ transactionId: transaction.id });
+      setRefundConfirmOpen(false);
       // Refresh the modal's own view + the finances list so the reversed
       // transaction and its 'refunded' status show up immediately.
       await fetchDetails(transaction.id);
@@ -306,7 +309,15 @@ export function TransactionDetailModal({
             </Button>
           )}
           {isRefundable && (
-            <Button variant="destructive" disabled={refunding} onClick={handleRefund}>
+            <Button
+              variant="destructive"
+              disabled={refunding}
+              onClick={() => {
+                setRefundError(null);
+                setRefundConfirmOpen(true);
+              }}
+              data-testid="refund-button"
+            >
               {refunding ? t('refunding_button') : t('refund_button')}
             </Button>
           )}
@@ -314,6 +325,16 @@ export function TransactionDetailModal({
             {t('close_button')}
           </Button>
         </DialogFooter>
+
+        {/* Refunding moves money at the provider and can't be undone: confirm first. */}
+        <RefundConfirmDialog
+          isOpen={refundConfirmOpen}
+          amountLabel={transaction.amount}
+          isRefunding={refunding}
+          errorMessage={refundError}
+          onCloseAction={() => setRefundConfirmOpen(false)}
+          onConfirmAction={handleRefund}
+        />
 
         {/* Nested inside the parent's content so Radix stacks focus and
             outside-click dismissal correctly. */}

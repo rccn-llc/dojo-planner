@@ -1009,6 +1009,14 @@
     "retry_button": "Relancer le paiement",
     "attempt_label": "Tentative {attempt} sur 3"
   },
+  "RefundConfirmDialog": {
+    "title": "Rembourser {amount} ?",
+    "description": "Cela rembourse la totalité du paiement de {amount} sur le moyen de paiement d'origine du membre. Un paiement pas encore réglé est annulé à la place. Le remboursement est effectué immédiatement chez le prestataire de paiement.",
+    "cannot_undo": "Cette action est irréversible.",
+    "cancel_button": "Conserver le paiement",
+    "confirm_button": "Rembourser {amount}",
+    "refunding_button": "Remboursement…"
+  },
   "MarketingPage": {
     "title": "Marketing",
     "add_new_coupon_button": "Ajouter un nouveau coupon",

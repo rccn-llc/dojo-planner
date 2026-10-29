@@ -971,6 +971,14 @@
     "retry_button": "Retry payment",
     "attempt_label": "Attempt {attempt} of 3"
   },
+  "RefundConfirmDialog": {
+    "title": "Refund {amount}?",
+    "description": "This returns the full {amount} charge to the member's original payment method. A charge that hasn't settled yet is voided instead. Refunding happens immediately at the payment provider.",
+    "cannot_undo": "This can't be undone.",
+    "cancel_button": "Keep payment",
+    "confirm_button": "Refund {amount}",
+    "refunding_button": "Refunding…"
+  },
   "ReportsPage": {
     "title": "Reports",
     "subtitle": "Select a report to view detailed analytics and insights",

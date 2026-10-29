@@ -971,6 +971,14 @@
     "retry_button": "支払いを再試行",
     "attempt_label": "{attempt}/3 回目"
   },
+  "RefundConfirmDialog": {
+    "title": "{amount}を返金しますか？",
+    "description": "{amount}の支払い全額を会員の元の支払い方法に返金します。まだ確定していない支払いは取り消されます。返金は決済代行会社で直ちに実行されます。",
+    "cannot_undo": "この操作は元に戻せません。",
+    "cancel_button": "支払いを保持",
+    "confirm_button": "{amount}を返金",
+    "refunding_button": "返金中…"
+  },
   "ReportsPage": {
     "title": "レポート",
     "subtitle": "詳細な分析とインサイトを表示するレポートを選択してください",
