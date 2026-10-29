@@ -20,11 +20,9 @@ setup('authenticate with Clerk', async ({ page }) => {
   // delete the shared user that other tests depend on.
   await cleanupOrphanedE2EUsers();
 
-  const shared = await createUserWithOrganization();
-
-  // Failed-recurring-payment rows for failedPayments.e2e.ts. Same window as the
-  // tenant row: only before the app under test holds pglite's one connection.
-  await seedFailedPaymentForE2E(shared.orgId);
+  // Failed-recurring-payment rows for failedPayments.e2e.ts, written on the
+  // tenant row's own connection (pglite-server accepts only one).
+  await createUserWithOrganization(seedFailedPaymentForE2E);
 
   const sharedUsername = process.env.E2E_CLERK_USER_USERNAME!;
   const sharedPassword = process.env.E2E_CLERK_USER_PASSWORD!;

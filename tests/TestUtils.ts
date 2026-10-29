@@ -60,7 +60,10 @@ export const cleanupOrphanedE2EUsers = async () => {
  * production uses, rather than a dev-only escape hatch that `NODE_ENV`
  * disables in CI anyway (CI runs `next start`).
  */
-export const registerTenantForE2E = async (orgId: string): Promise<boolean> => {
+export const registerTenantForE2E = async (
+  orgId: string,
+  afterWrite?: (pool: Pool, orgId: string) => Promise<void>,
+): Promise<boolean> => {
   const connectionString = process.env.DATABASE_URL;
   const keyHex = process.env.CONTROL_PLANE_ENCRYPTION_KEY ?? process.env.IQPRO_CONFIG_ENCRYPTION_KEY;
 
@@ -82,19 +85,29 @@ export const registerTenantForE2E = async (orgId: string): Promise<boolean> => {
   // So: best-effort. The setup-time call (the shared org every other spec
   // uses) succeeds. A mid-suite call cannot, and the caller is told rather
   // than the failure being silently swallowed.
+  //
+  // `afterWrite` runs on the SAME connection. A second pool opened right after
+  // this one ends was dropped by pglite-server in CI ("Connection terminated
+  // unexpectedly"), presumably before it had released the first socket, so any
+  // other setup-time write must share this connection rather than open its own.
   const pool = new Pool({ connectionString, max: 1 });
 
   try {
-    await pool.query(
-      `INSERT INTO tenant (org_id, display_name, connection_string_enc, region, status, schema_version)
-       VALUES ($1, $2, $3, 'local', 'active', '0000_baseline')
-       ON CONFLICT (org_id) DO UPDATE
-         SET connection_string_enc = EXCLUDED.connection_string_enc, status = 'active'`,
-      [orgId, 'E2E test tenant', encrypted],
-    );
+    try {
+      await pool.query(
+        `INSERT INTO tenant (org_id, display_name, connection_string_enc, region, status, schema_version)
+         VALUES ($1, $2, $3, 'local', 'active', '0000_baseline')
+         ON CONFLICT (org_id) DO UPDATE
+           SET connection_string_enc = EXCLUDED.connection_string_enc, status = 'active'`,
+        [orgId, 'E2E test tenant', encrypted],
+      );
+    } catch {
+      return false;
+    }
+    // Not swallowed: a setup write that fails here is a real bug (e.g. schema
+    // drift), and hiding it turns into unrelated-looking spec timeouts.
+    await afterWrite?.(pool, orgId);
     return true;
-  } catch {
-    return false;
   } finally {
     await pool.end().catch(() => {});
   }
@@ -111,70 +124,59 @@ export const E2E_FAILED_PAYMENT = {
  * Seed failed-recurring-payment rows for the shared E2E org, the way the
  * payment webhooks would have recorded them (`source = 'webhook_recurring'`).
  *
- * Same single-connection constraint as `registerTenantForE2E`: this only
- * works from `global.setup.ts`, before the app under test holds pglite's one
- * connection. CI runs a production build with no payment provider, so the
- * specs exercise display + the retry modal's confirm step, not a live charge.
+ * Passed to `createUserWithOrganization` so it runs on the tenant write's own
+ * connection — see `registerTenantForE2E`. CI runs a production build with no
+ * payment provider, so the specs exercise display + the retry modal's confirm
+ * step, not a live charge. Throws on failure.
  */
-export const seedFailedPaymentForE2E = async (orgId: string): Promise<boolean> => {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    return false;
-  }
-  const pool = new Pool({ connectionString, max: 1 });
+export const seedFailedPaymentForE2E = async (pool: Pool, orgId: string): Promise<void> => {
   const id = () => randomUUID();
   const daysAgo = (d: number) => new Date(Date.now() - d * 24 * 60 * 60 * 1000);
 
-  try {
-    const planId = id();
+  const planId = id();
+  await pool.query(
+    `INSERT INTO membership_plan (id, organization_id, name, slug, category, program, price, contract_length, access_level, frequency)
+     VALUES ($1, $2, 'E2E Monthly', $3, 'Adult', 'Adult', 100, 'Month-to-Month', 'Unlimited', 'Monthly')`,
+    [planId, orgId, `e2e-monthly-${planId.slice(0, 8)}`],
+  );
+
+  const scenarios = [
+    { ...E2E_FAILED_PAYMENT.pending, declines: [2], cardUpdatedDaysAgo: null as number | null },
+    { ...E2E_FAILED_PAYMENT.overdue, declines: [9, 6, 3], cardUpdatedDaysAgo: null as number | null },
+    { ...E2E_FAILED_PAYMENT.cardUpdated, declines: [3], cardUpdatedDaysAgo: 1 },
+  ];
+
+  for (const sc of scenarios) {
+    const memberId = id();
+    const membershipId = id();
     await pool.query(
-      `INSERT INTO membership_plan (id, organization_id, name, slug, category, program, price, contract_length, access_level, frequency)
-       VALUES ($1, $2, 'E2E Monthly', $3, 'Adult', 'Adult', 100, 'Month-to-Month', 'Unlimited', 'Monthly')`,
-      [planId, orgId, `e2e-monthly-${planId.slice(0, 8)}`],
+      `INSERT INTO member (id, organization_id, first_name, last_name, email, status, member_type, provider_customer_id)
+       VALUES ($1, $2, $3, $4, $5, 'past_due', 'individual', $6)`,
+      [memberId, orgId, sc.firstName, sc.lastName, `${sc.firstName.toLowerCase()}.${memberId.slice(0, 8)}@example.com`, `seed_cus_${memberId}`],
     );
-
-    const scenarios = [
-      { ...E2E_FAILED_PAYMENT.pending, declines: [2], cardUpdatedDaysAgo: null as number | null },
-      { ...E2E_FAILED_PAYMENT.overdue, declines: [9, 6, 3], cardUpdatedDaysAgo: null as number | null },
-      { ...E2E_FAILED_PAYMENT.cardUpdated, declines: [3], cardUpdatedDaysAgo: 1 },
-    ];
-
-    for (const sc of scenarios) {
-      const memberId = id();
-      const membershipId = id();
+    await pool.query(
+      `INSERT INTO member_membership (id, member_id, membership_plan_id, status, billing_type, provider_subscription_id, decline_count, last_decline_reason)
+       VALUES ($1, $2, $3, 'past_due', 'autopay', $4, $5, $6)`,
+      [membershipId, memberId, planId, `seed_sub_${membershipId}`, sc.declines.length, sc.reason],
+    );
+    await pool.query(
+      `INSERT INTO payment_method (id, member_id, type, last4, card_brand, expiration_date, provider_payment_method_id, is_default, status, updated_source, updated_at)
+       VALUES ($1, $2, 'card', '4242', 'VISA', '03/29', $3, true, 'active', $4, $5)`,
+      [id(), memberId, `seed_pm_${memberId}`, sc.cardUpdatedDaysAgo === null ? 'app' : 'provider_sync', sc.cardUpdatedDaysAgo === null ? daysAgo(30) : daysAgo(sc.cardUpdatedDaysAgo)],
+    );
+    for (const d of sc.declines) {
       await pool.query(
-        `INSERT INTO member (id, organization_id, first_name, last_name, email, status, member_type, provider_customer_id)
-         VALUES ($1, $2, $3, $4, $5, 'past_due', 'individual', $6)`,
-        [memberId, orgId, sc.firstName, sc.lastName, `${sc.firstName.toLowerCase()}.${memberId.slice(0, 8)}@example.com`, `seed_cus_${memberId}`],
+        `INSERT INTO transaction (id, organization_id, member_id, member_membership_id, provider_transaction_id, transaction_type, amount, status, source, payment_method, description, failure_reason, created_at)
+         VALUES ($1, $2, $3, $4, $5, 'membership_payment', 103.75, 'declined', 'webhook_recurring', 'card', 'Recurring membership payment (declined)', $6, $7)`,
+        [id(), orgId, memberId, membershipId, `seed_ptx_${id()}`, sc.reason, daysAgo(d)],
       );
-      await pool.query(
-        `INSERT INTO member_membership (id, member_id, membership_plan_id, status, billing_type, provider_subscription_id, decline_count, last_decline_reason)
-         VALUES ($1, $2, $3, 'past_due', 'autopay', $4, $5, $6)`,
-        [membershipId, memberId, planId, `seed_sub_${membershipId}`, sc.declines.length, sc.reason],
-      );
-      await pool.query(
-        `INSERT INTO payment_method (id, member_id, type, last4, card_brand, expiration_date, provider_payment_method_id, is_default, status, updated_source, updated_at)
-         VALUES ($1, $2, 'card', '4242', 'VISA', '03/29', $3, true, 'active', $4, $5)`,
-        [id(), memberId, `seed_pm_${memberId}`, sc.cardUpdatedDaysAgo === null ? 'app' : 'provider_sync', sc.cardUpdatedDaysAgo === null ? daysAgo(30) : daysAgo(sc.cardUpdatedDaysAgo)],
-      );
-      for (const d of sc.declines) {
-        await pool.query(
-          `INSERT INTO transaction (id, organization_id, member_id, member_membership_id, provider_transaction_id, transaction_type, amount, status, source, payment_method, description, failure_reason, created_at)
-           VALUES ($1, $2, $3, $4, $5, 'membership_payment', 103.75, 'declined', 'webhook_recurring', 'card', 'Recurring membership payment (declined)', $6, $7)`,
-          [id(), orgId, memberId, membershipId, `seed_ptx_${id()}`, sc.reason, daysAgo(d)],
-        );
-      }
     }
-    return true;
-  } catch (error) {
-    console.warn('[E2E] Failed to seed failed-payment scenarios:', error);
-    return false;
-  } finally {
-    await pool.end().catch(() => {});
   }
 };
 
-export const createUserWithOrganization = async () => {
+export const createUserWithOrganization = async (
+  afterTenantWrite?: (pool: Pool, orgId: string) => Promise<void>,
+) => {
   const slug = faker.string.alphanumeric(10).toLowerCase();
   process.env.E2E_CLERK_USER_USERNAME = `e2e_${slug}+clerk_test@example.com`;
   process.env.E2E_CLERK_USER_PASSWORD = 'password+clerk_test';
@@ -210,7 +212,7 @@ export const createUserWithOrganization = async () => {
   // The org must exist in the tenant directory before any dashboard request,
   // or `resolveTenant` fails closed with a 409. Returns false when the app is
   // already holding pglite's single connection — see registerTenantForE2E.
-  const registered = await registerTenantForE2E(organization.id);
+  const registered = await registerTenantForE2E(organization.id, afterTenantWrite);
 
   return { orgId: organization.id, registered };
 };
