@@ -279,7 +279,28 @@ describe('squarePaymentService', () => {
 
       expect(body.price_override_money).toEqual({ amount: 9950, currency: 'USD' });
       expect(body.plan_variation_id).toBe('var_existing');
-      expect(body.start_date).toBe('2026-03-04');
+      // One period after the first, which the app charged itself.
+      expect(body.start_date).toBe('2026-04-04');
+    });
+
+    it('starts billing one period after the first, for every cadence', async () => {
+      const { firstSquareBillingDate } = await import('./SquarePaymentService');
+      const start = new Date('2026-03-04T18:00:00Z');
+
+      expect(firstSquareBillingDate(start, 'weekly')).toBe('2026-03-11');
+      expect(firstSquareBillingDate(start, 'monthly')).toBe('2026-04-04');
+      expect(firstSquareBillingDate(start, 'semi-annual')).toBe('2026-09-04');
+      expect(firstSquareBillingDate(start, 'annual')).toBe('2027-03-04');
+    });
+
+    it('clamps to the month\'s last day and crosses the year', async () => {
+      const { firstSquareBillingDate } = await import('./SquarePaymentService');
+
+      expect(firstSquareBillingDate(new Date('2026-01-31T12:00:00Z'), 'monthly')).toBe('2026-02-28');
+      expect(firstSquareBillingDate(new Date('2028-01-31T12:00:00Z'), 'monthly')).toBe('2028-02-29');
+      expect(firstSquareBillingDate(new Date('2026-08-31T12:00:00Z'), 'semi-annual')).toBe('2027-02-28');
+      expect(firstSquareBillingDate(new Date('2026-12-15T12:00:00Z'), 'monthly')).toBe('2027-01-15');
+      expect(firstSquareBillingDate(new Date('2028-02-29T12:00:00Z'), 'annual')).toBe('2029-02-28');
     });
 
     it('passes the tax RATE, letting Square compute the money on every cycle', async () => {
