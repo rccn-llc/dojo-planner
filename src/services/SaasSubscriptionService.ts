@@ -22,7 +22,7 @@ import { eq } from 'drizzle-orm';
 // read control, saw null, and locked out a customer who had just paid.
 import { controlOrganizationDb } from '@/libs/ControlPlaneReads';
 import { getGatewayProcessors, iqproPost, iqproPut } from '@/libs/IQPro';
-import { IQPRO_BILLING_PERIOD, IQPRO_UNIT } from '@/libs/IQProConstants';
+import { IQPRO_BILLING_PERIOD, IQPRO_SUBSCRIPTION_STATUS, IQPRO_UNIT } from '@/libs/IQProConstants';
 import { logger } from '@/libs/Logger';
 import { organizationSchema } from '@/models/Schema';
 import { recordExternalRef, REF_TYPE } from '@/services/TenantExternalRefService';
@@ -270,7 +270,7 @@ export async function subscribe(
 
     const subscriptionPayload = {
       customerId,
-      subscriptionStatusId: 1, // Active
+      subscriptionStatusId: IQPRO_SUBSCRIPTION_STATUS.SCHEDULED, // 1 is DRAFT, which never bills
       name: `Dojo Planner ${plan.name} Plan`,
       prefix: 'SAAS',
       recurrence: {

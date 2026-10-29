@@ -375,7 +375,7 @@ describe('SaasSubscriptionService', () => {
         '/api/gateway/test-gateway-001/subscription',
         expect.objectContaining({
           customerId: 'iqpro-cust-001',
-          subscriptionStatusId: 1,
+          subscriptionStatusId: 2, // SCHEDULED — 1 is DRAFT, which never bills
           lineItems: expect.arrayContaining([
             expect.objectContaining({
               unitPrice: 49,

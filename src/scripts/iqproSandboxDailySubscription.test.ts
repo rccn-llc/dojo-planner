@@ -4,6 +4,7 @@ import {
   buildDailySubscriptionPayload,
   CANCEL_NOW_BODY,
   defaultRunTime,
+  gatewayStartTime,
   IQPRO_BILLING_PERIOD_DAILY,
   IQPRO_UNIT_DAYS,
   parseArgs,
@@ -33,28 +34,33 @@ describe('iqproSandboxDailySubscription', () => {
       firstName: 'Test',
       lastName: 'Member',
       email: 't@example.com',
+      state: 'CA',
       hour: 14,
       minute: 30,
       now: new Date('2026-10-27T14:20:00Z'),
     }) as Record<string, any>;
 
-    expect(p.recurrence).toMatchObject({ billingPeriodId: 1, schedule: { minutes: [30], hours: [14] }, isAutoRenewed: true, invoiceLengthInDays: 1, billingStartDate: '2026-10-27T14:20:00.000Z' });
+    expect(p.recurrence).toMatchObject({ billingPeriodId: 1, schedule: { minutes: [30], hours: [14] }, isAutoRenewed: true, invoiceLengthInDays: 1, billingStartDate: '2026-10-27T14:22:00.000Z' });
     expect(p.recurrence.schedule).not.toHaveProperty('daysOfMonth');
     expect(p.paymentMethod).toEqual({ customerPaymentMethodId: 'pm_1', isAutoCharged: true, cardProcessorId: 'proc_1' });
     expect(p.lineItems[0]).toMatchObject({ unitPrice: 1, unitOfMeasureId: 36, quantity: 1, discount: 0 });
     expect(p.addresses).toHaveLength(2);
+    // A real state on the billing address: IQPro rejects a placeholder for US.
+    expect(p.addresses[0]).toMatchObject({ isBilling: true, state: 'CA', country: 'US' });
     expect(p).not.toHaveProperty('paymentAdjustments');
     expect(p.prefix.length).toBeLessThanOrEqual(10);
   });
 
   it('omits the card processor when the gateway reports none', () => {
-    const p = buildDailySubscriptionPayload({ customerId: 'c', paymentMethodId: 'p', cardProcessorId: null, amount: 1, firstName: 'a', lastName: 'b', email: 'e@x.com', hour: 0, minute: 0 }) as Record<string, any>;
+    const p = buildDailySubscriptionPayload({ customerId: 'c', paymentMethodId: 'p', cardProcessorId: null, amount: 1, firstName: 'a', lastName: 'b', email: 'e@x.com', state: 'NY', hour: 0, minute: 0 }) as Record<string, any>;
 
     expect(p.paymentMethod).toEqual({ customerPaymentMethodId: 'p', isAutoCharged: true });
   });
 
-  it('schedules the first run ~10 minutes ahead in UTC, wrapping the hour', () => {
+  it('schedules the first run ~10 minutes ahead in the gateway time zone, wrapping the hour', () => {
     expect(defaultRunTime(new Date('2026-10-27T23:55:00Z'))).toEqual({ hour: 0, minute: 5 });
+    // The sandbox gateway is US/Central (CDT, UTC−5 on this date).
+    expect(defaultRunTime(new Date('2026-10-29T04:10:00Z'), 'US/Central')).toEqual({ hour: 23, minute: 20 });
   });
 
   it('refuses a non-sandbox environment or missing credentials', () => {
@@ -70,5 +76,21 @@ describe('iqproSandboxDailySubscription', () => {
 
   it('parses --key=value arguments', () => {
     expect(parseArgs(['--orgId=org_1', '--memberId=m', '--amount=1.00', 'stray'])).toEqual({ orgId: 'org_1', memberId: 'm', amount: '1.00' });
+  });
+});
+
+describe('gatewayStartTime', () => {
+  it('is two minutes ahead on the gateway\'s wall clock — IQPro reads the clock time as gateway-local', () => {
+    // 04:10 UTC on Oct 29 is 23:10 on Oct 28 in Central (CDT).
+    expect(gatewayStartTime(new Date('2026-10-29T04:10:00Z'), 'US/Central')).toBe('2026-10-28T23:12:00.000Z');
+    expect(gatewayStartTime(new Date('2026-10-29T04:10:00Z'), 'UTC')).toBe('2026-10-29T04:12:00.000Z');
+  });
+
+  it('creates the subscription ACTIVE, starting before its first run', () => {
+    const p = buildDailySubscriptionPayload({ customerId: 'c', paymentMethodId: 'p', cardProcessorId: null, amount: 1, firstName: 'a', lastName: 'b', email: 'e@x.com', state: 'CA', hour: 23, minute: 20, timeZone: 'US/Central', now: new Date('2026-10-29T04:10:00Z') }) as Record<string, any>;
+
+    expect(p.recurrence).toMatchObject({ termStartDate: '2026-10-28T23:12:00.000Z', billingStartDate: '2026-10-28T23:12:00.000Z', schedule: { minutes: [20], hours: [23] } });
+    // A wall-clock start is in the past as UTC, which IQPro requires to be ACTIVE.
+    expect(p.subscriptionStatusId).toBe(4);
   });
 });
