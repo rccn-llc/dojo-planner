@@ -13,7 +13,7 @@
 
 import type { IQProConfig } from '@/services/PaymentProviderConfigService';
 import { Buffer } from 'node:buffer';
-import { constants as cryptoConstants, verify as cryptoVerify } from 'node:crypto';
+import { createPublicKey, constants as cryptoConstants, verify as cryptoVerify } from 'node:crypto';
 import { Env } from './Env';
 import { logger } from './Logger';
 
@@ -637,13 +637,30 @@ type CachedKey = { pem: string | null; expiresAt: number };
 const webhookKeyCache = new Map<string, CachedKey>();
 const WEBHOOK_KEY_TTL_MS = 60 * 60 * 1000;
 
-/** Wrap a bare base64 key in PEM headers (64-char lines); pass PEM through. */
+/**
+ * A bare base64 key as SPKI PEM; an existing PEM passes through.
+ *
+ * ⚠️ IQPro's `webhookPublicKey` is a bare PKCS#1 `RSAPublicKey`
+ * (`MIIBigKCAYEA…`), NOT SPKI (`MIIBIjANBgkq…`). Wrapping it in
+ * `BEGIN PUBLIC KEY` fails to parse (ERR_OSSL_ASN1_WRONG_TAG), so every real
+ * webhook failed verification — found with the first sandbox delivery. Both
+ * DER encodings are tried and the key is re-exported as SPKI.
+ */
 export function toPublicKeyPem(key: string): string {
   const trimmed = key.trim();
   if (trimmed.includes('-----BEGIN')) {
     return trimmed;
   }
   const body = trimmed.replace(/\s+/g, '');
+  const der = Buffer.from(body, 'base64');
+  for (const type of ['spki', 'pkcs1'] as const) {
+    try {
+      return createPublicKey({ key: der, format: 'der', type }).export({ type: 'spki', format: 'pem' }).toString().trim();
+    } catch {
+      // Not this encoding — try the next.
+    }
+  }
+  // Unparseable: wrap it anyway so verification fails closed, not with a throw.
   const lines = body.match(/.{1,64}/g) ?? [];
   return `-----BEGIN PUBLIC KEY-----\n${lines.join('\n')}\n-----END PUBLIC KEY-----`;
 }
