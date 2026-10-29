@@ -140,7 +140,14 @@ export const update = os
     const context = await guardRole(ORG_ROLE.ACADEMY_OWNER);
 
     try {
-      const result = await updateMember({ ...input, status: 'active' }, context.orgId);
+      // Contact fields only. The status is NEVER set here: forcing 'active' let
+      // an ordinary edit reactivate a held / past-due / cancelled member without
+      // the membership lifecycle or the payment provider knowing. Status moves
+      // only through the lifecycle endpoints (hold / reactivate / cancel,
+      // remove / restore). Fields are picked explicitly so nothing beyond the
+      // contact details can reach the row, whatever the input carries.
+      const { id, email, firstName, lastName, phone } = input;
+      const result = await updateMember({ id, email, firstName, lastName, phone }, context.orgId);
 
       if (result.length === 0) {
         throw new ORPCError('Member not found', { status: 404 });

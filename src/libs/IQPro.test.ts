@@ -213,37 +213,62 @@ describe('iqproPost', () => {
     vi.resetModules();
   });
 
-  it('logs both request body and response body in full', async () => {
+  it('logs request and response bodies for diagnosis, with credentials and personal data redacted', async () => {
     const mod = await import('./IQPro');
     mod.resetOAuthTokenCache();
 
     mockOAuthOk();
     mockFetch.mockResolvedValueOnce(new Response(
-      JSON.stringify({ data: { customerId: 'cust_42' } }),
+      JSON.stringify({ data: { customerId: 'cust_42', email: 'm@example.com' } }),
       { status: 200 },
     ));
 
-    const requestBody = { name: 'Acme', referenceId: 'mem_1' };
+    const requestBody = {
+      referenceId: 'mem_1',
+      card: { token: '4264288H8vbk5555', maskedCard: '426428******5555' },
+      address: { email: 'm@example.com', state: 'CA' },
+    };
     const result = await mod.iqproPost(testConfig, '/api/gateway/test-gateway-id/customer', requestBody);
 
-    expect(result).toEqual({ data: { customerId: 'cust_42' } });
+    // The caller still gets the real response.
+    expect(result).toEqual({ data: { customerId: 'cust_42', email: 'm@example.com' } });
 
-    // Request body must be logged with the full JSON serialized
     const requestLog = mockLogger.info.mock.calls.find(c => c[0] === '[IQPro] POST request');
 
-    expect(requestLog?.[1]).toEqual({
-      path: '/api/gateway/test-gateway-id/customer',
-      body: JSON.stringify(requestBody, null, 2),
+    expect(requestLog?.[1].path).toBe('/api/gateway/test-gateway-id/customer');
+    expect(JSON.parse(requestLog?.[1].body)).toEqual({
+      referenceId: 'mem_1',
+      card: { token: '[redacted]', maskedCard: '••••5555' },
+      address: { email: '[redacted]', state: 'CA' },
     });
 
-    // Response body must also be logged in full
     const responseLog = mockLogger.info.mock.calls.find(c => c[0] === '[IQPro] POST response');
 
-    expect(responseLog?.[1]).toEqual({
-      path: '/api/gateway/test-gateway-id/customer',
-      status: 200,
-      response: JSON.stringify({ data: { customerId: 'cust_42' } }),
-    });
+    expect(responseLog?.[1].status).toBe(200);
+    expect(JSON.parse(responseLog?.[1].response)).toEqual({ data: { customerId: 'cust_42', email: '[redacted]' } });
+    expect(JSON.stringify(mockLogger.info.mock.calls)).not.toContain('4264288H8vbk5555');
+  });
+
+  it('redacts the raw body it embeds in a thrown error', async () => {
+    const mod = await import('./IQPro');
+    mod.resetOAuthTokenCache();
+
+    mockOAuthOk();
+    mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ statusDetails: ['bad'], token: 'tok-secret' }), { status: 400 }));
+
+    await expect(mod.iqproPost(testConfig, '/x', {})).rejects.toThrow(/\[redacted\]/);
+  });
+
+  it('never logs the ACH token returned by tokenization', async () => {
+    const mod = await import('./IQPro');
+    mod.resetOAuthTokenCache();
+
+    mockOAuthOk();
+    mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ data: { achId: 'ach-secret-token' } }), { status: 200 }));
+
+    await expect(mod.tokenizeAch(testConfig, { accountNumber: '000123456789', routingNumber: '021000021' })).resolves.toEqual({ achToken: 'ach-secret-token' });
+    expect(JSON.stringify([...mockLogger.info.mock.calls, ...mockLogger.error.mock.calls])).not.toContain('ach-secret-token');
+    expect(JSON.stringify(mockLogger.info.mock.calls)).not.toContain('000123456789');
   });
 
   it('logs the full error body on failure and throws with status', async () => {

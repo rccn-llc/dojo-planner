@@ -555,6 +555,67 @@ describe('SaasSubscriptionService', () => {
 
       expect(activated).toBe(false);
     });
+
+    it('cancels the new IQPro subscription when the first charge declines, so it never renews', async () => {
+      const { service, iqproPost } = await setupModule();
+      mockFindFirst().mockResolvedValue({ saasProviderCustomerId: 'existing-cust-001' });
+      iqproPost
+        .mockResolvedValueOnce({ data: { customerPaymentMethodId: 'iqpro-pm-dec' } })
+        .mockResolvedValueOnce({ data: { subscriptionId: 'iqpro-sub-dec' } })
+        .mockResolvedValueOnce({ data: { transaction: { status: 'declined', processorResponseText: 'Card declined' } } })
+        .mockResolvedValueOnce({}); // cancel
+
+      const result = await service.subscribe(testConfig, baseParams);
+
+      expect(result).toEqual({ success: false, error: 'The first charge failed: Card declined' });
+      expect(iqproPost).toHaveBeenLastCalledWith(testConfig, '/api/gateway/test-gateway-001/subscription/iqpro-sub-dec/cancel', {
+        cancel: { now: true, endOfBillingPeriod: false },
+      });
+    });
+
+    it('names the subscription to cancel by hand when the automatic cancel fails', async () => {
+      const { service, iqproPost } = await setupModule();
+      mockFindFirst().mockResolvedValue({ saasProviderCustomerId: 'existing-cust-001' });
+      iqproPost
+        .mockResolvedValueOnce({ data: { customerPaymentMethodId: 'iqpro-pm-dec' } })
+        .mockResolvedValueOnce({ data: { subscriptionId: 'iqpro-sub-stuck' } })
+        .mockResolvedValueOnce({ data: { transaction: { status: 'declined' } } })
+        .mockRejectedValueOnce(new Error('IQPro 500'));
+
+      const result = await service.subscribe(testConfig, baseParams);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('iqpro-sub-stuck could not be cancelled automatically');
+    });
+
+    it('cancels the subscription when the first-charge call itself fails', async () => {
+      const { service, iqproPost } = await setupModule();
+      mockFindFirst().mockResolvedValue({ saasProviderCustomerId: 'existing-cust-001' });
+      iqproPost
+        .mockResolvedValueOnce({ data: { customerPaymentMethodId: 'iqpro-pm' } })
+        .mockResolvedValueOnce({ data: { subscriptionId: 'iqpro-sub-net' } })
+        .mockRejectedValueOnce(new Error('network down'))
+        .mockResolvedValueOnce({}); // cancel
+
+      const result = await service.subscribe(testConfig, baseParams);
+
+      expect(result.success).toBe(false);
+      expect(iqproPost).toHaveBeenLastCalledWith(testConfig, '/api/gateway/test-gateway-001/subscription/iqpro-sub-net/cancel', expect.anything());
+    });
+
+    it('refuses a raw card number in production, before calling IQPro', async () => {
+      vi.stubEnv('NODE_ENV', 'production');
+      try {
+        const { service, iqproPost } = await setupModule();
+
+        const result = await service.subscribe(testConfig, { ...baseParams, cardToken: undefined, cardNumber: '4111111111111111' });
+
+        expect(result).toEqual({ success: false, error: 'Card details must be entered in the secure card form.' });
+        expect(iqproPost).not.toHaveBeenCalled();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
   });
 
   // ===== changePlan =====

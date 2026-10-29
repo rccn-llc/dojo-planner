@@ -919,6 +919,25 @@ describe('Member Router', () => {
     });
   });
 
+  describe('update (contact edit)', () => {
+    it('never changes the member\'s status — an edit must not reactivate a held / past-due / cancelled member', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { updateMember } = await import('@/services/MembersService');
+      vi.mocked(guardRole).mockResolvedValue(mockAcademyOwnerContext);
+      vi.mocked(updateMember).mockResolvedValue([{ id: 'member-1' }] as any);
+
+      const { update } = await import('./Member');
+      // A status smuggled into the request is stripped by EditMemberValidation.
+      await callHandler(update, { id: 'member-1', email: 'new@example.com', firstName: 'Pat', lastName: 'Due', phone: null, status: 'active' } as any);
+
+      expect(updateMember).toHaveBeenCalledWith(
+        { id: 'member-1', email: 'new@example.com', firstName: 'Pat', lastName: 'Due', phone: null },
+        mockAcademyOwnerContext.orgId,
+      );
+      expect(vi.mocked(updateMember).mock.calls[0]![0]).not.toHaveProperty('status');
+    });
+  });
+
   describe('updateMemberType', () => {
     it('should update member type and audit success', async () => {
       const { guardRole } = await import('./AuthGuards');

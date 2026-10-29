@@ -182,6 +182,42 @@ describe('syncMemberPaymentMethod', () => {
     expect(JSON.stringify(auditMock.mock.calls)).not.toContain('pm_new');
   });
 
+  it('two concurrent syncs for the same new card leave exactly ONE active card', async () => {
+    const m = await makeMember();
+    provider.getSubscriptionPaymentMethod.mockResolvedValue({ customerId: 'c', paymentMethodId: 'pm_new', paymentMethodName: 'card', last4: '4242', expirationDate: '03/29' });
+
+    const results = await Promise.all([
+      syncMemberPaymentMethod(m.memberId, ORG, IQPRO, { force: true }),
+      syncMemberPaymentMethod(m.memberId, ORG, IQPRO, { force: true }),
+    ]);
+
+    const active = (await cards(m.memberId)).filter(r => r.status === 'active');
+
+    expect(active).toHaveLength(1);
+    expect(active[0]!.providerPaymentMethodId).toBe('pm_new');
+    // One of them recorded the change; the other found it already recorded.
+    expect(results.filter(r => r.changed)).toHaveLength(1);
+    expect(results.find(r => !r.changed)!.paymentMethod).toMatchObject({ last4: '4242' });
+    expect(auditMock).toHaveBeenCalledTimes(1);
+
+    const notes = await db.select().from(noteSchema).where(eq(noteSchema.memberId, m.memberId));
+
+    expect(notes).toHaveLength(1);
+  });
+
+  it('retires every active card when replacing, repairing a member left with two', async () => {
+    const m = await makeMember();
+    await db.insert(paymentMethodSchema).values({ id: randomUUID(), memberId: m.memberId, type: 'card', providerPaymentMethodId: 'pm_stray', last4: '9999', isDefault: false });
+    provider.getSubscriptionPaymentMethod.mockResolvedValue({ customerId: 'c', paymentMethodId: 'pm_new', paymentMethodName: 'card', last4: '4242', expirationDate: '03/29' });
+
+    await syncMemberPaymentMethod(m.memberId, ORG, IQPRO, { force: true });
+
+    const rows = await cards(m.memberId);
+
+    expect(rows.filter(r => r.status === 'active').map(r => r.providerPaymentMethodId)).toEqual(['pm_new']);
+    expect(rows.filter(r => r.status === 'replaced').map(r => r.providerPaymentMethodId).sort()).toEqual(['pm_old', 'pm_stray']);
+  });
+
   it('updates in place when the provider id is the same but the expiry changed', async () => {
     const m = await makeMember();
     provider.getSubscriptionPaymentMethod.mockResolvedValue({ customerId: 'c', paymentMethodId: 'pm_old', paymentMethodName: 'card', last4: '1111', expirationDate: '09/30' });

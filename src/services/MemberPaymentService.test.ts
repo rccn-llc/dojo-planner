@@ -558,6 +558,32 @@ describe('processMemberPayment', () => {
     expect(membershipSet).toBeUndefined();
   });
 
+  it('autopay, taxable: the subscription carries the tax RATE, not the first sale\'s tax amount', async () => {
+    // A flat amount priced on the initial sale is wrong for every renewal
+    // (and providers read only the percentage on a subscription).
+    const { computeFeeBreakdown } = await import('@/libs/IQPro');
+    vi.mocked(computeFeeBreakdown).mockResolvedValueOnce({ ...baseFees, taxAmount: 8.38, taxPct: 8.375, amount: 112.13 });
+
+    const { processMemberPayment } = await import('./MemberPaymentService');
+    await processMemberPayment(testConfig, {
+      ...baseParams,
+      billingType: 'autopay',
+      membershipPlanFrequency: 'monthly',
+      memberMembershipId: 'mm_1',
+      isTaxable: true,
+    });
+
+    expect(mockProvider.createSubscription).toHaveBeenCalledWith(
+      testConfig,
+      expect.objectContaining({
+        paymentAdjustments: [
+          { type: 'Tax', percentage: 8.375, flatAmount: null },
+          { type: 'ServiceFee', percentage: 3.75, flatAmount: null },
+        ],
+      }),
+    );
+  });
+
   it('autopay: creates subscription THEN runs immediate Sale', async () => {
     const { computeFeeBreakdown } = await import('@/libs/IQPro');
     vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(baseFees);
@@ -619,7 +645,9 @@ describe('processMemberPayment', () => {
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toMatch(/Subscription created but initial charge failed/);
+    expect(result.error).toBe('The first charge failed.');
+    // The live subscription is cancelled, so it neither renews nor bills later.
+    expect(mockProvider.cancelSubscription).toHaveBeenCalledWith(testConfig, expect.any(String), { endOfBillingPeriod: false });
 
     const wroteAutopay = dbState.setCalls.some(s => s.billingType === 'autopay' || s.providerSubscriptionId);
 
@@ -634,6 +662,29 @@ describe('processMemberPayment', () => {
     const txInsert = txInsertArray?.find(r => r.providerTransactionId === 'tx_decline');
 
     expect(txInsert?.status).toBe('declined');
+  });
+
+  it('autopay: names the subscription to cancel by hand when the automatic cancel fails', async () => {
+    const { computeFeeBreakdown } = await import('@/libs/IQPro');
+    vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(baseFees);
+    mockProvider.processPayment.mockResolvedValue({ success: false, status: 'declined', error: 'Card declined' });
+    mockProvider.cancelSubscription.mockResolvedValueOnce({ success: false, error: 'IQPro 500' });
+
+    const { processMemberPayment } = await import('./MemberPaymentService');
+    const result = await processMemberPayment(testConfig, { ...baseParams, billingType: 'autopay', membershipPlanFrequency: 'monthly', memberMembershipId: 'mm_1' });
+
+    expect(result.error).toMatch(/^Card declined The subscription .+ could not be cancelled automatically/);
+  });
+
+  it('autopay: leaves the subscription alone while the first charge is still processing', async () => {
+    const { computeFeeBreakdown } = await import('@/libs/IQPro');
+    vi.mocked(computeFeeBreakdown).mockResolvedValueOnce(baseFees);
+    mockProvider.processPayment.mockResolvedValue({ success: false, status: 'processing' });
+
+    const { processMemberPayment } = await import('./MemberPaymentService');
+    await processMemberPayment(testConfig, { ...baseParams, billingType: 'autopay', membershipPlanFrequency: 'monthly', memberMembershipId: 'mm_1' });
+
+    expect(mockProvider.cancelSubscription).not.toHaveBeenCalled();
   });
 
   it('falls back to creditCardBin when no card token is provided', async () => {

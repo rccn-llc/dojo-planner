@@ -547,7 +547,7 @@ npm run stripe:listen    # Forward webhooks locally
 
 ### IQPro (Member Payments)
 
-**Transport:** Direct REST API via `fetch` — **no SDK dependency at runtime**. Every IQPro call logs the full request body and full response body (or error body) via the structured `logger` so vague IQPro 4xx errors can be diagnosed from Better Stack without re-running.
+**Transport:** Direct REST API via `fetch` — **no SDK dependency at runtime**. Every IQPro call logs its request and response body (or error body) via the structured `logger` so vague IQPro 4xx errors can be diagnosed from Better Stack without re-running. ⚠️ Bodies are **redacted first** (`src/libs/LogRedaction.ts` — `redactForLog` / `redactBodyForLog`): card/ACH tokens, account and card numbers, CVVs, secrets, names, emails, phones and street addresses are replaced with `[redacted]`, masked card numbers keep only the last 4, and a non-JSON body is truncated. Ids, statuses and amounts stay. The same redaction applies to the body text embedded in a thrown IQPro/Square error. Add any new sensitive field name to the `REMOVE` set.
 
 **Purpose:** Processes member-level payments (one-time charges and recurring autopay subscriptions) and organization-level SaaS subscriptions. Stripe remains as a legacy fallback for org-level billing only.
 
@@ -661,6 +661,7 @@ The IQPro subscription API has strict requirements validated against the sandbox
 - `cardProcessorId` / `achProcessorId` required on payment method — fetched via `getGatewayProcessors()` from gateway config
 - `trialLengthInDays` (required, min 0) and `invoiceLengthInDays` (required, min 1)
 - Line items: `unitPrice` in dollars (not cents), `discount` field is required (use `0`)
+- ⚠️ **InsertSubscription has NO `paymentAdjustments` field** — IQPro drops it silently, so renewals used to charge the bare plan price with **no service fee**. The fee is now a separate untaxed `"Service fee"` line item (`amount × SERVICE_FEE_PCT`), and every line sets `localTaxPercent` / `nationalTaxPercent` explicitly: a line without them gets the gateway's DEFAULT tax rate (10% in the sandbox), not zero. Sandbox-verified: $100 + fee line → 103.75; at 8.375% tax on the membership line → 112.13, the same total as the initial sale. Subscriptions created before this change still renew without the fee. `recurringFeePercents` (`PaymentProviderService.ts`) reads the percentages for both providers; `buildPaymentAdjustments` now passes Tax as a **percentage** (a flat amount priced on the first sale is wrong for every renewal).
 
 **IQPro webhooks (`/webhook/iqpro`)** — per the attached "iQ Pro+ Webhook API Guide" and "Subscription Decline Webhooks":
 - Payload `{ resourceType, subType, resource, traceId, actionDateTime, hashAlg, signatureAlg, signature }`. The signature is in the BODY and covers ONLY `resource`: **RSA-SHA256, PKCS#1 v1.5**, the gateway's public key. ⚠️ This replaced an HMAC/`x-iqpro-signature` scheme backed by a package that was never installed — every delivery used to fail before reaching a handler. `IQPRO_WEBHOOK_SECRET` is gone.
@@ -705,7 +706,7 @@ Organization-level SaaS subscriptions use IQPro (same SDK as member payments). A
 
 ### Square (Member Payments — alternative to IQPro)
 
-**Transport:** direct REST via `fetch` — **no SDK**, mirroring the IQPro decision. Every request and response body is logged through the structured logger; that logging is what made IQPro's vague 4xx errors diagnosable, and Square's error envelope is no friendlier.
+**Transport:** direct REST via `fetch` — **no SDK**, mirroring the IQPro decision. Every request and response body is logged (redacted, via `LogRedaction.ts` — see IQPro above) through the structured logger; that logging is what made IQPro's vague 4xx errors diagnosable, and Square's error envelope is no friendlier.
 
 ⚠️ **Square governs MEMBER payments only.** An organization choosing Square changes how *its members* are charged. It never changes how that organization pays *us*: the SaaS subscription is always the platform's own IQPro account via `resolvePlatformIQProConfig`, which is typed against `IQProConfig` and therefore **cannot receive a Square config even by accident**. That separation is enforced by the type system, not convention.
 
@@ -723,6 +724,7 @@ Organization-level SaaS subscriptions use IQPro (same SDK as member payments). A
 
 1. **`plan_variation_id` IS required**, though the API reference marks it optional. Omitting it returns `` `plan_variation_id` cannot be empty ``, and ad-hoc `phases` are rejected outright (`cadence` belongs to the *catalog* variation, not the subscription). Designing from the docs alone produces a subscription path that cannot work.
 2. **But ONE variation serves every member.** `price_override_money` and `tax_percentage` are set **per subscription**, not per plan — a $50 catalog variation happily produced a $73.50 subscription. So the catalog holds **four objects per org (one per cadence)**, not one per membership plan, and there is no price-sync problem. Both are mutable after creation, so a mid-term tax-rate change *can* be pushed to existing members.
+   ⚠️ A subscription has **no service-charge field**, so the service fee is folded into `price_override_money`: `squareRecurringPrice` = `base × (1 + fee / (1 + tax))`, because Square taxes the whole override while the initial sale taxes the base only. Exact with no tax (memberships); with tax a renewal can land one cent off. Before this, Square renewals charged no service fee.
 3. ⚠️ **`card_id` must ALWAYS be sent.** Omitting it does not fail — Square silently switches to emailing the member an invoice, so autopay would stop collecting with no error anywhere. `createSubscription` refuses rather than creating an invoice-billed subscription, and there is an explicit test for it.
 
 4. ⚠️ **`start_date` is the FIRST BILLING date, so it must be one period AFTER the app's own initial charge.** The app charges the first period itself at signup, then creates the subscription. With `start_date` = today the sandbox **deactivated the subscription on the spot** (`DEACTIVATE_SUBSCRIPTION`, no invoice, no payment — it would never renew); a future start is accepted as `PENDING`. Had Square billed instead, the member would have paid twice. `firstSquareBillingDate(startDate, frequency)` (and the kiosk's `firstSquareBillingDate(startDate, cadence)`) sets it one cadence later, clamping month ends — matching IQPro, whose first scheduled run also falls in the next period.
@@ -786,7 +788,7 @@ total_money             11213
 - **`total_tax_money` does NOT include the service charge** (838, not 869). A service charge comes back `taxable: false` by default and is only taxed if `applied_taxes` names the tax explicitly — the documented footgun, confirmed live.
 - **Square rounds half-up** (837.5 → 838), matching `roundCents`. ⚠️ `toMinorUnits(1.005)` is **100**, not 101, because the float is stored slightly low — and `roundCents` does the same. That agreement is the point: on a two-provider money path, IQPro and Square never disagreeing about an amount matters more than either being arithmetically ideal.
 
-⚠️ **`processPayment` is NON-ATOMIC**, unlike IQPro's single Sale call: it creates an Order then a Payment, so a failure between the two leaves an unpaid order. Square orders carry no money on their own, so an orphan is inert — but it is a reconciliation surface IQPro never had.
+**`processPayment` is a single call:** `POST /v2/payments` for the total the caller priced with `computeFees` (which uses `POST /v2/orders/calculate` — a quote that creates nothing). No Order is created, so there is no unpaid-order reconciliation surface. (An earlier version of this doc described an Order-then-Payment flow the code never had.)
 
 **Idempotency:** Square requires an `idempotency_key` on every mutating call and `ProcessPaymentParams` has no field for one, so it is generated per attempt. Deliberately not derived from the params: the orchestrator does not retry, and a key derived from amount+member would wrongly collapse two *deliberate* identical charges (a second event registration, say) into one.
 

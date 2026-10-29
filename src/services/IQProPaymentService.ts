@@ -51,6 +51,7 @@ import { IQPRO_BILLING_PERIOD, IQPRO_SUBSCRIPTION_STATUS, IQPRO_UNIT } from '@/l
 import { logger } from '@/libs/Logger';
 import { PAYMENT_PROVIDER } from '@/types/PaymentProvider';
 import { normalizeExpiration } from '@/utils/CardExpiration';
+import { recurringFeePercents } from './PaymentProviderService';
 
 // IQPro transaction statuses (lowercased) that decide how a charge is reversed.
 // Per the API reference, `/void` accepts only Pending / PendingSettlement and
@@ -543,6 +544,7 @@ export class IQProPaymentProvider implements IPaymentProvider {
     });
 
     try {
+      const fees = recurringFeePercents(params.paymentAdjustments);
       const now = params.startDate.toISOString();
       const dayOfMonth = params.startDate.getDate();
       const startMonth = params.startDate.getMonth() + 1; // 1-12
@@ -660,11 +662,30 @@ export class IQProPaymentProvider implements IPaymentProvider {
             unitPrice: params.amount, // Dollars, not cents
             discount: 0,
             unitOfMeasureId,
+            // Explicit: a line with no tax fields gets the gateway's DEFAULT
+            // rate (10% in the sandbox), not zero.
+            localTaxPercent: fees.taxPct,
+            nationalTaxPercent: 0,
           },
+          // InsertSubscription has NO paymentAdjustments field — IQPro drops it
+          // silently, so a renewal used to charge the bare price with no
+          // service fee. The fee is its own untaxed line instead
+          // (sandbox-verified: $100 + 3.75% → 103.75; at 8.375% tax → 112.13,
+          // the same total the initial sale charges).
+          ...(fees.serviceFeePct > 0
+            ? [{
+                name: 'Service fee',
+                description: `Service fee (${fees.serviceFeePct}%)`,
+                quantity: 1,
+                // amount × pct / 100, rounded to the cent (half-up, as roundCents)
+                unitPrice: Math.round(params.amount * fees.serviceFeePct) / 100,
+                discount: 0,
+                unitOfMeasureId,
+                localTaxPercent: 0,
+                nationalTaxPercent: 0,
+              }]
+            : []),
         ],
-        ...(params.paymentAdjustments && params.paymentAdjustments.length > 0 && {
-          paymentAdjustments: params.paymentAdjustments,
-        }),
       };
 
       const res = await iqproPost<{ data?: Record<string, unknown> }>(

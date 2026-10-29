@@ -16,6 +16,7 @@ import { Buffer } from 'node:buffer';
 import { createPublicKey, constants as cryptoConstants, verify as cryptoVerify } from 'node:crypto';
 import { Env } from './Env';
 import { logger } from './Logger';
+import { redactBodyForLog, redactForLog } from './LogRedaction';
 
 export type { IQProConfig };
 
@@ -128,7 +129,7 @@ export async function iqproPost<T = Record<string, unknown>>(
 
   logger.info('[IQPro] POST request', {
     path,
-    body: JSON.stringify(body, null, 2),
+    body: JSON.stringify(redactForLog(body), null, 2),
   });
 
   const res = await fetch(`${config.baseUrl}${path}`, {
@@ -146,15 +147,15 @@ export async function iqproPost<T = Record<string, unknown>>(
     logger.error('[IQPro] POST failed', {
       path,
       status: res.status,
-      response: text || '(empty body)',
+      response: redactBodyForLog(text),
     });
-    throw new Error(`IQPro API ${path} failed: ${res.status} ${text}`);
+    throw new Error(`IQPro API ${path} failed: ${res.status} ${redactBodyForLog(text)}`);
   }
 
   logger.info('[IQPro] POST response', {
     path,
     status: res.status,
-    response: text || '(empty body)',
+    response: redactBodyForLog(text),
   });
 
   return text ? (JSON.parse(text) as T) : ({} as T);
@@ -169,7 +170,7 @@ export async function iqproPut<T = Record<string, unknown>>(
 
   logger.info('[IQPro] PUT request', {
     path,
-    body: JSON.stringify(body, null, 2),
+    body: JSON.stringify(redactForLog(body), null, 2),
   });
 
   const res = await fetch(`${config.baseUrl}${path}`, {
@@ -187,15 +188,15 @@ export async function iqproPut<T = Record<string, unknown>>(
     logger.error('[IQPro] PUT failed', {
       path,
       status: res.status,
-      response: text || '(empty body)',
+      response: redactBodyForLog(text),
     });
-    throw new Error(`IQPro API PUT ${path} failed: ${res.status} ${text}`);
+    throw new Error(`IQPro API PUT ${path} failed: ${res.status} ${redactBodyForLog(text)}`);
   }
 
   logger.info('[IQPro] PUT response', {
     path,
     status: res.status,
-    response: text || '(empty body)',
+    response: redactBodyForLog(text),
   });
 
   return text ? (JSON.parse(text) as T) : ({} as T);
@@ -219,7 +220,7 @@ export async function iqproGet<T = Record<string, unknown>>(
     logger.error('[IQPro] GET failed', {
       path,
       status: res.status,
-      response: text || '(empty body)',
+      response: redactBodyForLog(text),
     });
     throw new Error(`IQPro API GET ${path} failed: ${res.status}`);
   }
@@ -227,7 +228,7 @@ export async function iqproGet<T = Record<string, unknown>>(
   logger.info('[IQPro] GET response', {
     path,
     status: res.status,
-    response: text || '(empty body)',
+    response: redactBodyForLog(text),
   });
 
   return text ? (JSON.parse(text) as T) : ({} as T);
@@ -253,7 +254,7 @@ export async function getTokenizationConfig(
     const errorBody = await res.text().catch(() => '');
     logger.error('[IQPro] Failed to fetch tokenization config', {
       status: res.status,
-      response: errorBody || '(empty body)',
+      response: redactBodyForLog(errorBody),
     });
     throw new Error(`Tokenization config request failed: ${res.status}`);
   }
@@ -334,14 +335,14 @@ export async function tokenizeAch(
   if (!res.ok) {
     logger.error('[IQPro] ACH tokenization failed', {
       status: res.status,
-      response: text || '(empty body)',
+      response: redactBodyForLog(text),
     });
     throw new Error(`ACH tokenization failed: ${res.status}`);
   }
 
   logger.info('[IQPro] ACH tokenize response', {
     status: res.status,
-    response: text || '(empty body)',
+    response: redactBodyForLog(text),
   });
 
   const json = text ? JSON.parse(text) : {};
@@ -386,14 +387,14 @@ export async function getGatewayProcessors(config: IQProConfig): Promise<Gateway
   if (!res.ok) {
     logger.error('[IQPro] Failed to fetch gateway config', {
       status: res.status,
-      response: text || '(empty body)',
+      response: redactBodyForLog(text),
     });
     throw new Error(`Gateway config request failed: ${res.status}`);
   }
 
   logger.info('[IQPro] Gateway config response', {
     status: res.status,
-    response: text || '(empty body)',
+    response: redactBodyForLog(text),
   });
 
   const json = text ? JSON.parse(text) : {};

@@ -348,6 +348,21 @@ export type SubscriptionPaymentMethod = {
 
 export type LifecycleActionResult = { success: boolean; error?: string };
 
+/**
+ * The service-fee and tax PERCENTAGES a recurring subscription must carry so
+ * every renewal charges what the initial sale did. Read from the subscription's
+ * `paymentAdjustments` (ServiceFee / Tax, percentage form).
+ */
+export function recurringFeePercents(
+  adjustments: CreateSubscriptionParams['paymentAdjustments'],
+): { serviceFeePct: number; taxPct: number } {
+  const pct = (type: string) => {
+    const value = adjustments?.find(a => a.type === type)?.percentage;
+    return typeof value === 'number' && value > 0 ? value : 0;
+  };
+  return { serviceFeePct: pct('ServiceFee'), taxPct: pct('Tax') };
+}
+
 /** A saved payment method on the provider's CUSTOMER record (not a subscription). */
 export type CustomerPaymentMethodSummary = {
   paymentMethodId: string;

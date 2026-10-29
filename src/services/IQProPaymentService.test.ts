@@ -591,7 +591,71 @@ describe('IQProPaymentProvider', () => {
       expect(p.addresses).toHaveLength(2);
       expect(p.addresses[0].isBilling).toBe(true);
       expect(p.addresses[1].isRemittance).toBe(true);
-      expect(p.paymentAdjustments).toEqual([{ type: 'ServiceFee', percentage: 3.75, flatAmount: null }]);
+      // InsertSubscription has no paymentAdjustments field — IQPro ignored it,
+      // so renewals charged no service fee. The fee is its own line now.
+      expect(p).not.toHaveProperty('paymentAdjustments');
+      expect(p.lineItems).toHaveLength(2);
+      expect(p.lineItems[0]).toEqual(expect.objectContaining({ unitPrice: 99, localTaxPercent: 0, nationalTaxPercent: 0 }));
+      expect(p.lineItems[1]).toEqual(expect.objectContaining({
+        name: 'Service fee',
+        unitPrice: 3.71, // 99 × 3.75% = 3.7125
+        localTaxPercent: 0,
+        nationalTaxPercent: 0,
+        unitOfMeasureId: 120,
+      }));
+    });
+
+    it('taxes only the membership line, so a renewal totals what the initial sale did', async () => {
+      // Sandbox-verified: $100 at 8.375% tax + a 3.75% fee line → 112.13.
+      const { provider, iqproPost } = await loadProvider();
+      iqproPost.mockResolvedValueOnce({ data: { subscriptionId: 'sub_tax' } });
+
+      await provider.createSubscription(testConfig, {
+        organizationId: 'test-org-456',
+        customerId: 'cust_123',
+        paymentMethodId: 'pm_card_1',
+        amount: 100,
+        frequency: 'monthly',
+        startDate: new Date('2026-04-15T12:00:00Z'),
+        description: 'Adult BJJ',
+        firstName: 'Jane',
+        lastName: 'Doe',
+        email: 'jane@example.com',
+        paymentAdjustments: [
+          { type: 'Tax', percentage: 8.375, flatAmount: null },
+          { type: 'ServiceFee', percentage: 3.75, flatAmount: null },
+        ],
+      });
+
+      const p = iqproPost.mock.calls[0]![2] as Record<string, any>;
+
+      expect(p.lineItems[0]).toEqual(expect.objectContaining({ unitPrice: 100, localTaxPercent: 8.375 }));
+      expect(p.lineItems[1]).toEqual(expect.objectContaining({ unitPrice: 3.75, localTaxPercent: 0 }));
+    });
+
+    it('adds no fee line when there is no service fee, and sets tax to zero explicitly', async () => {
+      // A line with no tax fields gets the gateway's default rate, not zero.
+      const { provider, iqproPost } = await loadProvider();
+      iqproPost.mockResolvedValueOnce({ data: { subscriptionId: 'sub_nofee' } });
+
+      await provider.createSubscription(testConfig, {
+        organizationId: 'test-org-456',
+        customerId: 'cust_123',
+        paymentMethodId: 'pm_card_1',
+        amount: 40,
+        frequency: 'monthly',
+        startDate: new Date('2026-04-15T12:00:00Z'),
+        description: 'Hold fee — Adult BJJ',
+        prefix: 'HOLD',
+        firstName: 'Jane',
+        lastName: 'Doe',
+        email: 'jane@example.com',
+      });
+
+      const p = iqproPost.mock.calls[0]![2] as Record<string, any>;
+
+      expect(p.lineItems).toHaveLength(1);
+      expect(p.lineItems[0]).toEqual(expect.objectContaining({ unitPrice: 40, localTaxPercent: 0, nationalTaxPercent: 0 }));
     });
 
     it('uses IQPro\'s native Six Months period (7) for semi-annual, with both months and the Half year unit', async () => {

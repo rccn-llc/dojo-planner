@@ -274,13 +274,35 @@ export async function syncMemberPaymentMethod(
   }
 
   // ── A different card: replace ──
+  // Serialised per member: two syncs (page load + modal + webhook follow-up)
+  // can both read the same active card above. Lock the member row, then decide
+  // from the state AFTER the lock — otherwise each retires the old card and
+  // inserts its own active default, leaving several active cards and making
+  // every "charge the saved card" lookup nondeterministic.
   const newId = randomUUID();
-  await db.transaction(async (tx) => {
-    if (local) {
+  const outcome = await db.transaction(async (tx) => {
+    await tx
+      .select({ id: memberSchema.id })
+      .from(memberSchema)
+      .where(eq(memberSchema.id, memberId))
+      .for('update');
+
+    const active = await tx
+      .select({ id: paymentMethodSchema.id, providerPaymentMethodId: paymentMethodSchema.providerPaymentMethodId })
+      .from(paymentMethodSchema)
+      .where(and(eq(paymentMethodSchema.memberId, memberId), eq(paymentMethodSchema.status, 'active')));
+
+    // A concurrent sync already recorded this card.
+    if (active.some(row => row.providerPaymentMethodId === remote.paymentMethodId)) {
+      return 'already_recorded' as const;
+    }
+
+    // Retire EVERY active card, not just the one read before the lock.
+    if (active.length > 0) {
       await tx
         .update(paymentMethodSchema)
         .set({ status: 'replaced', isDefault: false, updatedAt: changedAt })
-        .where(eq(paymentMethodSchema.id, local.id));
+        .where(and(eq(paymentMethodSchema.memberId, memberId), eq(paymentMethodSchema.status, 'active')));
     }
     await tx.insert(paymentMethodSchema).values({
       id: newId,
@@ -293,7 +315,21 @@ export async function syncMemberPaymentMethod(
       updatedAt: changedAt,
       lastSyncedAt: now,
     });
+    return 'replaced' as const;
   });
+
+  if (outcome === 'already_recorded') {
+    const [current] = await db
+      .select(SELECT_PM)
+      .from(paymentMethodSchema)
+      .where(and(
+        eq(paymentMethodSchema.memberId, memberId),
+        eq(paymentMethodSchema.status, 'active'),
+        eq(paymentMethodSchema.providerPaymentMethodId, remote.paymentMethodId),
+      ))
+      .limit(1);
+    return { changed: false, ...(current ? { paymentMethod: toSynced(current) } : {}) };
+  }
 
   const next = toSynced({ id: newId, type: remoteFields.type, last4: remoteFields.last4, cardBrand: remoteFields.cardBrand, expirationDate: remoteFields.expirationDate, updatedSource: 'provider_sync', updatedAt: changedAt });
   await recordChange({ memberId, organizationId, config, actor: opts.actor, previous: local ?? null, next });
