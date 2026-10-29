@@ -35,6 +35,7 @@ import type {
   CreatePaymentMethodParams,
   CreatePaymentMethodResult,
   CreateSubscriptionParams,
+  CustomerPaymentMethodSummary,
   FeeQuote,
   IPaymentProvider,
   LifecycleActionResult,
@@ -54,6 +55,7 @@ import { fromMinorUnits, SquareApiError, squareGet, squarePost, toMinorUnits } f
 import { squarePlanVariationSchema } from '@/models/Schema';
 import { PAYMENT_PROVIDER } from '@/types/PaymentProvider';
 import { formatExpiration } from '@/utils/CardExpiration';
+import { recurringFeePercents } from './PaymentProviderService';
 
 /**
  * Narrow the union at the boundary, mirroring `requireIQPro`.
@@ -167,19 +169,31 @@ export function firstSquareBillingDate(periodStart: Date, frequency: Subscriptio
  * mutable after creation, so a later tax-rate change can be pushed to existing
  * members with a `PUT`.
  *
- * The service fee is deliberately NOT carried onto the subscription: Square
- * models it as an order-level service charge, and there is no per-subscription
- * equivalent. B7's webhook path is where a recurring cycle's fees are recorded.
+ * The service fee is folded into the price instead — see
+ * `squareRecurringPrice`.
  */
-function squareTaxPercentage(
-  adjustments: CreateSubscriptionParams['paymentAdjustments'],
-): { tax_percentage?: string } {
-  const tax = adjustments?.find(a => a.type === 'Tax');
-  const pct = tax?.percentage;
-  if (pct === null || pct === undefined || pct <= 0) {
-    return {};
+function squareTaxPercentage(taxPct: number): { tax_percentage?: string } {
+  return taxPct > 0 ? { tax_percentage: String(taxPct) } : {};
+}
+
+/**
+ * The per-cycle price for a Square subscription, service fee included.
+ *
+ * A subscription has only `price_override_money` and `tax_percentage` — there
+ * is no service-charge field — so a fee left off the price is simply never
+ * collected on a renewal. The initial sale charges
+ * `base × (1 + tax) + base × fee` (tax on the base only, see `computeFees`);
+ * Square taxes the WHOLE override, so the override that reproduces that total
+ * is `base × (1 + fee / (1 + tax))`. With no tax that is just `base × (1 + fee)`
+ * and exact; with tax the cent rounding can leave a renewal one cent off the
+ * initial sale, since no whole-cent override always hits it (memberships are
+ * non-taxable, so in practice this is the exact case).
+ */
+export function squareRecurringPrice(baseAmount: number, serviceFeePct: number, taxPct: number): number {
+  if (serviceFeePct <= 0) {
+    return baseAmount;
   }
-  return { tax_percentage: String(pct) };
+  return fromMinorUnits(toMinorUnits(baseAmount * (1 + (serviceFeePct / 100) / (1 + taxPct / 100))));
 }
 
 /**
@@ -475,13 +489,10 @@ export class SquarePaymentProvider implements IPaymentProvider {
   }
 
   /**
-   * One-time charge.
-   *
-   * ⚠️ Non-atomic, unlike IQPro's single Sale call: this creates an Order and
-   * then a Payment against it, so a failure between the two leaves an order
-   * that exists but was never paid. The order id is logged before the charge
-   * so an orphan can be reconciled; Square orders carry no money on their own,
-   * so an unpaid one is inert rather than harmful.
+   * One-time charge: a single `POST /v2/payments` for the total the caller
+   * already priced (`computeFees` → `/v2/orders/calculate`, which only quotes
+   * and creates nothing). No Order is created here, so there is no orphan to
+   * reconcile — the payment either exists or it does not.
    */
   async processPayment(config: PaymentProviderConfig, params: ProcessPaymentParams): Promise<PaymentResult> {
     const square = requireSquare(config);
@@ -576,6 +587,7 @@ export class SquarePaymentProvider implements IPaymentProvider {
 
     try {
       const planVariationId = await ensurePlanVariation(square, params.organizationId, cadence);
+      const fees = recurringFeePercents(params.paymentAdjustments);
 
       const body = {
         idempotency_key: idempotencyKey(),
@@ -588,8 +600,12 @@ export class SquarePaymentProvider implements IPaymentProvider {
         start_date: firstSquareBillingDate(params.startDate, params.frequency),
         // Per-subscription override, which is what lets one catalog variation
         // serve every member on this cadence.
-        price_override_money: { amount: toMinorUnits(params.amount), currency: 'USD' },
-        ...(squareTaxPercentage(params.paymentAdjustments)),
+        // Service fee included — see squareRecurringPrice.
+        price_override_money: {
+          amount: toMinorUnits(squareRecurringPrice(params.amount, fees.serviceFeePct, fees.taxPct)),
+          currency: 'USD',
+        },
+        ...(squareTaxPercentage(fees.taxPct)),
       };
 
       const res = await squarePost<{ subscription?: { id?: string } }>(square, '/v2/subscriptions', body);
@@ -873,6 +889,30 @@ export class SquarePaymentProvider implements IPaymentProvider {
         error: error instanceof Error ? error.message : 'Square invoice cancel failed.',
       };
     }
+  }
+
+  // Card-update requests are IQPro-only: Square sends card.* webhooks, and its
+  // retry charges whatever card is on file. Typed refusals, never throws.
+  async listCustomerPaymentMethods(
+    _config: PaymentProviderConfig,
+    _providerCustomerId: string,
+  ): Promise<CustomerPaymentMethodSummary[] | null> {
+    return null;
+  }
+
+  async sendPaymentMethodUpdateLink(
+    _config: PaymentProviderConfig,
+    _params: { providerCustomerId: string; email: string },
+  ): Promise<LifecycleActionResult> {
+    return { success: false, error: 'Card-update links are not used with Square: it reports card changes itself.' };
+  }
+
+  async setSubscriptionPaymentMethod(
+    _config: PaymentProviderConfig,
+    _subscriptionId: string,
+    _paymentMethodId: string,
+  ): Promise<LifecycleActionResult> {
+    return { success: false, error: 'Not used with Square: its subscriptions charge the card on file.' };
   }
 
   /**

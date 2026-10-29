@@ -16,7 +16,9 @@ export const badgeVariants = cva(
         warning:
           'border-yellow-600 bg-yellow-100 text-yellow-800 dark:border-yellow-500 dark:bg-yellow-900/30 dark:text-yellow-300',
         success:
-          'border-green-600 bg-green-100 text-green-800 dark:border-green-500 dark:bg-green-900/30 dark:text-green-300',
+          // dojo-planner-colors.css redefines green-50…400: 200/300 are DARK greens
+          // (#04770c / #044208), so dark mode uses the light green-400 (#46e15c).
+          'border-green-600 bg-green-100 text-green-800 dark:border-green-400 dark:bg-green-900/30 dark:text-green-400',
       },
     },
     defaultVariants: {

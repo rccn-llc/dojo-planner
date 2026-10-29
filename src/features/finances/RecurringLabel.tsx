@@ -28,7 +28,13 @@ export function RecurringLabel({ status, transactionType, recurring }: {
   return (
     <>
       {label && (
-        <Badge variant={label.variant} className="ml-1" data-testid="recurring-label">
+        <Badge
+          variant={label.variant}
+          className="ml-1"
+          data-testid="recurring-label"
+          // A label, not an action: say where the payment came from.
+          title={label.key === 'source_retry' ? t('source_retry_hint') : undefined}
+        >
           {text}
         </Badge>
       )}

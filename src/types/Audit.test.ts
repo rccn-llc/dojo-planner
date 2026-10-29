@@ -44,8 +44,9 @@ describe('Audit Types', () => {
       // + 1 instructor photo update
       // + 5 failed recurring payments (membership overdue + transaction retry
       //   + transaction possible duplicate + payment method sync
-      //   + payment method provider update) = 105
-      expect(actionCount).toBe(105);
+      //   + payment method provider update)
+      // + 1 card-update request = 106
+      expect(actionCount).toBe(106);
     });
   });
 

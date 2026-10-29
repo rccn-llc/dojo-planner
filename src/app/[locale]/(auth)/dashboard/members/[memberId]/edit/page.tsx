@@ -22,9 +22,11 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { RecurringLabel } from '@/features/finances/RecurringLabel';
 import { isRetryable } from '@/features/finances/recurringPayments';
+import { RefundConfirmDialog } from '@/features/finances/RefundConfirmDialog';
 import { RetryPaymentModal } from '@/features/finances/RetryPaymentModal';
 import { transformCouponsToUi } from '@/features/marketing';
 import { ConvertMemberModal } from '@/features/members/conversion/ConvertMemberModal';
+import { CardUpdateLinkAction } from '@/features/members/details/CardUpdateLinkAction';
 import { ChangeMembershipModal } from '@/features/members/details/ChangeMembershipModal';
 import { EditContactInfoModal } from '@/features/members/details/EditContactInfoModal';
 import { EditMemberPhotoModal } from '@/features/members/details/EditMemberPhotoModal';
@@ -857,6 +859,8 @@ export default function EditMemberPage() {
   const canRefund = useHasRole(ORG_ROLE.ADMIN);
   const [refundingId, setRefundingId] = useState<string | null>(null);
   const [refundError, setRefundError] = useState<string | null>(null);
+  // The billing row awaiting refund confirmation (refunds can't be undone).
+  const [refundTarget, setRefundTarget] = useState<{ id: string; amount: number } | null>(null);
 
   // Archive/restore a member is an academy-owner action (#221) — mirrors the
   // member.remove / member.restore ACADEMY_OWNER guard. Lower roles don't see it.
@@ -868,6 +872,7 @@ export default function EditMemberPage() {
     setRefundError(null);
     try {
       await client.transactions.refund({ transactionId });
+      setRefundTarget(null);
       await reloadBillingHistory();
     } catch (err) {
       setRefundError(err instanceof Error ? err.message : 'Refund failed. Please try again.');
@@ -1197,6 +1202,19 @@ export default function EditMemberPage() {
       )}
 
       {/* Failed recurring payment */}
+      <RefundConfirmDialog
+        isOpen={refundTarget !== null}
+        amountLabel={refundTarget ? formatCurrency(refundTarget.amount) : ''}
+        isRefunding={refundTarget !== null && refundingId === refundTarget.id}
+        errorMessage={refundError}
+        onCloseAction={() => setRefundTarget(null)}
+        onConfirmAction={() => {
+          if (refundTarget) {
+            void handleRefund(refundTarget.id);
+          }
+        }}
+      />
+
       <PastDueBanner
         rows={billingHistory.map(item => ({
           id: item.id,
@@ -1211,6 +1229,7 @@ export default function EditMemberPage() {
         activeCard={activePaymentMethods[0] ?? null}
         canRetry={canRetryPayment}
         onRetryAction={row => setRetryTarget({ transactionId: row.id, memberId: row.memberId })}
+        cardUpdateAction={canRetryPayment ? <CardUpdateLinkAction memberId={memberId} /> : undefined}
       />
 
       {/* Member Header */}
@@ -1782,13 +1801,13 @@ export default function EditMemberPage() {
                                     <line x1="7" y1="7" x2="7.01" y2="7" />
                                   </svg>
                                 </span>
-                                <span className="text-sm font-medium text-green-800 dark:text-green-200">
+                                <span className="text-sm font-medium text-green-800 dark:text-green-100">
                                   Coupon Applied:
                                   {' '}
                                   {appliedCoupon.code}
                                 </span>
                               </div>
-                              <p className="mt-1 text-xs text-green-700 dark:text-green-300">
+                              <p className="mt-1 text-xs text-green-700 dark:text-green-400">
                                 {appliedCoupon.type === 'Free Trial'
                                   ? appliedCoupon.amount
                                   : `${appliedCoupon.amount} off`}
@@ -1916,7 +1935,11 @@ export default function EditMemberPage() {
                                   <Button
                                     size="sm"
                                     disabled={refundingId === item.id}
-                                    onClick={() => handleRefund(item.id)}
+                                    onClick={() => {
+                                      setRefundError(null);
+                                      setRefundTarget({ id: item.id, amount: item.amount });
+                                    }}
+                                    data-testid={`billing-refund-${item.id}`}
                                     className="w-fit"
                                   >
                                     {refundingId === item.id ? t('refunding_button') : t('refund_button')}

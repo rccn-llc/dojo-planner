@@ -923,7 +923,8 @@
     "loading_transactions": "Chargement des transactions...",
     "source_recurring": "Récurrent",
     "source_recurring_attempt": "Récurrent · tentative {attempt}/3",
-    "source_retry": "Relance",
+    "source_retry": "Relance manuelle",
+    "source_retry_hint": "Payé par une relance manuelle d'un paiement récurrent échoué.",
     "resolved": "Réglé",
     "possible_duplicate": "Doublon possible",
     "retry_payment": "Relancer le paiement",
@@ -1007,6 +1008,14 @@
     "superseded_note": "Une tentative échouée plus récente existe pour cette adhésion — relancez celle-ci.",
     "retry_button": "Relancer le paiement",
     "attempt_label": "Tentative {attempt} sur 3"
+  },
+  "RefundConfirmDialog": {
+    "title": "Rembourser {amount} ?",
+    "description": "Cela rembourse la totalité du paiement de {amount} sur le moyen de paiement d'origine du membre. Un paiement pas encore réglé est annulé à la place. Le remboursement est effectué immédiatement chez le prestataire de paiement.",
+    "cannot_undo": "Cette action est irréversible.",
+    "cancel_button": "Conserver le paiement",
+    "confirm_button": "Rembourser {amount}",
+    "refunding_button": "Remboursement…"
   },
   "MarketingPage": {
     "title": "Marketing",
@@ -2163,6 +2172,12 @@
     "past_due_banner_detail": "{amount} refusé le {date} : {reason}",
     "past_due_banner_attempt": "Tentative {attempt} sur 3 — IQPro relancera automatiquement.",
     "past_due_banner_card_updated": "Le membre a mis à jour sa carte le {date} — prêt à relancer.",
+    "card_update_link_button": "Envoyer le lien de mise à jour de la carte",
+    "card_update_link_resend": "Renvoyer le lien de mise à jour de la carte",
+    "card_update_link_sending": "Envoi…",
+    "card_update_link_sent": "Lien de mise à jour envoyé par e-mail le {date} — en attente de la nouvelle carte du membre.",
+    "card_update_waiting": "En attente de l'ajout d'une nouvelle carte par le membre chez IQPro.",
+    "card_update_link_failed": "Impossible d'envoyer le lien : {error}",
     "retry_payment_button": "Relancer le paiement",
     "billing_status_column": "Statut",
     "billing_status_paid": "Payé",

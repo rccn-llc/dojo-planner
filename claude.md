@@ -43,7 +43,7 @@ src/
 ├── routers/               # ORPC API handlers
 │   ├── AuthGuards.ts      # Auth middleware with role hierarchy
 │   ├── Catalog.ts         # Catalog items, variants, categories, images
-│   ├── Member.ts          # Member CRUD, family linking/unlinking, HOH search, member type conversion, confirmation email, membership lifecycle (cancelMembership, holdMembership, reactivateMembership), `getById` (single member incl. base64 photo — the members LIST omits photoUrl for payload/heap reasons, so the detail page loads the photo via this endpoint), `listPaymentMethods` (`includeReplaced` for the history view), `syncPaymentMethod` (FRONT_DESK; reconcile the saved card with the provider's subscription card)
+│   ├── Member.ts          # Member CRUD, family linking/unlinking, HOH search, member type conversion, confirmation email, membership lifecycle (cancelMembership, holdMembership, reactivateMembership), `getById` (single member incl. base64 photo — the members LIST omits photoUrl for payload/heap reasons, so the detail page loads the photo via this endpoint), `listPaymentMethods` (`includeReplaced` for the history view), `syncPaymentMethod` (FRONT_DESK; reconcile the saved card with the provider's subscription card), `sendPaymentMethodUpdateLink` / `paymentMethodUpdateRequest` (FRONT_DESK; email IQPro's add-a-card link and read the open card-update request)
 │   ├── Members.ts         # Members list ops
 │   ├── Classes.ts         # Classes list & tags (create/update persist allowWalkIns + schedule instructor clerk ids)
 │   ├── Events.ts          # Events list + event registration/enrollment (register, registrations, cancelRegistration)
@@ -82,6 +82,7 @@ src/
 │   ├── RecurringChargeWebhookService.ts # Records recurring charges (declined AND paid) reported by the IQPro/Square webhooks: dedup, transaction row, decline count, past_due/overdue side effects, possible-duplicate flag
 │   ├── PaymentRetryService.ts # `retryFailedTransaction` + `getRetryQuote`: re-charge a declined recurring payment against the subscription's card, record the attempt, close the Square invoice
 │   ├── PaymentMethodSyncService.ts # Reconcile the local saved card with the provider's subscription card (IQPro sends no card-update webhook); replaced cards kept as history
+│   ├── PaymentMethodUpdateRequestService.ts # IQPro card-update requests: record the customer's card ids, detect a card the member ADDED (new id), switch the subscription onto it
 │   └── SaasSubscriptionService.ts # Org-level SaaS billing via IQPro (subscribe, change plan, cancel, billing history, super admin auto-grant)
 │
 ├── models/
@@ -398,6 +399,14 @@ When a member's subscription charge fails at IQPro or Square, the payment webhoo
 
 **Card updates at the provider (`PaymentMethodSyncService`):** after a failed charge IQPro emails the cardholder a link to update their card, and sends **no webhook** for it (IQPro publishes only Transaction / Settlement / Invoice webhooks). The reconcile reads the subscription's card back (`getSubscriptionPaymentMethod`, now returning last4 / brand / expiry) and: same card → bump `last_synced_at`; same provider id with a new last4/expiry → update in place; different id → old row `status = 'replaced'` (history), new `active` default row with `updated_source = 'provider_sync'`, a member note, and a `PAYMENT_METHOD_PROVIDER_UPDATE` audit (masked values only). A failed provider read never touches local data; repeat reads within 60s are throttled unless forced. ⚠️ **Every "charge the saved card" lookup filters `status = 'active'`** (vaulted `processMemberPayment`, `getMemberPaymentMethods`, the kiosk saved-card join).
 
+**⚠️ A card the member ADDS at IQPro is not on the subscription (Basys, 2026-10).** IQPro's add-payment-method link — the one staff send, and the one IQPro emails after a decline — adds the card to the IQPro **customer**; the subscription (and IQPro's own retries, and the app's retry) keep charging the old card, and no webhook fires. Basys's recommended pattern is implemented in `PaymentMethodUpdateRequestService`:
+
+1. **Open a request** — automatically when an IQPro decline is recorded (`openUpdateRequestAfterDecline`, no email: IQPro sends its own), or when staff click **Send card-update link** (`member.sendPaymentMethodUpdateLink` → `POST …/customer/{id}/payment/token` `{ notificationContactMethod: 'Email', mainRecipient }`). The customer's current card ids are recorded as the baseline (the app's known ids if IQPro can't be read). One open request per member.
+2. **Poll only open requests** — on every card-sync trigger below; the daily cron also includes members with an open request who aren't past due.
+3. **A new payment-method id = the added card** (the new default, else the last listed). Every live subscription is switched onto it with `setSubscriptionPaymentMethod`, then the regular reconcile records it locally (old card `replaced`, note, audit, "Card updated — ready to retry"). A refused switch stays pending and retries on the next poll. Requests expire after 30 days.
+
+⚠️ **Updating a live IQPro subscription** (sandbox-verified): PUT `name` + `prefix` + the recurrence **exactly as IQPro stored it** (`subscriptionUpdatePayload`), plus `paymentMethod` for a card switch. Without the recurrence IQPro answers 500; start dates re-sent in any other form are refused outside Draft. Line items and addresses are kept. Hold/reactivate use the same payload.
+
 | Trigger | Provider |
 |---|---|
 | After any recorded subscription charge webhook (via `runAfterResponse`, tenant scope re-entered) | IQPro + Square |
@@ -538,7 +547,7 @@ npm run stripe:listen    # Forward webhooks locally
 
 ### IQPro (Member Payments)
 
-**Transport:** Direct REST API via `fetch` — **no SDK dependency at runtime**. Every IQPro call logs the full request body and full response body (or error body) via the structured `logger` so vague IQPro 4xx errors can be diagnosed from Better Stack without re-running.
+**Transport:** Direct REST API via `fetch` — **no SDK dependency at runtime**. Every IQPro call logs its request and response body (or error body) via the structured `logger` so vague IQPro 4xx errors can be diagnosed from Better Stack without re-running. ⚠️ Bodies are **redacted first** (`src/libs/LogRedaction.ts` — `redactForLog` / `redactBodyForLog`): card/ACH tokens, account and card numbers, CVVs, secrets, names, emails, phones and street addresses are replaced with `[redacted]`, masked card numbers keep only the last 4, and a non-JSON body is truncated. Ids, statuses and amounts stay. The same redaction applies to the body text embedded in a thrown IQPro/Square error. Add any new sensitive field name to the `REMOVE` set.
 
 **Purpose:** Processes member-level payments (one-time charges and recurring autopay subscriptions) and organization-level SaaS subscriptions. Stripe remains as a legacy fallback for org-level billing only.
 
@@ -652,6 +661,7 @@ The IQPro subscription API has strict requirements validated against the sandbox
 - `cardProcessorId` / `achProcessorId` required on payment method — fetched via `getGatewayProcessors()` from gateway config
 - `trialLengthInDays` (required, min 0) and `invoiceLengthInDays` (required, min 1)
 - Line items: `unitPrice` in dollars (not cents), `discount` field is required (use `0`)
+- ⚠️ **InsertSubscription has NO `paymentAdjustments` field** — IQPro drops it silently, so renewals used to charge the bare plan price with **no service fee**. The fee is now a separate untaxed `"Service fee"` line item (`amount × SERVICE_FEE_PCT`), and every line sets `localTaxPercent` / `nationalTaxPercent` explicitly: a line without them gets the gateway's DEFAULT tax rate (10% in the sandbox), not zero. Sandbox-verified: $100 + fee line → 103.75; at 8.375% tax on the membership line → 112.13, the same total as the initial sale. Subscriptions created before this change still renew without the fee. `recurringFeePercents` (`PaymentProviderService.ts`) reads the percentages for both providers; `buildPaymentAdjustments` now passes Tax as a **percentage** (a flat amount priced on the first sale is wrong for every renewal).
 
 **IQPro webhooks (`/webhook/iqpro`)** — per the attached "iQ Pro+ Webhook API Guide" and "Subscription Decline Webhooks":
 - Payload `{ resourceType, subType, resource, traceId, actionDateTime, hashAlg, signatureAlg, signature }`. The signature is in the BODY and covers ONLY `resource`: **RSA-SHA256, PKCS#1 v1.5**, the gateway's public key. ⚠️ This replaced an HMAC/`x-iqpro-signature` scheme backed by a package that was never installed — every delivery used to fail before reaching a handler. `IQPRO_WEBHOOK_SECRET` is gone.
@@ -696,7 +706,7 @@ Organization-level SaaS subscriptions use IQPro (same SDK as member payments). A
 
 ### Square (Member Payments — alternative to IQPro)
 
-**Transport:** direct REST via `fetch` — **no SDK**, mirroring the IQPro decision. Every request and response body is logged through the structured logger; that logging is what made IQPro's vague 4xx errors diagnosable, and Square's error envelope is no friendlier.
+**Transport:** direct REST via `fetch` — **no SDK**, mirroring the IQPro decision. Every request and response body is logged (redacted, via `LogRedaction.ts` — see IQPro above) through the structured logger; that logging is what made IQPro's vague 4xx errors diagnosable, and Square's error envelope is no friendlier.
 
 ⚠️ **Square governs MEMBER payments only.** An organization choosing Square changes how *its members* are charged. It never changes how that organization pays *us*: the SaaS subscription is always the platform's own IQPro account via `resolvePlatformIQProConfig`, which is typed against `IQProConfig` and therefore **cannot receive a Square config even by accident**. That separation is enforced by the type system, not convention.
 
@@ -714,6 +724,7 @@ Organization-level SaaS subscriptions use IQPro (same SDK as member payments). A
 
 1. **`plan_variation_id` IS required**, though the API reference marks it optional. Omitting it returns `` `plan_variation_id` cannot be empty ``, and ad-hoc `phases` are rejected outright (`cadence` belongs to the *catalog* variation, not the subscription). Designing from the docs alone produces a subscription path that cannot work.
 2. **But ONE variation serves every member.** `price_override_money` and `tax_percentage` are set **per subscription**, not per plan — a $50 catalog variation happily produced a $73.50 subscription. So the catalog holds **four objects per org (one per cadence)**, not one per membership plan, and there is no price-sync problem. Both are mutable after creation, so a mid-term tax-rate change *can* be pushed to existing members.
+   ⚠️ A subscription has **no service-charge field**, so the service fee is folded into `price_override_money`: `squareRecurringPrice` = `base × (1 + fee / (1 + tax))`, because Square taxes the whole override while the initial sale taxes the base only. Exact with no tax (memberships); with tax a renewal can land one cent off. Before this, Square renewals charged no service fee.
 3. ⚠️ **`card_id` must ALWAYS be sent.** Omitting it does not fail — Square silently switches to emailing the member an invoice, so autopay would stop collecting with no error anywhere. `createSubscription` refuses rather than creating an invoice-billed subscription, and there is an explicit test for it.
 
 4. ⚠️ **`start_date` is the FIRST BILLING date, so it must be one period AFTER the app's own initial charge.** The app charges the first period itself at signup, then creates the subscription. With `start_date` = today the sandbox **deactivated the subscription on the spot** (`DEACTIVATE_SUBSCRIPTION`, no invoice, no payment — it would never renew); a future start is accepted as `PENDING`. Had Square billed instead, the member would have paid twice. `firstSquareBillingDate(startDate, frequency)` (and the kiosk's `firstSquareBillingDate(startDate, cadence)`) sets it one cadence later, clamping month ends — matching IQPro, whose first scheduled run also falls in the next period.
@@ -777,7 +788,7 @@ total_money             11213
 - **`total_tax_money` does NOT include the service charge** (838, not 869). A service charge comes back `taxable: false` by default and is only taxed if `applied_taxes` names the tax explicitly — the documented footgun, confirmed live.
 - **Square rounds half-up** (837.5 → 838), matching `roundCents`. ⚠️ `toMinorUnits(1.005)` is **100**, not 101, because the float is stored slightly low — and `roundCents` does the same. That agreement is the point: on a two-provider money path, IQPro and Square never disagreeing about an amount matters more than either being arithmetically ideal.
 
-⚠️ **`processPayment` is NON-ATOMIC**, unlike IQPro's single Sale call: it creates an Order then a Payment, so a failure between the two leaves an unpaid order. Square orders carry no money on their own, so an orphan is inert — but it is a reconciliation surface IQPro never had.
+**`processPayment` is a single call:** `POST /v2/payments` for the total the caller priced with `computeFees` (which uses `POST /v2/orders/calculate` — a quote that creates nothing). No Order is created, so there is no unpaid-order reconciliation surface. (An earlier version of this doc described an Order-then-Payment flow the code never had.)
 
 **Idempotency:** Square requires an `idempotency_key` on every mutating call and `ProcessPaymentParams` has no field for one, so it is generated per attempt. Deliberately not derived from the params: the orchestrator does not retry, and a key derived from amount+member would wrongly collapse two *deliberate* identical charges (a second event registration, say) into one.
 
@@ -1098,6 +1109,7 @@ await deleteUserWithOrganization();
 - `attendance` - Check-in records
 - `audit_event` - SOC2 compliance audit logging
 - `payment_method` - Saved payment methods (card, bank_transfer, cash, check), optional `providerPaymentMethodId`, `card_brand`, `expiration_date` ('MM/YY'), `status` (`'active'` | `'replaced'` — a card replaced at the provider is history and must never be charged), `updated_source` (`'app'` | `'provider_sync'`), `created_at`, `updated_at`, `last_synced_at`
+- `payment_method_update_request` - IQPro card-update requests: `member_id`, `provider_customer_id`, `reason` (`decline` | `staff`), `baseline_payment_method_ids` (JSON text of the customer's card ids when opened), `link_sent_at`, `status` (`pending` | `completed` | `expired`, 30-day window), `new_payment_method_id`. In `TENANT_TABLES` (after `member`).
 - `payment_webhook_event` - Processed payment-webhook keys, unique on `(provider, event_key)` — IQPro `transactionId:STATUS`, Square `event_id`. In `TENANT_TABLES`.
 - `address` - Member addresses
 - `note` - Member notes
@@ -1697,6 +1709,7 @@ AUDIT_ACTION.PAYMENT_METHOD_REGISTER;
 AUDIT_ACTION.PAYMENT_METHOD_VIEW; // read-access logging (SOC2 CC7.2) — saved payment methods
 AUDIT_ACTION.PAYMENT_METHOD_SYNC; // reconcile the saved card with the provider
 AUDIT_ACTION.PAYMENT_METHOD_PROVIDER_UPDATE; // the provider reports the card changed (masked values only)
+AUDIT_ACTION.PAYMENT_METHOD_UPDATE_REQUEST; // card-update request opened / IQPro add-a-card link emailed
 
 // SaaS subscription operations
 AUDIT_ACTION.SAAS_SUBSCRIPTION_CREATE;

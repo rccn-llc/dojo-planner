@@ -781,17 +781,55 @@ describe('TransactionDetailModal', () => {
       expect(page.getByText('refund_button').elements()).toHaveLength(0);
     });
 
-    it('calls the refund endpoint and invalidates the cache when clicked', async () => {
+    it('asks for confirmation first — clicking Refund alone refunds nothing', async () => {
+      await render(
+        <TransactionDetailModal isOpen={true} onCloseAction={() => {}} transaction={createMockTransaction()} />,
+      );
+
+      await userEvent.click(page.getByTestId('refund-button'));
+
+      await expect.element(page.getByTestId('refund-confirm-dialog')).toBeInTheDocument();
+      expect(mockRefundTransaction).not.toHaveBeenCalled();
+    });
+
+    it('refunds and invalidates the cache once confirmed, then closes the confirmation', async () => {
       mockRefundTransaction.mockResolvedValue({ refundTransactionId: 'r1' });
       await render(
         <TransactionDetailModal isOpen={true} onCloseAction={() => {}} transaction={createMockTransaction()} />,
       );
 
-      await userEvent.click(page.getByText('refund_button'));
+      await userEvent.click(page.getByTestId('refund-button'));
+      await userEvent.click(page.getByTestId('refund-confirm-button'));
 
       await vi.waitFor(() => expect(mockRefundTransaction).toHaveBeenCalledWith({ transactionId: 'txn-uuid-1' }));
+      await vi.waitFor(() => expect(mockInvalidateTransactionsCache).toHaveBeenCalled());
+      await vi.waitFor(() => expect(page.getByTestId('refund-confirm-dialog').elements()).toHaveLength(0));
+    });
 
-      expect(mockInvalidateTransactionsCache).toHaveBeenCalled();
+    it('"Keep payment" cancels without refunding', async () => {
+      await render(
+        <TransactionDetailModal isOpen={true} onCloseAction={() => {}} transaction={createMockTransaction()} />,
+      );
+
+      await userEvent.click(page.getByTestId('refund-button'));
+      await userEvent.click(page.getByText('cancel_button'));
+
+      await vi.waitFor(() => expect(page.getByTestId('refund-confirm-dialog').elements()).toHaveLength(0));
+
+      expect(mockRefundTransaction).not.toHaveBeenCalled();
+    });
+
+    it('keeps the confirmation open and shows the error when the refund fails', async () => {
+      mockRefundTransaction.mockRejectedValue(new Error('IQPro refused the refund'));
+      await render(
+        <TransactionDetailModal isOpen={true} onCloseAction={() => {}} transaction={createMockTransaction()} />,
+      );
+
+      await userEvent.click(page.getByTestId('refund-button'));
+      await userEvent.click(page.getByTestId('refund-confirm-button'));
+
+      await expect.element(page.getByTestId('refund-confirm-dialog').getByRole('alert')).toHaveTextContent('IQPro refused the refund');
+      expect(mockInvalidateTransactionsCache).not.toHaveBeenCalled();
     });
   });
 

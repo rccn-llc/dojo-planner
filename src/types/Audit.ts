@@ -92,6 +92,9 @@ export const AUDIT_ACTION = {
   // The reconcile found the card changed AT THE PROVIDER (e.g. the member
   // updated it via the provider's failed-payment email).
   PAYMENT_METHOD_PROVIDER_UPDATE: 'paymentMethod.providerUpdate',
+  // A card-update request opened (decline) or the IQPro add-card link was
+  // emailed to the member (staff).
+  PAYMENT_METHOD_UPDATE_REQUEST: 'paymentMethod.updateRequest',
 
   // Tag operations
   TAG_CREATE: 'tag.create',

@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { and, count, desc, eq, gte, inArray, max, or } from 'drizzle-orm';
 import { db } from '@/libs/DB';
 import { logger } from '@/libs/Logger';
-import { addressSchema, attendanceSchema, couponUsageSchema, eventRegistrationSchema, familyMemberSchema, memberMembershipSchema, memberSchema, membershipPlanSchema, noteSchema, paymentMethodSchema, signedWaiverSchema, transactionSchema } from '@/models/Schema';
+import { addressSchema, attendanceSchema, couponUsageSchema, eventRegistrationSchema, familyMemberSchema, memberMembershipSchema, memberSchema, membershipPlanSchema, noteSchema, paymentMethodSchema, paymentMethodUpdateRequestSchema, signedWaiverSchema, transactionSchema } from '@/models/Schema';
 import { recurringStateColumns } from '@/services/TransactionsService';
 
 export type MembershipPlanData = {
@@ -1229,6 +1229,7 @@ export type RemoveFullyResult = {
   rowsRemoved: {
     signedWaiver: number;
     paymentMethod: number;
+    paymentMethodUpdateRequest: number;
     transaction: number;
     couponUsage: number;
     eventRegistration: number;
@@ -1273,6 +1274,7 @@ export async function removeFully(
       rowsRemoved: {
         signedWaiver: 0,
         paymentMethod: 0,
+        paymentMethodUpdateRequest: 0,
         transaction: 0,
         couponUsage: 0,
         eventRegistration: 0,
@@ -1295,6 +1297,9 @@ export async function removeFully(
     const pm = await tx.delete(paymentMethodSchema)
       .where(eq(paymentMethodSchema.memberId, memberId))
       .returning({ id: paymentMethodSchema.id });
+    const pur = await tx.delete(paymentMethodUpdateRequestSchema)
+      .where(eq(paymentMethodUpdateRequestSchema.memberId, memberId))
+      .returning({ id: paymentMethodUpdateRequestSchema.id });
     const tr = await tx.delete(transactionSchema)
       .where(eq(transactionSchema.memberId, memberId))
       .returning({ id: transactionSchema.id });
@@ -1335,6 +1340,7 @@ export async function removeFully(
       rowsRemoved: {
         signedWaiver: sw.length,
         paymentMethod: pm.length,
+        paymentMethodUpdateRequest: pur.length,
         transaction: tr.length,
         couponUsage: cu.length,
         eventRegistration: er.length,

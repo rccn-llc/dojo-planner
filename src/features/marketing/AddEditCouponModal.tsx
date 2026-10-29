@@ -194,7 +194,7 @@ function CouponFormContent({ coupon, onCloseAction, onSaveAction }: CouponFormCo
         {successMessage
           ? (
               <div className="rounded-lg bg-green-50 p-4 dark:bg-green-950/30">
-                <p className="text-sm text-green-900 dark:text-green-200">
+                <p className="text-sm text-green-900 dark:text-green-100">
                   {successMessage}
                 </p>
               </div>

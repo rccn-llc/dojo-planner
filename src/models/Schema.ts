@@ -1020,6 +1020,39 @@ export const transactionSchema = pgTable(
 // (IQPro and Square both document at-least-once delivery), so every handler
 // claims its event key here first and stops if the insert conflicts.
 // event_key: IQPro `transactionId:STATUS`, Square `event_id`.
+/**
+ * A pending "the member should add a new card" request (IQPro).
+ *
+ * IQPro's add-payment-method link (and its post-decline email) ADDS a card to
+ * the customer; it does not put it on the subscription, and IQPro sends no
+ * webhook for it. So the app records the customer's card ids when the request
+ * opens (on a recorded decline, or when staff send the link), polls only open
+ * requests, and on a NEW card id switches the subscription onto it — Basys's
+ * recommended approach.
+ */
+export const paymentMethodUpdateRequestSchema = pgTable(
+  'payment_method_update_request',
+  {
+    id: text('id').primaryKey(), // UUID v4
+    organizationId: text('organization_id').notNull(),
+    memberId: text('member_id').references(() => memberSchema.id).notNull(),
+    provider: text('provider').notNull(), // 'iqpro'
+    providerCustomerId: text('provider_customer_id').notNull(),
+    reason: text('reason').notNull(), // 'decline' | 'staff'
+    /** JSON array of the customer's provider payment-method ids when opened. */
+    baselinePaymentMethodIds: text('baseline_payment_method_ids').notNull().default('[]'),
+    linkSentAt: timestamp('link_sent_at', { mode: 'date' }),
+    status: text('status').notNull().default('pending'), // 'pending' | 'completed' | 'expired'
+    newPaymentMethodId: text('new_payment_method_id'),
+    createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+    completedAt: timestamp('completed_at', { mode: 'date' }),
+  },
+  table => [
+    index('payment_method_update_request_member_status_idx').on(table.memberId, table.status),
+    index('payment_method_update_request_org_status_idx').on(table.organizationId, table.status),
+  ],
+);
+
 export const paymentWebhookEventSchema = pgTable(
   'payment_webhook_event',
   {

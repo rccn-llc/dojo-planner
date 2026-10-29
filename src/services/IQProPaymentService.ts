@@ -24,6 +24,7 @@ import type {
   CreatePaymentMethodParams,
   CreatePaymentMethodResult,
   CreateSubscriptionParams,
+  CustomerPaymentMethodSummary,
   FeeQuote,
   IPaymentProvider,
   LifecycleActionResult,
@@ -50,6 +51,7 @@ import { IQPRO_BILLING_PERIOD, IQPRO_SUBSCRIPTION_STATUS, IQPRO_UNIT } from '@/l
 import { logger } from '@/libs/Logger';
 import { PAYMENT_PROVIDER } from '@/types/PaymentProvider';
 import { normalizeExpiration } from '@/utils/CardExpiration';
+import { recurringFeePercents } from './PaymentProviderService';
 
 // IQPro transaction statuses (lowercased) that decide how a charge is reversed.
 // Per the API reference, `/void` accepts only Pending / PendingSettlement and
@@ -78,6 +80,40 @@ function roundToCents(n: number): number {
  *
  * Everything below this call keeps using `IQProConfig` unchanged.
  */
+/**
+ * The PUT body IQPro accepts for a LIVE subscription: name + prefix + the
+ * recurrence exactly as IQPro stored it, plus an optional paymentMethod.
+ *
+ * ⚠️ Sandbox: omitting the recurrence answers 500; re-sending the start dates
+ * in any form other than the stored UTC values is refused outside Draft. So
+ * the dates are echoed verbatim and only `isAutoRenewed` may be overridden.
+ * `billingPeriodId` is nested on GET and flat on PUT.
+ */
+function subscriptionUpdatePayload(
+  sub: Record<string, unknown>,
+  overrides: { isAutoRenewed?: boolean },
+  paymentMethod?: Record<string, unknown>,
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = { name: sub.name, prefix: sub.prefix };
+  const recurrence = sub.recurrence as Record<string, unknown> | undefined;
+  if (recurrence) {
+    payload.recurrence = {
+      termStartDate: recurrence.termStartDate,
+      billingStartDate: recurrence.billingStartDate,
+      isAutoRenewed: overrides.isAutoRenewed ?? recurrence.isAutoRenewed,
+      allowProration: recurrence.allowProration,
+      trialLengthInDays: recurrence.trialLengthInDays,
+      invoiceLengthInDays: recurrence.invoiceLengthInDays,
+      billingPeriodId: (recurrence.billingPeriod as Record<string, unknown> | undefined)?.billingPeriodId,
+      schedule: recurrence.schedule,
+    };
+  }
+  if (paymentMethod) {
+    payload.paymentMethod = paymentMethod;
+  }
+  return payload;
+}
+
 function requireIQPro(config: PaymentProviderConfig): IQProConfig {
   if (config.provider !== PAYMENT_PROVIDER.IQPRO) {
     throw new TypeError(
@@ -508,6 +544,7 @@ export class IQProPaymentProvider implements IPaymentProvider {
     });
 
     try {
+      const fees = recurringFeePercents(params.paymentAdjustments);
       const now = params.startDate.toISOString();
       const dayOfMonth = params.startDate.getDate();
       const startMonth = params.startDate.getMonth() + 1; // 1-12
@@ -625,11 +662,30 @@ export class IQProPaymentProvider implements IPaymentProvider {
             unitPrice: params.amount, // Dollars, not cents
             discount: 0,
             unitOfMeasureId,
+            // Explicit: a line with no tax fields gets the gateway's DEFAULT
+            // rate (10% in the sandbox), not zero.
+            localTaxPercent: fees.taxPct,
+            nationalTaxPercent: 0,
           },
+          // InsertSubscription has NO paymentAdjustments field — IQPro drops it
+          // silently, so a renewal used to charge the bare price with no
+          // service fee. The fee is its own untaxed line instead
+          // (sandbox-verified: $100 + 3.75% → 103.75; at 8.375% tax → 112.13,
+          // the same total the initial sale charges).
+          ...(fees.serviceFeePct > 0
+            ? [{
+                name: 'Service fee',
+                description: `Service fee (${fees.serviceFeePct}%)`,
+                quantity: 1,
+                // amount × pct / 100, rounded to the cent (half-up, as roundCents)
+                unitPrice: Math.round(params.amount * fees.serviceFeePct) / 100,
+                discount: 0,
+                unitOfMeasureId,
+                localTaxPercent: 0,
+                nationalTaxPercent: 0,
+              }]
+            : []),
         ],
-        ...(params.paymentAdjustments && params.paymentAdjustments.length > 0 && {
-          paymentAdjustments: params.paymentAdjustments,
-        }),
       };
 
       const res = await iqproPost<{ data?: Record<string, unknown> }>(
@@ -862,26 +918,7 @@ export class IQProPaymentProvider implements IPaymentProvider {
     try {
       const subRes = await iqproGet<{ data?: Record<string, unknown> }>(iqpro, subPath);
       const sub = (subRes.data ?? subRes) as Record<string, unknown>;
-      const recurrence = sub.recurrence as Record<string, unknown> | undefined;
-
-      const putPayload: Record<string, unknown> = {
-        name: sub.name,
-        prefix: sub.prefix,
-      };
-      if (recurrence) {
-        putPayload.recurrence = {
-          termStartDate: recurrence.termStartDate,
-          billingStartDate: recurrence.billingStartDate,
-          isAutoRenewed,
-          allowProration: recurrence.allowProration,
-          trialLengthInDays: recurrence.trialLengthInDays,
-          invoiceLengthInDays: recurrence.invoiceLengthInDays,
-          billingPeriodId: (recurrence.billingPeriod as Record<string, unknown> | undefined)?.billingPeriodId,
-          schedule: recurrence.schedule,
-        };
-      }
-
-      await iqproPut(iqpro, subPath, putPayload);
+      await iqproPut(iqpro, subPath, subscriptionUpdatePayload(sub, { isAutoRenewed }));
       return { success: true };
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
@@ -902,6 +939,115 @@ export class IQProPaymentProvider implements IPaymentProvider {
     _providerInvoiceId: string,
   ): Promise<LifecycleActionResult & { note?: string }> {
     return { success: true, note: 'IQPro has no invoice-close action; nothing to do.' };
+  }
+
+  async listCustomerPaymentMethods(
+    config: PaymentProviderConfig,
+    providerCustomerId: string,
+  ): Promise<CustomerPaymentMethodSummary[] | null> {
+    const iqpro = requireIQPro(config);
+    try {
+      const res = await iqproGet<{ data?: Record<string, unknown> }>(
+        iqpro,
+        `/api/gateway/${iqpro.gatewayId}/customer/${providerCustomerId}`,
+      );
+      const customer = (res.data ?? res) as { paymentMethods?: Array<Record<string, unknown>> };
+      return (customer.paymentMethods ?? []).flatMap((pm) => {
+        const id = (pm.paymentMethodId ?? pm.customerPaymentMethodId) as string | undefined;
+        if (!id) {
+          return [];
+        }
+        const card = pm.card as { maskedCard?: string } | undefined;
+        const ach = pm.ach as { maskedAccount?: string; accountNumber?: string } | undefined;
+        const masked = card?.maskedCard ?? ach?.maskedAccount ?? ach?.accountNumber;
+        return [{
+          paymentMethodId: id,
+          type: card ? 'card' as const : 'ach' as const,
+          ...(masked ? { last4: String(masked).slice(-4) } : {}),
+          ...(typeof pm.isDefault === 'boolean' ? { isDefault: pm.isDefault } : {}),
+        }];
+      });
+    } catch (err) {
+      logger.warn('[IQPro] Customer payment methods read failed', {
+        providerCustomerId,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+      return null;
+    }
+  }
+
+  /**
+   * IQPro's "Creates and sends an add payment method token": a one-time link,
+   * emailed by IQPro, where the member adds a card to their CUSTOMER record.
+   * It does not touch any subscription — see setSubscriptionPaymentMethod.
+   */
+  async sendPaymentMethodUpdateLink(
+    config: PaymentProviderConfig,
+    params: { providerCustomerId: string; email: string },
+  ): Promise<LifecycleActionResult> {
+    const iqpro = requireIQPro(config);
+    try {
+      await iqproPost(iqpro, `/api/gateway/${iqpro.gatewayId}/customer/${params.providerCustomerId}/payment/token`, {
+        notificationContactMethod: 'Email',
+        mainRecipient: params.email,
+      });
+      return { success: true };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      logger.error('[IQPro] Add-payment-method link failed', { providerCustomerId: params.providerCustomerId, error: message });
+      return { success: false, error: message };
+    }
+  }
+
+  /**
+   * Point a live subscription at another saved customer payment method.
+   *
+   * Sandbox-verified (2026-10) on a Scheduled subscription: IQPro accepts a PUT
+   * of name + prefix + the STORED recurrence + paymentMethod, and keeps line
+   * items and addresses. Without the recurrence it answered 500; with the
+   * start dates re-sent in any other form it refused ("can only be updated
+   * when the subscription status is Draft").
+   */
+  async setSubscriptionPaymentMethod(
+    config: PaymentProviderConfig,
+    subscriptionId: string,
+    paymentMethodId: string,
+  ): Promise<LifecycleActionResult> {
+    const iqpro = requireIQPro(config);
+    const subPath = `/api/gateway/${iqpro.gatewayId}/subscription/${subscriptionId}`;
+    try {
+      const subRes = await iqproGet<{ data?: Record<string, unknown> }>(iqpro, subPath);
+      const sub = (subRes.data ?? subRes) as Record<string, unknown>;
+      // IQPro refuses any update to a cancelled subscription, and it bills
+      // nothing — nothing to switch (sandbox: one cancelled at IQPro but not
+      // locally kept a card-update request open forever).
+      if ((sub.status as { subscriptionStatusId?: number } | undefined)?.subscriptionStatusId === IQPRO_SUBSCRIPTION_STATUS.CANCELLED) {
+        return { success: true };
+      }
+      const current = (sub.paymentMethod ?? {}) as Record<string, unknown>;
+
+      // The new method may be a bank account where the old was a card (or the
+      // reverse); IQPro needs the matching processor on the subscription.
+      let { cardProcessorId, achProcessorId } = current as { cardProcessorId?: string | null; achProcessorId?: string | null };
+      if (!cardProcessorId || !achProcessorId) {
+        const processors = await getGatewayProcessors(iqpro);
+        cardProcessorId ??= processors.cardProcessorId ?? null;
+        achProcessorId ??= processors.achProcessorId ?? null;
+      }
+
+      await iqproPut(iqpro, subPath, subscriptionUpdatePayload(sub, {}, {
+        subscriptionPaymentMethodId: current.subscriptionPaymentMethodId ?? null,
+        customerPaymentMethodId: paymentMethodId,
+        cardProcessorId: cardProcessorId ?? null,
+        achProcessorId: achProcessorId ?? null,
+        isAutoCharged: typeof current.isAutoCharged === 'boolean' ? current.isAutoCharged : true,
+      }));
+      return { success: true };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      logger.error('[IQPro] Subscription payment method update failed', { subscriptionId, error: message });
+      return { success: false, error: message };
+    }
   }
 
   /**

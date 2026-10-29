@@ -920,7 +920,8 @@
     "loading_transactions": "取引を読み込み中...",
     "source_recurring": "定期",
     "source_recurring_attempt": "定期 · {attempt}/3 回目",
-    "source_retry": "再試行",
+    "source_retry": "手動再試行",
+    "source_retry_hint": "スタッフが失敗した定期支払いを再試行して支払われました。",
     "resolved": "解決済み",
     "possible_duplicate": "二重請求の可能性",
     "retry_payment": "支払いを再試行",
@@ -969,6 +970,14 @@
     "superseded_note": "このメンバーシップにはより新しい失敗した試行があります。そちらを再試行してください。",
     "retry_button": "支払いを再試行",
     "attempt_label": "{attempt}/3 回目"
+  },
+  "RefundConfirmDialog": {
+    "title": "{amount}を返金しますか？",
+    "description": "{amount}の支払い全額を会員の元の支払い方法に返金します。まだ確定していない支払いは取り消されます。返金は決済代行会社で直ちに実行されます。",
+    "cannot_undo": "この操作は元に戻せません。",
+    "cancel_button": "支払いを保持",
+    "confirm_button": "{amount}を返金",
+    "refunding_button": "返金中…"
   },
   "ReportsPage": {
     "title": "レポート",
@@ -2158,6 +2167,12 @@
     "past_due_banner_detail": "{date} に {amount} が拒否されました: {reason}",
     "past_due_banner_attempt": "{attempt}/3 回目 — IQPro が自動で再試行します。",
     "past_due_banner_card_updated": "{date} に会員がカードを更新しました — 再試行できます。",
+    "card_update_link_button": "カード更新リンクを送信",
+    "card_update_link_resend": "カード更新リンクを再送信",
+    "card_update_link_sending": "送信中…",
+    "card_update_link_sent": "{date}にカード更新リンクをメールで送信しました — 会員による新しいカードの追加を待っています。",
+    "card_update_waiting": "会員がIQProで新しいカードを追加するのを待っています。",
+    "card_update_link_failed": "リンクを送信できませんでした：{error}",
     "retry_payment_button": "支払いを再試行",
     "billing_status_column": "ステータス",
     "billing_status_paid": "支払済み",

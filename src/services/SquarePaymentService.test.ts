@@ -321,6 +321,39 @@ describe('squarePaymentService', () => {
       const [, , body] = squarePost.mock.calls[0] as [unknown, string, Record<string, unknown>];
 
       expect(body.tax_percentage).toBe('8.375');
+      // Square taxes the whole override, so the fee is scaled by 1/(1+tax):
+      // 99.50 × (1 + 0.0375 / 1.08375) = 102.94 → ×1.08375 = 111.56, the same
+      // as the initial sale's 99.50 + 8.33 tax + 3.73 fee.
+      expect(body.price_override_money).toEqual({ amount: 10294, currency: 'USD' });
+    });
+
+    it('folds the service fee into the price — a subscription has no service-charge field', async () => {
+      selectRows = [{ planVariationId: 'var_existing' }];
+      squarePost.mockResolvedValueOnce({ subscription: { id: 'sub_1' } });
+
+      const provider = await loadProvider();
+      await provider.createSubscription(squareConfig as never, {
+        ...subParams,
+        amount: 100,
+        paymentAdjustments: [{ type: 'ServiceFee', percentage: 3.75, flatAmount: null }],
+      });
+
+      const [, , body] = squarePost.mock.calls[0] as [unknown, string, Record<string, unknown>];
+
+      expect(body.price_override_money).toEqual({ amount: 10375, currency: 'USD' });
+      expect(body).not.toHaveProperty('tax_percentage');
+    });
+
+    it('squareRecurringPrice reproduces the initial-sale total', async () => {
+      const { squareRecurringPrice } = await import('./SquarePaymentService');
+
+      expect(squareRecurringPrice(100, 0, 0)).toBe(100);
+      expect(squareRecurringPrice(100, 0, 8.375)).toBe(100);
+      expect(squareRecurringPrice(100, 3.75, 0)).toBe(103.75);
+      // 100 × (1 + 0.0375 / 1.08375) = 103.46 → Square charges 103.46 + 8.66
+      // = 112.12 against the initial sale's 112.13. No whole-cent price hits it
+      // exactly (103.47 → 112.14); rounding half-up stays within a cent.
+      expect(squareRecurringPrice(100, 3.75, 8.375)).toBe(103.46);
     });
 
     it('omits tax_percentage entirely for a non-taxable membership', async () => {
@@ -713,6 +746,17 @@ describe('squarePaymentService', () => {
       await expect((await loadProvider()).getSubscriptionPaymentMethod(squareConfig as never, 'sub_1'))
         .resolves
         .toMatchObject({ paymentMethodId: 'ccof:card_1' });
+    });
+  });
+
+  describe('card-update requests (IQPro-only)', () => {
+    it('refuses rather than calling Square: it reports card changes by webhook', async () => {
+      const provider = await loadProvider();
+
+      await expect(provider.listCustomerPaymentMethods(squareConfig as never, 'cus_1')).resolves.toBeNull();
+      await expect(provider.sendPaymentMethodUpdateLink(squareConfig as never, { providerCustomerId: 'cus_1', email: 'm@example.com' })).resolves.toMatchObject({ success: false });
+      await expect(provider.setSubscriptionPaymentMethod(squareConfig as never, 'sub_1', 'card_1')).resolves.toMatchObject({ success: false });
+      expect(squarePost).not.toHaveBeenCalled();
     });
   });
 

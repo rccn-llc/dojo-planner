@@ -177,11 +177,46 @@ export async function getCurrentSubscription(
 
 // ===== Subscribe to a plan =====
 
+/**
+ * Cancel a subscription whose first charge failed, so it neither renews nor
+ * charges later. Returns a note for the caller's error message: empty when it
+ * was cancelled, otherwise the id an operator must cancel in iQ Pro+.
+ */
+async function cancelOrphanSubscription(config: IQProConfig, subscriptionId: string, orgId: string): Promise<string> {
+  if (!subscriptionId) {
+    return '';
+  }
+  try {
+    await iqproPost(config, `/api/gateway/${config.gatewayId}/subscription/${subscriptionId}/cancel`, {
+      cancel: { now: true, endOfBillingPeriod: false },
+    });
+    logger.info('[SaaS] Cancelled the subscription whose first charge failed', { orgId, subscriptionId });
+    return '';
+  } catch (error) {
+    logger.error('[SaaS] RECONCILE: could not cancel the subscription whose first charge failed — cancel it in iQ Pro+', {
+      orgId,
+      subscriptionId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return ` The IQPro subscription ${subscriptionId} could not be cancelled automatically — cancel it in iQ Pro+ before retrying.`;
+  }
+}
+
 export async function subscribe(
   config: IQProConfig,
   params: SubscribeParams,
 ): Promise<{ success: boolean; error?: string }> {
   const gatewayId = config.gatewayId;
+
+  // A raw card number (PAN) is a dev-only fallback for running without the
+  // TokenEx iframe. In production it would put card data in app memory, logs
+  // and an IQPro request body, so it is refused before anything is sent.
+  if (params.cardNumber && !params.cardToken && process.env.NODE_ENV === 'production') {
+    logger.error('[SaaS] Refused a raw card number in production', { orgId: params.orgId });
+    return { success: false, error: 'Card details must be entered in the secure card form.' };
+  }
+  const cardNumberFallback = process.env.NODE_ENV === 'production' ? undefined : params.cardNumber;
+
   const processors = await getGatewayProcessors(config);
 
   try {
@@ -222,8 +257,8 @@ export async function subscribe(
     }
 
     // Step 2: Register payment method
-    const first6 = params.cardFirstSix ?? params.cardNumber?.slice(0, 6) ?? '000000';
-    const last4 = params.cardLastFour ?? params.cardNumber?.slice(-4) ?? '0000';
+    const first6 = params.cardFirstSix ?? cardNumberFallback?.slice(0, 6) ?? '000000';
+    const last4 = params.cardLastFour ?? cardNumberFallback?.slice(-4) ?? '0000';
     const maskedCard = `${first6}******${last4}`;
 
     const pmRes = await iqproPost<{ data?: Record<string, unknown> }>(
@@ -231,7 +266,7 @@ export async function subscribe(
       `/api/gateway/${gatewayId}/customer/${customerId}/payment`,
       {
         card: {
-          token: params.cardToken ?? params.cardNumber,
+          token: params.cardToken ?? cardNumberFallback,
           expirationDate: params.cardExpiry,
           maskedCard,
         },
@@ -366,11 +401,18 @@ export async function subscribe(
       caption: `Dojo Planner ${plan.name}`.substring(0, 19),
     };
 
-    const saleRes = await iqproPost<{ data?: Record<string, unknown> }>(
-      config,
-      `/api/gateway/${gatewayId}/transaction`,
-      salePayload,
-    );
+    let saleRes: { data?: Record<string, unknown> };
+    try {
+      saleRes = await iqproPost<{ data?: Record<string, unknown> }>(
+        config,
+        `/api/gateway/${gatewayId}/transaction`,
+        salePayload,
+      );
+    } catch (error) {
+      // The subscription exists but the first period was never collected.
+      const cleanup = await cancelOrphanSubscription(config, subscriptionId, params.orgId);
+      throw new Error(`${error instanceof Error ? error.message : 'The first charge failed'}${cleanup}`);
+    }
     const saleRaw = (saleRes.data ?? saleRes) as Record<string, unknown>;
     const saleTx = (saleRaw.transaction ?? saleRaw) as Record<string, unknown>;
     const saleStatus = ((saleTx.status ?? '') as string).toLowerCase();
@@ -385,7 +427,10 @@ export async function subscribe(
         subscriptionId,
         status: saleStatus,
       });
-      return { success: false, error: `Subscription created but the first charge failed: ${reason}` };
+      // Left alone it would auto-renew and bill later — and a retry would
+      // create another. Cancel it; surface a cleanup failure for reconciliation.
+      const cleanup = await cancelOrphanSubscription(config, subscriptionId, params.orgId);
+      return { success: false, error: `The first charge failed: ${reason}${cleanup}` };
     }
 
     logger.info('[SaaS] Initial charge approved', { orgId: params.orgId, subscriptionId, status: saleStatus });

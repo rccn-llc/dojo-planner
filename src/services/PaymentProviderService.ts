@@ -349,6 +349,29 @@ export type SubscriptionPaymentMethod = {
 export type LifecycleActionResult = { success: boolean; error?: string };
 
 /**
+ * The service-fee and tax PERCENTAGES a recurring subscription must carry so
+ * every renewal charges what the initial sale did. Read from the subscription's
+ * `paymentAdjustments` (ServiceFee / Tax, percentage form).
+ */
+export function recurringFeePercents(
+  adjustments: CreateSubscriptionParams['paymentAdjustments'],
+): { serviceFeePct: number; taxPct: number } {
+  const pct = (type: string) => {
+    const value = adjustments?.find(a => a.type === type)?.percentage;
+    return typeof value === 'number' && value > 0 ? value : 0;
+  };
+  return { serviceFeePct: pct('ServiceFee'), taxPct: pct('Tax') };
+}
+
+/** A saved payment method on the provider's CUSTOMER record (not a subscription). */
+export type CustomerPaymentMethodSummary = {
+  paymentMethodId: string;
+  type: 'card' | 'ach';
+  last4?: string;
+  isDefault?: boolean;
+};
+
+/**
  * Outcome of reversing a charge for its FULL amount.
  *
  * `method` records what the provider actually did: `void` cancels a charge
@@ -443,6 +466,35 @@ export type IPaymentProvider = {
     config: PaymentProviderConfig,
     providerInvoiceId: string,
   ) => Promise<LifecycleActionResult & { note?: string }>;
+
+  /**
+   * Every saved payment method on the provider customer, or null when it can't
+   * be read. The card-update requests compare this against the ids recorded
+   * when the request opened: a new id is a card the member added.
+   */
+  listCustomerPaymentMethods: (
+    config: PaymentProviderConfig,
+    providerCustomerId: string,
+  ) => Promise<CustomerPaymentMethodSummary[] | null>;
+
+  /**
+   * Email the member the provider's own "add a payment method" link (IQPro:
+   * `POST …/customer/{id}/payment/token`). Returns failures, never throws.
+   */
+  sendPaymentMethodUpdateLink: (
+    config: PaymentProviderConfig,
+    params: { providerCustomerId: string; email: string },
+  ) => Promise<LifecycleActionResult>;
+
+  /**
+   * Put a saved customer payment method on a live subscription, so its
+   * renewals (and the provider's own retries) charge it. Returns failures.
+   */
+  setSubscriptionPaymentMethod: (
+    config: PaymentProviderConfig,
+    subscriptionId: string,
+    paymentMethodId: string,
+  ) => Promise<LifecycleActionResult>;
 };
 
 // ===== Factory =====

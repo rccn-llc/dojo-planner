@@ -61,6 +61,17 @@ const syncMemberPaymentMethodMock = vi.fn();
 vi.mock('@/services/PaymentMethodSyncService', () => ({
   syncMemberPaymentMethod: (...a: unknown[]) => syncMemberPaymentMethodMock(...a),
 }));
+const openPaymentMethodUpdateRequestMock = vi.fn();
+const getPaymentMethodUpdateStatusMock = vi.fn();
+vi.mock('@/services/PaymentMethodUpdateRequestService', async (importOriginal) => {
+  // Keep the real error classes: the router maps them with instanceof.
+  const actual = await importOriginal<typeof import('@/services/PaymentMethodUpdateRequestService')>();
+  return {
+    ...actual,
+    openPaymentMethodUpdateRequest: (...a: unknown[]) => openPaymentMethodUpdateRequestMock(...a),
+    getPaymentMethodUpdateStatus: (...a: unknown[]) => getPaymentMethodUpdateStatusMock(...a),
+  };
+});
 vi.mock('@/services/EmailService', () => ({
   sendMemberConfirmationEmail: vi.fn(),
 }));
@@ -413,6 +424,93 @@ describe('Member Router', () => {
       const { syncPaymentMethod } = await import('./Member');
 
       await expect(callHandler(syncPaymentMethod, { memberId: 'nope' })).rejects.toMatchObject({ status: 404 });
+    });
+  });
+
+  describe('sendPaymentMethodUpdateLink', () => {
+    beforeEach(() => {
+      resolvePaymentProviderConfigMock.mockResolvedValue({ provider: 'iqpro' });
+    });
+
+    it('requires FRONT_DESK and opens a staff request that emails the link', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
+      openPaymentMethodUpdateRequestMock.mockResolvedValue({ requestId: 'req_1', created: true, linkSent: true });
+
+      const { sendPaymentMethodUpdateLink } = await import('./Member');
+      const result = await callHandler(sendPaymentMethodUpdateLink, { memberId: 'member-123' });
+
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
+      expect(openPaymentMethodUpdateRequestMock).toHaveBeenCalledWith('member-123', 'test-org-456', { provider: 'iqpro' }, { reason: 'staff', sendLink: true, actor: mockFrontDeskContext });
+      expect(result).toEqual({ requestId: 'req_1', created: true, linkSent: true });
+    });
+
+    it('maps "not possible for this member" errors to 409', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { PaymentMethodUpdateNotSupportedError, NoProviderCustomerError, MemberEmailMissingError } = await import('@/services/PaymentMethodUpdateRequestService');
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
+      const { sendPaymentMethodUpdateLink } = await import('./Member');
+
+      for (const error of [new PaymentMethodUpdateNotSupportedError(), new NoProviderCustomerError(), new MemberEmailMissingError()]) {
+        openPaymentMethodUpdateRequestMock.mockRejectedValueOnce(error);
+
+        await expect(callHandler(sendPaymentMethodUpdateLink, { memberId: 'member-123' })).rejects.toMatchObject({ status: 409, message: error.message });
+      }
+    });
+
+    it('maps a link IQPro refused to 422 and audits the failure', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { audit } = await import('@/services/AuditService');
+      const { PaymentMethodUpdateLinkError } = await import('@/services/PaymentMethodUpdateRequestService');
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
+      openPaymentMethodUpdateRequestMock.mockRejectedValue(new PaymentMethodUpdateLinkError('IQPro is down'));
+
+      const { sendPaymentMethodUpdateLink } = await import('./Member');
+
+      await expect(callHandler(sendPaymentMethodUpdateLink, { memberId: 'member-123' })).rejects.toMatchObject({ status: 422, message: 'IQPro is down' });
+      expect(audit).toHaveBeenCalledWith(mockFrontDeskContext, AUDIT_ACTION.PAYMENT_METHOD_UPDATE_REQUEST, AUDIT_ENTITY_TYPE.MEMBER, { entityId: 'member-123', status: 'failure', error: 'IQPro is down' });
+    });
+
+    it('maps a member from another org to 404, and anything else to 500', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { MemberNotFoundError } = await import('@/services/MembersService');
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
+      const { sendPaymentMethodUpdateLink } = await import('./Member');
+
+      openPaymentMethodUpdateRequestMock.mockRejectedValueOnce(new MemberNotFoundError());
+
+      await expect(callHandler(sendPaymentMethodUpdateLink, { memberId: 'nope' })).rejects.toMatchObject({ status: 404 });
+
+      openPaymentMethodUpdateRequestMock.mockRejectedValueOnce(new Error('db down'));
+
+      await expect(callHandler(sendPaymentMethodUpdateLink, { memberId: 'member-123' })).rejects.toMatchObject({ status: 500 });
+    });
+  });
+
+  describe('paymentMethodUpdateRequest', () => {
+    it('requires FRONT_DESK and returns whether a link can be sent plus the open request', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
+      resolvePaymentProviderConfigMock.mockResolvedValue({ provider: 'iqpro' });
+      getPaymentMethodUpdateStatusMock.mockResolvedValue({ supported: true, request: null });
+
+      const { paymentMethodUpdateRequest } = await import('./Member');
+      const result = await callHandler(paymentMethodUpdateRequest, { memberId: 'member-123' });
+
+      expect(guardRole).toHaveBeenCalledWith(ORG_ROLE.FRONT_DESK);
+      expect(getPaymentMethodUpdateStatusMock).toHaveBeenCalledWith('member-123', 'test-org-456', { provider: 'iqpro' });
+      expect(result).toEqual({ supported: true, request: null });
+    });
+
+    it('maps a member from another org to 404', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { MemberNotFoundError } = await import('@/services/MembersService');
+      vi.mocked(guardRole).mockResolvedValue(mockFrontDeskContext);
+      getPaymentMethodUpdateStatusMock.mockRejectedValue(new MemberNotFoundError());
+
+      const { paymentMethodUpdateRequest } = await import('./Member');
+
+      await expect(callHandler(paymentMethodUpdateRequest, { memberId: 'nope' })).rejects.toMatchObject({ status: 404 });
     });
   });
 
@@ -818,6 +916,25 @@ describe('Member Router', () => {
       await expect(
         callHandler(getById, { memberId: 'cross-tenant-member' }),
       ).rejects.toMatchObject({ status: 404 });
+    });
+  });
+
+  describe('update (contact edit)', () => {
+    it('never changes the member\'s status — an edit must not reactivate a held / past-due / cancelled member', async () => {
+      const { guardRole } = await import('./AuthGuards');
+      const { updateMember } = await import('@/services/MembersService');
+      vi.mocked(guardRole).mockResolvedValue(mockAcademyOwnerContext);
+      vi.mocked(updateMember).mockResolvedValue([{ id: 'member-1' }] as any);
+
+      const { update } = await import('./Member');
+      // A status smuggled into the request is stripped by EditMemberValidation.
+      await callHandler(update, { id: 'member-1', email: 'new@example.com', firstName: 'Pat', lastName: 'Due', phone: null, status: 'active' } as any);
+
+      expect(updateMember).toHaveBeenCalledWith(
+        { id: 'member-1', email: 'new@example.com', firstName: 'Pat', lastName: 'Due', phone: null },
+        mockAcademyOwnerContext.orgId,
+      );
+      expect(vi.mocked(updateMember).mock.calls[0]![0]).not.toHaveProperty('status');
     });
   });
 

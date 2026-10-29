@@ -343,14 +343,14 @@ export default function EventDetailPage({ params }: { params: Promise<PageParams
                 <div className="rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950/30">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-green-800 dark:text-green-200">{t('early_bird_label')}</p>
+                      <p className="text-sm font-medium text-green-800 dark:text-green-100">{t('early_bird_label')}</p>
                       <p className="text-xs text-green-600 dark:text-green-400">
                         {t('until')}
                         {' '}
                         {eventData.earlyBirdDeadline}
                       </p>
                     </div>
-                    <p className="text-lg font-bold text-green-700 dark:text-green-300">
+                    <p className="text-lg font-bold text-green-700 dark:text-green-400">
                       {formatPrice(eventData.earlyBirdPrice)}
                     </p>
                   </div>

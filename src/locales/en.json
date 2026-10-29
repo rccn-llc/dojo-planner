@@ -920,7 +920,8 @@
     "loading_transactions": "Loading transactions...",
     "source_recurring": "Recurring",
     "source_recurring_attempt": "Recurring · attempt {attempt}/3",
-    "source_retry": "Retry",
+    "source_retry": "Manual retry",
+    "source_retry_hint": "Paid by a staff retry of a failed recurring payment.",
     "resolved": "Resolved",
     "possible_duplicate": "Possible duplicate",
     "retry_payment": "Retry payment",
@@ -969,6 +970,14 @@
     "superseded_note": "A newer failed attempt exists for this membership — retry that one.",
     "retry_button": "Retry payment",
     "attempt_label": "Attempt {attempt} of 3"
+  },
+  "RefundConfirmDialog": {
+    "title": "Refund {amount}?",
+    "description": "This returns the full {amount} charge to the member's original payment method. A charge that hasn't settled yet is voided instead. Refunding happens immediately at the payment provider.",
+    "cannot_undo": "This can't be undone.",
+    "cancel_button": "Keep payment",
+    "confirm_button": "Refund {amount}",
+    "refunding_button": "Refunding…"
   },
   "ReportsPage": {
     "title": "Reports",
@@ -2158,6 +2167,12 @@
     "past_due_banner_detail": "{amount} declined on {date}: {reason}",
     "past_due_banner_attempt": "Attempt {attempt} of 3 — IQPro will retry automatically.",
     "past_due_banner_card_updated": "Member updated their card on {date} — ready to retry.",
+    "card_update_link_button": "Send card-update link",
+    "card_update_link_resend": "Resend card-update link",
+    "card_update_link_sending": "Sending…",
+    "card_update_link_sent": "Card-update link emailed on {date} — waiting for the member to add a card.",
+    "card_update_waiting": "Waiting for the member to add a new card at IQPro.",
+    "card_update_link_failed": "Could not send the link: {error}",
     "retry_payment_button": "Retry payment",
     "billing_status_column": "Status",
     "billing_status_paid": "Paid",

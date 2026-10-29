@@ -27,6 +27,7 @@ import type { SquareProviderConfig } from '@/services/PaymentProviderConfigServi
 import { Buffer } from 'node:buffer';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { logger } from '@/libs/Logger';
+import { redactBodyForLog, redactForLog } from './LogRedaction';
 
 /** Square's API version, pinned. Sent on every request. */
 const SQUARE_API_VERSION = '2025-01-23';
@@ -70,7 +71,7 @@ export class SquareApiError extends Error {
     super(
       parsed
         ? `Square ${path} failed (${status}): ${parsed.category}/${parsed.code} — ${parsed.detail}`
-        : `Square ${path} failed (${status}): ${body || '(empty body)'}`,
+        : `Square ${path} failed (${status}): ${redactBodyForLog(body)}`,
     );
     this.name = 'SquareApiError';
     this.status = status;
@@ -115,9 +116,10 @@ async function squareRequest<T>(
   logger.info('[Square] request', {
     method,
     path,
-    // Full body, like the IQPro transport. The access token is a header, so it
-    // is not in here; Square never echoes card data back into a request body.
-    body: body === undefined ? undefined : JSON.stringify(body, null, 2),
+    // Full body for diagnosis, minus credentials (source_id: a card nonce or
+    // stored-card id) and personal data — see LogRedaction. The access token
+    // is a header, so it is not in here.
+    body: body === undefined ? undefined : JSON.stringify(redactForLog(body), null, 2),
   });
 
   const res = await fetch(url, {
@@ -137,12 +139,12 @@ async function squareRequest<T>(
       method,
       path,
       status: res.status,
-      response: text || '(empty body)',
+      response: redactBodyForLog(text),
     });
     throw new SquareApiError(path, res.status, text);
   }
 
-  logger.info('[Square] response', { method, path, status: res.status, response: text });
+  logger.info('[Square] response', { method, path, status: res.status, response: redactBodyForLog(text) });
 
   // A 204 has no body; callers of such endpoints expect an empty object.
   return (text ? JSON.parse(text) : {}) as T;

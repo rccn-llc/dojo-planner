@@ -624,8 +624,12 @@ describe('FinancesTable', () => {
 
       await expect.element(page.getByText('source_recurring_attempt').first()).toBeInTheDocument();
       await expect.element(page.getByText('resolved').first()).toBeInTheDocument();
-      await expect.element(page.getByText('source_retry').first()).toBeInTheDocument();
+      await expect.element(page.getByText('source_retry', { exact: true }).first()).toBeInTheDocument();
+      // A label, not an action: the tooltip says where the payment came from.
+      await expect.element(page.getByText('source_retry', { exact: true }).first()).toHaveAttribute('title', 'source_retry_hint');
       await expect.element(page.getByText('possible_duplicate').first()).toBeInTheDocument();
+      // Only the retry label carries the hint.
+      await expect.element(page.getByText('resolved').first()).not.toHaveAttribute('title');
     });
 
     it('offers a "Failed payments" filter showing only unresolved declines', async () => {

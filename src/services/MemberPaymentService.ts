@@ -612,8 +612,10 @@ function buildPaymentAdjustments(
   isTaxable: boolean,
 ): Array<{ type: string; percentage: number | null; flatAmount: number | null }> {
   const adjustments: Array<{ type: string; percentage: number | null; flatAmount: number | null }> = [];
-  if (isTaxable && feeBreakdown.taxAmount > 0) {
-    adjustments.push({ type: 'Tax', percentage: null, flatAmount: feeBreakdown.taxAmount });
+  // Subscriptions only: a renewal needs the tax RATE. A flat amount priced on
+  // the initial sale (signup fee included) is wrong for every later cycle.
+  if (isTaxable && feeBreakdown.taxPct > 0) {
+    adjustments.push({ type: 'Tax', percentage: feeBreakdown.taxPct, flatAmount: null });
   }
   adjustments.push({ type: 'ServiceFee', percentage: feeBreakdown.serviceFeePct, flatAmount: null });
   return adjustments;
@@ -828,13 +830,36 @@ async function handleAutopay(args: AutopayParams): Promise<ProcessMemberPaymentR
       memberId: params.memberId,
       declineReason: initialCharge.declineReason,
     });
+
+    // A DECLINED first charge leaves a live subscription the app never
+    // persists: it would renew and bill later (it is Scheduled, not Draft),
+    // and a retry of the signup would create another. Cancel it. A charge that
+    // is still `processing` (an unsettled bank payment) is left alone — it may
+    // yet clear.
+    let cleanupNote = '';
+    if (initialCharge.status === 'declined' && subResult.subscriptionId) {
+      const cancelled = await provider.cancelSubscription(config, subResult.subscriptionId, { endOfBillingPeriod: false });
+      if (cancelled.success) {
+        logger.info('[MemberPayment] Cancelled the subscription whose first charge declined', {
+          subscriptionId: subResult.subscriptionId,
+          memberId: params.memberId,
+        });
+      } else {
+        logger.error('[MemberPayment] RECONCILE: could not cancel the subscription whose first charge declined — cancel it at the payment provider', {
+          subscriptionId: subResult.subscriptionId,
+          memberId: params.memberId,
+          error: cancelled.error,
+        });
+        cleanupNote = ` The subscription ${subResult.subscriptionId} could not be cancelled automatically — cancel it at the payment provider before retrying.`;
+      }
+    }
+
     return {
       success: false,
       status: initialCharge.status,
       declineReason: initialCharge.declineReason,
       transactionId: txId,
-      error: initialCharge.error
-        ?? 'Subscription created but initial charge failed. The IQPro subscription may need manual cleanup.',
+      error: `${initialCharge.error ?? 'The first charge failed.'}${cleanupNote}`,
     };
   }
 

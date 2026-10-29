@@ -89,6 +89,7 @@ import {
   noteSchema,
   organizationSchema,
   paymentMethodSchema,
+  paymentMethodUpdateRequestSchema,
   paymentWebhookEventSchema,
   programSchema,
   signedWaiverSchema,
@@ -1105,6 +1106,8 @@ async function clearSeededData(organizationId: string) {
   // Clear transaction and payment data (references member)
   await db.delete(transactionSchema).where(eq(transactionSchema.organizationId, organizationId));
   await db.delete(paymentWebhookEventSchema).where(eq(paymentWebhookEventSchema.organizationId, organizationId));
+  // Card-update requests reference member.
+  await db.delete(paymentMethodUpdateRequestSchema).where(eq(paymentMethodUpdateRequestSchema.organizationId, organizationId));
   await db.delete(paymentMethodSchema).where(sql`${paymentMethodSchema.memberId} IN (SELECT id FROM member WHERE organization_id = ${organizationId})`);
 
   // Clear audit_event rows for this org (references member / membership IDs that

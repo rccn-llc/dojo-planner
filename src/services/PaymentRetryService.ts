@@ -364,6 +364,7 @@ export async function getRetryQuote(
   const [card] = await db
     .select({
       type: paymentMethodSchema.type,
+      providerPaymentMethodId: paymentMethodSchema.providerPaymentMethodId,
       cardBrand: paymentMethodSchema.cardBrand,
       last4: paymentMethodSchema.last4,
       expirationDate: paymentMethodSchema.expirationDate,
@@ -384,6 +385,11 @@ export async function getRetryQuote(
         isTaxable: false,
         taxStatePct: 0,
         paymentMethodType: card?.type === 'bank_transfer' ? 'ach' : 'card',
+        // IQPro prices a card by its BIN; naming the saved card lets the
+        // provider look it up ("Exactly one of Token/CreditCardBin").
+        ...(ctx.member.providerCustomerId && card?.providerPaymentMethodId
+          ? { customerId: ctx.member.providerCustomerId, paymentMethodId: card.providerPaymentMethodId }
+          : {}),
       });
       fees = { baseAmount: quote.baseAmount, serviceFeeAmount: quote.serviceFeeAmount, serviceFeePct: quote.serviceFeePct, taxAmount: quote.taxAmount, amount: quote.amount };
     } catch (error) {
@@ -618,6 +624,12 @@ export async function retryFailedTransaction(
     }
   })();
   const baseAmount = retryBaseAmount(ctx.original, pct);
+  if (!(baseAmount > 0)) {
+    // Never "collect" $0: the provider path treats a zero amount as nothing to
+    // charge and reports success, which would reactivate the member unpaid.
+    await db.delete(transactionSchema).where(eq(transactionSchema.id, retryTransactionId));
+    throw new TransactionNotRetryableError('This failed payment has no recorded amount, so it cannot be retried from Dojo Planner. Check the charge at the payment provider.');
+  }
 
   let outcome: ChargeOutcome;
   try {

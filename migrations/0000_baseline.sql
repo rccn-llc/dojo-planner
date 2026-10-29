@@ -726,4 +726,22 @@ CREATE TABLE IF NOT EXISTS "payment_webhook_event" (
 CREATE UNIQUE INDEX IF NOT EXISTS "payment_webhook_event_provider_key_idx" ON "payment_webhook_event" USING btree ("provider","event_key");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "payment_webhook_event_org_idx" ON "payment_webhook_event" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "transaction_retry_of_idx" ON "transaction" USING btree ("retry_of_transaction_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "transaction_provider_invoice_idx" ON "transaction" USING btree ("provider_invoice_id");
+CREATE INDEX IF NOT EXISTS "transaction_provider_invoice_idx" ON "transaction" USING btree ("provider_invoice_id");--> statement-breakpoint
+-- ── Card-update requests (IQPro add-payment-method link / post-decline) ─────
+CREATE TABLE IF NOT EXISTS "payment_method_update_request" (
+	"id" text PRIMARY KEY NOT NULL,
+	"organization_id" text NOT NULL,
+	"member_id" text NOT NULL,
+	"provider" text NOT NULL,
+	"provider_customer_id" text NOT NULL,
+	"reason" text NOT NULL,
+	"baseline_payment_method_ids" text DEFAULT '[]' NOT NULL,
+	"link_sent_at" timestamp,
+	"status" text DEFAULT 'pending' NOT NULL,
+	"new_payment_method_id" text,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	"completed_at" timestamp
+);--> statement-breakpoint
+ALTER TABLE "payment_method_update_request" ADD CONSTRAINT "payment_method_update_request_member_id_member_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."member"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "payment_method_update_request_member_status_idx" ON "payment_method_update_request" USING btree ("member_id","status");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "payment_method_update_request_org_status_idx" ON "payment_method_update_request" USING btree ("organization_id","status");

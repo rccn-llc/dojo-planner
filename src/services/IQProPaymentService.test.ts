@@ -591,7 +591,71 @@ describe('IQProPaymentProvider', () => {
       expect(p.addresses).toHaveLength(2);
       expect(p.addresses[0].isBilling).toBe(true);
       expect(p.addresses[1].isRemittance).toBe(true);
-      expect(p.paymentAdjustments).toEqual([{ type: 'ServiceFee', percentage: 3.75, flatAmount: null }]);
+      // InsertSubscription has no paymentAdjustments field — IQPro ignored it,
+      // so renewals charged no service fee. The fee is its own line now.
+      expect(p).not.toHaveProperty('paymentAdjustments');
+      expect(p.lineItems).toHaveLength(2);
+      expect(p.lineItems[0]).toEqual(expect.objectContaining({ unitPrice: 99, localTaxPercent: 0, nationalTaxPercent: 0 }));
+      expect(p.lineItems[1]).toEqual(expect.objectContaining({
+        name: 'Service fee',
+        unitPrice: 3.71, // 99 × 3.75% = 3.7125
+        localTaxPercent: 0,
+        nationalTaxPercent: 0,
+        unitOfMeasureId: 120,
+      }));
+    });
+
+    it('taxes only the membership line, so a renewal totals what the initial sale did', async () => {
+      // Sandbox-verified: $100 at 8.375% tax + a 3.75% fee line → 112.13.
+      const { provider, iqproPost } = await loadProvider();
+      iqproPost.mockResolvedValueOnce({ data: { subscriptionId: 'sub_tax' } });
+
+      await provider.createSubscription(testConfig, {
+        organizationId: 'test-org-456',
+        customerId: 'cust_123',
+        paymentMethodId: 'pm_card_1',
+        amount: 100,
+        frequency: 'monthly',
+        startDate: new Date('2026-04-15T12:00:00Z'),
+        description: 'Adult BJJ',
+        firstName: 'Jane',
+        lastName: 'Doe',
+        email: 'jane@example.com',
+        paymentAdjustments: [
+          { type: 'Tax', percentage: 8.375, flatAmount: null },
+          { type: 'ServiceFee', percentage: 3.75, flatAmount: null },
+        ],
+      });
+
+      const p = iqproPost.mock.calls[0]![2] as Record<string, any>;
+
+      expect(p.lineItems[0]).toEqual(expect.objectContaining({ unitPrice: 100, localTaxPercent: 8.375 }));
+      expect(p.lineItems[1]).toEqual(expect.objectContaining({ unitPrice: 3.75, localTaxPercent: 0 }));
+    });
+
+    it('adds no fee line when there is no service fee, and sets tax to zero explicitly', async () => {
+      // A line with no tax fields gets the gateway's default rate, not zero.
+      const { provider, iqproPost } = await loadProvider();
+      iqproPost.mockResolvedValueOnce({ data: { subscriptionId: 'sub_nofee' } });
+
+      await provider.createSubscription(testConfig, {
+        organizationId: 'test-org-456',
+        customerId: 'cust_123',
+        paymentMethodId: 'pm_card_1',
+        amount: 40,
+        frequency: 'monthly',
+        startDate: new Date('2026-04-15T12:00:00Z'),
+        description: 'Hold fee — Adult BJJ',
+        prefix: 'HOLD',
+        firstName: 'Jane',
+        lastName: 'Doe',
+        email: 'jane@example.com',
+      });
+
+      const p = iqproPost.mock.calls[0]![2] as Record<string, any>;
+
+      expect(p.lineItems).toHaveLength(1);
+      expect(p.lineItems[0]).toEqual(expect.objectContaining({ unitPrice: 40, localTaxPercent: 0, nationalTaxPercent: 0 }));
     });
 
     it('uses IQPro\'s native Six Months period (7) for semi-annual, with both months and the Half year unit', async () => {
@@ -970,6 +1034,182 @@ describe('IQProPaymentProvider', () => {
 
       expect(result.success).toBe(false);
       expect(result.declined).toBeUndefined();
+    });
+  });
+
+  describe('card-update requests', () => {
+    async function loadWithPut() {
+      const loaded = await loadProvider();
+      const { iqproPut } = await import('@/libs/IQPro');
+      return { ...loaded, iqproPut: vi.mocked(iqproPut) };
+    }
+
+    const storedSub = {
+      name: 'Adult BJJ',
+      prefix: 'MBR',
+      recurrence: {
+        termStartDate: '2026-10-29T05:07:00Z',
+        billingStartDate: '2026-10-29T05:07:00Z',
+        isAutoRenewed: true,
+        allowProration: false,
+        trialLengthInDays: 0,
+        invoiceLengthInDays: 1,
+        billingPeriod: { billingPeriodId: 4, name: 'Monthly' },
+        schedule: { minutes: [0], hours: [0], daysOfMonth: [29] },
+      },
+      paymentMethod: { subscriptionPaymentMethodId: 'spm_1', cardProcessorId: 'proc_card_on_sub', isAutoCharged: true },
+    };
+
+    it('lists the customer\'s saved cards and bank accounts', async () => {
+      const { provider, iqproGet } = await loadProvider();
+      iqproGet.mockResolvedValueOnce({
+        data: {
+          paymentMethods: [
+            { paymentMethodId: 'pm_card', card: { maskedCard: '426428******5555' }, isDefault: true },
+            { paymentMethodId: 'pm_ach', ach: { maskedAccount: '****6789' } },
+            { customerPaymentMethodId: 'pm_bare' },
+            { card: { maskedCard: '411111******1111' } },
+          ],
+        },
+      });
+
+      await expect(provider.listCustomerPaymentMethods(testConfig, 'cus_1')).resolves.toEqual([
+        { paymentMethodId: 'pm_card', type: 'card', last4: '5555', isDefault: true },
+        { paymentMethodId: 'pm_ach', type: 'ach', last4: '6789' },
+        { paymentMethodId: 'pm_bare', type: 'ach' },
+      ]);
+      expect(iqproGet).toHaveBeenCalledWith(transportConfig, '/api/gateway/test-gateway-001/customer/cus_1');
+    });
+
+    it('returns an empty list for a customer with no methods, and null when IQPro cannot be read', async () => {
+      const { provider, iqproGet } = await loadProvider();
+      iqproGet.mockResolvedValueOnce({ data: {} });
+
+      await expect(provider.listCustomerPaymentMethods(testConfig, 'cus_1')).resolves.toEqual([]);
+
+      iqproGet.mockRejectedValueOnce(new Error('IQPro 503'));
+
+      await expect(provider.listCustomerPaymentMethods(testConfig, 'cus_1')).resolves.toBeNull();
+
+      iqproGet.mockRejectedValueOnce('not an error');
+
+      await expect(provider.listCustomerPaymentMethods(testConfig, 'cus_1')).resolves.toBeNull();
+    });
+
+    it('sends IQPro\'s add-payment-method link by email', async () => {
+      const { provider, iqproPost } = await loadProvider();
+      iqproPost.mockResolvedValueOnce({ statusCode: 'Created' });
+
+      await expect(provider.sendPaymentMethodUpdateLink(testConfig, { providerCustomerId: 'cus_1', email: 'm@example.com' })).resolves.toEqual({ success: true });
+      expect(iqproPost).toHaveBeenCalledWith(transportConfig, '/api/gateway/test-gateway-001/customer/cus_1/payment/token', {
+        notificationContactMethod: 'Email',
+        mainRecipient: 'm@example.com',
+      });
+    });
+
+    it('returns a failure when IQPro refuses the link', async () => {
+      const { provider, iqproPost } = await loadProvider();
+      iqproPost.mockRejectedValueOnce(new Error('400 bad email'));
+
+      await expect(provider.sendPaymentMethodUpdateLink(testConfig, { providerCustomerId: 'cus_1', email: 'x' })).resolves.toEqual({ success: false, error: '400 bad email' });
+
+      iqproPost.mockRejectedValueOnce('boom');
+
+      await expect(provider.sendPaymentMethodUpdateLink(testConfig, { providerCustomerId: 'cus_1', email: 'x' })).resolves.toEqual({ success: false, error: 'Unknown error' });
+    });
+
+    it('switches the subscription\'s card with the sandbox-verified shape: stored recurrence echoed verbatim', async () => {
+      const { provider, iqproGet, iqproPut, getGatewayProcessors } = await loadWithPut();
+      iqproGet.mockResolvedValueOnce({ data: storedSub });
+      iqproPut.mockResolvedValueOnce({ data: {} });
+
+      await expect(provider.setSubscriptionPaymentMethod(testConfig, 'sub_1', 'pm_new')).resolves.toEqual({ success: true });
+      expect(iqproPut).toHaveBeenCalledWith(transportConfig, '/api/gateway/test-gateway-001/subscription/sub_1', {
+        name: 'Adult BJJ',
+        prefix: 'MBR',
+        recurrence: {
+          termStartDate: '2026-10-29T05:07:00Z',
+          billingStartDate: '2026-10-29T05:07:00Z',
+          isAutoRenewed: true,
+          allowProration: false,
+          trialLengthInDays: 0,
+          invoiceLengthInDays: 1,
+          billingPeriodId: 4,
+          schedule: { minutes: [0], hours: [0], daysOfMonth: [29] },
+        },
+        paymentMethod: {
+          subscriptionPaymentMethodId: 'spm_1',
+          customerPaymentMethodId: 'pm_new',
+          // The subscription's own processor wins; the gateway's fills the gap.
+          cardProcessorId: 'proc_card_on_sub',
+          achProcessorId: 'test-ach-processor-001',
+          isAutoCharged: true,
+        },
+      });
+      expect(getGatewayProcessors).toHaveBeenCalledTimes(1);
+    });
+
+    it('needs no gateway lookup when the subscription already has both processors', async () => {
+      const { provider, iqproGet, iqproPut, getGatewayProcessors } = await loadWithPut();
+      iqproGet.mockResolvedValueOnce({ data: { ...storedSub, paymentMethod: { subscriptionPaymentMethodId: 'spm_1', cardProcessorId: 'c', achProcessorId: 'a', isAutoCharged: false } } });
+      iqproPut.mockResolvedValueOnce({ data: {} });
+
+      await provider.setSubscriptionPaymentMethod(testConfig, 'sub_1', 'pm_new');
+
+      expect(getGatewayProcessors).not.toHaveBeenCalled();
+      expect(iqproPut.mock.calls[0]![2]).toMatchObject({ paymentMethod: { cardProcessorId: 'c', achProcessorId: 'a', isAutoCharged: false } });
+    });
+
+    it('defaults to auto-charged and null processors when nothing is known', async () => {
+      const { provider, iqproGet, iqproPut, getGatewayProcessors } = await loadWithPut();
+      iqproGet.mockResolvedValueOnce({ name: 'N', prefix: 'P' });
+      getGatewayProcessors.mockResolvedValueOnce({ cardProcessorId: null, achProcessorId: null });
+      iqproPut.mockResolvedValueOnce({ data: {} });
+
+      await provider.setSubscriptionPaymentMethod(testConfig, 'sub_1', 'pm_new');
+
+      expect(iqproPut.mock.calls[0]![2]).toEqual({
+        name: 'N',
+        prefix: 'P',
+        paymentMethod: { subscriptionPaymentMethodId: null, customerPaymentMethodId: 'pm_new', cardProcessorId: null, achProcessorId: null, isAutoCharged: true },
+      });
+    });
+
+    it('skips a subscription IQPro already cancelled (it refuses any update, and bills nothing)', async () => {
+      const { provider, iqproGet, iqproPut } = await loadWithPut();
+      iqproGet.mockResolvedValueOnce({ data: { ...storedSub, status: { subscriptionStatusId: 7, name: 'Cancelled' } } });
+
+      await expect(provider.setSubscriptionPaymentMethod(testConfig, 'sub_cancelled', 'pm_new')).resolves.toEqual({ success: true });
+      expect(iqproPut).not.toHaveBeenCalled();
+    });
+
+    it('returns a failure when IQPro refuses the switch', async () => {
+      const { provider, iqproGet, iqproPut } = await loadWithPut();
+      iqproGet.mockResolvedValueOnce({ data: storedSub });
+      iqproPut.mockRejectedValueOnce(new Error('IQPro 500'));
+
+      await expect(provider.setSubscriptionPaymentMethod(testConfig, 'sub_1', 'pm_new')).resolves.toEqual({ success: false, error: 'IQPro 500' });
+
+      iqproGet.mockRejectedValueOnce('boom');
+
+      await expect(provider.setSubscriptionPaymentMethod(testConfig, 'sub_1', 'pm_new')).resolves.toEqual({ success: false, error: 'Unknown error' });
+    });
+
+    it('hold/reactivate still sends name + prefix + the stored recurrence, overriding only isAutoRenewed', async () => {
+      const { provider, iqproGet, iqproPut } = await loadWithPut();
+      iqproGet.mockResolvedValueOnce({ data: storedSub });
+      iqproPut.mockResolvedValueOnce({ data: {} });
+
+      await expect(provider.setSubscriptionAutoRenewal(testConfig, 'sub_1', false)).resolves.toEqual({ success: true });
+
+      const body = iqproPut.mock.calls[0]![2] as Record<string, any>;
+
+      expect(body).toEqual({
+        name: 'Adult BJJ',
+        prefix: 'MBR',
+        recurrence: expect.objectContaining({ termStartDate: '2026-10-29T05:07:00Z', billingStartDate: '2026-10-29T05:07:00Z', isAutoRenewed: false, billingPeriodId: 4 }),
+      });
+      expect(body).not.toHaveProperty('paymentMethod');
     });
   });
 

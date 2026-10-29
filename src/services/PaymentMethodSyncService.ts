@@ -38,6 +38,7 @@ import { MEMBER_STATUS } from '@/types/MemberStatus';
 import { PAYMENT_PROVIDER } from '@/types/PaymentProvider';
 import { audit } from './AuditService';
 import { MemberNotFoundError } from './MembersService';
+import { applyPendingCardUpdate, membersWithOpenUpdateRequests } from './PaymentMethodUpdateRequestService';
 import { getPaymentProvider } from './PaymentProviderService';
 
 /** A repeat sync within this window reuses the last result instead of calling the provider. */
@@ -122,7 +123,18 @@ export async function syncMemberPaymentMethod(
   memberId: string,
   organizationId: string,
   config: PaymentProviderConfig | null,
-  opts: { force?: boolean; actor?: AuditContext } = {},
+  opts: {
+    force?: boolean;
+    actor?: AuditContext;
+    /**
+     * A change found now already happened before this moment. The sync that
+     * follows a decline can only find the card that was CHARGED, so a
+     * difference it discovers predates the failure — dating it "now" would
+     * claim the member updated their card after the failure ("ready to
+     * retry") when it is the card that just declined. Sandbox, 2026-10.
+     */
+    changedBefore?: Date;
+  } = {},
 ): Promise<SyncPaymentMethodResult> {
   const [member] = await db
     .select({ id: memberSchema.id })
@@ -157,6 +169,19 @@ export async function syncMemberPaymentMethod(
     return { changed: false, skipped: 'simulated', ...(local ? { paymentMethod: toSynced(local) } : {}) };
   }
 
+  // A card the member ADDED at IQPro is not on the subscription until we put
+  // it there; do that first so the read below sees it.
+  if (config.provider === PAYMENT_PROVIDER.IQPRO) {
+    try {
+      await applyPendingCardUpdate(memberId, organizationId, config);
+    } catch (error) {
+      logger.warn('[PaymentMethodSync] Applying a pending card update failed', {
+        memberId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   let remote: SubscriptionPaymentMethod | null = null;
   try {
     const provider = await getPaymentProvider(config);
@@ -176,6 +201,10 @@ export async function syncMemberPaymentMethod(
   }
 
   const now = new Date();
+  // When the card changed (see opts.changedBefore); last_synced_at stays `now`.
+  const changedAt = opts.changedBefore && opts.changedBefore.getTime() <= now.getTime()
+    ? new Date(opts.changedBefore.getTime() - 1)
+    : now;
   const remoteFields = {
     type: localType(remote),
     providerPaymentMethodId: remote.paymentMethodId,
@@ -226,7 +255,7 @@ export async function syncMemberPaymentMethod(
         cardBrand: remoteFields.cardBrand ?? local.cardBrand,
         firstSix: remoteFields.firstSix ?? local.firstSix,
         updatedSource: 'provider_sync',
-        updatedAt: now,
+        updatedAt: changedAt,
         lastSyncedAt: now,
       })
       .where(eq(paymentMethodSchema.id, local.id));
@@ -238,20 +267,42 @@ export async function syncMemberPaymentMethod(
       cardBrand: remoteFields.cardBrand ?? local.cardBrand,
       expirationDate: remoteFields.expirationDate ?? local.expirationDate,
       updatedSource: 'provider_sync',
-      updatedAt: now,
+      updatedAt: changedAt,
     });
     await recordChange({ memberId, organizationId, config, actor: opts.actor, previous: local, next: updated });
     return { changed: true, paymentMethod: updated, previousLast4: local.last4 };
   }
 
   // ── A different card: replace ──
+  // Serialised per member: two syncs (page load + modal + webhook follow-up)
+  // can both read the same active card above. Lock the member row, then decide
+  // from the state AFTER the lock — otherwise each retires the old card and
+  // inserts its own active default, leaving several active cards and making
+  // every "charge the saved card" lookup nondeterministic.
   const newId = randomUUID();
-  await db.transaction(async (tx) => {
-    if (local) {
+  const outcome = await db.transaction(async (tx) => {
+    await tx
+      .select({ id: memberSchema.id })
+      .from(memberSchema)
+      .where(eq(memberSchema.id, memberId))
+      .for('update');
+
+    const active = await tx
+      .select({ id: paymentMethodSchema.id, providerPaymentMethodId: paymentMethodSchema.providerPaymentMethodId })
+      .from(paymentMethodSchema)
+      .where(and(eq(paymentMethodSchema.memberId, memberId), eq(paymentMethodSchema.status, 'active')));
+
+    // A concurrent sync already recorded this card.
+    if (active.some(row => row.providerPaymentMethodId === remote.paymentMethodId)) {
+      return 'already_recorded' as const;
+    }
+
+    // Retire EVERY active card, not just the one read before the lock.
+    if (active.length > 0) {
       await tx
         .update(paymentMethodSchema)
-        .set({ status: 'replaced', isDefault: false, updatedAt: now })
-        .where(eq(paymentMethodSchema.id, local.id));
+        .set({ status: 'replaced', isDefault: false, updatedAt: changedAt })
+        .where(and(eq(paymentMethodSchema.memberId, memberId), eq(paymentMethodSchema.status, 'active')));
     }
     await tx.insert(paymentMethodSchema).values({
       id: newId,
@@ -261,12 +312,26 @@ export async function syncMemberPaymentMethod(
       status: 'active',
       updatedSource: 'provider_sync',
       createdAt: now,
-      updatedAt: now,
+      updatedAt: changedAt,
       lastSyncedAt: now,
     });
+    return 'replaced' as const;
   });
 
-  const next = toSynced({ id: newId, type: remoteFields.type, last4: remoteFields.last4, cardBrand: remoteFields.cardBrand, expirationDate: remoteFields.expirationDate, updatedSource: 'provider_sync', updatedAt: now });
+  if (outcome === 'already_recorded') {
+    const [current] = await db
+      .select(SELECT_PM)
+      .from(paymentMethodSchema)
+      .where(and(
+        eq(paymentMethodSchema.memberId, memberId),
+        eq(paymentMethodSchema.status, 'active'),
+        eq(paymentMethodSchema.providerPaymentMethodId, remote.paymentMethodId),
+      ))
+      .limit(1);
+    return { changed: false, ...(current ? { paymentMethod: toSynced(current) } : {}) };
+  }
+
+  const next = toSynced({ id: newId, type: remoteFields.type, last4: remoteFields.last4, cardBrand: remoteFields.cardBrand, expirationDate: remoteFields.expirationDate, updatedSource: 'provider_sync', updatedAt: changedAt });
   await recordChange({ memberId, organizationId, config, actor: opts.actor, previous: local ?? null, next });
   return { changed: true, paymentMethod: next, previousLast4: local?.last4 ?? null };
 }
@@ -344,9 +409,10 @@ export async function syncMemberQuietly(
   memberId: string,
   organizationId: string,
   config: PaymentProviderConfig,
+  opts: { changedBefore?: Date } = {},
 ): Promise<void> {
   try {
-    await syncMemberPaymentMethod(memberId, organizationId, config, { force: true });
+    await syncMemberPaymentMethod(memberId, organizationId, config, { force: true, ...opts });
   } catch (error) {
     logger.warn('[PaymentMethodSync] Background sync failed', {
       memberId,
@@ -359,9 +425,10 @@ export async function syncMemberQuietly(
 export const CRON_SYNC_LIMIT_PER_ORG = 200;
 
 /**
- * Reconcile every member of one org who has a past-due membership. Runs from
- * the daily cron to catch card updates that no webhook or page view surfaced.
- * Must run inside the org's tenant scope. Respects the per-member throttle.
+ * Reconcile every member of one org who has a past-due membership or an open
+ * card-update request. Runs from the daily cron to catch card updates that no
+ * webhook or page view surfaced. Must run inside the org's tenant scope.
+ * Respects the per-member throttle.
  */
 export async function syncPastDuePaymentMethods(
   organizationId: string,
@@ -377,10 +444,12 @@ export async function syncPastDuePaymentMethods(
       isNotNull(memberMembershipSchema.providerSubscriptionId),
     ))
     .limit(CRON_SYNC_LIMIT_PER_ORG);
+  const pending = await membersWithOpenUpdateRequests(organizationId, CRON_SYNC_LIMIT_PER_ORG);
+  const memberIds = [...new Set([...rows.map(r => r.memberId), ...pending])].slice(0, CRON_SYNC_LIMIT_PER_ORG);
 
   let changed = 0;
   let failed = 0;
-  for (const { memberId } of rows) {
+  for (const memberId of memberIds) {
     try {
       const result = await syncMemberPaymentMethod(memberId, organizationId, config);
       if (result.changed) {
@@ -397,5 +466,5 @@ export async function syncPastDuePaymentMethods(
       });
     }
   }
-  return { checked: rows.length, changed, failed };
+  return { checked: memberIds.length, changed, failed };
 }
