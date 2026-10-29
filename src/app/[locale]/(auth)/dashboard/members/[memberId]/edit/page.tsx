@@ -1784,13 +1784,13 @@ export default function EditMemberPage() {
                                     <line x1="7" y1="7" x2="7.01" y2="7" />
                                   </svg>
                                 </span>
-                                <span className="text-sm font-medium text-green-800 dark:text-green-200">
+                                <span className="text-sm font-medium text-green-800 dark:text-green-100">
                                   Coupon Applied:
                                   {' '}
                                   {appliedCoupon.code}
                                 </span>
                               </div>
-                              <p className="mt-1 text-xs text-green-700 dark:text-green-300">
+                              <p className="mt-1 text-xs text-green-700 dark:text-green-400">
                                 {appliedCoupon.type === 'Free Trial'
                                   ? appliedCoupon.amount
                                   : `${appliedCoupon.amount} off`}
