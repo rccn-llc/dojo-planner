@@ -126,6 +126,38 @@ function squareDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** `date` plus `months`, clamped to the target month's last day (Jan 31 + 1 → Feb 28). */
+function addMonthsClamped(date: Date, months: number): Date {
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth() + months;
+  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(year, month, Math.min(date.getUTCDate(), lastDay)));
+}
+
+/**
+ * Square's `start_date` for a subscription whose FIRST period the app has
+ * already charged: one billing period after `periodStart`.
+ *
+ * ⚠️ Square bills a subscription from its `start_date`, so starting it on the
+ * day the app's own initial charge runs either bills that period a second
+ * time or — what the sandbox did (2026-10) — deactivates the subscription on
+ * the spot (`DEACTIVATE_SUBSCRIPTION`, no invoice), so it never renews. A
+ * start date in the future is accepted as PENDING and bills from then on.
+ * This matches IQPro, whose first scheduled run also falls in the next period.
+ */
+export function firstSquareBillingDate(periodStart: Date, frequency: SubscriptionFrequency): string {
+  switch (frequency) {
+    case 'weekly':
+      return squareDate(new Date(periodStart.getTime() + 7 * 24 * 60 * 60 * 1000));
+    case 'monthly':
+      return squareDate(addMonthsClamped(periodStart, 1));
+    case 'semi-annual':
+      return squareDate(addMonthsClamped(periodStart, 6));
+    case 'annual':
+      return squareDate(addMonthsClamped(periodStart, 12));
+  }
+}
+
 /**
  * Lift the tax RATE out of the fee adjustments the orchestrator built.
  *
@@ -552,7 +584,8 @@ export class SquarePaymentProvider implements IPaymentProvider {
         customer_id: params.customerId,
         // Always present — see the card_id note above.
         card_id: params.paymentMethodId,
-        start_date: squareDate(params.startDate),
+        // The first period is already paid — see firstSquareBillingDate.
+        start_date: firstSquareBillingDate(params.startDate, params.frequency),
         // Per-subscription override, which is what lets one catalog variation
         // serve every member on this cadence.
         price_override_money: { amount: toMinorUnits(params.amount), currency: 'USD' },

@@ -238,6 +238,12 @@ export type CreateSubscriptionParams = {
   paymentMethodId: string;
   amount: number;
   frequency: SubscriptionFrequency;
+  /**
+   * Start of the FIRST period, which the caller charges itself (the initial
+   * Sale at signup). Providers bill from the NEXT period: IQPro's first
+   * scheduled run naturally falls there; Square's `start_date` is set one
+   * period later (`firstSquareBillingDate`).
+   */
   startDate: Date;
   description: string;
   metadata?: Record<string, string>;
