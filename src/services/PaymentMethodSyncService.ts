@@ -188,8 +188,12 @@ export async function syncMemberPaymentMethod(
 
   // ── Same provider id ──
   if (local && local.providerPaymentMethodId === remote.paymentMethodId) {
-    const detailsChanged = (!!remote.last4 && remote.last4 !== local.last4)
-      || (!!remote.expirationDate && remote.expirationDate !== local.expirationDate);
+    // A change means a value we HAD differs. A value we never stored (rows
+    // saved before expiry was recorded) is a backfill, not a member update —
+    // the sandbox's first sync reported "•••• 5555 → •••• 5555" as one.
+    const differs = (remoteValue: string | undefined, localValue: string | null) =>
+      !!remoteValue && !!localValue && remoteValue !== localValue;
+    const detailsChanged = differs(remote.last4, local.last4) || differs(remote.expirationDate, local.expirationDate);
 
     if (!detailsChanged) {
       // Backfill display fields an older row lacks, without calling it a change.
@@ -197,12 +201,21 @@ export async function syncMemberPaymentMethod(
         .update(paymentMethodSchema)
         .set({
           lastSyncedAt: now,
+          ...(!local.last4 && remote.last4 ? { last4: remote.last4 } : {}),
           ...(!local.cardBrand && remote.cardBrand ? { cardBrand: remote.cardBrand } : {}),
           ...(!local.expirationDate && remote.expirationDate ? { expirationDate: remote.expirationDate } : {}),
           ...(!local.firstSix && remote.firstSix ? { firstSix: remote.firstSix } : {}),
         })
         .where(eq(paymentMethodSchema.id, local.id));
-      return { changed: false, paymentMethod: toSynced({ ...local, cardBrand: local.cardBrand ?? remote.cardBrand ?? null, expirationDate: local.expirationDate ?? remote.expirationDate ?? null }) };
+      return {
+        changed: false,
+        paymentMethod: toSynced({
+          ...local,
+          last4: local.last4 ?? remote.last4 ?? null,
+          cardBrand: local.cardBrand ?? remote.cardBrand ?? null,
+          expirationDate: local.expirationDate ?? remote.expirationDate ?? null,
+        }),
+      };
     }
 
     await db

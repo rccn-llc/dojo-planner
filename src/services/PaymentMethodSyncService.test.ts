@@ -124,17 +124,26 @@ describe('syncMemberPaymentMethod', () => {
 
     const result = await syncMemberPaymentMethod(m.memberId, ORG, IQPRO);
 
-    expect(result).toMatchObject({ changed: true });
-
-    // Backfill path: expiry was null locally, so the first sync records it as a change.
-    const again = await syncMemberPaymentMethod(m.memberId, ORG, IQPRO, { force: true });
-
-    expect(again.changed).toBe(false);
+    // A field we never stored is a backfill, not a member update. Sandbox: the
+    // first sync of a pre-expiry row reported "•••• 5555 → •••• 5555".
+    expect(result).toMatchObject({ changed: false, paymentMethod: { last4: '1111', expirationDate: '05/28', cardBrand: 'MASTERCARD' } });
+    expect(auditMock).not.toHaveBeenCalled();
 
     const [row] = await cards(m.memberId);
 
-    expect(row).toMatchObject({ cardBrand: 'MASTERCARD', firstSix: '555555' });
+    expect(row).toMatchObject({ cardBrand: 'MASTERCARD', firstSix: '555555', expirationDate: '05/28' });
+    expect(row!.updatedSource).not.toBe('provider_sync');
     expect(row!.lastSyncedAt).not.toBeNull();
+  });
+
+  it('backfills a missing last4 quietly too', async () => {
+    const m = await makeMember({ card: { last4: null } });
+    provider.getSubscriptionPaymentMethod.mockResolvedValue({ customerId: 'c', paymentMethodId: 'pm_old', paymentMethodName: 'card', last4: '1111', expirationDate: '01/27' });
+
+    const result = await syncMemberPaymentMethod(m.memberId, ORG, IQPRO);
+
+    expect(result).toMatchObject({ changed: false, paymentMethod: { last4: '1111' } });
+    expect(auditMock).not.toHaveBeenCalled();
   });
 
   it('treats a brand-only difference as unchanged and fills the brand', async () => {

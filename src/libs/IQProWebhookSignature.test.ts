@@ -61,6 +61,25 @@ describe('toPublicKeyPem', () => {
     expect(lines.slice(1, -2).every(l => l.length === 64)).toBe(true);
   });
 
+  it('accepts IQPro\'s bare PKCS#1 key (MIIBig…) and a signature made with it verifies', async () => {
+    const { toPublicKeyPem, verifyIQProWebhookSignature } = await load();
+    // IQPro's gateway configuration returns an RSAPublicKey, not SPKI.
+    const pkcs1Bare = publicKey.export({ type: 'pkcs1', format: 'der' }).toString('base64');
+    const pem = toPublicKeyPem(pkcs1Bare);
+    const resource = '{"transactionId":"tx-1","status":"DECLINED","amount":10.50}';
+
+    expect(pem.split('\n')[0]).toBe('-----BEGIN PUBLIC KEY-----');
+    expect(verifyIQProWebhookSignature({ rawBody: body(resource, signText(resource)), resource: JSON.parse(resource), signature: signText(resource), publicKeyPem: pem })).toBe(true);
+  });
+
+  it('wraps an unparseable key anyway, so verification fails closed', async () => {
+    const { toPublicKeyPem, verifyIQProWebhookSignature } = await load();
+    const pem = toPublicKeyPem('bm90LWEta2V5');
+
+    expect(pem).toBe('-----BEGIN PUBLIC KEY-----\nbm90LWEta2V5\n-----END PUBLIC KEY-----');
+    expect(verifyIQProWebhookSignature({ rawBody: body('{}', signText('{}')), resource: {}, signature: signText('{}'), publicKeyPem: pem })).toBe(false);
+  });
+
   it('passes an existing PEM through unchanged (trimmed)', async () => {
     const { toPublicKeyPem } = await load();
 
