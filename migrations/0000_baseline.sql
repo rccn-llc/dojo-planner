@@ -744,4 +744,5 @@ CREATE TABLE IF NOT EXISTS "payment_method_update_request" (
 );--> statement-breakpoint
 ALTER TABLE "payment_method_update_request" ADD CONSTRAINT "payment_method_update_request_member_id_member_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."member"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "payment_method_update_request_member_status_idx" ON "payment_method_update_request" USING btree ("member_id","status");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "payment_method_update_request_org_status_idx" ON "payment_method_update_request" USING btree ("organization_id","status");
+CREATE INDEX IF NOT EXISTS "payment_method_update_request_org_status_idx" ON "payment_method_update_request" USING btree ("organization_id","status");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "payment_method_update_request_one_pending_idx" ON "payment_method_update_request" USING btree ("member_id") WHERE "status" = 'pending';

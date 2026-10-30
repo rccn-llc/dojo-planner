@@ -376,6 +376,69 @@ describe('InviteStaffModal', () => {
       });
     });
 
+    describe('delayed close after success', () => {
+      async function submitValidInvite() {
+        await waitFor(() => {
+          expect(mockFetchStaffRoles).toHaveBeenCalled();
+        });
+        await userEvent.fill(page.getByTestId('invite-staff-first-name'), 'John');
+        await userEvent.fill(page.getByTestId('invite-staff-last-name'), 'Doe');
+        await userEvent.fill(page.getByTestId('invite-staff-email'), 'john@example.com');
+        await userEvent.click(page.getByTestId('invite-staff-role'));
+        await userEvent.click(page.getByRole('option', { name: 'Admin' }));
+        await userEvent.click(page.getByTestId('invite-staff-save-button'));
+        await waitFor(() => {
+          expect(page.getByText('invitation_sent_success').query()).not.toBeNull();
+        });
+      }
+
+      const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+      it('closes the modal on its own after showing the success message', async () => {
+        await render(<InviteStaffModal isOpen={true} onCloseAction={mockHandlers.onCloseAction} />);
+        await submitValidInvite();
+
+        expect(mockHandlers.onCloseAction).not.toHaveBeenCalled();
+
+        await waitFor(() => {
+          expect(mockHandlers.onCloseAction).toHaveBeenCalledTimes(1);
+        }, { timeout: 3000 });
+      });
+
+      it('a stale timer never closes a modal the user closed and reopened', async () => {
+        const screen = await render(<InviteStaffModal isOpen={true} onCloseAction={mockHandlers.onCloseAction} />);
+        await submitValidInvite();
+
+        // Closed and reopened before the 1.5s delayed close fires.
+        await screen.rerender(<InviteStaffModal isOpen={false} onCloseAction={mockHandlers.onCloseAction} />);
+        await screen.rerender(<InviteStaffModal isOpen={true} onCloseAction={mockHandlers.onCloseAction} />);
+        await wait(2000);
+
+        expect(mockHandlers.onCloseAction).not.toHaveBeenCalled();
+      });
+
+      it('clears the timer when the user closes the modal themselves', async () => {
+        await render(<InviteStaffModal isOpen={true} onCloseAction={mockHandlers.onCloseAction} />);
+        await submitValidInvite();
+
+        await userEvent.keyboard('{Escape}');
+        await wait(2000);
+
+        // Only the user's own close — not a second one from the timer.
+        expect(mockHandlers.onCloseAction).toHaveBeenCalledTimes(1);
+      });
+
+      it('clears the timer on unmount', async () => {
+        const screen = await render(<InviteStaffModal isOpen={true} onCloseAction={mockHandlers.onCloseAction} />);
+        await submitValidInvite();
+
+        await screen.unmount();
+        await wait(2000);
+
+        expect(mockHandlers.onCloseAction).not.toHaveBeenCalled();
+      });
+    });
+
     it('should display error message when invitation fails', async () => {
       mockInviteStaffMember.mockResolvedValue({
         success: false,

@@ -1,4 +1,5 @@
 import type { PaymentProvider } from '@/types/PaymentProvider';
+import { sql } from 'drizzle-orm';
 import { bigint, boolean, index, integer, numeric, pgTable, primaryKey, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 import { PAYMENT_PROVIDER } from '@/types/PaymentProvider';
 
@@ -1050,6 +1051,13 @@ export const paymentMethodUpdateRequestSchema = pgTable(
   table => [
     index('payment_method_update_request_member_status_idx').on(table.memberId, table.status),
     index('payment_method_update_request_org_status_idx').on(table.organizationId, table.status),
+    // At most ONE pending request per member. Two concurrent opens (a decline
+    // webhook and a staff click, say) would otherwise both find none and each
+    // insert one with a different baseline. The loser's insert conflicts and
+    // reuses the winner's row.
+    uniqueIndex('payment_method_update_request_one_pending_idx')
+      .on(table.memberId)
+      .where(sql`${table.status} = 'pending'`),
   ],
 );
 

@@ -35,7 +35,7 @@ export type TenantTable = {
   /**
    * How rows are attributed to an organization.
    *
-   * `direct` — the table carries `organization_id` itself (17 tables).
+   * `direct` — the table carries `organization_id` itself (19 tables).
    * `via`    — reachable only through a parent; the SQL fragment is the
    *            subquery that selects this table's rows for one org.
    */
@@ -47,7 +47,8 @@ export type TenantTable = {
 };
 
 /**
- * All 35 copyable tables, in INSERT order.
+ * All 37 copyable tables, in INSERT order (19 `direct`, 18 `via`). A test
+ * pins both counts, so a table added here must update this comment too.
  *
  * NOTE: `instructor_profile` is org-scoped but is NOT cleared by `seed.ts`'s
  * teardown. Copying only what the seed clears would silently drop it, so it is

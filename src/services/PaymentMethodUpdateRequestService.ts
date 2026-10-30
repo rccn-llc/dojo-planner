@@ -108,6 +108,22 @@ async function findOpen(memberId: string): Promise<(OpenUpdateRequest & { baseli
 }
 
 /**
+ * Mark the member's pending requests older than the window `expired`. They
+ * are no longer polled, and the one-pending-per-member unique index must not
+ * let a stale row block a new request.
+ */
+async function expireStale(memberId: string): Promise<void> {
+  await db
+    .update(paymentMethodUpdateRequestSchema)
+    .set({ status: 'expired' })
+    .where(and(
+      eq(paymentMethodUpdateRequestSchema.memberId, memberId),
+      eq(paymentMethodUpdateRequestSchema.status, 'pending'),
+      lt(paymentMethodUpdateRequestSchema.createdAt, new Date(Date.now() - UPDATE_REQUEST_TTL_MS)),
+    ));
+}
+
+/**
  * For the UI: whether a card-update link can be sent for this member (IQPro
  * org, member has an IQPro customer and an email), and the open request.
  */
@@ -171,6 +187,7 @@ export async function openPaymentMethodUpdateRequest(
   let requestId: string;
   let created = false;
 
+  await expireStale(memberId);
   const open = await findOpen(memberId);
   if (open) {
     requestId = open.id;
@@ -184,17 +201,32 @@ export async function openPaymentMethodUpdateRequest(
           .where(and(eq(paymentMethodSchema.memberId, memberId), isNotNull(paymentMethodSchema.providerPaymentMethodId))))
           .map(r => r.id as string);
 
-    requestId = randomUUID();
-    await db.insert(paymentMethodUpdateRequestSchema).values({
-      id: requestId,
-      organizationId,
-      memberId,
-      provider: config.provider,
-      providerCustomerId: member.providerCustomerId,
-      reason: opts.reason,
-      baselinePaymentMethodIds: JSON.stringify(baseline),
-    });
-    created = true;
+    // The unique index allows one pending request per member. A concurrent
+    // open that got here first wins: this insert does nothing, and its row
+    // (with its baseline) is reused.
+    const inserted = await db
+      .insert(paymentMethodUpdateRequestSchema)
+      .values({
+        id: randomUUID(),
+        organizationId,
+        memberId,
+        provider: config.provider,
+        providerCustomerId: member.providerCustomerId,
+        reason: opts.reason,
+        baselinePaymentMethodIds: JSON.stringify(baseline),
+      })
+      .onConflictDoNothing()
+      .returning({ id: paymentMethodUpdateRequestSchema.id });
+    if (inserted[0]) {
+      requestId = inserted[0].id;
+      created = true;
+    } else {
+      const winner = await findOpen(memberId);
+      if (!winner) {
+        throw new Error('A card-update request conflicted but no open request was found.');
+      }
+      requestId = winner.id;
+    }
   }
 
   let linkSent = false;
@@ -262,14 +294,7 @@ export async function applyPendingCardUpdate(
   }
 
   // Stop polling requests nobody acted on.
-  await db
-    .update(paymentMethodUpdateRequestSchema)
-    .set({ status: 'expired' })
-    .where(and(
-      eq(paymentMethodUpdateRequestSchema.memberId, memberId),
-      eq(paymentMethodUpdateRequestSchema.status, 'pending'),
-      lt(paymentMethodUpdateRequestSchema.createdAt, new Date(Date.now() - UPDATE_REQUEST_TTL_MS)),
-    ));
+  await expireStale(memberId);
 
   const open = await findOpen(memberId);
   if (!open) {

@@ -9,7 +9,10 @@
  * - credentials — card/ACH tokens (IQPro `token`, `achToken`, `achId`; Square
  *   `source_id`, nonces), account/card numbers, CVVs, secrets → removed;
  * - personal data — names, emails, phones, street addresses → removed;
- * - masked numbers (`426428******5555`) → last 4 only.
+ * - masked numbers (`426428******5555`) → last 4 only;
+ * - a body that is not a JSON object/array (HTML error pages, plain text, a
+ *   bare JSON string) → replaced entirely by a marker. It cannot be redacted by
+ *   field, and gateway error pages can echo submitted fields.
  *
  * Ids, statuses, amounts and field NAMES are kept: they are what diagnosis
  * needs. Keys are matched case-insensitively and in camel or snake case.
@@ -83,21 +86,35 @@ export function redactForLog(value: unknown): unknown {
   return out;
 }
 
-const MAX_UNPARSED = 500;
+/**
+ * A body that cannot be redacted by field is never logged: only its kind and
+ * length, which is what diagnosis can safely use (with the HTTP status the
+ * caller logs alongside).
+ */
+function unstructuredMarker(text: string): string {
+  const kind = /^\s*<(?:!doctype|html|\?xml|[a-z])/i.test(text) ? 'HTML/XML' : 'text';
+  return `[non-JSON ${kind} body redacted, ${text.length} chars]`;
+}
 
 /**
- * Redact a raw body for logging (or for an error message). A JSON body is
- * redacted field by field and pretty-printed; anything else cannot be redacted
- * by field, so it is kept only up to a short length — error text is usually
- * short and needed for diagnosis.
+ * Redact a raw body for logging (or for an error message). A JSON object or
+ * array is redacted field by field and pretty-printed; anything else is
+ * replaced by a marker (see `unstructuredMarker`).
  */
 export function redactBodyForLog(text: string | null | undefined): string {
   if (!text) {
     return '(empty body)';
   }
+  let parsed: unknown;
   try {
-    return JSON.stringify(redactForLog(JSON.parse(text)), null, 2);
+    parsed = JSON.parse(text);
   } catch {
-    return text.length > MAX_UNPARSED ? `${text.slice(0, MAX_UNPARSED)}… [truncated]` : text;
+    return unstructuredMarker(text);
   }
+  // A bare JSON string is free text in quotes; numbers, booleans and null
+  // carry nothing sensitive.
+  if (typeof parsed === 'string') {
+    return unstructuredMarker(parsed);
+  }
+  return JSON.stringify(redactForLog(parsed), null, 2);
 }
