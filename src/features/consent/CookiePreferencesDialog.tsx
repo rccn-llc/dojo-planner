@@ -65,7 +65,6 @@ function PreferencesForm({
   onOpenChangeAction: (open: boolean) => void;
 }) {
   const t = useTranslations('CookieConsent');
-  const descriptionId = useId();
   const necessaryLabelId = useId();
   const functionalLabelId = useId();
   const analyticsLabelId = useId();
@@ -106,14 +105,14 @@ function PreferencesForm({
   return (
     <>
       {/*
-        DialogContent hardcodes `aria-describedby={undefined}` before its prop
-        spread, which suppresses Radix's automatic description association.
-        Passing it explicitly here restores it (the spread wins).
+        Radix Dialog (>= 1.3) links DialogDescription to aria-describedby on
+        its own. Do not pass an explicit id here: it replaces Radix's id on the
+        description but not in aria-describedby, leaving a dangling reference.
       */}
-      <DialogContent aria-describedby={descriptionId} className="sm:max-w-xl">
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{t('dialog_title')}</DialogTitle>
-          <DialogDescription id={descriptionId}>
+          <DialogDescription>
             {t('dialog_description')}
           </DialogDescription>
         </DialogHeader>

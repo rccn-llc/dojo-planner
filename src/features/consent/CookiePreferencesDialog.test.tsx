@@ -80,8 +80,12 @@ describe('CookiePreferencesDialog', () => {
     const describedBy = dialog.getAttribute('aria-describedby');
 
     expect(describedBy).toBeTruthy();
-    expect(dialog.querySelector(`#${CSS.escape(describedBy!)}`)?.textContent)
-      .toContain('Choose which categories');
+
+    // Every referenced id must resolve: a dangling id is an invalid ARIA reference.
+    const descriptions = describedBy!.split(/\s+/).map(id => dialog.querySelector(`#${CSS.escape(id)}`));
+
+    expect(descriptions.every(Boolean)).toBe(true);
+    expect(descriptions.map(el => el?.textContent).join(' ')).toContain('Choose which categories');
   });
 
   it('saves only the categories the visitor turned on', async () => {
