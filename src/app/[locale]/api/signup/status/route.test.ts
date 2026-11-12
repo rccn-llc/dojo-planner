@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { GET, OPTIONS, resetStatusRouteState } from './route';
+import { resetSignupRouteState } from '@/libs/SignupRouteState';
+import { GET, OPTIONS } from './route';
 
 vi.mock('@/utils/SignupConfig', () => ({
   SIGNUP_LIMITS: { statusPollsPerMinute: 3 },
@@ -21,7 +22,7 @@ function get(query: string, headers: Record<string, string> = { 'origin': 'https
 describe('GET /api/signup/status', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    resetStatusRouteState();
+    resetSignupRouteState();
     readSignupStatus.mockResolvedValue({ state: 'provisioning', step: 'database', message: 'Preparing your database' });
   });
 

@@ -1,11 +1,10 @@
 import type { CorsPolicy } from '@/libs/Cors';
-import type { PublicSignupStatus } from '@/services/SignupFlowService';
 import { corsJson, evaluateCors, preflightResponse } from '@/libs/Cors';
 import { logger } from '@/libs/Logger';
-import { createWindowLimiter } from '@/libs/MemoryRateLimit';
 import { getClientIP } from '@/libs/RateLimit';
+import { statusCache as cache, statusLimiter as polls } from '@/libs/SignupRouteState';
 import { readSignupStatus } from '@/services/SignupFlowService';
-import { SIGNUP_LIMITS, signupAllowedOrigins } from '@/utils/SignupConfig';
+import { signupAllowedOrigins } from '@/utils/SignupConfig';
 import { isSignupRequestId, isSignupToken } from '@/validations/SignupTokens';
 
 /**
@@ -21,15 +20,6 @@ export const runtime = 'nodejs';
 
 const CACHE_MS = 2000;
 const MAX_CACHED = 5000;
-
-const polls = createWindowLimiter({ limit: SIGNUP_LIMITS.statusPollsPerMinute, windowMs: 60_000 });
-const cache = new Map<string, { at: number; status: PublicSignupStatus }>();
-
-/** Exported for tests. */
-export function resetStatusRouteState(): void {
-  polls.reset();
-  cache.clear();
-}
 
 function corsPolicy(): CorsPolicy {
   return {

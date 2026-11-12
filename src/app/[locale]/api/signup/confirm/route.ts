@@ -1,8 +1,8 @@
 import { Buffer } from 'node:buffer';
 import { NextResponse } from 'next/server';
 import { logger } from '@/libs/Logger';
-import { createWindowLimiter } from '@/libs/MemoryRateLimit';
 import { getClientIP } from '@/libs/RateLimit';
+import { confirmLimiter } from '@/libs/SignupRouteState';
 import { confirmAndDispatch } from '@/services/SignupFlowService';
 import { isConfirmToken } from '@/validations/SignupTokens';
 
@@ -25,13 +25,6 @@ import { isConfirmToken } from '@/validations/SignupTokens';
 export const runtime = 'nodejs';
 
 const MAX_BODY_BYTES = 1024;
-const confirms = createWindowLimiter({ limit: 10, windowMs: 60_000 });
-
-/** Exported for tests. */
-export function resetConfirmRouteState(): void {
-  confirms.reset();
-}
-
 const json = (body: unknown, status: number, headers?: Record<string, string>) =>
   NextResponse.json(body, { status, headers: { 'Cache-Control': 'no-store', ...headers } });
 
@@ -47,7 +40,7 @@ export const POST = async (request: Request) => {
   if (Number(request.headers.get('content-length') ?? '0') > MAX_BODY_BYTES) {
     return json({ error: 'payload_too_large' }, 413);
   }
-  if (!confirms.allow(getClientIP(request))) {
+  if (!confirmLimiter.allow(getClientIP(request))) {
     return json({ error: 'rate_limited' }, 429, { 'Retry-After': '60' });
   }
 

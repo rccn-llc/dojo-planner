@@ -108,6 +108,7 @@ src/
 │   ├── Cors.ts            # Exact-origin CORS for the public sign-up routes (headers on errors too)
 │   ├── CronAuth.ts        # `isAuthorizedCronRequest` — shared `Bearer $CRON_SECRET` check for /api/cron/*
 │   ├── MemoryRateLimit.ts # `createWindowLimiter` — per-instance fixed-window counter (sign-up status + confirm routes)
+│   ├── SignupRouteState.ts # The sign-up routes' limiters + status cache. ⚠️ Not in the route files: a route module may export only handlers/config, or `next build` fails its type check
 │   └── Square.ts          # Square REST transport (no SDK). `toMinorUnits`/`fromMinorUnits` are the ONLY dollars↔cents crossing
 ├── utils/                 # Helper functions
 │   ├── AppConfig.ts       # Pricing plans, Clerk locales

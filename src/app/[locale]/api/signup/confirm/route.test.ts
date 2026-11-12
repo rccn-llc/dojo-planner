@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { POST, resetConfirmRouteState } from './route';
+import { resetSignupRouteState } from '@/libs/SignupRouteState';
+import { POST } from './route';
 
 const confirmAndDispatch = vi.fn();
 vi.mock('@/services/SignupFlowService', () => ({ confirmAndDispatch: (t: string) => confirmAndDispatch(t) }));
@@ -20,7 +21,7 @@ const withToken = (token: unknown = TOKEN) => JSON.stringify({ token });
 describe('POST /api/signup/confirm', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    resetConfirmRouteState();
+    resetSignupRouteState();
   });
 
   it.each(['started', 'already_confirmed', 'failed'])('returns 200 for %s so the page shows live status', async (kind) => {
