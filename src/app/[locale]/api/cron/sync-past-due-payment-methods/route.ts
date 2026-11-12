@@ -1,9 +1,7 @@
-import { Buffer } from 'node:buffer';
-import { timingSafeEqual } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 import { controlDb } from '@/libs/ControlDb';
-import { Env } from '@/libs/Env';
+import { isAuthorizedCronRequest } from '@/libs/CronAuth';
 import { logger } from '@/libs/Logger';
 import { runWithTenant } from '@/libs/TenantContext';
 import { TENANT_STATUS, tenantSchema } from '@/models/ControlSchema';
@@ -22,19 +20,8 @@ import { getDbForOrg } from '@/services/TenantDirectoryService';
  * Vercel Cron authenticates with `Authorization: Bearer $CRON_SECRET`. With no
  * secret configured the route refuses everything rather than run open.
  */
-function authorized(request: Request): boolean {
-  const secret = Env.CRON_SECRET;
-  if (!secret) {
-    return false;
-  }
-  const header = request.headers.get('authorization') ?? '';
-  const expected = Buffer.from(`Bearer ${secret}`);
-  const actual = Buffer.from(header);
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
-}
-
 export const GET = async (request: Request) => {
-  if (!authorized(request)) {
+  if (!isAuthorizedCronRequest(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

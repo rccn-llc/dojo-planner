@@ -2444,6 +2444,25 @@
     "vendors_title": "データの受領者",
     "vendors_body": "エラーおよびパフォーマンス監視は Sentry が処理します。必要不可欠なセッションデータは Clerk が、決済データは当社の決済代行会社が処理します。"
   },
+  "SignupConfirm": {
+    "meta_title": "アカデミーの確認",
+    "title": "アカデミーの確認",
+    "loading": "リンクを確認しています…",
+    "intro": "確認すると Dojo Planner にアカデミーが作成されます。設定には数分かかり、完了するとサインイン用の招待メールが届きます。",
+    "confirm_button": "アカデミーを確認する",
+    "confirming": "確認しています…",
+    "invalid_link": "このリンクは無効です。最新のメールのリンクを使用するか、もう一度お申し込みください。",
+    "unavailable": "問題が発生しました。数分後にもう一度お試しください。",
+    "step_queued": "設定を開始しています…",
+    "step_organization": "組織を作成しています…",
+    "step_database": "データベースを準備しています…",
+    "step_starter_data": "初期データを読み込んでいます…",
+    "step_invitation": "招待を送信しています…",
+    "state_ready": "アカデミーの準備ができました。サインイン用の招待メールをご確認ください。",
+    "go_to_sign_in": "Dojo Planner へ移動",
+    "state_expired": "確認リンクの有効期限が切れました。もう一度お申し込みください。",
+    "state_failed": "アカデミーの設定を完了できませんでした。担当チームに通知済みで、ご連絡いたします。"
+  },
   "Footer": {
     "copyright": "© Dojo Planner. All rights reserved.",
     "privacy": "プライバシーポリシー",

@@ -63,6 +63,8 @@ vi.mock('@/libs/Logger', () => ({
 // Mock drizzle-orm eq
 vi.mock('drizzle-orm', () => ({
   eq: vi.fn((_col, val) => ({ _type: 'eq', value: val })),
+  // ControlSchema's partial indexes use `sql` at import time.
+  sql: Object.assign(vi.fn(() => ({ _type: 'sql' })), { raw: vi.fn() }),
 }));
 
 // Helper to mock findFirst with partial org data (avoids the full schema type

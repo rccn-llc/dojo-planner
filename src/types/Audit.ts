@@ -179,6 +179,12 @@ export const AUDIT_ACTION = {
   ROLE_CREATE: 'role.create',
   ROLE_UPDATE: 'role.update',
   ROLE_DELETE: 'role.delete',
+
+  // Public sign-up from www.dojoplanner.com (system actor, no org yet)
+  ORG_SIGNUP_SUBMIT: 'orgSignup.submit',
+  ORG_SIGNUP_CONFIRM: 'orgSignup.confirm',
+  ORG_SIGNUP_DISPATCH: 'orgSignup.dispatch',
+  ORG_SIGNUP_FAILED: 'orgSignup.failed',
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTION)[keyof typeof AUDIT_ACTION];
@@ -218,6 +224,7 @@ export const AUDIT_ENTITY_TYPE = {
   STAFF: 'staff',
   INSTRUCTOR: 'instructor',
   ROLE: 'role',
+  SIGNUP_REQUEST: 'signupRequest',
 } as const;
 
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPE)[keyof typeof AUDIT_ENTITY_TYPE];
@@ -244,6 +251,14 @@ export type AuditFieldChange = {
  * scheduled job — no Clerk user performed them. Pair with the resolved orgId.
  */
 export const SYSTEM_ACTOR_USER_ID = 'system:payment-webhook';
+
+/**
+ * Actor and org recorded for public sign-up audits. A sign-up has no Clerk
+ * user and no organization until it is provisioned, so neither id exists yet;
+ * the entity id (the sign-up request id) ties the events together.
+ */
+export const SIGNUP_ACTOR_USER_ID = 'system:public-signup';
+export const SIGNUP_AUDIT_ORG_ID = 'public-signup';
 
 export type AuditContext = {
   /** Clerk user ID performing the action */

@@ -1,7 +1,7 @@
 import type { OnboardState, Queryable } from './steps';
 import { describe, expect, it, vi } from 'vitest';
 import { TENANT_TABLES } from '../../services/TenantDataMap';
-import { countOrgRows, ensureControlTrial, hasPaymentConfig, planSteps, readConfiguredProvider, readTenantRow, writePaymentConfig } from './steps';
+import { countOrgRows, ensureControlTrial, hasPaymentConfig, isReferenceSeedComplete, needsProvision, planSteps, readConfiguredProvider, readTenantRow, writePaymentConfig } from './steps';
 
 function fakeDb(rowsFor: (sql: string) => unknown[]) {
   const query = vi.fn(async (sql: string, _params?: unknown[]) => ({ rows: rowsFor(sql) }));
@@ -13,7 +13,9 @@ const FRESH: OnboardState = {
   ownerAccessGranted: false,
   databaseExists: false,
   tenantStatus: null,
+  schemaApplied: false,
   orgRowCount: 0,
+  seedComplete: false,
   paymentSaved: false,
   paymentRequested: true,
 };
@@ -29,9 +31,22 @@ describe('planSteps', () => {
   });
 
   it('marks completed steps on resume after a failure mid-way', () => {
-    const steps = planSteps({ ...FRESH, clerkOrgExists: true, ownerAccessGranted: true, databaseExists: true, tenantStatus: 'provisioning' });
+    const steps = planSteps({ ...FRESH, clerkOrgExists: true, ownerAccessGranted: true, databaseExists: true, tenantStatus: 'provisioning', schemaApplied: true });
 
     expect(steps.filter(s => s.done).map(s => s.id)).toEqual(['clerk-org', 'owner', 'database', 'provision']);
+  });
+
+  it('does not count a tenant row with no schema as provisioned', () => {
+    const steps = planSteps({ ...FRESH, tenantStatus: 'provisioning', schemaApplied: false });
+
+    expect(steps.find(s => s.id === 'provision')?.done).toBe(false);
+  });
+
+  it('does not count a seed that stopped part-way as done, and says so', () => {
+    const seed = planSteps({ ...FRESH, orgRowCount: 40, seedComplete: false }).find(s => s.id === 'seed');
+
+    expect(seed?.done).toBe(false);
+    expect(seed?.label).toContain('stopped part-way');
   });
 
   it('treats only an ACTIVE tenant as activated', () => {
@@ -40,7 +55,7 @@ describe('planSteps', () => {
   });
 
   it('always re-runs verification', () => {
-    const all = { ...FRESH, clerkOrgExists: true, ownerAccessGranted: true, databaseExists: true, tenantStatus: 'active', orgRowCount: 9, paymentSaved: true };
+    const all = { ...FRESH, clerkOrgExists: true, ownerAccessGranted: true, databaseExists: true, tenantStatus: 'active', schemaApplied: true, orgRowCount: 9, seedComplete: true, paymentSaved: true };
 
     expect(planSteps(all).filter(s => !s.done).map(s => s.id)).toEqual(['verify']);
   });
@@ -48,9 +63,32 @@ describe('planSteps', () => {
 
 describe('state probes', () => {
   it('reads the tenant row', async () => {
-    const { db } = fakeDb(() => [{ status: 'active', connection_string_enc: 'enc' }]);
+    const { db } = fakeDb(() => [{ status: 'active', connection_string_enc: 'enc', schema_version: '0000_baseline' }]);
 
-    expect(await readTenantRow(db, 'org_1')).toEqual({ status: 'active', connectionStringEncrypted: 'enc' });
+    expect(await readTenantRow(db, 'org_1')).toEqual({ status: 'active', connectionStringEncrypted: 'enc', schemaVersion: '0000_baseline' });
+  });
+
+  it('reads a missing schema version as null', async () => {
+    const { db } = fakeDb(() => [{ status: 'provisioning', connection_string_enc: 'enc', schema_version: null }]);
+
+    expect((await readTenantRow(db, 'org_1'))?.schemaVersion).toBeNull();
+  });
+
+  it('needs provisioning with no row, or a non-active row that never recorded its schema', () => {
+    expect(needsProvision(null)).toBe(true);
+    expect(needsProvision({ status: 'provisioning', connectionStringEncrypted: 'e', schemaVersion: null })).toBe(true);
+    expect(needsProvision({ status: 'provisioning', connectionStringEncrypted: 'e', schemaVersion: '0000_baseline' })).toBe(false);
+    // An ACTIVE row is never re-provisioned, whatever its recorded version.
+    expect(needsProvision({ status: 'active', connectionStringEncrypted: 'e', schemaVersion: null })).toBe(false);
+  });
+
+  it('treats the seed as complete only once the merge fields (written last) exist', async () => {
+    const done = fakeDb(() => [{ n: '2' }]);
+
+    expect(await isReferenceSeedComplete(done.db, 'org_1')).toBe(true);
+    expect(done.query.mock.calls[0]?.[0]).toContain('waiver_merge_field');
+    expect(done.query.mock.calls[0]?.[1]).toEqual(['org_1']);
+    expect(await isReferenceSeedComplete(fakeDb(() => [{ n: '0' }]).db, 'org_1')).toBe(false);
   });
 
   it('returns null with no tenant row', async () => {

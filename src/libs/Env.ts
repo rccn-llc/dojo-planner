@@ -83,6 +83,11 @@ export const Env = createEnv({
     // Resend email service (optional - email sending disabled if not configured)
     RESEND_API_KEY: z.string().min(1).optional(),
     RESEND_FROM_EMAIL: z.string().email().optional(),
+    // ---- Public sign-up (/api/signup) ----
+    // Fine-grained GitHub token, Actions: read & write on rccn-llc/dojo-planner
+    // ONLY. Starts the `onboard-org` job when an owner confirms. Expires at most
+    // yearly; when it does, confirmations fail with an alert naming it.
+    GITHUB_DISPATCH_TOKEN: z.string().min(1).optional(),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.string().optional(),
@@ -127,6 +132,7 @@ export const Env = createEnv({
     SQUARE_ENVIRONMENT: process.env.SQUARE_ENVIRONMENT,
     RESEND_API_KEY: process.env.RESEND_API_KEY,
     RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL,
+    GITHUB_DISPATCH_TOKEN: process.env.GITHUB_DISPATCH_TOKEN,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:
       process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,

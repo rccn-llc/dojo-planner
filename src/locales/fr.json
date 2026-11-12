@@ -2449,6 +2449,25 @@
     "vendors_title": "Qui reçoit ces données",
     "vendors_body": "La surveillance des erreurs et des performances est traitée par Sentry. Les données de session strictement nécessaires sont traitées par Clerk, et les données de paiement par notre prestataire de paiement."
   },
+  "SignupConfirm": {
+    "meta_title": "Confirmez votre académie",
+    "title": "Confirmez votre académie",
+    "loading": "Vérification de votre lien…",
+    "intro": "Confirmez pour créer votre académie sur Dojo Planner. La configuration prend quelques minutes et vous recevrez une invitation par e-mail pour vous connecter dès qu'elle sera prête.",
+    "confirm_button": "Confirmer mon académie",
+    "confirming": "Confirmation…",
+    "invalid_link": "Ce lien n'est pas valide. Utilisez le lien de votre e-mail le plus récent ou inscrivez-vous à nouveau.",
+    "unavailable": "Une erreur s'est produite de notre côté. Réessayez dans quelques minutes.",
+    "step_queued": "Démarrage de la configuration…",
+    "step_organization": "Création de votre organisation…",
+    "step_database": "Préparation de votre base de données…",
+    "step_starter_data": "Chargement des données de départ…",
+    "step_invitation": "Envoi de votre invitation…",
+    "state_ready": "Votre académie est prête. Consultez votre e-mail pour l'invitation à vous connecter.",
+    "go_to_sign_in": "Aller sur Dojo Planner",
+    "state_expired": "Ce lien de confirmation a expiré. Veuillez vous inscrire à nouveau.",
+    "state_failed": "Nous n'avons pas pu terminer la configuration de votre académie. Notre équipe a été prévenue et vous contactera."
+  },
   "Footer": {
     "copyright": "© Dojo Planner. Tous droits réservés.",
     "privacy": "Politique de confidentialité",

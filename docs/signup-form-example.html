@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Start your academy</title>
+  <!--
+    Sample sign-up form for www.dojoplanner.com. Contract: docs/SIGNUP-API.md.
+    Try it locally: `npx http-server docs -p 8080`, open
+    http://localhost:8080/signup-form-example.html, and point CONFIG.apiBase at a
+    preview deployment (preview accepts http://localhost:8080). A file:// page
+    sends `Origin: null` and is refused.
+  -->
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 32rem; margin: 2rem auto; padding: 0 1rem; color: #111; }
+    label { display: block; margin-top: 1rem; font-weight: 600; }
+    input { width: 100%; box-sizing: border-box; padding: .55rem; font-size: 1rem; border: 1px solid #bbb; border-radius: .375rem; }
+    input[aria-invalid="true"] { border-color: #b00020; }
+    .error { color: #b00020; font-size: .875rem; min-height: 1.25em; margin-top: .25rem; }
+    .hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; } /* honeypot: hidden from people */
+    button { margin-top: 1.5rem; padding: .65rem 1.25rem; font-size: 1rem; cursor: pointer; }
+    button[disabled] { opacity: .6; cursor: wait; }
+    #status { margin-top: 1.5rem; padding: 1rem; border-radius: .5rem; background: #f3f4f6; }
+  </style>
+</head>
+<body>
+  <h1>Start your academy</h1>
+
+  <form id="signup-form" novalidate>
+    <label for="academyName">Academy name</label>
+    <input id="academyName" name="academyName" required minlength="2" maxlength="120"
+           autocomplete="organization" aria-describedby="academyName-error">
+    <div class="error" id="academyName-error"></div>
+
+    <label for="ownerName">Your name</label>
+    <input id="ownerName" name="ownerName" required maxlength="120"
+           autocomplete="name" aria-describedby="ownerName-error">
+    <div class="error" id="ownerName-error"></div>
+
+    <label for="ownerEmail">Email</label>
+    <input id="ownerEmail" name="ownerEmail" type="email" required maxlength="254"
+           autocomplete="email" aria-describedby="ownerEmail-error">
+    <div class="error" id="ownerEmail-error"></div>
+
+    <label for="ownerPhone">Phone</label>
+    <input id="ownerPhone" name="ownerPhone" type="tel" required maxlength="40"
+           pattern="[0-9 +().\-]{7,40}" autocomplete="tel" aria-describedby="ownerPhone-error">
+    <div class="error" id="ownerPhone-error"></div>
+
+    <!-- Honeypot. People never see it; bots fill it in. Must be sent empty. -->
+    <div class="hp" aria-hidden="true">
+      <label for="website">Website</label>
+      <input id="website" name="website" tabindex="-1" autocomplete="off">
+    </div>
+
+    <button type="submit" id="submit">Create my academy</button>
+    <div class="error" id="form-error" role="alert"></div>
+  </form>
+
+  <div id="status" role="status" aria-live="polite" hidden></div>
+
+  <script>
+  (() => {
+    // ---------------------------------------------------------------
+    // Configuration
+    // ---------------------------------------------------------------
+    const CONFIG = {
+      apiBase: 'https://app.dojoplanner.com', // preview: 'https://<preview-host>'
+      pollFastMs: 4000,                        // poll every 4 s…
+      pollSlowMs: 15000,                       // …then every 15 s
+      slowAfterMs: 5 * 60 * 1000,              // after 5 minutes
+      giveUpAfterMs: 30 * 60 * 1000,           // stop polling after 30 minutes
+      storageKey: 'dojoplanner.signup',        // resumes polling after a page refresh
+    };
+
+    const FIELDS = ['academyName', 'ownerName', 'ownerEmail', 'ownerPhone'];
+    const FIELD_ERRORS = {
+      required: 'This field is required.',
+      invalid: 'Please check this value.',
+      too_long: 'This is too long.',
+    };
+    // Fallback wording. The status endpoint usually sends `message`, which wins.
+    const STATE_TEXT = {
+      'awaiting_confirmation': 'Check your email for a confirmation link.',
+      'provisioning:queued': 'Starting setup…',
+      'provisioning': 'Setting up your academy…',
+      'ready': 'Your academy is ready. Check your email for your invitation.',
+      'failed': 'We couldn’t finish setting up your academy. Our team has been notified and will contact you.',
+      'expired': 'That confirmation link expired. Please submit the form again.',
+    };
+    const FINAL_STATES = ['ready', 'failed', 'expired'];
+
+    const form = document.getElementById('signup-form');
+    const submitBtn = document.getElementById('submit');
+    const formError = document.getElementById('form-error');
+    const statusEl = document.getElementById('status');
+    let timer;
+
+    // ---------------------------------------------------------------
+    // Submit: POST JSON to /api/signup
+    // ---------------------------------------------------------------
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      clearErrors();
+      if (!form.checkValidity()) {
+        // Quick feedback in the browser; the server is still the authority.
+        FIELDS.forEach((name) => {
+          const input = form.elements[name];
+          if (!input.validity.valid) {
+            showFieldError(name, input.validity.valueMissing ? 'required' : 'invalid');
+          }
+        });
+        return;
+      }
+
+      const data = new FormData(form);
+      const payload = {
+        academyName: String(data.get('academyName') || ''),
+        ownerName: String(data.get('ownerName') || ''),
+        ownerEmail: String(data.get('ownerEmail') || ''),
+        ownerPhone: String(data.get('ownerPhone') || ''),
+        website: String(data.get('website') || ''), // honeypot, normally ''
+      };
+
+      submitBtn.disabled = true;
+      let res;
+      try {
+        res = await fetch(`${CONFIG.apiBase}/api/signup`, {
+          method: 'POST',
+          mode: 'cors',          // cross-origin: www → app
+          credentials: 'omit',   // no cookies are needed or sent
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          // The browser adds `Origin: https://www.dojoplanner.com` itself;
+          // it cannot (and must not) be set here.
+          body: JSON.stringify(payload),
+        });
+      } catch {
+        formError.textContent = 'We couldn’t reach Dojo Planner. Check your connection and try again.';
+        submitBtn.disabled = false;
+        return;
+      }
+
+      const body = await res.json().catch(() => ({}));
+
+      if (res.status === 202 && isAppUrl(body.statusUrl)) {
+        const session = { statusUrl: body.statusUrl, startedAt: Date.now() };
+        try { sessionStorage.setItem(CONFIG.storageKey, JSON.stringify(session)); } catch { /* private mode */ }
+        form.hidden = true;
+        startPolling(session);
+        return;
+      }
+
+      submitBtn.disabled = false;
+      if (res.status === 400 && body.error === 'invalid_request') {
+        Object.entries(body.fields || {}).forEach(([name, code]) => showFieldError(name, code));
+      } else if (res.status === 429) {
+        const seconds = Number(res.headers.get('Retry-After')) || 900;
+        formError.textContent = `Too many attempts. Please try again in about ${Math.ceil(seconds / 60)} minutes.`;
+      } else if (res.status === 503) {
+        formError.textContent = 'Sign-up is temporarily unavailable. Please try again later.';
+      } else {
+        // 400 invalid_json, 403, 413, 415: a problem with this page, not the visitor.
+        formError.textContent = 'Something went wrong on our side. Please try again later.';
+        console.error('Signup request rejected', res.status, body);
+      }
+    });
+
+    // ---------------------------------------------------------------
+    // Poll GET statusUrl until ready / failed / expired
+    // ---------------------------------------------------------------
+    function startPolling(session) {
+      showStatus(STATE_TEXT.awaiting_confirmation);
+      const tick = async () => {
+        const elapsed = Date.now() - session.startedAt;
+        if (elapsed > CONFIG.giveUpAfterMs) {
+          showStatus('This is taking longer than expected. You’ll still get an email when your academy is ready.');
+          return stop(false);
+        }
+        if (!document.hidden) {
+          try {
+            const res = await fetch(session.statusUrl, {
+              method: 'GET',
+              mode: 'cors',
+              credentials: 'omit',
+              headers: { 'Accept': 'application/json' },
+            });
+            if (res.ok) {
+              const s = await res.json();
+              render(s);
+              if (FINAL_STATES.includes(s.state)) return stop(s.state === 'expired');
+            } else if (res.status === 404) {
+              showStatus('We couldn’t find this sign-up. Please submit the form again.');
+              return stop(true);
+            }
+            // 429 / 5xx / network errors: keep polling, they are usually temporary.
+          } catch { /* keep polling */ }
+        }
+        timer = setTimeout(tick, elapsed > CONFIG.slowAfterMs ? CONFIG.pollSlowMs : CONFIG.pollFastMs);
+      };
+      tick();
+    }
+
+    function render(s) {
+      const key = s.state === 'provisioning' && s.step === 'queued' ? 'provisioning:queued' : s.state;
+      showStatus(s.message || STATE_TEXT[key] || 'Working…');
+      if (s.state === 'ready' && isAppUrl(s.signInUrl)) {
+        const link = document.createElement('a');
+        link.href = s.signInUrl;
+        link.textContent = 'Go to Dojo Planner';
+        statusEl.append(document.createElement('br'), link);
+      }
+    }
+
+    function stop(showFormAgain) {
+      clearTimeout(timer);
+      try { sessionStorage.removeItem(CONFIG.storageKey); } catch { /* ignore */ }
+      if (showFormAgain) {
+        form.hidden = false;
+        submitBtn.disabled = false;
+      }
+    }
+
+    // ---------------------------------------------------------------
+    // Helpers
+    // ---------------------------------------------------------------
+    function showStatus(text) {
+      statusEl.hidden = false;
+      statusEl.textContent = text; // textContent, never innerHTML
+    }
+
+    // Only link to the Dojo Planner app itself — never to whatever URL a
+    // response happens to contain (a `javascript:` URL would run on click).
+    function isAppUrl(value) {
+      try {
+        const url = new URL(value);
+        return url.origin === new URL(CONFIG.apiBase).origin && (url.protocol === 'https:' || url.hostname === 'localhost');
+      } catch {
+        return false;
+      }
+    }
+
+    function showFieldError(name, code) {
+      const input = form.elements[name];
+      const slot = document.getElementById(`${name}-error`);
+      if (!input || !slot) return;
+      input.setAttribute('aria-invalid', 'true');
+      slot.textContent = FIELD_ERRORS[code] || FIELD_ERRORS.invalid;
+    }
+
+    function clearErrors() {
+      formError.textContent = '';
+      FIELDS.forEach((name) => {
+        form.elements[name].removeAttribute('aria-invalid');
+        document.getElementById(`${name}-error`).textContent = '';
+      });
+    }
+
+    // Resume polling if the visitor refreshed the page after submitting.
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(CONFIG.storageKey) || 'null');
+      if (saved && isAppUrl(saved.statusUrl)) {
+        form.hidden = true;
+        startPolling(saved);
+      }
+    } catch { /* ignore */ }
+  })();
+  </script>
+</body>
+</html>

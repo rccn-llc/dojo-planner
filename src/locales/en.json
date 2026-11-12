@@ -2444,6 +2444,25 @@
     "vendors_title": "Who receives this data",
     "vendors_body": "Error and performance monitoring is processed by Sentry. Strictly necessary session data is processed by Clerk, and payment data by our payment processor."
   },
+  "SignupConfirm": {
+    "meta_title": "Confirm your academy",
+    "title": "Confirm your academy",
+    "loading": "Checking your link…",
+    "intro": "Confirm to create your academy on Dojo Planner. Setup takes a few minutes, and you'll get an email invitation to sign in when it's ready.",
+    "confirm_button": "Confirm my academy",
+    "confirming": "Confirming…",
+    "invalid_link": "This link isn't valid. Please use the link from your most recent email, or sign up again.",
+    "unavailable": "Something went wrong on our side. Please try again in a few minutes.",
+    "step_queued": "Starting setup…",
+    "step_organization": "Creating your organization…",
+    "step_database": "Preparing your database…",
+    "step_starter_data": "Loading starter data…",
+    "step_invitation": "Sending your invitation…",
+    "state_ready": "Your academy is ready. Check your email for your invitation to sign in.",
+    "go_to_sign_in": "Go to Dojo Planner",
+    "state_expired": "That confirmation link expired. Please sign up again.",
+    "state_failed": "We couldn't finish setting up your academy. Our team has been notified and will contact you."
+  },
   "Footer": {
     "copyright": "© Dojo Planner. All rights reserved.",
     "privacy": "Privacy Policy",

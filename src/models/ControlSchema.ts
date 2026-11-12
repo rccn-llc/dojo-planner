@@ -1,4 +1,5 @@
-import { index, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { index, integer, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 
 // =============================================================================
 // CONTROL-PLANE SCHEMA
@@ -109,3 +110,107 @@ export const tenantExternalRefSchema = pgTable(
     index('tenant_external_ref_org_idx').on(table.orgId),
   ],
 );
+
+/**
+ * Lifecycle of a public sign-up from www.dojoplanner.com. The order matters:
+ * each status is only ever reached from the one before it, and `failed` /
+ * `expired` are terminal until an operator re-runs the GitHub job.
+ */
+export const SIGNUP_STATUS = {
+  /** Form accepted; confirmation email sent; nothing provisioned. */
+  AWAITING_CONFIRMATION: 'awaiting_confirmation',
+  /** The owner clicked Confirm; a slug has been assigned. */
+  CONFIRMED: 'confirmed',
+  /** The GitHub `onboard-org` job was started. */
+  DISPATCHED: 'dispatched',
+  /** `org:create --fromRequest` is running (attempt 1 or 2). */
+  PROVISIONING: 'provisioning',
+  /** The org is active and the owner has been invited. */
+  PROVISIONED: 'provisioned',
+  /** Both attempts failed, the job died, or GitHub refused the dispatch. */
+  FAILED: 'failed',
+  /** The confirmation link was never used, or its email could not be sent. */
+  EXPIRED: 'expired',
+} as const;
+
+export type SignupStatus = (typeof SIGNUP_STATUS)[keyof typeof SIGNUP_STATUS];
+
+/** Statuses that still hold an owner email or slug. */
+export const OPEN_SIGNUP_STATUSES: readonly SignupStatus[] = [
+  SIGNUP_STATUS.AWAITING_CONFIRMATION,
+  SIGNUP_STATUS.CONFIRMED,
+  SIGNUP_STATUS.DISPATCHED,
+  SIGNUP_STATUS.PROVISIONING,
+];
+
+/**
+ * One row per public sign-up. This is the durable record of who applied and
+ * what happened, and the hand-off between the app (which accepts and confirms)
+ * and `org:create --fromRequest` running in GitHub Actions (which provisions).
+ *
+ * Control plane because no tenant database exists for the org yet.
+ *
+ * ⚠️ `last_error` is internal: it can hold provider messages and hosts, so it is
+ * never logged by the CLI (the repo's Actions logs are public) and never
+ * returned to the form.
+ */
+export const orgSignupRequestSchema = pgTable(
+  'org_signup_request',
+  {
+    id: text('id').primaryKey(),
+    status: text('status').notNull().default(SIGNUP_STATUS.AWAITING_CONFIRMATION),
+    academyName: text('academy_name').notNull(),
+    // Assigned at confirmation, when it is checked against Clerk.
+    slug: text('slug'),
+    ownerName: text('owner_name').notNull(),
+    // Always lowercase — the unique "one open request per email" index relies on it.
+    ownerEmail: text('owner_email').notNull(),
+    ownerPhone: text('owner_phone').notNull(),
+    // sha256 hex of the emailed token. The token itself is never stored.
+    confirmTokenHash: text('confirm_token_hash').notNull(),
+    confirmExpiresAt: timestamp('confirm_expires_at', { mode: 'date' }).notNull(),
+    confirmedAt: timestamp('confirmed_at', { mode: 'date' }),
+    // Confirmation emails sent for this request. Capped, so resubmitting the
+    // same address cannot be used to flood someone's inbox.
+    confirmEmailsSent: integer('confirm_emails_sent').notNull().default(0),
+    // sha256 hex of the token the form polls with. It can only READ status.
+    statusTokenHash: text('status_token_hash').notNull(),
+    // A `planSteps` step name, written by the CLI before each step.
+    currentStep: text('current_step'),
+    attempt: integer('attempt').notNull().default(0),
+    heartbeatAt: timestamp('heartbeat_at', { mode: 'date' }),
+    clerkOrgId: text('clerk_org_id'),
+    workflowRunUrl: text('workflow_run_url'),
+    lastError: text('last_error'),
+    provisionedAt: timestamp('provisioned_at', { mode: 'date' }),
+    // Set in the same guarded UPDATE that claims the alert, so it is sent once.
+    alertSentAt: timestamp('alert_sent_at', { mode: 'date' }),
+    submitIp: text('submit_ip'),
+    userAgent: text('user_agent'),
+    createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { mode: 'date' })
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  table => [
+    uniqueIndex('org_signup_request_confirm_token_idx').on(table.confirmTokenHash),
+    uniqueIndex('org_signup_request_status_token_idx').on(table.statusTokenHash),
+    // At most one OPEN request per owner email. `owner_email` is always stored
+    // lowercased (SignupRequestService), so a plain column index is
+    // case-insensitive in effect — and unlike `lower(...)` it is a column the
+    // test suites' drizzle-orm mocks can describe.
+    uniqueIndex('org_signup_request_open_email_idx')
+      .on(table.ownerEmail)
+      .where(sql`${table.status} IN ('awaiting_confirmation', 'confirmed', 'dispatched', 'provisioning')`),
+    // A slug, once assigned, is reserved unless its request expired.
+    uniqueIndex('org_signup_request_slug_idx')
+      .on(table.slug)
+      .where(sql`${table.status} <> 'expired'`),
+    index('org_signup_request_ip_created_idx').on(table.submitIp, table.createdAt),
+    index('org_signup_request_email_created_idx').on(table.ownerEmail, table.createdAt),
+    index('org_signup_request_status_idx').on(table.status),
+  ],
+);
+
+export type OrgSignupRequest = typeof orgSignupRequestSchema.$inferSelect;

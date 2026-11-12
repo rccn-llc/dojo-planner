@@ -16,6 +16,7 @@ vi.mock('resend', () => ({
 vi.mock('@/libs/Logger', () => ({
   logger: {
     info: vi.fn(),
+    warn: vi.fn(),
     error: vi.fn(),
   },
 }));
@@ -362,6 +363,49 @@ describe('EmailService', () => {
       const result = await sendPaymentReceiptEmail(baseReceipt);
 
       expect(result).toBe(false);
+    });
+  });
+
+  describe('sendSignupConfirmationEmail', () => {
+    const params = {
+      toEmail: 'jordan@example.com',
+      ownerName: '<script>alert(1)</script>',
+      academyName: 'Riverside & "Friends"',
+      confirmUrl: 'https://app.example.test/signup/confirm?id=1&token=sc_x',
+      expiresInHours: 48,
+    };
+
+    it('returns false without sending when Resend is not configured', async () => {
+      const { sendSignupConfirmationEmail } = await import('./EmailService');
+
+      expect(await sendSignupConfirmationEmail(params)).toBe(false);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it('escapes every form value and carries the link and expiry', async () => {
+      process.env.RESEND_API_KEY = 'test_resend_key_not_real'; // nosecret
+      mockSend.mockResolvedValue({});
+      const { sendSignupConfirmationEmail } = await import('./EmailService');
+
+      expect(await sendSignupConfirmationEmail(params)).toBe(true);
+
+      const sent = mockSend.mock.calls[0]![0];
+
+      expect(sent.to).toBe('jordan@example.com');
+      expect(sent.subject).toBe('Confirm Riverside & "Friends" on Dojo Planner');
+      expect(sent.html).not.toContain('<script>');
+      expect(sent.html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+      expect(sent.html).toContain('Riverside &amp; &quot;Friends&quot;');
+      expect(sent.html).toContain('href="https://app.example.test/signup/confirm?id=1&amp;token=sc_x"');
+      expect(sent.html).toContain('48 hours');
+    });
+
+    it('returns false when Resend throws', async () => {
+      process.env.RESEND_API_KEY = 'test_resend_key_not_real'; // nosecret
+      mockSend.mockRejectedValue(new Error('Resend down'));
+      const { sendSignupConfirmationEmail } = await import('./EmailService');
+
+      expect(await sendSignupConfirmationEmail(params)).toBe(false);
     });
   });
 });

@@ -1,0 +1,142 @@
+name: Onboard organization
+
+# Started by the app (POST /api/signup/confirm) when an academy owner confirms
+# a public sign-up from www.dojoplanner.com. Can also be started by hand from
+# the Actions tab, or re-run after a failure (the CLI resumes where it stopped).
+#
+# ⚠️ This repository is PUBLIC: run logs and inputs are visible to anyone.
+#   - The only input is the sign-up request id; org:create reads the rest from
+#     the control database.
+#   - `--ci` masks every customer value, captures child-script output, and
+#     records failure detail on the request row (last_error), not in the log.
+#   - Inputs reach the shell through env vars only, never `${{ }}` inside `run:`.
+#
+# Secrets come from the GitHub ENVIRONMENT (Production / Preview), which should
+# be restricted to deployments from `main`. They are existing values copied from
+# `.env.onboard.<target>` (and NEON_API_KEY from `.env.local`) — nothing new.
+
+on:
+  workflow_dispatch:
+    inputs:
+      request_id:
+        description: Sign-up request id (org_signup_request.id)
+        required: true
+        type: string
+      target:
+        description: Which environment's control plane and Clerk instance
+        required: true
+        type: choice
+        options: [production, preview]
+        default: production
+      dry_run:
+        description: Preflight only — write nothing
+        required: false
+        type: boolean
+        default: false
+
+# Nothing by default; the job asks for exactly what it needs.
+permissions: {}
+
+concurrency:
+  group: onboard-${{ inputs.request_id }}
+  cancel-in-progress: false
+
+jobs:
+  onboard:
+    name: Provision sign-up
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ inputs.target == 'production' && 'Production' || 'Preview' }}
+    permissions:
+      contents: read
+
+    # Inputs and non-secret values only. Secrets are given to the individual
+    # steps that use them, so checkout, Node setup and `npm ci` (which runs
+    # dependency install scripts) never see them.
+    env:
+      REQUEST_ID: ${{ inputs.request_id }}
+      TARGET: ${{ inputs.target }}
+      DRY_RUN: ${{ inputs.dry_run }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+    steps:
+      - name: Validate inputs
+        run: |
+          if [[ ! "$REQUEST_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+            echo "request_id must be a UUID."
+            exit 1
+          fi
+          if [[ "$TARGET" != "production" && "$TARGET" != "preview" ]]; then
+            echo "target must be production or preview."
+            exit 1
+          fi
+
+      # Actions are pinned to full commit SHAs (a tag can be moved); Dependabot
+      # (github-actions ecosystem) keeps the pins current.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      # No dependency cache here: this job holds production secrets, and a cache
+      # entry is shared with other workflows. A clean install from the lockfile
+      # cannot be poisoned by another run.
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22.x
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: org:create (attempt 1)
+        id: attempt1
+        continue-on-error: true
+        env:
+          # Environment secrets (copied, not new). An environment secret overrides
+          # the repo-level CLERK_SECRET_KEY (the dev key CI uses); if it is
+          # missing, org:create refuses the dev key for a production target.
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          CONTROL_DATABASE_URL: ${{ secrets.CONTROL_DATABASE_URL }}
+          IQPRO_CONFIG_ENCRYPTION_KEY: ${{ secrets.IQPRO_CONFIG_ENCRYPTION_KEY }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          # Not secrets.
+          VERCEL_TEAM_ID: team_wwtiHql0ZaKJEoVAVUUi9oPh
+          ONBOARD_OPERATOR_USERNAME: ${{ vars.ONBOARD_OPERATOR_USERNAME }}
+          ONBOARD_NEON_REGION: iad1
+        run: |
+          args=(--target="$TARGET" --fromRequest="$REQUEST_ID" --ci)
+          if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          npm run org:create -- "${args[@]}"
+
+      # The CLI resumes: every completed step is detected and skipped.
+      - name: org:create (attempt 2)
+        id: attempt2
+        if: steps.attempt1.outcome == 'failure' && inputs.dry_run != true
+        env:
+          # Same as attempt 1.
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          CONTROL_DATABASE_URL: ${{ secrets.CONTROL_DATABASE_URL }}
+          IQPRO_CONFIG_ENCRYPTION_KEY: ${{ secrets.IQPRO_CONFIG_ENCRYPTION_KEY }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          # Not secrets.
+          VERCEL_TEAM_ID: team_wwtiHql0ZaKJEoVAVUUi9oPh
+          ONBOARD_OPERATOR_USERNAME: ${{ vars.ONBOARD_OPERATOR_USERNAME }}
+          ONBOARD_NEON_REGION: iad1
+        run: npm run org:create -- --target="$TARGET" --fromRequest="$REQUEST_ID" --ci --attempt=2
+
+      - name: Dry run failed
+        if: steps.attempt1.outcome == 'failure' && inputs.dry_run == true
+        run: |
+          echo "The dry run failed. The detail is not printed here (public log)."
+          exit 1
+
+      # Covers a job that died before org:create could record its own failure.
+      # The app reports the failure to Sentry when it sees the request failed.
+      # Needs only the control database.
+      - name: Mark the sign-up failed
+        if: failure() && inputs.dry_run != true
+        env:
+          CONTROL_DATABASE_URL: ${{ secrets.CONTROL_DATABASE_URL }}
+        run: npx --no-install tsx src/scripts/markSignupFailed.ts --request="$REQUEST_ID" --runUrl="$RUN_URL"

@@ -745,4 +745,41 @@ CREATE TABLE IF NOT EXISTS "payment_method_update_request" (
 ALTER TABLE "payment_method_update_request" ADD CONSTRAINT "payment_method_update_request_member_id_member_id_fk" FOREIGN KEY ("member_id") REFERENCES "public"."member"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "payment_method_update_request_member_status_idx" ON "payment_method_update_request" USING btree ("member_id","status");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "payment_method_update_request_org_status_idx" ON "payment_method_update_request" USING btree ("organization_id","status");--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "payment_method_update_request_one_pending_idx" ON "payment_method_update_request" USING btree ("member_id") WHERE "status" = 'pending';
+CREATE UNIQUE INDEX IF NOT EXISTS "payment_method_update_request_one_pending_idx" ON "payment_method_update_request" USING btree ("member_id") WHERE "status" = 'pending';--> statement-breakpoint
+-- ── Public sign-ups from www.dojoplanner.com (CONTROL plane) ────────────────
+-- Durable record of each sign-up and the hand-off between /api/signup and
+-- `org:create --fromRequest` in GitHub Actions. Like `tenant`, it is created
+-- (empty and inert) in every tenant database too.
+CREATE TABLE IF NOT EXISTS "org_signup_request" (
+	"id" text PRIMARY KEY NOT NULL,
+	"status" text DEFAULT 'awaiting_confirmation' NOT NULL,
+	"academy_name" text NOT NULL,
+	"slug" text,
+	"owner_name" text NOT NULL,
+	"owner_email" text NOT NULL,
+	"owner_phone" text NOT NULL,
+	"confirm_token_hash" text NOT NULL,
+	"confirm_expires_at" timestamp NOT NULL,
+	"confirmed_at" timestamp,
+	"confirm_emails_sent" integer DEFAULT 0 NOT NULL,
+	"status_token_hash" text NOT NULL,
+	"current_step" text,
+	"attempt" integer DEFAULT 0 NOT NULL,
+	"heartbeat_at" timestamp,
+	"clerk_org_id" text,
+	"workflow_run_url" text,
+	"last_error" text,
+	"provisioned_at" timestamp,
+	"alert_sent_at" timestamp,
+	"submit_ip" text,
+	"user_agent" text,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	"updated_at" timestamp DEFAULT now() NOT NULL
+);--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "org_signup_request_confirm_token_idx" ON "org_signup_request" USING btree ("confirm_token_hash");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "org_signup_request_status_token_idx" ON "org_signup_request" USING btree ("status_token_hash");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "org_signup_request_open_email_idx" ON "org_signup_request" USING btree ("owner_email") WHERE "status" IN ('awaiting_confirmation', 'confirmed', 'dispatched', 'provisioning');--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "org_signup_request_slug_idx" ON "org_signup_request" USING btree ("slug") WHERE "status" <> 'expired';--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "org_signup_request_ip_created_idx" ON "org_signup_request" USING btree ("submit_ip","created_at");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "org_signup_request_email_created_idx" ON "org_signup_request" USING btree ("owner_email","created_at");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "org_signup_request_status_idx" ON "org_signup_request" USING btree ("status");

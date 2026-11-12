@@ -89,10 +89,27 @@ export function createClerkAdmin(secretKey: string, fetchImpl: typeof fetch = fe
      * Give the owner access. An existing Clerk user is added directly (their id
      * is known immediately); otherwise an invitation is sent. Re-running finds
      * the membership or pending invitation and does nothing.
+     *
+     * `alwaysInvite` (public sign-ups) sends an invitation even when the email
+     * already has a Clerk account, because the invitation EMAIL is how that
+     * owner learns their academy is ready — a direct add sends nothing. An
+     * owner who already accepted is left as they are.
      */
-    async ensureOwnerAccess(orgId: string, email: string, role: string): Promise<OwnerAccessResult> {
+    async ensureOwnerAccess(
+      orgId: string,
+      email: string,
+      role: string,
+      options: { alwaysInvite?: boolean; publicMetadata?: Record<string, string> } = {},
+    ): Promise<OwnerAccessResult> {
       const user = await this.findUserByEmail(email);
-      if (user) {
+      if (user && options.alwaysInvite) {
+        const members = await request<Paginated<Membership>>(`/organizations/${orgId}/memberships?limit=100`);
+        const existing = members?.data.find(m => m.public_user_data?.user_id === user.id);
+        if (existing?.role === role) {
+          return { kind: 'member', userId: user.id, alreadyDone: true };
+        }
+      }
+      if (user && !options.alwaysInvite) {
         const members = await request<Paginated<Membership>>(`/organizations/${orgId}/memberships?limit=100`);
         const existing = members?.data.find(m => m.public_user_data?.user_id === user.id);
         if (existing) {
@@ -110,7 +127,14 @@ export function createClerkAdmin(secretKey: string, fetchImpl: typeof fetch = fe
       if (pending) {
         return { kind: 'invited', alreadyDone: true };
       }
-      await request(`/organizations/${orgId}/invitations`, { method: 'POST', body: { email_address: email, role } });
+      await request(`/organizations/${orgId}/invitations`, {
+        method: 'POST',
+        body: {
+          email_address: email,
+          role,
+          ...(options.publicMetadata && { public_metadata: options.publicMetadata }),
+        },
+      });
       return { kind: 'invited', alreadyDone: false };
     },
 
