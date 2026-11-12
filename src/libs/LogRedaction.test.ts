@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { redactBodyForLog, REDACTED, redactForLog } from './LogRedaction';
+import { logSafeText, redactBodyForLog, REDACTED, redactForLog } from './LogRedaction';
 
 describe('redactForLog', () => {
   it('removes IQPro payment credentials and personal data, keeping ids and amounts', () => {
@@ -81,5 +81,16 @@ describe('redactBodyForLog', () => {
   it('labels an empty body', () => {
     expect(redactBodyForLog('')).toBe('(empty body)');
     expect(redactBodyForLog(null)).toBe('(empty body)');
+  });
+});
+
+describe('logSafeText', () => {
+  it('replaces control and invisible formatting characters', () => {
+    expect(logSafeText('a\nb\r\tc‮d​e')).toBe('a?b??c?d?e');
+  });
+
+  it('cuts long values', () => {
+    expect(logSafeText('x'.repeat(10), 4)).toBe('xxxx…');
+    expect(logSafeText('short')).toBe('short');
   });
 });

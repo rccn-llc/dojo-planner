@@ -118,3 +118,14 @@ export function redactBodyForLog(text: string | null | undefined): string {
   }
   return JSON.stringify(redactForLog(parsed), null, 2);
 }
+
+/**
+ * A request-supplied string (a header, a JSON field NAME) made safe to log:
+ * control and invisible formatting characters — newlines, bidi overrides,
+ * zero-width characters — become `?`, so a crafted value cannot forge a log
+ * line or hide part of one, and the result is cut to `max` characters.
+ */
+export function logSafeText(value: string, max = 200): string {
+  const cleaned = value.replace(/[\p{Cc}\p{Cf}]/gu, '?');
+  return cleaned.length > max ? `${cleaned.slice(0, max)}…` : cleaned;
+}

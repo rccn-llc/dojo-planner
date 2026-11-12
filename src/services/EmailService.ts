@@ -327,3 +327,78 @@ function buildConfirmationEmailHtml(params: MemberConfirmationEmailParams): stri
 </body>
 </html>`;
 }
+
+// ===== Public sign-up (www.dojoplanner.com) =====
+
+/** Values from the public sign-up form are untrusted: escape before embedding. */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+export type SignupConfirmationEmailParams = {
+  toEmail: string;
+  ownerName: string;
+  academyName: string;
+  confirmUrl: string;
+  expiresInHours: number;
+};
+
+/**
+ * "Confirm your academy" — the only thing standing between a submitted form
+ * and a provisioned organization. Returns false (never throws) when the email
+ * could not be sent, so the caller can tell the visitor to try again.
+ */
+export async function sendSignupConfirmationEmail(params: SignupConfirmationEmailParams): Promise<boolean> {
+  if (!resend) {
+    logger.info('[Email] Sign-up confirmation skipped — RESEND_API_KEY not configured');
+    return false;
+  }
+
+  const name = escapeHtml(params.ownerName);
+  const academy = escapeHtml(params.academyName);
+  const url = escapeHtml(params.confirmUrl);
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f9fafb;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+    <tr>
+      <td style="padding: 40px 32px;">
+        <h1 style="margin: 0 0 8px; font-size: 24px; color: #111827;">Confirm your academy</h1>
+        <p style="margin: 0 0 16px; color: #374151; font-size: 16px;">Hi ${name},</p>
+        <p style="margin: 0 0 24px; color: #374151; font-size: 16px;">
+          Confirm to create <strong>${academy}</strong> on Dojo Planner. Setup starts as soon as you confirm and takes a few minutes.
+        </p>
+        <p style="margin: 0 0 24px;">
+          <a href="${url}" style="display: inline-block; padding: 12px 20px; background-color: #111827; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600;">Confirm my academy</a>
+        </p>
+        <p style="margin: 0 0 8px; color: #6b7280; font-size: 14px;">This link works for ${params.expiresInHours} hours.</p>
+        <p style="margin: 0; color: #6b7280; font-size: 14px;">If you didn't sign up, ignore this email — nothing is created until you confirm.</p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+  try {
+    await resend.emails.send({
+      from: fromEmail,
+      to: params.toEmail,
+      subject: `Confirm ${params.academyName} on Dojo Planner`,
+      html,
+    });
+    logger.info('[Email] Sign-up confirmation sent');
+    return true;
+  } catch (error) {
+    logger.error('[Email] Failed to send sign-up confirmation', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return false;
+  }
+}

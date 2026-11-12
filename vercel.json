@@ -3,6 +3,7 @@
   "installCommand": "npm ci",
   "regions": ["iad1"],
   "crons": [
-    { "path": "/api/cron/sync-past-due-payment-methods", "schedule": "0 14 * * *" }
+    { "path": "/api/cron/sync-past-due-payment-methods", "schedule": "0 14 * * *" },
+    { "path": "/api/cron/signup-alerts", "schedule": "0 13 * * *" }
   ]
 }

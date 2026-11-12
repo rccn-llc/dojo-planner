@@ -83,7 +83,11 @@ src/
 │   ├── PaymentRetryService.ts # `retryFailedTransaction` + `getRetryQuote`: re-charge a declined recurring payment against the subscription's card, record the attempt, close the Square invoice
 │   ├── PaymentMethodSyncService.ts # Reconcile the local saved card with the provider's subscription card (IQPro sends no card-update webhook); replaced cards kept as history
 │   ├── PaymentMethodUpdateRequestService.ts # IQPro card-update requests: record the customer's card ids, detect a card the member ADDED (new id), switch the subscription onto it
-│   └── SaasSubscriptionService.ts # Org-level SaaS billing via IQPro (subscribe, change plan, cancel, billing history, super admin auto-grant)
+│   ├── SaasSubscriptionService.ts # Org-level SaaS billing via IQPro (subscribe, change plan, cancel, billing history, super admin auto-grant)
+│   ├── SignupFlowService.ts       # Public sign-up: submit / confirm (+ slug, dispatch) / public status
+│   ├── SignupRequestService.ts    # `org_signup_request` (control plane) reads + guarded writes, limits
+│   ├── SignupDispatchService.ts   # Start onboard-org.yml via GitHub workflow_dispatch (request id only)
+│   └── SignupAlertService.ts      # Send-once Sentry event for a failed sign-up (tag area:signup; no owner PII)
 │
 ├── models/
 │   └── Schema.ts          # Drizzle ORM tables (25+ tables)
@@ -101,6 +105,10 @@ src/
 │   ├── Stripe.ts          # Stripe client
 │   ├── IQPro.ts           # IQPro payment client singleton + gateway processor lookup + `getServiceFeePct` (platform-wide, shared with Square) + webhook RSA verification (`getWebhookPublicKey`, `verifyIQProWebhookSignature`)
 │   ├── AfterResponse.ts   # `runAfterResponse` — Next `after()` with a fire-and-forget fallback (webhook follow-up work)
+│   ├── Cors.ts            # Exact-origin CORS for the public sign-up routes (headers on errors too)
+│   ├── CronAuth.ts        # `isAuthorizedCronRequest` — shared `Bearer $CRON_SECRET` check for /api/cron/*
+│   ├── MemoryRateLimit.ts # `createWindowLimiter` — per-instance fixed-window counter (sign-up status + confirm routes)
+│   ├── SignupRouteState.ts # The sign-up routes' limiters + status cache. ⚠️ Not in the route files: a route module may export only handlers/config, or `next build` fails its type check
 │   └── Square.ts          # Square REST transport (no SDK). `toMinorUnits`/`fromMinorUnits` are the ONLY dollars↔cents crossing
 ├── utils/                 # Helper functions
 │   ├── AppConfig.ts       # Pricing plans, Clerk locales
@@ -183,7 +191,11 @@ docs/                      # Documentation
 | `/webhook/iqpro` | POST | IQPro payment webhooks (RSA-signed `resource`; per-gateway key) |
 | `/webhook/square` | POST | Square payment webhooks (B7) |
 | `/api/organization/[orgId]/subscription` | GET | Subscription details |
-| `/api/cron/sync-past-due-payment-methods` | GET | Daily Vercel Cron (`vercel.json`): reconcile every past-due member's card with the provider. `Authorization: Bearer $CRON_SECRET`; refuses everything when unset |
+| `/api/cron/sync-past-due-payment-methods` | GET | Daily Vercel Cron (`vercel.json`): reconcile every past-due member's card with the provider. `Authorization: Bearer $CRON_SECRET` (shared check: `libs/CronAuth.ts`); refuses everything when unset |
+| `/api/signup` | POST, OPTIONS | **Public**, CORS for `www.dojoplanner.com`. JSON contract in `docs/SIGNUP-API.md`. Stores an `org_signup_request` and emails a confirm link; 202 `{ requestId, statusToken, statusUrl }`. See "Public sign-up" |
+| `/api/signup/status` | GET, OPTIONS | Public. Polled by the form and the confirm page; fixed public wording only, 404 for a wrong token |
+| `/api/signup/confirm` | POST | Same-origin, from `/signup/confirm`. Confirms, assigns the slug (free in Clerk + other sign-ups), dispatches `onboard-org.yml` |
+| `/api/cron/signup-alerts` | GET | Daily Vercel Cron (`CRON_SECRET`): fails stuck sign-ups, reports unreported failures to Sentry |
 
 ### Layout Hierarchy
 
@@ -423,6 +435,38 @@ When a member's subscription charge fails at IQPro or Square, the payment webhoo
 **IQPro sandbox (real failed renewals):** `src/scripts/iqproSandboxDailySubscription.ts` (refuses non-sandbox URLs) puts a member who already has a real IQPro customer + saved card (added via Add Member with approving card `4264281555555555`; ⚠️ Basys's emailed card list shows `…550` — a spreadsheet zeroed the 16th digit of every 16-digit card, so recompute the Luhn check digit before using any of them. Add the member as Head of Household and **Skip for now** so the card is saved with no charge, since the triggers are documented for a $1 amount) on a **$1.00 DAILY** subscription (billingPeriodId 1, unit 36 Days), adds the local membership and routing refs, and prints the test steps: switch the card to decline card `4124939999999990` via IQPro's update-card email → three decline webhooks → overdue → update back → "Card updated — ready to retry" → retry pays the invoice. `--cancel=<id>` cleans up. Needs a public tunnel + a Developer Hub Transaction webhook, and `IQPRO_WEBHOOK_PUBLIC_KEY_OVERRIDE` unset. Basys: amounts can matter for decline triggers (use $1), there is no delayed decline, and subscriptions cannot be charged on demand. ⚠️ The schedule's time zone is assumed UTC.
 
 **Testing locally:** the seed adds failed-payment members (Paula Pending = attempt 1/3, Oscar Overdue, Rita Resolved, Dana Duplicate, Carl Cardupdate, Sam Square, Diego Decline, Sloane Slow). `src/scripts/simulatePaymentWebhook.ts` sends signed webhooks to localhost (IQPro via a dev keypair in gitignored `.simulator-keys/` + `IQPRO_WEBHOOK_PUBLIC_KEY_OVERRIDE`, Square via HMAC). ⚠️ Square's sandbox cannot simulate a failed recurring payment (Square staff); its `invoice.scheduled_charge_failed` path is fixture-tested only.
+
+### Public sign-up (www.dojoplanner.com → `org:create`)
+
+A form on www.dojoplanner.com (academy name, owner name, email, phone) creates a **production org with no payment provider**. The contract, a sample form (`docs/signup-form-example.html`) and the operations runbook are in **`docs/SIGNUP-API.md`** — keep it in step with the routes.
+
+**Flow:** `POST /api/signup` (browser, CORS) → `org_signup_request` row `awaiting_confirmation` + Resend confirm email → owner opens `/signup/confirm` (static `(marketing)` page) and clicks **Confirm** (a POST — opening the link does nothing, email scanners pre-open links) → slug assigned → GitHub `workflow_dispatch` of `.github/workflows/onboard-org.yml` with ONLY `request_id` + `target` → `npm run org:create -- --fromRequest=<id> --ci` (attempt 1; on failure attempt 2, which resumes) → `provisioned`. The form polls `/api/signup/status` throughout.
+
+**Hardening:**
+- Ids and tokens must match the exact shapes issued (`src/validations/SignupTokens.ts`) before any database read.
+- Both names refuse links, markup and invisible or bidi characters (`isSafeDisplayName`), because they go into an email to any address.
+- Public status wording never names the owner or the academy.
+- The confirm route is JSON-only, refuses `Sec-Fetch-Site` cross-site requests, caps the body at 1 KB and is limited per IP (`libs/MemoryRateLimit.ts`, shared with status).
+- Logged request values go through `logSafeText`.
+- `redactEmails` uses bounded quantifiers (ReDoS).
+- The confirm page strips the token from the URL (`takeConfirmLink`) and links to sign-in by a fixed path.
+- `onboard-org.yml` scopes secrets per step, pins actions by SHA, uses no cache and is clean under `zizmor --persona=pedantic`.
+
+**Abuse limits (counted from the table — no Upstash, no captcha):** 5 submissions / IP / 15 min, 3 requests and 3 confirm emails per email / 24 h, 20 new sign-ups / day, hidden `website` honeypot (filled → decoy 202, nothing stored). An email already past confirmation also gets a decoy 202, so the form cannot reveal whether an address is being set up.
+
+**Key files:** `src/app/[locale]/api/signup/{route,status/route,confirm/route}.ts`, `src/services/SignupFlowService.ts` (submit/confirm/status orchestration, slug assignment, public status mapping), `SignupRequestService.ts` (all `org_signup_request` reads/writes; guarded UPDATEs), `SignupDispatchService.ts` (GitHub dispatch, one retry on 5xx/network), `SignupAlertService.ts` (send-once alert via a claimed `alert_sent_at`), `src/libs/Cors.ts`, `src/utils/SignupConfig.ts` (origins, limits, app URL, GitHub target — constants, not env), `src/validations/SignupValidation.ts`, `src/features/signup/SignupConfirm.tsx`, CLI side `src/scripts/onboarding/{signupRequests,unattended}.ts`, `src/scripts/markSignupFailed.ts`.
+
+**`org:create` unattended mode** (`onboarding/unattended.ts`): `--fromRequest=<id>` takes name/slug/owner from the row, forces `provider=skip`, writes `current_step` + `heartbeat_at` before each step, records `clerk_org_id`, and invites the owner only **after activation** (`ensureOwnerAccess(..., { alwaysInvite: true, publicMetadata: { invitedFirstName, invitedLastName } })` — an invitation even for an existing Clerk user, because its email is how they learn the academy is ready). `--nonInteractive` swaps in a prompter that **fails** on any question (a safety confirm is a stop, never a default). `--envFromShell` skips the shell-override stop. Attempt 1's failure keeps the request `provisioning`; only `--attempt=2` (or the workflow's `markSignupFailed.ts` step) sets `failed`. A readiness-check failure on a sign-up run is recorded in `last_error` but does not fail it (readiness checks every tenant; drift elsewhere must not fail a live, invited org).
+
+⚠️ **`rccn-llc/dojo-planner` is a PUBLIC repo — Actions logs and inputs are public.** `--ci` (implies the two flags above) emits `::add-mask::` for every customer value and connection string (plus its user/password/host) before it can print, captures child-script output (`runScript(..., { capture: true })` → `ScriptFailedError.output`), skips `showTenants`, prints a generic failure line, and stores the detail only in `org_signup_request.last_error`. Never add a `run:` that echoes env or interpolates `${{ }}` into a shell command — inputs go through env vars.
+
+**Resume fixes the retry depends on:** `needsProvision` (a tenant row with no `schema_version` re-runs `provisionTenant`), `isReferenceSeedComplete` (merge fields are seeded last; a partial seed on a never-served sign-up org is purged via `purgeTenantData.ts` and re-seeded — anything else stops for a person), and `neonStoreMetadata()` reads `ONBOARD_NEON_REGION` after the env file loads. `provisionTenant` is given `DATABASE_URL = CONTROL_DATABASE_URL` explicitly rather than inheriting the checkout's `.env`.
+
+**Failures & alerts:** a request in flight with no heartbeat for 15 min is failed when read. Each failure is reported to **Sentry** exactly once (status read, confirm, or the daily `/api/cron/signup-alerts` sweep — hourly needs Vercel Pro): one issue per request, fingerprinted by id, tagged `area: signup` + `signup_request_id`, with academy name, `last_error` (emails redacted) and run link — never the owner's email/phone, and the event's request/user data (owner IP — `sendDefaultPii` is on) is stripped. Notification is a Sentry alert rule on that tag, not app config. A report Sentry did not accept (`flush` false) releases the claim for the sweep; with no Sentry client it is logged once. An expired/revoked `GITHUB_DISPATCH_TOKEN` (401/403) fails confirmations with "GitHub dispatch token rejected — renew GITHUB_DISPATCH_TOKEN". Recovery: fix, then **Re-run all jobs** — `markSignupProvisioning` accepts `failed` and clears `alert_sent_at`.
+
+⚠️ **Timestamps on this table are written as UTC wall time** regardless of the database session time zone: the app sets `created_at` explicitly and passes ISO strings in raw SQL; the CLI uses `now() AT TIME ZONE 'utc'`. Local pglite runs in the machine's zone, where `DEFAULT now()` would skew every window comparison by the UTC offset.
+
+**Setup (one-time):** Vercel `GITHUB_DISPATCH_TOKEN` (fine-grained, Actions read & write on this repo only, ≤ 1-year expiry — the ONLY new variable); a Sentry alert rule on `area: signup`; GitHub environments `Production`/`Preview` get **copies** of `CLERK_SECRET_KEY`, `CONTROL_DATABASE_URL`, `IQPRO_CONFIG_ENCRYPTION_KEY`, `VERCEL_TOKEN`, `NEON_API_KEY` plus the variable `ONBOARD_OPERATOR_USERNAME` (a non-super-admin Clerk service account, removed from each org); restrict `Production` to `main`; turn off Clerk "Allow users to create organizations". Existing databases need `~/Desktop/signup-request-ddl/signup-request-forward.sql` (control DB + every active tenant DB).
 
 ### Event Registration / Enrollment
 
@@ -1123,6 +1167,7 @@ await deleteUserWithOrganization();
 - `signed_waiver` - Signed waiver records with signature data, rendered content, membership plan snapshot (name, price, frequency, contract length, signup fee, trial status), and coupon/discount snapshot (code, type, amount, discounted price). Only a **single** signature is captured per waiver: `signatureDataUrl`/`signedByName` hold the signer. When a minor requires a guardian (`requiresGuardian`), that single signature is the **guardian's** and `signedByRelationship` records the relationship (`parent` | `guardian` | `legal_guardian`); the minor never signs. The waiver PDF labels the line "Guardian signed by" when `signedByRelationship` is set to anything other than `self`, else "Signed by".
 - `membership_waiver` - Junction table linking memberships to required waivers
 - `waiver_merge_field` - Configurable placeholder fields for waiver templates
+- `org_signup_request` (**control plane**, `ControlSchema.ts`) - One row per public sign-up: `status` (`awaiting_confirmation` → `confirmed` → `dispatched` → `provisioning` → `provisioned`, or `failed` / `expired`), academy + owner name/email/phone (the owner phone lives ONLY here), `slug` (assigned at confirmation), sha256 `confirm_token_hash` / `status_token_hash` (tokens are never stored), `confirm_expires_at` (48 h), `confirm_emails_sent`, `current_step` / `attempt` / `heartbeat_at` (written by `org:create`), `clerk_org_id`, `workflow_run_url`, `last_error` (**internal only** — never logged in CI, never returned to the form), `alert_sent_at`, `submit_ip`, `user_agent`. Partial unique indexes: one OPEN request per `lower(owner_email)`, one non-expired request per `slug`. Inert copy in every tenant DB, like `tenant`.
 - `square_plan_variation` - Square catalog plan variations for a Square org's subscriptions, keyed `(organization_id, cadence)` with a unique index on the pair. At most **four rows per org** — one per cadence, NOT one per membership plan, because `price_override_money` is set per subscription. Written lazily by `ensurePlanVariation` in `SquarePaymentService`; irrelevant to IQPro orgs.
 
 **Commands:**
@@ -1384,6 +1429,10 @@ IQPRO_WEBHOOK_PUBLIC_KEY_OVERRIDE
 
 # Bearer secret Vercel Cron sends to /api/cron/* (min 16 chars). Unset → cron routes refuse.
 CRON_SECRET
+
+# Public sign-up (docs/SIGNUP-API.md). Fine-grained GitHub token, Actions read & write on
+# rccn-llc/dojo-planner ONLY — starts onboard-org.yml when an owner confirms. Expires (≤ 1 year).
+GITHUB_DISPATCH_TOKEN
 
 SERVICE_FEE_PCT=3.75     # Service fee % applied to EVERY transaction. Sent to IQPro as a ServiceFee paymentAdjustment (percentage, not flatAmount).
 # Note: Sales-tax % is per-organization (see Location Settings page → tax_rate).
@@ -1690,6 +1739,12 @@ AUDIT_ACTION.TRANSACTION_RETRY; // staff re-charged a declined recurring payment
 AUDIT_ACTION.TRANSACTION_POSSIBLE_DUPLICATE; // system actor — auto-charge after a manual retry collected the cycle
 AUDIT_ACTION.TRANSACTION_VIEW; // read-access logging (SOC2 CC7.2) — member transaction history
 
+// Public sign-up (actor SIGNUP_ACTOR_USER_ID, org SIGNUP_AUDIT_ORG_ID — no org exists yet; entity = request id)
+AUDIT_ACTION.ORG_SIGNUP_SUBMIT;
+AUDIT_ACTION.ORG_SIGNUP_CONFIRM;
+AUDIT_ACTION.ORG_SIGNUP_DISPATCH;
+AUDIT_ACTION.ORG_SIGNUP_FAILED;
+
 // Waiver operations
 AUDIT_ACTION.WAIVER_TEMPLATE_CREATE;
 AUDIT_ACTION.WAIVER_TEMPLATE_UPDATE;
@@ -1760,6 +1815,8 @@ AUDIT_ACTION.HOLD_FEE_CHARGE;
 **Rate Limits:**
 | Endpoint | Limit | Window | Identifier |
 |----------|-------|--------|------------|
+| `/api/signup` | 5 / IP / 15 min; 3 / email / 24 h; 20 / day | counted from `org_signup_request` | IP, email |
+| `/api/signup/status` | 30 req | 1 min (in memory, per instance) | IP |
 | `/rpc/*` (authenticated) | 100 req | 1 min | orgId |
 | `/rpc/*` (unauthenticated) | 10 req | 1 min | IP |
 | `/webhook/billing` | 100 req | 1 min | IP |

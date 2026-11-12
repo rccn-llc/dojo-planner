@@ -39,10 +39,29 @@ export function buildChildEnv(
   return env;
 }
 
-type Spawn = (command: string, args: string[], options: { stdio: 'inherit'; env: ChildEnv }) => Pick<SpawnSyncReturns<Buffer>, 'status'>;
+type Spawn = (
+  command: string,
+  args: string[],
+  options: { stdio: 'inherit' | 'pipe'; env: ChildEnv },
+) => Pick<SpawnSyncReturns<Buffer>, 'status'> & { stdout?: Buffer | null; stderr?: Buffer | null };
 
 const defaultSpawn: Spawn = (command, args, options) =>
-  spawnSync(command, args, { ...options, env: options.env as NodeJS.ProcessEnv });
+  spawnSync(command, args, { ...options, env: options.env as NodeJS.ProcessEnv, maxBuffer: 16 * 1024 * 1024 });
+
+/** How much of a captured child's output a failure keeps. */
+const CAPTURED_TAIL_CHARS = 3000;
+
+/**
+ * A child script failed. `output` is its captured output (captured runs only):
+ * it may contain customer data or hosts, so it belongs in an internal record,
+ * never in a public log.
+ */
+export class ScriptFailedError extends Error {
+  constructor(message: string, readonly output: string | null) {
+    super(message);
+    this.name = 'ScriptFailedError';
+  }
+}
 
 export function runScript(
   label: string,
@@ -50,10 +69,17 @@ export function runScript(
   args: string[],
   env: ChildEnv,
   spawn: Spawn = defaultSpawn,
+  options: { capture?: boolean } = {},
 ): void {
   console.info(`\n──── ${label} ────`);
-  const result = spawn('npx', ['tsx', script, ...args], { stdio: 'inherit', env });
+  const result = spawn('npx', ['tsx', script, ...args], { stdio: options.capture ? 'pipe' : 'inherit', env });
   if (result.status !== 0) {
-    throw new Error(`${label} failed (exit ${result.status ?? 'signal'}).`);
+    const output = options.capture
+      ? `${result.stdout?.toString() ?? ''}${result.stderr?.toString() ?? ''}`.slice(-CAPTURED_TAIL_CHARS)
+      : null;
+    throw new ScriptFailedError(`${label} failed (exit ${result.status ?? 'signal'}).`, output);
+  }
+  if (options.capture) {
+    console.info(`✓ ${label}`);
   }
 }

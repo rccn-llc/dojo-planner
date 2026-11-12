@@ -66,6 +66,7 @@ A comprehensive web-based management system for martial arts dojos. Dojo Planner
 - Multi-tenancy support for managing multiple locations
 - Organization and location settings
 - User profiles with security settings and MFA
+- Public sign-up: a form on www.dojoplanner.com posts to `/api/signup`; once the owner confirms by email, a GitHub Actions job creates the organization with `org:create --fromRequest`. Contract, sample form and operations: [docs/SIGNUP-API.md](docs/SIGNUP-API.md)
 
 ## Tech Stack
 
@@ -137,6 +138,7 @@ npm run db:generate   # Generate migration from schema changes
 npm run db:migrate    # Apply pending migrations
 npm run db:studio     # Open Drizzle Studio to explore the database
 npm run org:create    # Onboard a new organization end to end (Clerk org, database, seed, activate)
+                      #   unattended, from a public sign-up: -- --fromRequest=<id> --ci (see docs/SIGNUP-API.md)
 ```
 
 ### Database Seeding

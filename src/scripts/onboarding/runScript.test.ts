@@ -1,5 +1,6 @@
+import { Buffer } from 'node:buffer';
 import { describe, expect, it, vi } from 'vitest';
-import { buildChildEnv, runScript } from './runScript';
+import { buildChildEnv, runScript, ScriptFailedError } from './runScript';
 
 describe('buildChildEnv', () => {
   const shell = {
@@ -45,5 +46,39 @@ describe('runScript', () => {
   it('throws on a non-zero exit so later steps never run', () => {
     expect(() => runScript('Seed', 's.ts', [], {}, () => ({ status: 1 }))).toThrow(/Seed failed \(exit 1\)/);
     expect(() => runScript('Seed', 's.ts', [], {}, () => ({ status: null }))).toThrow(/exit signal/);
+  });
+
+  it('captures output when asked, and keeps it off the console on failure', () => {
+    const spawn = vi.fn((_command: string, _args: string[], _options: { stdio: string }) => ({ status: 2, stdout: Buffer.from('host db.internal\n'), stderr: Buffer.from('boom') }));
+
+    let caught: unknown;
+    try {
+      runScript('Provision', 'p.ts', [], {}, spawn, { capture: true });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(spawn.mock.calls[0]?.[2]).toMatchObject({ stdio: 'pipe' });
+    expect(caught).toBeInstanceOf(ScriptFailedError);
+    expect((caught as ScriptFailedError).message).toBe('Provision failed (exit 2).');
+    expect((caught as ScriptFailedError).output).toBe('host db.internal\nboom');
+  });
+
+  it('keeps only the tail of a long captured output', () => {
+    const spawn = () => ({ status: 1, stdout: Buffer.from('x'.repeat(10_000)), stderr: null });
+
+    try {
+      runScript('Seed', 's.ts', [], {}, spawn, { capture: true });
+    } catch (error) {
+      expect((error as ScriptFailedError).output).toHaveLength(3000);
+    }
+  });
+
+  it('has no captured output for an inherited (interactive) run', () => {
+    try {
+      runScript('Seed', 's.ts', [], {}, () => ({ status: 1 }));
+    } catch (error) {
+      expect((error as ScriptFailedError).output).toBeNull();
+    }
   });
 });

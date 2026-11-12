@@ -110,6 +110,62 @@ describe('createClerkAdmin', () => {
     });
   });
 
+  describe('ensureOwnerAccess with alwaysInvite (public sign-ups)', () => {
+    it('invites an EXISTING Clerk user instead of adding them silently', async () => {
+      const { impl, calls } = fakeFetch([
+        { method: 'GET', path: /\/users\?/, body: [{ id: 'user_owner', username: null }] },
+        { method: 'GET', path: /\/memberships\?/, body: { data: [] } },
+        { method: 'GET', path: /\/invitations\?/, body: { data: [] } },
+        { method: 'POST', path: /\/invitations$/, body: {} },
+      ]);
+      const result = await createClerkAdmin('k', impl).ensureOwnerAccess('org_1', 'o@x.com', 'org:academy_owner', {
+        alwaysInvite: true,
+        publicMetadata: { invitedFirstName: 'Jordan', invitedLastName: 'Rivera' },
+      });
+
+      expect(result).toEqual({ kind: 'invited', alreadyDone: false });
+      expect(calls.some(c => c.method === 'POST' && c.url.endsWith('/memberships'))).toBe(false);
+      expect(calls.find(c => c.method === 'POST')?.body).toEqual({
+        email_address: 'o@x.com',
+        role: 'org:academy_owner',
+        public_metadata: { invitedFirstName: 'Jordan', invitedLastName: 'Rivera' },
+      });
+    });
+
+    it('leaves an owner who already accepted alone', async () => {
+      const { impl, calls } = fakeFetch([
+        { method: 'GET', path: /\/users\?/, body: [{ id: 'user_owner', username: null }] },
+        { method: 'GET', path: /\/memberships\?/, body: { data: [{ role: 'org:academy_owner', public_user_data: { user_id: 'user_owner' } }] } },
+      ]);
+      const result = await createClerkAdmin('k', impl).ensureOwnerAccess('org_1', 'o@x.com', 'org:academy_owner', { alwaysInvite: true });
+
+      expect(result).toEqual({ kind: 'member', userId: 'user_owner', alreadyDone: true });
+      expect(calls.every(c => c.method === 'GET')).toBe(true);
+    });
+
+    it('does not invite twice', async () => {
+      const { impl, calls } = fakeFetch([
+        { method: 'GET', path: /\/users\?/, body: [] },
+        { method: 'GET', path: /\/invitations\?/, body: { data: [{ email_address: 'o@x.com', role: 'org:academy_owner', status: 'pending' }] } },
+      ]);
+      const result = await createClerkAdmin('k', impl).ensureOwnerAccess('org_1', 'o@x.com', 'org:academy_owner', { alwaysInvite: true });
+
+      expect(result).toEqual({ kind: 'invited', alreadyDone: true });
+      expect(calls.some(c => c.method === 'POST')).toBe(false);
+    });
+
+    it('sends no public_metadata key when there is no name', async () => {
+      const { impl, calls } = fakeFetch([
+        { method: 'GET', path: /\/users\?/, body: [] },
+        { method: 'GET', path: /\/invitations\?/, body: { data: [] } },
+        { method: 'POST', path: /\/invitations$/, body: {} },
+      ]);
+      await createClerkAdmin('k', impl).ensureOwnerAccess('org_1', 'o@x.com', 'org:academy_owner', { alwaysInvite: true });
+
+      expect(calls.find(c => c.method === 'POST')?.body).toEqual({ email_address: 'o@x.com', role: 'org:academy_owner' });
+    });
+  });
+
   describe('hasOwnerAccess (read-only)', () => {
     it('is true for an existing user who already has the role', async () => {
       const { impl, calls } = fakeFetch([

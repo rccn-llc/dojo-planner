@@ -14,15 +14,41 @@ export type Queryable = {
   query: <R = Record<string, unknown>>(text: string, params?: unknown[]) => Promise<{ rows: R[] }>;
 };
 
-export type TenantRow = { status: string; connectionStringEncrypted: string };
+export type TenantRow = { status: string; connectionStringEncrypted: string; schemaVersion: string | null };
 
 export async function readTenantRow(control: Queryable, orgId: string): Promise<TenantRow | null> {
-  const { rows } = await control.query<{ status: string; connection_string_enc: string }>(
-    'SELECT status, connection_string_enc FROM tenant WHERE org_id = $1',
+  const { rows } = await control.query<{ status: string; connection_string_enc: string; schema_version: string | null }>(
+    'SELECT status, connection_string_enc, schema_version FROM tenant WHERE org_id = $1',
     [orgId],
   );
   const row = rows[0];
-  return row ? { status: row.status, connectionStringEncrypted: row.connection_string_enc } : null;
+  return row
+    ? { status: row.status, connectionStringEncrypted: row.connection_string_enc, schemaVersion: row.schema_version ?? null }
+    : null;
+}
+
+/**
+ * Whether `provisionTenant` still has to run. A row with no `schema_version`
+ * means a previous provision inserted the row and then died before (or while)
+ * applying the schema — skipping it then would seed an empty database.
+ * `provisionTenant` upserts its row, so re-running it is safe.
+ */
+export function needsProvision(row: TenantRow | null): boolean {
+  return row === null || (row.status !== TENANT_STATUS.ACTIVE && row.schemaVersion === null);
+}
+
+/**
+ * `seed.ts --referenceDataOnly` writes the waiver merge fields LAST, so their
+ * presence means the seed ran to completion. The seed is not transactional and
+ * uses random ids, so a run that stopped part-way can neither be skipped nor
+ * simply re-run; see the partial-seed handling in onboardOrg.ts.
+ */
+export async function isReferenceSeedComplete(tenant: Queryable, orgId: string): Promise<boolean> {
+  const { rows } = await tenant.query<{ n: string }>(
+    'SELECT count(*)::text AS n FROM waiver_merge_field WHERE organization_id = $1',
+    [orgId],
+  );
+  return Number(rows[0]?.n ?? 0) > 0;
 }
 
 export async function readAllTenantRows(control: Queryable): Promise<{ orgId: string; connectionStringEncrypted: string }[]> {
@@ -131,7 +157,11 @@ export type OnboardState = {
   ownerAccessGranted: boolean;
   databaseExists: boolean;
   tenantStatus: string | null;
+  /** The tenant row has a recorded schema version (see needsProvision). */
+  schemaApplied: boolean;
   orgRowCount: number;
+  /** The reference seed finished (see isReferenceSeedComplete). */
+  seedComplete: boolean;
   paymentSaved: boolean;
   paymentRequested: boolean;
 };
@@ -146,13 +176,17 @@ export type PlannedStep = { id: StepId; label: string; done: boolean };
  * because `cutoverTenant --activate-only` refuses an empty database anyway.
  */
 export function planSteps(state: OnboardState): PlannedStep[] {
-  const provisioned = state.tenantStatus !== null;
+  const provisioned = state.tenantStatus !== null && state.schemaApplied;
   const steps: PlannedStep[] = [
     { id: 'clerk-org', label: 'Create Clerk organization', done: state.clerkOrgExists },
     { id: 'owner', label: 'Grant academy owner access', done: state.ownerAccessGranted },
     { id: 'database', label: 'Create tenant database', done: state.databaseExists },
     { id: 'provision', label: 'Register database + apply schema', done: provisioned },
-    { id: 'seed', label: 'Seed starter data', done: state.orgRowCount > 0 },
+    {
+      id: 'seed',
+      label: state.orgRowCount > 0 && !state.seedComplete ? 'Seed starter data (a previous seed stopped part-way)' : 'Seed starter data',
+      done: state.seedComplete,
+    },
   ];
   if (state.paymentRequested) {
     steps.push({ id: 'payment', label: 'Save payment credentials', done: state.paymentSaved });

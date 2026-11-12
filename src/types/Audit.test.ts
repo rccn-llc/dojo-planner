@@ -45,8 +45,9 @@ describe('Audit Types', () => {
       // + 5 failed recurring payments (membership overdue + transaction retry
       //   + transaction possible duplicate + payment method sync
       //   + payment method provider update)
-      // + 1 card-update request = 106
-      expect(actionCount).toBe(106);
+      // + 1 card-update request
+      // + 4 public sign-up (submit + confirm + dispatch + failed) = 110
+      expect(actionCount).toBe(110);
     });
   });
 
@@ -63,8 +64,8 @@ describe('Audit Types', () => {
       // event, eventSession, coupon, classEnrollment, eventRegistration, attendance, transaction, tag, image
       // + catalogItem, catalogVariant, catalogCategory, catalogImage
       // + waiverTemplate, signedWaiver, membershipWaiver, waiverMergeField + familyMember + paymentMethod + organization
-      // + note + staff + instructor + role = 31
-      expect(entityCount).toBe(31);
+      // + note + staff + instructor + role + signupRequest = 32
+      expect(entityCount).toBe(32);
     });
   });
 
